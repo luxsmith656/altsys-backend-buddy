@@ -74,8 +74,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [syncSession]);
 
   const signIn = async (email: string, password: string) => {
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
-    return { error: error as Error | null };
+    // Retry logic for cold-start database issues
+    const maxRetries = 3;
+    let lastError: Error | null = null;
+
+    for (let attempt = 0; attempt < maxRetries; attempt++) {
+      try {
+        const { error } = await supabase.auth.signInWithPassword({ email, password });
+        if (error) return { error: error as Error };
+        return { error: null }; // Success
+      } catch (err) {
+        lastError = err as Error;
+        if (attempt < maxRetries - 1) {
+          // Wait before retrying (exponential backoff)
+          await new Promise(resolve => setTimeout(resolve, 1000 * (attempt + 1)));
+        }
+      }
+    }
+    
+    return { error: lastError };
   };
 
   const signUp = async (email: string, password: string, fullName: string) => {
