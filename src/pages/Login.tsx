@@ -82,10 +82,10 @@ export default function Login() {
             <Button variant="outline" size="sm" className="text-xs" onClick={() => quickLogin('admin@kalisungan.ph', 'admin123')}>
               Main Admin
             </Button>
-            <Button variant="outline" size="sm" className="text-xs" onClick={() => quickLogin('lamot1@kalisungan.ph', 'lamot1123')}>
+            <Button variant="outline" size="sm" className="text-xs" onClick={() => quickLogin('lamot1@kalisungan.ph', 'lamot123')}>
               Lamot 1 Admin
             </Button>
-            <Button variant="outline" size="sm" className="text-xs" onClick={() => quickLogin('lamot2@kalisungan.ph', 'lamot2123')}>
+            <Button variant="outline" size="sm" className="text-xs" onClick={() => quickLogin('lamot2@kalisungan.ph', 'lamot123')}>
               Lamot 2 Admin
             </Button>
             <Button variant="outline" size="sm" className="text-xs" onClick={() => quickLogin('guide@kalisungan.ph', 'guide123')}>
