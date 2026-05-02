@@ -1,4 +1,4 @@
-export type AppRole = 'admin' | 'ranger' | 'hiker' | 'guide';
+export type AppRole = 'admin' | 'ranger' | 'hiker' | 'guide' | 'super_admin';
 export type BookingStatus = 'pending' | 'confirmed' | 'cancelled' | 'adjustment_pending';
 
 /** Companion with full demographic details */

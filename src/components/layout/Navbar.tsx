@@ -21,6 +21,7 @@ export default function Navbar() {
   const [notifPreview, setNotifPreview] = useState<Array<{ id: string; title: string; createdAt: string }>>([]);
 
   const dashboardPath =
+    role === 'super_admin' ? '/central' :
     role === 'admin' ? '/admin' :
     role === 'ranger' ? '/ranger' :
     role === 'guide' ? '/guide' :

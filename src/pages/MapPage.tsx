@@ -767,7 +767,7 @@ export default function MapPage() {
             )}
 
             {filteredPath.length > 1 && (
-              <Polyline positions={filteredPath.map(p => [p.lat, p.lon])} pathOptions={{ color: '#22c55e', weight: 5 }} />
+              <Polyline positions={filteredPath.map(p => [p.lat, p.lon] as [number, number])} pathOptions={{ color: '#22c55e', weight: 5 }} />
             )}
 
             {/* Raw GPS data for debugging (optional) */}

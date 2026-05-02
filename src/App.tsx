@@ -4,6 +4,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { AuthProvider } from "@/hooks/useAuth";
+import { LocationsProvider } from "@/hooks/useLocations";
 import { ThemeProvider } from "@/hooks/useTheme";
 import Navbar from "@/components/layout/Navbar";
 import Index from "./pages/Index";
@@ -18,6 +19,7 @@ import HikerDashboard from "./pages/HikerDashboard";
 import ProfilePage from "./pages/ProfilePage";
 import DashboardRedirect from "./pages/DashboardRedirect";
 import GuideDashboard from "./pages/GuideDashboard";
+import CentralDashboard from "./pages/CentralDashboard";
 import NotificationsPage from "./pages/NotificationsPage";
 import NotFound from "./pages/NotFound";
 import RoleRoute from "@/components/auth/RoleRoute";
@@ -41,23 +43,26 @@ const App = () => (
       <BrowserRouter>
         <ThemeProvider>
           <AuthProvider>
-            <Navbar />
-            <Routes>
-              <Route path="/" element={<Index />} />
-              <Route path="/login" element={<Login />} />
-              <Route path="/register" element={<Register />} />
-              <Route path="/map" element={<MapPage />} />
-              <Route path="/chat" element={<ChatPage />} />
-              <Route path="/booking" element={<BookingPage />} />
-              <Route path="/admin" element={<RoleRoute allowedRoles={['admin']}><AdminDashboard /></RoleRoute>} />
-              <Route path="/ranger" element={<RoleRoute allowedRoles={['ranger']}><RangerDashboard /></RoleRoute>} />
-              <Route path="/hiker" element={<RoleRoute allowedRoles={['hiker']}><HikerDashboard /></RoleRoute>} />
-              <Route path="/guide" element={<RoleRoute allowedRoles={['guide']}><GuideDashboard /></RoleRoute>} />
-              <Route path="/profile" element={<ProfilePage />} />
-              <Route path="/dashboard" element={<DashboardRedirect />} />
-              <Route path="/notifications" element={<NotificationsPage />} />
-              <Route path="*" element={<NotFound />} />
-            </Routes>
+            <LocationsProvider>
+              <Navbar />
+              <Routes>
+                <Route path="/" element={<Index />} />
+                <Route path="/login" element={<Login />} />
+                <Route path="/register" element={<Register />} />
+                <Route path="/map" element={<MapPage />} />
+                <Route path="/chat" element={<ChatPage />} />
+                <Route path="/booking" element={<BookingPage />} />
+                <Route path="/admin" element={<RoleRoute allowedRoles={['admin', 'super_admin']}><AdminDashboard /></RoleRoute>} />
+                <Route path="/central" element={<RoleRoute allowedRoles={['super_admin']}><CentralDashboard /></RoleRoute>} />
+                <Route path="/ranger" element={<RoleRoute allowedRoles={['ranger']}><RangerDashboard /></RoleRoute>} />
+                <Route path="/hiker" element={<RoleRoute allowedRoles={['hiker']}><HikerDashboard /></RoleRoute>} />
+                <Route path="/guide" element={<RoleRoute allowedRoles={['guide']}><GuideDashboard /></RoleRoute>} />
+                <Route path="/profile" element={<ProfilePage />} />
+                <Route path="/dashboard" element={<DashboardRedirect />} />
+                <Route path="/notifications" element={<NotificationsPage />} />
+                <Route path="*" element={<NotFound />} />
+              </Routes>
+            </LocationsProvider>
           </AuthProvider>
         </ThemeProvider>
       </BrowserRouter>

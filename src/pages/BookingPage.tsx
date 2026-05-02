@@ -57,6 +57,8 @@ import { cn } from '@/lib/utils';
 import { getPHLocationOptions, COMMON_NATIONALITIES } from '@/lib/ph-locations';
 import { uploadPaymentScreenshot, isFirebaseConfigured } from '@/lib/firebase-storage';
 import type { CompanionDetail } from '@/types';
+import { useLocations } from '@/hooks/useLocations';
+import LocationPreview from '@/components/booking/LocationPreview';
 
 /* ── Weather code → human-readable label (Open-Meteo) ── */
 function weatherCodeToLabel(code: number): string {
@@ -202,6 +204,12 @@ export default function BookingPage() {
   const [preferredGuide, setPreferredGuide] = useState('');
   const [locationSearch, setLocationSearch] = useState('');
 
+  // ── Multi-location: hiker picks where to start (Lamot 1, Lamot 2, etc.) ──
+  const { locations: allLocations } = useLocations();
+  const [startLocationId, setStartLocationId] = useState<string>('');
+  const [dbGuides, setDbGuides] = useState<Array<{ id: string; full_name: string; location_id: string; per_trip_fee: number }>>([]);
+  const [preferredGuideId, setPreferredGuideId] = useState<string>('');
+
   // ── Guide dropdown options ──
   const [guideOptions, setGuideOptions] = useState<string[]>([]);
 
@@ -303,25 +311,38 @@ export default function BookingPage() {
       emailAddress, phoneNumber, province, city, locationSearch,
       companions, companionDetails, medicalNotes, preferredGuide, booking]);
 
-  /* ── Fetch guide names for dropdown ── */
+  /* ── Fetch guides (real DB rows for fee + location scoping; also feeds dropdown names) ── */
   useEffect(() => {
-    const fetchGuideNames = async () => {
-      try {
-        const { data: roles } = await supabase.from('user_roles').select('user_id').eq('role', 'guide');
-        if (!roles || roles.length === 0) {
-          setGuideOptions(['Rodel Manalansan', 'Bong Villarosa', 'Nilo Santos', 'Allan Reyes']);
-          return;
-        }
-        const ids = roles.map((r: any) => r.user_id);
-        const { data: profiles } = await supabase.from('profiles').select('full_name').in('user_id', ids);
-        const names = (profiles || []).map((p: any) => p.full_name).filter(Boolean);
-        setGuideOptions(names.length ? names : ['Rodel Manalansan', 'Bong Villarosa', 'Nilo Santos', 'Allan Reyes']);
-      } catch {
-        setGuideOptions(['Rodel Manalansan', 'Bong Villarosa', 'Nilo Santos', 'Allan Reyes']);
-      }
+    const fetchGuides = async () => {
+      const { data: gs } = await supabase
+        .from('guides' as any)
+        .select('id,full_name,location_id,per_trip_fee,is_active')
+        .eq('is_active', true);
+      const list = ((gs as any[]) ?? []) as Array<{ id: string; full_name: string; location_id: string; per_trip_fee: number }>;
+      setDbGuides(list);
+      const names = list.map((g) => g.full_name).filter(Boolean);
+      setGuideOptions(names.length ? names : ['Rodel Manalansan', 'Bong Villarosa', 'Nilo Santos', 'Allan Reyes']);
     };
-    void fetchGuideNames();
+    void fetchGuides();
   }, []);
+
+  /* ── Auto-pick first active location if none chosen ── */
+  useEffect(() => {
+    if (!startLocationId && allLocations.length > 0) {
+      setStartLocationId(allLocations[0].id);
+    }
+  }, [allLocations, startLocationId]);
+
+  const selectedLocation = useMemo(
+    () => allLocations.find((l) => l.id === startLocationId) || null,
+    [allLocations, startLocationId],
+  );
+
+  const guidesAtLocation = useMemo(
+    () => dbGuides.filter((g) => g.location_id === startLocationId),
+    [dbGuides, startLocationId],
+  );
+
 
   /* ── Capacity fetching ── */
   const fetchMonthCapacity = useCallback(async (year: number, month: number) => {
@@ -597,8 +618,31 @@ export default function BookingPage() {
   /* ── Submit ── */
   const handleBook = async () => {
     if (!user || !date) return;
+    if (!startLocationId) {
+      toast.error('Please choose a starting location (e.g. Lamot 1).');
+      return;
+    }
+
     const dateStr = format(date, 'yyyy-MM-dd');
     setLoading(true);
+
+    // ── Per-guide-per-day quota: 5 bookings max per guide for the same date.
+    if (preferredGuideId) {
+      const { data: existing, error: qErr } = await supabase
+        .from('booking_assignments' as any)
+        .select('id,status,booking:bookings!inner(booking_date)')
+        .eq('guide_id', preferredGuideId)
+        .in('status', ['pending', 'accepted']);
+      if (!qErr) {
+        const sameDay = ((existing as any[]) ?? []).filter((row: any) => row.booking?.booking_date === dateStr).length;
+        if (sameDay >= 5) {
+          setLoading(false);
+          toast.error('This guide is already at the 5-booking quota for that date. Please pick another guide or date.');
+          return;
+        }
+      }
+    }
+
     const qrData = `KALISUNGAN-${user.id.slice(0, 8)}-${dateStr}-${Date.now()}`;
     const companionNames = companions.map((name) => name.trim()).filter(Boolean);
     const fees = calculateFees(groupSize);
@@ -668,9 +712,29 @@ export default function BookingPage() {
         emergency_contact_phone: phoneNumber,
         notes: metaNotes,
         status: 'pending',
-      })
+        location_id: startLocationId,
+        start_location_id: startLocationId,
+        preferred_guide_id: preferredGuideId || null,
+        entry_fee: fees.entryFee,
+        guide_fee: fees.guideFee,
+        total_amount: fees.totalFee,
+        age_bracket: age ? (Number(age) < 18 ? 'minor' : Number(age) < 30 ? '18-29' : Number(age) < 45 ? '30-44' : Number(age) < 60 ? '45-59' : '60+') : '',
+        gender: sex || '',
+        origin_city: city || '',
+        group_type: groupSize > 1 ? 'group' : 'solo',
+      } as any)
       .select()
       .single();
+
+    // Auto-create assignment row if hiker requested a specific guide.
+    if (data && preferredGuideId) {
+      await supabase.from('booking_assignments' as any).insert({
+        booking_id: data.id,
+        guide_id: preferredGuideId,
+        location_id: startLocationId,
+        status: 'pending',
+      } as any);
+    }
 
     if (error) {
       toast.error(error.message);
@@ -1217,7 +1281,7 @@ export default function BookingPage() {
                         )}
                         <div className="space-y-4">
                           {companions.map((_, idx) => {
-                            const cd = companionDetails[idx] || {};
+                            const cd: CompanionDetail = companionDetails[idx] || ({} as CompanionDetail);
                             return (
                               <div key={`companion-${idx}`} className="rounded-xl border border-border/30 bg-secondary/10 p-4 space-y-3">
                                 <div className="flex items-center justify-between">
@@ -1355,25 +1419,81 @@ export default function BookingPage() {
                         </div>
                       )}
 
-                      {/* Preferred Guide */}
+                      {/* Start Location (Lamot 1 / Lamot 2 / Main) — REQUIRED */}
                       <div className="space-y-2 sm:col-span-2">
-                        <Label htmlFor="preferredGuide">Preferred Guide <span className="text-muted-foreground font-normal">(Optional)</span></Label>
+                        <Label htmlFor="startLocation" className="flex items-center gap-1.5">
+                          <MapPin className="h-3.5 w-3.5 text-primary" />
+                          Starting Location <span className="text-destructive">*</span>
+                        </Label>
                         <Select
-                          value={preferredGuide || 'none'}
-                          onValueChange={(v) => setPreferredGuide(v === 'none' ? '' : v)}
+                          value={startLocationId}
+                          onValueChange={(v) => { setStartLocationId(v); setPreferredGuideId(''); }}
+                        >
+                          <SelectTrigger id="startLocation">
+                            <SelectValue placeholder="Choose where you'll start hiking" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {allLocations.map((loc) => (
+                              <SelectItem key={loc.id} value={loc.id}>
+                                {loc.name}{loc.lgu ? ` — ${loc.lgu}` : ''}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <p className="text-xs text-muted-foreground">
+                          Pick the trailhead you'll start from. Each LGU site has its own admin and team.
+                        </p>
+                      </div>
+
+                      {/* Map preview — shown BEFORE booking is confirmed so hikers see exactly where to go */}
+                      {selectedLocation && (
+                        <div className="sm:col-span-2">
+                          <LocationPreview
+                            name={selectedLocation.name}
+                            lgu={selectedLocation.lgu}
+                            lat={Number(selectedLocation.center_lat)}
+                            lng={Number(selectedLocation.center_lng)}
+                            description={selectedLocation.description}
+                          />
+                        </div>
+                      )}
+
+                      {/* Preferred Guide — scoped to chosen location, shows fee */}
+                      <div className="space-y-2 sm:col-span-2">
+                        <Label htmlFor="preferredGuide">Preferred Guide <span className="text-muted-foreground font-normal">(Optional, additional fee)</span></Label>
+                        <Select
+                          value={preferredGuideId || 'none'}
+                          onValueChange={(v) => {
+                            if (v === 'none') {
+                              setPreferredGuideId('');
+                              setPreferredGuide('');
+                            } else {
+                              setPreferredGuideId(v);
+                              const g = guidesAtLocation.find((x) => x.id === v);
+                              setPreferredGuide(g?.full_name || '');
+                            }
+                          }}
                         >
                           <SelectTrigger id="preferredGuide">
                             <SelectValue placeholder="None (Admin will assign)" />
                           </SelectTrigger>
                           <SelectContent>
                             <SelectItem value="none">None (Admin will assign)</SelectItem>
-                            {guideOptions.map((name) => (
-                              <SelectItem key={name} value={name}>{name}</SelectItem>
+                            {guidesAtLocation.map((g) => (
+                              <SelectItem key={g.id} value={g.id}>
+                                {g.full_name} — ₱{Number(g.per_trip_fee).toLocaleString()}
+                              </SelectItem>
                             ))}
+                            {guidesAtLocation.length === 0 && (
+                              <SelectItem value="__none__" disabled>No guides yet at this location</SelectItem>
+                            )}
                           </SelectContent>
                         </Select>
-                        <p className="text-xs text-muted-foreground">A licensed local guide will be assigned by admin. You may request a preference, but assignment is subject to availability.</p>
+                        <p className="text-xs text-muted-foreground">
+                          Each guide can take up to <strong>5 bookings per day</strong>. Assignment subject to availability.
+                        </p>
                       </div>
+
                     </div>
                   </div>
                 )}
