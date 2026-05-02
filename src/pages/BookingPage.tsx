@@ -1217,7 +1217,7 @@ export default function BookingPage() {
                         )}
                         <div className="space-y-4">
                           {companions.map((_, idx) => {
-                            const cd = companionDetails[idx] || {};
+                            const cd: CompanionDetail = companionDetails[idx] || ({} as CompanionDetail);
                             return (
                               <div key={`companion-${idx}`} className="rounded-xl border border-border/30 bg-secondary/10 p-4 space-y-3">
                                 <div className="flex items-center justify-between">
