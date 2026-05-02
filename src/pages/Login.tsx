@@ -75,12 +75,21 @@ export default function Login() {
         {/* Quick login buttons for testing */}
         <div className="mt-6 glass-card rounded-xl p-4">
           <p className="text-xs text-muted-foreground mb-3 text-center">Quick Login (Test Accounts)</p>
-          <div className="grid grid-cols-3 gap-2">
-            <Button variant="outline" size="sm" className="text-xs" onClick={() => quickLogin('admin@kalisungan.ph', 'admin123')}>
-              Admin
+          <div className="grid grid-cols-2 gap-2">
+            <Button variant="outline" size="sm" className="text-xs" onClick={() => quickLogin('central@kalisungan.ph', 'central123')}>
+              LGU Central (super admin)
             </Button>
-            <Button variant="outline" size="sm" className="text-xs" onClick={() => quickLogin('ranger@kalisungan.ph', 'ranger123')}>
-              Ranger
+            <Button variant="outline" size="sm" className="text-xs" onClick={() => quickLogin('admin@kalisungan.ph', 'admin123')}>
+              Main Admin
+            </Button>
+            <Button variant="outline" size="sm" className="text-xs" onClick={() => quickLogin('lamot1@kalisungan.ph', 'lamot1123')}>
+              Lamot 1 Admin
+            </Button>
+            <Button variant="outline" size="sm" className="text-xs" onClick={() => quickLogin('lamot2@kalisungan.ph', 'lamot2123')}>
+              Lamot 2 Admin
+            </Button>
+            <Button variant="outline" size="sm" className="text-xs" onClick={() => quickLogin('guide@kalisungan.ph', 'guide123')}>
+              Guide
             </Button>
             <Button variant="outline" size="sm" className="text-xs" onClick={() => quickLogin('hiker@kalisungan.ph', 'hiker123')}>
               Hiker

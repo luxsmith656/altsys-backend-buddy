@@ -1419,25 +1419,81 @@ export default function BookingPage() {
                         </div>
                       )}
 
-                      {/* Preferred Guide */}
+                      {/* Start Location (Lamot 1 / Lamot 2 / Main) — REQUIRED */}
                       <div className="space-y-2 sm:col-span-2">
-                        <Label htmlFor="preferredGuide">Preferred Guide <span className="text-muted-foreground font-normal">(Optional)</span></Label>
+                        <Label htmlFor="startLocation" className="flex items-center gap-1.5">
+                          <MapPin className="h-3.5 w-3.5 text-primary" />
+                          Starting Location <span className="text-destructive">*</span>
+                        </Label>
                         <Select
-                          value={preferredGuide || 'none'}
-                          onValueChange={(v) => setPreferredGuide(v === 'none' ? '' : v)}
+                          value={startLocationId}
+                          onValueChange={(v) => { setStartLocationId(v); setPreferredGuideId(''); }}
+                        >
+                          <SelectTrigger id="startLocation">
+                            <SelectValue placeholder="Choose where you'll start hiking" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {allLocations.map((loc) => (
+                              <SelectItem key={loc.id} value={loc.id}>
+                                {loc.name}{loc.lgu ? ` — ${loc.lgu}` : ''}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <p className="text-xs text-muted-foreground">
+                          Pick the trailhead you'll start from. Each LGU site has its own admin and team.
+                        </p>
+                      </div>
+
+                      {/* Map preview — shown BEFORE booking is confirmed so hikers see exactly where to go */}
+                      {selectedLocation && (
+                        <div className="sm:col-span-2">
+                          <LocationPreview
+                            name={selectedLocation.name}
+                            lgu={selectedLocation.lgu}
+                            lat={Number(selectedLocation.center_lat)}
+                            lng={Number(selectedLocation.center_lng)}
+                            description={selectedLocation.description}
+                          />
+                        </div>
+                      )}
+
+                      {/* Preferred Guide — scoped to chosen location, shows fee */}
+                      <div className="space-y-2 sm:col-span-2">
+                        <Label htmlFor="preferredGuide">Preferred Guide <span className="text-muted-foreground font-normal">(Optional, additional fee)</span></Label>
+                        <Select
+                          value={preferredGuideId || 'none'}
+                          onValueChange={(v) => {
+                            if (v === 'none') {
+                              setPreferredGuideId('');
+                              setPreferredGuide('');
+                            } else {
+                              setPreferredGuideId(v);
+                              const g = guidesAtLocation.find((x) => x.id === v);
+                              setPreferredGuide(g?.full_name || '');
+                            }
+                          }}
                         >
                           <SelectTrigger id="preferredGuide">
                             <SelectValue placeholder="None (Admin will assign)" />
                           </SelectTrigger>
                           <SelectContent>
                             <SelectItem value="none">None (Admin will assign)</SelectItem>
-                            {guideOptions.map((name) => (
-                              <SelectItem key={name} value={name}>{name}</SelectItem>
+                            {guidesAtLocation.map((g) => (
+                              <SelectItem key={g.id} value={g.id}>
+                                {g.full_name} — ₱{Number(g.per_trip_fee).toLocaleString()}
+                              </SelectItem>
                             ))}
+                            {guidesAtLocation.length === 0 && (
+                              <SelectItem value="__none__" disabled>No guides yet at this location</SelectItem>
+                            )}
                           </SelectContent>
                         </Select>
-                        <p className="text-xs text-muted-foreground">A licensed local guide will be assigned by admin. You may request a preference, but assignment is subject to availability.</p>
+                        <p className="text-xs text-muted-foreground">
+                          Each guide can take up to <strong>5 bookings per day</strong>. Assignment subject to availability.
+                        </p>
                       </div>
+
                     </div>
                   </div>
                 )}
