@@ -43,23 +43,26 @@ const App = () => (
       <BrowserRouter>
         <ThemeProvider>
           <AuthProvider>
-            <Navbar />
-            <Routes>
-              <Route path="/" element={<Index />} />
-              <Route path="/login" element={<Login />} />
-              <Route path="/register" element={<Register />} />
-              <Route path="/map" element={<MapPage />} />
-              <Route path="/chat" element={<ChatPage />} />
-              <Route path="/booking" element={<BookingPage />} />
-              <Route path="/admin" element={<RoleRoute allowedRoles={['admin']}><AdminDashboard /></RoleRoute>} />
-              <Route path="/ranger" element={<RoleRoute allowedRoles={['ranger']}><RangerDashboard /></RoleRoute>} />
-              <Route path="/hiker" element={<RoleRoute allowedRoles={['hiker']}><HikerDashboard /></RoleRoute>} />
-              <Route path="/guide" element={<RoleRoute allowedRoles={['guide']}><GuideDashboard /></RoleRoute>} />
-              <Route path="/profile" element={<ProfilePage />} />
-              <Route path="/dashboard" element={<DashboardRedirect />} />
-              <Route path="/notifications" element={<NotificationsPage />} />
-              <Route path="*" element={<NotFound />} />
-            </Routes>
+            <LocationsProvider>
+              <Navbar />
+              <Routes>
+                <Route path="/" element={<Index />} />
+                <Route path="/login" element={<Login />} />
+                <Route path="/register" element={<Register />} />
+                <Route path="/map" element={<MapPage />} />
+                <Route path="/chat" element={<ChatPage />} />
+                <Route path="/booking" element={<BookingPage />} />
+                <Route path="/admin" element={<RoleRoute allowedRoles={['admin', 'super_admin']}><AdminDashboard /></RoleRoute>} />
+                <Route path="/central" element={<RoleRoute allowedRoles={['super_admin']}><CentralDashboard /></RoleRoute>} />
+                <Route path="/ranger" element={<RoleRoute allowedRoles={['ranger']}><RangerDashboard /></RoleRoute>} />
+                <Route path="/hiker" element={<RoleRoute allowedRoles={['hiker']}><HikerDashboard /></RoleRoute>} />
+                <Route path="/guide" element={<RoleRoute allowedRoles={['guide']}><GuideDashboard /></RoleRoute>} />
+                <Route path="/profile" element={<ProfilePage />} />
+                <Route path="/dashboard" element={<DashboardRedirect />} />
+                <Route path="/notifications" element={<NotificationsPage />} />
+                <Route path="*" element={<NotFound />} />
+              </Routes>
+            </LocationsProvider>
           </AuthProvider>
         </ThemeProvider>
       </BrowserRouter>
