@@ -54,7 +54,7 @@ export function LocationsProvider({ children }: { children: ReactNode }) {
       .select('*')
       .order('name');
 
-    const list = (locs as LocationRow[] | null) ?? [];
+    const list = (locs as unknown as LocationRow[] | null) ?? [];
     setLocations(list);
 
     if (user) {
