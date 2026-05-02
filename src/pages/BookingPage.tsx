@@ -718,7 +718,7 @@ export default function BookingPage() {
         entry_fee: fees.entryFee,
         guide_fee: fees.guideFee,
         total_amount: fees.totalFee,
-        age_bracket: age ? bracketForAge(Number(age)) : '',
+        age_bracket: age ? (Number(age) < 18 ? 'minor' : Number(age) < 30 ? '18-29' : Number(age) < 45 ? '30-44' : Number(age) < 60 ? '45-59' : '60+') : '',
         gender: sex || '',
         origin_city: city || '',
         group_type: groupSize > 1 ? 'group' : 'solo',
