@@ -13,6 +13,7 @@ import MapCompass from '@/components/map/MapCompass';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { useAuth } from '@/hooks/useAuth';
 import SOSPanel from '@/components/core/SOSPanel';
+import HikerSessionStreamer from '@/components/map/HikerSessionStreamer';
 
 import 'leaflet/dist/leaflet.css';
 
@@ -814,6 +815,9 @@ export default function MapPage() {
         <div className="absolute bottom-[7.5rem] md:bottom-[11rem] left-4 z-[1100]">
           <SOSPanel compact />
         </div>
+
+        {/* Live session streamer + checkpoint survey prompt */}
+        <HikerSessionStreamer />
 
         {/* Desktop right-side stack: layers + elevation + locate */}
         <div className="hidden md:flex absolute right-4 bottom-4 z-[1100] flex-col items-end gap-2">
