@@ -9,6 +9,8 @@ import { motion } from 'framer-motion';
 import { Building2, Users, DollarSign, TrendingUp, MapPin, Loader2, AlertTriangle, RefreshCw } from 'lucide-react';
 import LocationSwitcher from '@/components/layout/LocationSwitcher';
 import RealtimeMonitorMap from '@/components/admin/RealtimeMonitorMap';
+import LGUDemographicsPanel from '@/components/admin/LGUDemographicsPanel';
+import LGUFinancialPanel from '@/components/admin/LGUFinancialPanel';
 import { format, subDays, startOfMonth } from 'date-fns';
 
 interface LocStats {
@@ -119,7 +121,9 @@ export default function CentralDashboard() {
 
         <Tabs defaultValue="overview">
           <TabsList className="glass-card">
-            <TabsTrigger value="overview">Overview by location</TabsTrigger>
+            <TabsTrigger value="overview">Overview</TabsTrigger>
+            <TabsTrigger value="demographics">Demographics</TabsTrigger>
+            <TabsTrigger value="financial">Financial</TabsTrigger>
             <TabsTrigger value="monitor">Live monitor</TabsTrigger>
           </TabsList>
 
@@ -150,6 +154,14 @@ export default function CentralDashboard() {
                 </Card>
               )}
             </div>
+          </TabsContent>
+
+          <TabsContent value="demographics" className="mt-4">
+            <LGUDemographicsPanel locationId={activeLocationId} />
+          </TabsContent>
+
+          <TabsContent value="financial" className="mt-4">
+            <LGUFinancialPanel locationId={activeLocationId} />
           </TabsContent>
 
           <TabsContent value="monitor" className="mt-4">
