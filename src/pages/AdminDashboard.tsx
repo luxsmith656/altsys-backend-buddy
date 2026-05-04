@@ -392,6 +392,7 @@ export default function AdminDashboard() {
       .insert({
         user_id: scannedBooking.user_id,
         booking_id: scannedBooking.id,
+        location_id: scannedBooking.location_id ?? scannedBooking.start_location_id ?? null,
         start_time: new Date().toISOString(),
         status: 'active',
         total_distance_km: 0,
