@@ -35,6 +35,10 @@ interface BookingAIChatProps {
   groupComposition?: GroupComposition | null;
   onGroupCompositionSet?: (composition: GroupComposition) => void;
   onTimeSuggest?: (time: string) => void;
+  /** Selected starting location — scopes the AI to that trailhead's checkpoints, surveys, and fees. */
+  locationId?: string | null;
+  /** Optional preferred guide name to share with the AI. */
+  preferredGuideName?: string | null;
 }
 
 const TYPING_DELAY = 750;
