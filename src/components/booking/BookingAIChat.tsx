@@ -433,6 +433,8 @@ export default function BookingAIChat({
   groupComposition,
   onGroupCompositionSet,
   onTimeSuggest: _onTimeSuggest,
+  locationId,
+  preferredGuideName,
 }: BookingAIChatProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [messages, setMessages] = useState<ChatMsg[]>([]);
