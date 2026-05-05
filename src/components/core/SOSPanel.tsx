@@ -11,6 +11,8 @@ import {
 } from '@/components/ui/alert-dialog';
 import { toast } from 'sonner';
 import { motion, AnimatePresence } from 'framer-motion';
+import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/hooks/useAuth';
 
 interface SOSPanelProps {
   /** Compact mode renders just a single red button (for map overlay) */
@@ -24,33 +26,61 @@ const EMERGENCY_CONTACTS = [
 ];
 
 export default function SOSPanel({ compact = false }: SOSPanelProps) {
+  const { user } = useAuth();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [sending, setSending] = useState(false);
   const [sent, setSent] = useState(false);
-  const [coords, setCoords] = useState<{ lat: number; lng: number } | null>(null);
+  const [coords, setCoords] = useState<{ lat: number; lng: number; accuracy?: number } | null>(null);
 
   /* Grab GPS coords when the dialog opens */
   useEffect(() => {
     if (!dialogOpen || !navigator.geolocation) return;
     navigator.geolocation.getCurrentPosition(
-      (pos) => setCoords({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
+      (pos) => setCoords({ lat: pos.coords.latitude, lng: pos.coords.longitude, accuracy: pos.coords.accuracy }),
       () => setCoords(null),
       { enableHighAccuracy: true, timeout: 5000 }
     );
   }, [dialogOpen]);
 
   const handleSendSOS = async () => {
+    if (!user) {
+      toast.error('Please sign in to send an SOS.');
+      return;
+    }
     setSending(true);
-    /* 
-      In a real implementation this would POST to a Supabase Edge Function
-      or Realtime channel that notifies admins/rangers.
-      For now we simulate a network call.
-    */
-    await new Promise((r) => setTimeout(r, 1800));
-    setSending(false);
-    setSent(true);
-    toast.error('🆘 SOS Alert Sent — Rangers have been notified!', { duration: 8000 });
+    try {
+      // Find active session + booking + location for context
+      const { data: session } = await supabase
+        .from('hiker_sessions')
+        .select('id,booking_id,location_id')
+        .eq('user_id', user.id)
+        .eq('status', 'active')
+        .order('start_time', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      const { error } = await supabase.from('sos_alerts' as any).insert({
+        user_id: user.id,
+        session_id: session?.id ?? null,
+        booking_id: session?.booking_id ?? null,
+        location_id: session?.location_id ?? null,
+        latitude: coords?.lat ?? null,
+        longitude: coords?.lng ?? null,
+        accuracy: coords?.accuracy ?? null,
+        message: 'Hiker SOS — needs immediate assistance.',
+        status: 'active',
+      } as any);
+
+      if (error) throw error;
+      setSent(true);
+      toast.error('🆘 SOS Alert Sent — Rangers and admins notified!', { duration: 8000 });
+    } catch (e: any) {
+      toast.error(`Failed to send SOS: ${e.message ?? e}`);
+    } finally {
+      setSending(false);
+    }
   };
+
 
   const handleClose = () => {
     setDialogOpen(false);
