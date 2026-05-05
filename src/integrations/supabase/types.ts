@@ -64,6 +64,8 @@ export type Database = {
           notes: string | null
           origin_city: string
           payment_status: string
+          planned_route_json: Json
+          preferred_guide_fee: number
           preferred_guide_id: string | null
           qr_code_data: string | null
           start_location_id: string | null
@@ -87,6 +89,8 @@ export type Database = {
           notes?: string | null
           origin_city?: string
           payment_status?: string
+          planned_route_json?: Json
+          preferred_guide_fee?: number
           preferred_guide_id?: string | null
           qr_code_data?: string | null
           start_location_id?: string | null
@@ -110,6 +114,8 @@ export type Database = {
           notes?: string | null
           origin_city?: string
           payment_status?: string
+          planned_route_json?: Json
+          preferred_guide_fee?: number
           preferred_guide_id?: string | null
           qr_code_data?: string | null
           start_location_id?: string | null
@@ -730,6 +736,63 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      sos_alerts: {
+        Row: {
+          accuracy: number | null
+          acknowledged_at: string | null
+          acknowledged_by: string | null
+          booking_id: string | null
+          created_at: string
+          escalated_at: string | null
+          id: string
+          latitude: number | null
+          location_id: string | null
+          longitude: number | null
+          message: string
+          resolved_at: string | null
+          session_id: string | null
+          status: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          accuracy?: number | null
+          acknowledged_at?: string | null
+          acknowledged_by?: string | null
+          booking_id?: string | null
+          created_at?: string
+          escalated_at?: string | null
+          id?: string
+          latitude?: number | null
+          location_id?: string | null
+          longitude?: number | null
+          message?: string
+          resolved_at?: string | null
+          session_id?: string | null
+          status?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          accuracy?: number | null
+          acknowledged_at?: string | null
+          acknowledged_by?: string | null
+          booking_id?: string | null
+          created_at?: string
+          escalated_at?: string | null
+          id?: string
+          latitude?: number | null
+          location_id?: string | null
+          longitude?: number | null
+          message?: string
+          resolved_at?: string | null
+          session_id?: string | null
+          status?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
       }
       trail_reports: {
         Row: {
