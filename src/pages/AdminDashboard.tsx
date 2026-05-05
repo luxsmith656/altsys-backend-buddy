@@ -84,6 +84,7 @@ import {
 import TrailRecorder from '@/components/map/TrailRecorder';
 import QRCameraScanner from '@/components/admin/QRCameraScanner';
 import DemographicsTab from '@/components/admin/DemographicsTab';
+import SOSAlertsPanel from '@/components/admin/SOSAlertsPanel';
 import PaymentSummaryTab from '@/components/admin/PaymentSummaryTab';
 import { Calendar } from '@/components/ui/calendar';
 import { format } from 'date-fns';
@@ -2058,6 +2059,11 @@ export default function AdminDashboard() {
             <DemographicsTab />
           </TabsContent>
         </Tabs>
+
+        {/* Real-time SOS alerts for this admin's locations */}
+        <div className="mt-6">
+          <SOSAlertsPanel locationId={null} />
+        </div>
       </div>
 
       {/* Floating collapsible booking calendar */}
