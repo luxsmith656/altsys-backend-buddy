@@ -164,11 +164,12 @@ export default function CentralDashboard() {
                 </Card>
               )}
             </div>
+
+            <ForecastPanel locationId={activeLocationId} readOnly={false} />
           </TabsContent>
 
           <TabsContent value="demographics" className="mt-4 space-y-4">
             <LGUDemographicsPanel locationId={activeLocationId} />
-            <ForecastPanel locationId={activeLocationId} readOnly={false} />
           </TabsContent>
 
           <TabsContent value="financial" className="mt-4">
