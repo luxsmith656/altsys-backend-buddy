@@ -84,6 +84,7 @@ import {
 import TrailRecorder from '@/components/map/TrailRecorder';
 import QRCameraScanner from '@/components/admin/QRCameraScanner';
 import DemographicsTab from '@/components/admin/DemographicsTab';
+import ForecastPanel from '@/components/admin/ForecastPanel';
 import SOSAlertsPanel from '@/components/admin/SOSAlertsPanel';
 import PaymentSummaryTab from '@/components/admin/PaymentSummaryTab';
 import { Calendar } from '@/components/ui/calendar';
@@ -2055,8 +2056,9 @@ export default function AdminDashboard() {
           </TabsContent>
 
           {/* ─────────────────────────────── DEMOGRAPHICS TAB ── */}
-          <TabsContent value="demographics">
+          <TabsContent value="demographics" className="space-y-6">
             <DemographicsTab />
+            <ForecastPanel locationId={null} />
           </TabsContent>
         </Tabs>
 
