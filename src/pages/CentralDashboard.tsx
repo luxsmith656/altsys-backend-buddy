@@ -11,6 +11,7 @@ import LocationSwitcher from '@/components/layout/LocationSwitcher';
 import RealtimeMonitorMap from '@/components/admin/RealtimeMonitorMap';
 import LGUDemographicsPanel from '@/components/admin/LGUDemographicsPanel';
 import LGUFinancialPanel from '@/components/admin/LGUFinancialPanel';
+import ForecastPanel from '@/components/admin/ForecastPanel';
 import SOSAlertsPanel from '@/components/admin/SOSAlertsPanel';
 import ProvisionLocationWizard from '@/components/admin/ProvisionLocationWizard';
 import { format, subDays, startOfMonth } from 'date-fns';
@@ -165,8 +166,9 @@ export default function CentralDashboard() {
             </div>
           </TabsContent>
 
-          <TabsContent value="demographics" className="mt-4">
+          <TabsContent value="demographics" className="mt-4 space-y-4">
             <LGUDemographicsPanel locationId={activeLocationId} />
+            <ForecastPanel locationId={activeLocationId} readOnly={false} />
           </TabsContent>
 
           <TabsContent value="financial" className="mt-4">
