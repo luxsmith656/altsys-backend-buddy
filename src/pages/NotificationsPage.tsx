@@ -174,6 +174,9 @@ export default function NotificationsPage() {
                               setItems((prev) => prev.filter((x) => x.id !== n.id));
                               setRemoved((prev) => (prev.includes(n.id) ? prev : [...prev, n.id]));
                               markNotificationRemoved(user.id, n.id);
+                              if (n.id.startsWith('fs:')) {
+                                void deleteFsNotification(n.id.slice(3));
+                              }
                             }}
                           >
                             <Trash2 className="h-3 w-3 mr-1" />
