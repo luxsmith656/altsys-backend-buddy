@@ -17,9 +17,24 @@ export default function Register() {
   const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
+  const [googleLoading, setGoogleLoading] = useState(false);
   const { signUp } = useAuth();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
+
+  const handleGoogle = async () => {
+    if (!isFirebaseConfigured()) {
+      toast.error('Google sign-up unavailable — Firebase not configured.');
+      return;
+    }
+    setGoogleLoading(true);
+    const { error } = await signInWithFirebaseGoogle();
+    setGoogleLoading(false);
+    if (error) { toast.error(error.message); return; }
+    toast.success('Account ready — signed in with Google');
+    const redirectPath = searchParams.get('redirect');
+    navigate(redirectPath || '/dashboard');
+  };
 
   // Verification States
   const [step, setStep] = useState(1); // 1 = form, 2 = verification
