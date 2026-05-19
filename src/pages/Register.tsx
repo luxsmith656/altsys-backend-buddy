@@ -8,6 +8,8 @@ import { Loader2, Phone, Mail, MessageSquare, ShieldCheck, RefreshCw, ChevronLef
 import { toast } from 'sonner';
 import logo from '@/assets/logo.png';
 import { sendSms, sendOtpEmail } from '@/lib/notification-service';
+import { signInWithFirebaseGoogle } from '@/lib/firebase-auth';
+import { isFirebaseConfigured } from '@/lib/firebase';
 
 export default function Register() {
   const [fullName, setFullName] = useState('');
