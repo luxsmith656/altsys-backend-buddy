@@ -73,14 +73,17 @@ Deno.serve(async (req) => {
 
     // First-time setup: ensure profile + default 'hiker' role exist.
     if (userId) {
-      await admin.from('profiles').upsert(
+      const { error: profileError } = await admin.from('profiles').upsert(
         { user_id: userId, full_name: fullName },
         { onConflict: 'user_id', ignoreDuplicates: true },
       );
-      await admin.from('user_roles').upsert(
+      if (profileError) return json({ error: profileError.message }, 500);
+
+      const { error: roleError } = await admin.from('user_roles').upsert(
         { user_id: userId, role: 'hiker' },
         { onConflict: 'user_id,role', ignoreDuplicates: true },
       );
+      if (roleError) return json({ error: roleError.message }, 500);
     }
 
     // Mint a magiclink; the client exchanges its token_hash for a session.
