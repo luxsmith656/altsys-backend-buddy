@@ -44,33 +44,38 @@ Deno.serve(async (req) => {
       auth: { persistSession: false, autoRefreshToken: false },
     });
 
-    // Ensure a Supabase auth user exists for this email.
-    const createRes = await admin.auth.admin.createUser({
+    // Fire createUser and generateLink in parallel. generateLink works for
+    // existing OR newly-created users (it ensures + signs in by email).
+    const createUserPromise = admin.auth.admin.createUser({
       email,
       email_confirm: true,
       user_metadata: { full_name: fullName, firebase_uid: payload.sub, provider: 'firebase-google' },
     });
+    const linkPromise = admin.auth.admin.generateLink({ type: 'magiclink', email });
+
+    const [createRes, { data: linkData, error: linkError }] = await Promise.all([
+      createUserPromise,
+      linkPromise,
+    ]);
+
+    if (linkError || !linkData?.properties?.hashed_token) {
+      return json({ error: linkError?.message ?? 'Failed to generate session' }, 500);
+    }
+
     const alreadyExists = createRes.error && /already.*registered|exists/i.test(createRes.error.message);
     if (createRes.error && !alreadyExists) {
       return json({ error: createRes.error.message }, 500);
     }
     const isNewUser = !alreadyExists && !!createRes.data?.user?.id;
+    const userId =
+      createRes.data?.user?.id ??
+      (linkData as { user?: { id?: string } })?.user?.id ??
+      null;
 
-    // Resolve the auth user id.
-    let userId = createRes.data?.user?.id ?? null;
-    if (!userId) {
-      for (let page = 1; page <= 10 && !userId; page++) {
-        const { data } = await admin.auth.admin.listUsers({ page, perPage: 200 });
-        userId = data?.users.find((u) => u.email?.toLowerCase() === email)?.id ?? null;
-        if (!data || data.users.length < 200) break;
-      }
-    }
-
-    // Idempotent first-time setup: profile + default 'hiker' role.
-    // Run in parallel with the magiclink generation to cut latency.
-    const setupPromise = (async () => {
-      if (!userId) return;
-      const [{ error: profileError }, { error: roleError }] = await Promise.all([
+    // Background first-time setup so the client can continue immediately.
+    // Onboarding upserts the profile row, so a tiny race here is fine.
+    if (userId) {
+      const bg = Promise.all([
         admin.from('profiles').upsert(
           { user_id: userId, full_name: fullName },
           { onConflict: 'user_id', ignoreDuplicates: true },
@@ -79,17 +84,9 @@ Deno.serve(async (req) => {
           { user_id: userId, role: 'hiker' },
           { onConflict: 'user_id,role', ignoreDuplicates: true },
         ),
-      ]);
-      if (profileError) throw new Error(profileError.message);
-      if (roleError) throw new Error(roleError.message);
-    })();
-
-    const linkPromise = admin.auth.admin.generateLink({ type: 'magiclink', email });
-
-    await setupPromise;
-    const { data: linkData, error: linkError } = await linkPromise;
-    if (linkError || !linkData?.properties?.hashed_token) {
-      return json({ error: linkError?.message ?? 'Failed to generate session' }, 500);
+      ]).catch((e) => console.error('[firebase-auth-bridge] setup error', e));
+      // @ts-ignore Deno EdgeRuntime keeps the task alive after response.
+      globalThis.EdgeRuntime?.waitUntil?.(bg);
     }
 
     return json({
