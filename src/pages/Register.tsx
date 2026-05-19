@@ -199,6 +199,7 @@ export default function Register() {
                 {verificationMethod === 'sms' ? 'Send SMS OTP' : 'Send Email OTP'}
               </Button>
             </form>
+            </>
           ) : (
             <form onSubmit={handleVerifyOtp} className="space-y-6">
               <div className="text-center">
