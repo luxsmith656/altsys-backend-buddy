@@ -46,16 +46,39 @@ Deno.serve(async (req) => {
       auth: { persistSession: false, autoRefreshToken: false },
     });
 
-    // Make sure a Supabase auth user exists for this email.
-    // listUsers doesn't support filter-by-email server-side reliably across versions,
-    // so we try create-and-ignore-conflict.
+    // Ensure a Supabase auth user exists for this email.
     const createRes = await admin.auth.admin.createUser({
       email,
       email_confirm: true,
       user_metadata: { full_name: fullName, firebase_uid: payload.sub, provider: 'firebase-google' },
     });
-    if (createRes.error && !/already.*registered|exists/i.test(createRes.error.message)) {
+    const alreadyExists = createRes.error && /already.*registered|exists/i.test(createRes.error.message);
+    if (createRes.error && !alreadyExists) {
       return json({ error: createRes.error.message }, 500);
+    }
+
+    // Resolve the auth user id (newly created or pre-existing).
+    let userId = createRes.data?.user?.id ?? null;
+    if (!userId) {
+      // listUsers is paginated; first page is enough for a fresh Google account,
+      // but loop a few pages just in case.
+      for (let page = 1; page <= 10 && !userId; page++) {
+        const { data } = await admin.auth.admin.listUsers({ page, perPage: 200 });
+        userId = data?.users.find((u) => u.email?.toLowerCase() === email)?.id ?? null;
+        if (!data || data.users.length < 200) break;
+      }
+    }
+
+    // First-time setup: ensure profile + default 'hiker' role exist.
+    if (userId) {
+      await admin.from('profiles').upsert(
+        { user_id: userId, full_name: fullName },
+        { onConflict: 'user_id', ignoreDuplicates: true },
+      );
+      await admin.from('user_roles').upsert(
+        { user_id: userId, role: 'hiker' },
+        { onConflict: 'user_id,role', ignoreDuplicates: true },
+      );
     }
 
     // Mint a magiclink; the client exchanges its token_hash for a session.
