@@ -56,6 +56,7 @@ import BookingInsightsPanel from '@/components/booking/BookingInsightsPanel';
 import { cn } from '@/lib/utils';
 import { getPHLocationOptions, COMMON_NATIONALITIES } from '@/lib/ph-locations';
 import { uploadPaymentScreenshot, isFirebaseConfigured } from '@/lib/firebase-storage';
+import { createUserNotification } from '@/lib/firebase-firestore';
 import type { CompanionDetail } from '@/types';
 import { useLocations } from '@/hooks/useLocations';
 import LocationPreview from '@/components/booking/LocationPreview';
@@ -769,6 +770,14 @@ export default function BookingPage() {
         trail: 'Mt. Kalisungan Summit',
         hikeTime,
       });
+
+      if (isFirebaseConfigured() && user?.id) {
+        void createUserNotification(user.id, {
+          title: 'Booking submitted',
+          body: `Your booking for ${dateStr} is now pending admin approval.`,
+          category: 'booking',
+        });
+      }
     }
     setLoading(false);
   };

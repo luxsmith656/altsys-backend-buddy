@@ -9,6 +9,7 @@ import logo from '@/assets/logo.png';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { loadAnnouncements } from '@/lib/announcements';
 import { loadRemovedNotificationIds, loadSeenNotificationIds } from '@/lib/notifications';
+import { isFirebaseConfigured } from '@/lib/firebase';
 import { subscribeUserNotifications, type FsNotification } from '@/lib/firestoreNotifications';
 import { supabase } from '@/integrations/supabase/client';
 
@@ -65,6 +66,17 @@ export default function Navbar() {
       setNotifPreview([]);
       return;
     }
+
+    if (isFirebaseConfigured()) {
+      const unsubscribe = subscribeUserNotifications(user.id, (items) => {
+        const removed = new Set(loadRemovedNotificationIds(user.id));
+        const unseen = items.filter((item) => !removed.has(item.id)).length;
+        setNotifCount(unseen);
+        setNotifPreview(items.slice(0, 4));
+      });
+      return unsubscribe;
+    }
+
     const loadNotifData = async () => {
       const seen = new Set(loadSeenNotificationIds(user.id));
       const removed = new Set(loadRemovedNotificationIds(user.id));

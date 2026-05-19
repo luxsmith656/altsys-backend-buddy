@@ -6,12 +6,8 @@ import { Button } from '@/components/ui/button';
 import { Bell, Megaphone, CalendarCheck, AlertTriangle, CheckCheck, Trash2 } from 'lucide-react';
 import { loadAnnouncements } from '@/lib/announcements';
 import { loadRemovedNotificationIds, loadSeenNotificationIds, markNotificationRemoved, saveSeenNotificationIds } from '@/lib/notifications';
-import {
-  deleteFsNotification,
-  markFsNotificationRead,
-  subscribeUserNotifications,
-  type FsNotification,
-} from '@/lib/firestoreNotifications';
+import { isFirebaseConfigured } from '@/lib/firebase';
+import { subscribeUserNotifications, type FsNotification } from '@/lib/firestoreNotifications';
 
 type AppNotification = {
   id: string;
@@ -43,6 +39,14 @@ export default function NotificationsPage() {
     if (!user) return;
     setSeen(loadSeenNotificationIds(user.id));
     setRemoved(loadRemovedNotificationIds(user.id));
+
+    if (isFirebaseConfigured()) {
+      const unsubscribe = subscribeUserNotifications(user.id, (firestoreItems) => {
+        const removedIds = new Set(loadRemovedNotificationIds(user.id));
+        setItems(firestoreItems.filter((item) => !removedIds.has(item.id)));
+      });
+      return unsubscribe;
+    }
 
     const loadAll = async () => {
       const removedIds = new Set(loadRemovedNotificationIds(user.id));
