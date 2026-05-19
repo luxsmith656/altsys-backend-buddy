@@ -33,6 +33,13 @@ Deno.serve(async (req) => {
     const { payload } = await jwtVerify(idToken, JWKS, {
       issuer: `https://securetoken.google.com/${FIREBASE_PROJECT_ID}`,
       audience: FIREBASE_PROJECT_ID,
+    }).catch((err) => {
+      console.error('[firebase-auth-bridge] jwtVerify failed', {
+        expectedIss: `https://securetoken.google.com/${FIREBASE_PROJECT_ID}`,
+        expectedAud: FIREBASE_PROJECT_ID,
+        projectIdLen: FIREBASE_PROJECT_ID.length,
+      });
+      throw err;
     });
 
     const email = (payload.email as string | undefined)?.toLowerCase();
