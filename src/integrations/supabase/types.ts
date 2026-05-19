@@ -447,32 +447,50 @@ export type Database = {
       }
       profiles: {
         Row: {
+          age: number | null
           avatar_url: string
           created_at: string
+          data_consent_at: string | null
           emergency_contact: string
           full_name: string
           id: string
+          liability_waiver_at: string | null
+          onboarding_completed_at: string | null
           phone: string
+          privacy_accepted_at: string | null
+          terms_accepted_at: string | null
           updated_at: string
           user_id: string
         }
         Insert: {
+          age?: number | null
           avatar_url?: string
           created_at?: string
+          data_consent_at?: string | null
           emergency_contact?: string
           full_name?: string
           id?: string
+          liability_waiver_at?: string | null
+          onboarding_completed_at?: string | null
           phone?: string
+          privacy_accepted_at?: string | null
+          terms_accepted_at?: string | null
           updated_at?: string
           user_id: string
         }
         Update: {
+          age?: number | null
           avatar_url?: string
           created_at?: string
+          data_consent_at?: string | null
           emergency_contact?: string
           full_name?: string
           id?: string
+          liability_waiver_at?: string | null
+          onboarding_completed_at?: string | null
           phone?: string
+          privacy_accepted_at?: string | null
+          terms_accepted_at?: string | null
           updated_at?: string
           user_id?: string
         }

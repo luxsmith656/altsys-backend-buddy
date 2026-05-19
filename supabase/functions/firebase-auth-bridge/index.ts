@@ -14,7 +14,6 @@ const ALLOWED_FIREBASE_PROJECT_IDS = Array.from(
   new Set([FIREBASE_PROJECT_ID, 'altsys-backend-buddy'].filter(Boolean)),
 );
 
-// Firebase ID tokens are signed with these public keys.
 const JWKS = createRemoteJWKSet(
   new URL('https://www.googleapis.com/service_accounts/v1/jwk/securetoken@system.gserviceaccount.com'),
 );
@@ -28,11 +27,8 @@ Deno.serve(async (req) => {
     }
 
     const { idToken } = await req.json().catch(() => ({}));
-    if (!idToken || typeof idToken !== 'string') {
-      return json({ error: 'Missing idToken' }, 400);
-    }
+    if (!idToken || typeof idToken !== 'string') return json({ error: 'Missing idToken' }, 400);
 
-    // Verify Firebase ID token: signature, issuer, audience.
     const payload = await verifyFirebaseToken(idToken);
 
     const email = (payload.email as string | undefined)?.toLowerCase();
@@ -58,12 +54,11 @@ Deno.serve(async (req) => {
     if (createRes.error && !alreadyExists) {
       return json({ error: createRes.error.message }, 500);
     }
+    const isNewUser = !alreadyExists && !!createRes.data?.user?.id;
 
-    // Resolve the auth user id (newly created or pre-existing).
+    // Resolve the auth user id.
     let userId = createRes.data?.user?.id ?? null;
     if (!userId) {
-      // listUsers is paginated; first page is enough for a fresh Google account,
-      // but loop a few pages just in case.
       for (let page = 1; page <= 10 && !userId; page++) {
         const { data } = await admin.auth.admin.listUsers({ page, perPage: 200 });
         userId = data?.users.find((u) => u.email?.toLowerCase() === email)?.id ?? null;
@@ -71,26 +66,28 @@ Deno.serve(async (req) => {
       }
     }
 
-    // First-time setup: ensure profile + default 'hiker' role exist.
-    if (userId) {
-      const { error: profileError } = await admin.from('profiles').upsert(
-        { user_id: userId, full_name: fullName },
-        { onConflict: 'user_id', ignoreDuplicates: true },
-      );
-      if (profileError) return json({ error: profileError.message }, 500);
+    // Idempotent first-time setup: profile + default 'hiker' role.
+    // Run in parallel with the magiclink generation to cut latency.
+    const setupPromise = (async () => {
+      if (!userId) return;
+      const [{ error: profileError }, { error: roleError }] = await Promise.all([
+        admin.from('profiles').upsert(
+          { user_id: userId, full_name: fullName },
+          { onConflict: 'user_id', ignoreDuplicates: true },
+        ),
+        admin.from('user_roles').upsert(
+          { user_id: userId, role: 'hiker' },
+          { onConflict: 'user_id,role', ignoreDuplicates: true },
+        ),
+      ]);
+      if (profileError) throw new Error(profileError.message);
+      if (roleError) throw new Error(roleError.message);
+    })();
 
-      const { error: roleError } = await admin.from('user_roles').upsert(
-        { user_id: userId, role: 'hiker' },
-        { onConflict: 'user_id,role', ignoreDuplicates: true },
-      );
-      if (roleError) return json({ error: roleError.message }, 500);
-    }
+    const linkPromise = admin.auth.admin.generateLink({ type: 'magiclink', email });
 
-    // Mint a magiclink; the client exchanges its token_hash for a session.
-    const { data: linkData, error: linkError } = await admin.auth.admin.generateLink({
-      type: 'magiclink',
-      email,
-    });
+    await setupPromise;
+    const { data: linkData, error: linkError } = await linkPromise;
     if (linkError || !linkData?.properties?.hashed_token) {
       return json({ error: linkError?.message ?? 'Failed to generate session' }, 500);
     }
@@ -98,6 +95,7 @@ Deno.serve(async (req) => {
     return json({
       email,
       token_hash: linkData.properties.hashed_token,
+      is_new_user: isNewUser,
     });
   } catch (err) {
     console.error('[firebase-auth-bridge] error', err);
@@ -114,7 +112,6 @@ function json(body: unknown, status = 200) {
 
 async function verifyFirebaseToken(idToken: string): Promise<JWTPayload> {
   let lastError: unknown;
-
   for (const projectId of ALLOWED_FIREBASE_PROJECT_IDS) {
     try {
       const { payload } = await jwtVerify(idToken, JWKS, {
@@ -126,7 +123,6 @@ async function verifyFirebaseToken(idToken: string): Promise<JWTPayload> {
       lastError = err;
     }
   }
-
   console.error('[firebase-auth-bridge] jwtVerify failed', {
     allowedAudiences: ALLOWED_FIREBASE_PROJECT_IDS,
     configuredProjectIdLen: FIREBASE_PROJECT_ID.length,
