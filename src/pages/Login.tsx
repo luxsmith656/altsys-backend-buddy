@@ -47,14 +47,23 @@ export default function Login() {
       return;
     }
     setGoogleLoading(true);
-    const { error } = await signInWithFirebaseGoogle();
+    const { error, isNewUser } = await signInWithFirebaseGoogle();
     if (error) {
       setGoogleLoading(false);
       toast.error(error.message);
       return;
     }
+    const redirect = searchParams.get('redirect');
+    // Optimistic redirect: new users go straight to onboarding while the
+    // profile + hiker role upserts finish in the background on the server.
+    if (isNewUser) {
+      setGoogleLoading(false);
+      toast.success('Signed in with Google');
+      navigate(redirect ? `/onboarding?redirect=${encodeURIComponent(redirect)}` : '/onboarding');
+      return;
+    }
     const { data: { user } } = await supabase.auth.getUser();
-    const next = user ? await resolvePostLoginPath(user.id, searchParams.get('redirect')) : '/dashboard';
+    const next = user ? await resolvePostLoginPath(user.id, redirect) : '/dashboard';
     setGoogleLoading(false);
     toast.success('Signed in with Google');
     navigate(next);
