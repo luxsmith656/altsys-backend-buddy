@@ -7,7 +7,7 @@ import { createClient } from 'npm:@supabase/supabase-js@2';
 import { corsHeaders } from 'npm:@supabase/supabase-js@2/cors';
 import { createRemoteJWKSet, jwtVerify } from 'npm:jose@5';
 
-const FIREBASE_PROJECT_ID = Deno.env.get('FIREBASE_PROJECT_ID') ?? '';
+const FIREBASE_PROJECT_ID = (Deno.env.get('FIREBASE_PROJECT_ID') ?? '').trim().replace(/^["']|["']$/g, '');
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SERVICE_ROLE = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 
@@ -33,6 +33,13 @@ Deno.serve(async (req) => {
     const { payload } = await jwtVerify(idToken, JWKS, {
       issuer: `https://securetoken.google.com/${FIREBASE_PROJECT_ID}`,
       audience: FIREBASE_PROJECT_ID,
+    }).catch((err) => {
+      console.error('[firebase-auth-bridge] jwtVerify failed', {
+        expectedIss: `https://securetoken.google.com/${FIREBASE_PROJECT_ID}`,
+        expectedAud: FIREBASE_PROJECT_ID,
+        projectIdLen: FIREBASE_PROJECT_ID.length,
+      });
+      throw err;
     });
 
     const email = (payload.email as string | undefined)?.toLowerCase();
