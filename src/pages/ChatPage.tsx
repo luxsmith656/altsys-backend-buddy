@@ -131,9 +131,9 @@ export default function ChatPage() {
             <Bot className="h-5 w-5 text-primary" />
           </div>
           <div>
-            <h1 className="font-bold">Trail AI Assistant</h1>
+            <h1 className="font-bold">Trail Assistant</h1>
             <p className="text-xs text-muted-foreground">
-              {isOnline ? 'Powered by AI • Mount Kalisungan Expert' : '📴 Offline Mode • Local Knowledge Base'}
+              {isOnline ? 'Mount Kalisungan Expert' : '📴 Offline Mode • Local Knowledge Base'}
             </p>
           </div>
         </div>
