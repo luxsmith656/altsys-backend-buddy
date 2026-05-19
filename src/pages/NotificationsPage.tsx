@@ -7,7 +7,7 @@ import { Bell, Megaphone, CalendarCheck, AlertTriangle, CheckCheck, Trash2 } fro
 import { loadAnnouncements } from '@/lib/announcements';
 import { loadRemovedNotificationIds, loadSeenNotificationIds, markNotificationRemoved, saveSeenNotificationIds } from '@/lib/notifications';
 import { isFirebaseConfigured } from '@/lib/firebase';
-import { subscribeUserNotifications, type FsNotification } from '@/lib/firestoreNotifications';
+import { subscribeUserNotifications, markFsNotificationRead, deleteFsNotification, type FsNotification } from '@/lib/firestoreNotifications';
 
 type AppNotification = {
   id: string;
