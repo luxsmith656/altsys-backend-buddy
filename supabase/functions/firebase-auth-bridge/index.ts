@@ -7,9 +7,9 @@ import { createClient } from 'npm:@supabase/supabase-js@2';
 import { corsHeaders } from 'npm:@supabase/supabase-js@2/cors';
 import { createRemoteJWKSet, jwtVerify, type JWTPayload } from 'npm:jose@5';
 
-const FIREBASE_PROJECT_ID = (Deno.env.get('FIREBASE_PROJECT_ID') ?? '').trim().replace(/^["']|["']$/g, '');
-const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
-const SERVICE_ROLE = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+const FIREBASE_PROJECT_ID = cleanEnv('FIREBASE_PROJECT_ID');
+const SUPABASE_URL = cleanEnv('SUPABASE_URL');
+const SERVICE_ROLE = cleanEnv('SUPABASE_SERVICE_ROLE_KEY');
 const ALLOWED_FIREBASE_PROJECT_IDS = Array.from(
   new Set([FIREBASE_PROJECT_ID, 'altsys-backend-buddy'].filter(Boolean)),
 );
@@ -24,7 +24,7 @@ Deno.serve(async (req) => {
 
   try {
     if (!SUPABASE_URL || !SERVICE_ROLE || ALLOWED_FIREBASE_PROJECT_IDS.length === 0) {
-      return json({ error: 'FIREBASE_PROJECT_ID not configured' }, 500);
+      return json({ error: 'Google sign-in is not configured correctly' }, 500);
     }
 
     const { idToken } = await req.json().catch(() => ({}));
@@ -129,4 +129,8 @@ async function verifyFirebaseToken(idToken: string): Promise<JWTPayload> {
     configuredProjectIdLen: FIREBASE_PROJECT_ID.length,
   });
   throw lastError instanceof Error ? lastError : new Error('Invalid Firebase token');
+}
+
+function cleanEnv(name: string): string {
+  return (Deno.env.get(name) ?? '').trim().replace(/^["']|["']$/g, '');
 }
