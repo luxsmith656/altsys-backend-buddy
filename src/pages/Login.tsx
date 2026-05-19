@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { supabase } from '@/integrations/supabase/client';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { Button } from '@/components/ui/button';
@@ -9,6 +10,7 @@ import { toast } from 'sonner';
 import logo from '@/assets/logo.png';
 import { signInWithFirebaseGoogle } from '@/lib/firebase-auth';
 import { isFirebaseConfigured } from '@/lib/firebase';
+import { resolvePostLoginPath } from '@/lib/post-login';
 
 export default function Login() {
   const [email, setEmail] = useState('');
@@ -46,14 +48,16 @@ export default function Login() {
     }
     setGoogleLoading(true);
     const { error } = await signInWithFirebaseGoogle();
-    setGoogleLoading(false);
     if (error) {
+      setGoogleLoading(false);
       toast.error(error.message);
       return;
     }
+    const { data: { user } } = await supabase.auth.getUser();
+    const next = user ? await resolvePostLoginPath(user.id, searchParams.get('redirect')) : '/dashboard';
+    setGoogleLoading(false);
     toast.success('Signed in with Google');
-    const redirectPath = searchParams.get('redirect');
-    navigate(redirectPath || '/dashboard');
+    navigate(next);
   };
 
   return (

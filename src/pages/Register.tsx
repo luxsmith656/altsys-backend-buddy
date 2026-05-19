@@ -10,6 +10,8 @@ import logo from '@/assets/logo.png';
 import { sendSms, sendOtpEmail } from '@/lib/notification-service';
 import { signInWithFirebaseGoogle } from '@/lib/firebase-auth';
 import { isFirebaseConfigured } from '@/lib/firebase';
+import { supabase } from '@/integrations/supabase/client';
+import { resolvePostLoginPath } from '@/lib/post-login';
 
 export default function Register() {
   const [fullName, setFullName] = useState('');
@@ -30,11 +32,12 @@ export default function Register() {
     }
     setGoogleLoading(true);
     const { error } = await signInWithFirebaseGoogle();
+    if (error) { setGoogleLoading(false); toast.error(error.message); return; }
+    const { data: { user } } = await supabase.auth.getUser();
+    const next = user ? await resolvePostLoginPath(user.id, searchParams.get('redirect')) : '/onboarding';
     setGoogleLoading(false);
-    if (error) { toast.error(error.message); return; }
-    toast.success('Account ready — signed in with Google');
-    const redirectPath = searchParams.get('redirect');
-    navigate(redirectPath || '/dashboard');
+    toast.success('Account ready — finish your profile');
+    navigate(next);
   };
 
   // Verification States
