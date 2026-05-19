@@ -9,6 +9,7 @@ import logo from '@/assets/logo.png';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { loadAnnouncements } from '@/lib/announcements';
 import { loadRemovedNotificationIds, loadSeenNotificationIds } from '@/lib/notifications';
+import { subscribeUserNotifications, type FsNotification } from '@/lib/firestoreNotifications';
 import { supabase } from '@/integrations/supabase/client';
 
 export default function Navbar() {
@@ -46,6 +47,18 @@ export default function Navbar() {
       .join('');
   }, [user]);
 
+  const [fsNotifs, setFsNotifs] = useState<FsNotification[]>([]);
+
+  // Subscribe to Firestore notifications for this user (realtime).
+  useEffect(() => {
+    if (!user) {
+      setFsNotifs([]);
+      return;
+    }
+    const unsub = subscribeUserNotifications(user.id, setFsNotifs);
+    return () => unsub();
+  }, [user]);
+
   useEffect(() => {
     if (!user) {
       setNotifCount(0);
@@ -71,8 +84,17 @@ export default function Navbar() {
         title: `Booking ${b.status}`,
         createdAt: b.created_at,
       }));
-      const all = [...anns, ...bookingItems].filter((n) => !removed.has(n.id));
-      const unseen = all.filter((n) => !seen.has(n.id)).length;
+      const fsItems = fsNotifs.map((n) => ({
+        id: `fs:${n.id}`,
+        title: n.title,
+        createdAt: n.createdAt,
+        read: n.read,
+      }));
+      const all = [...anns, ...bookingItems, ...fsItems].filter((n) => !removed.has(n.id));
+      const unseen = all.filter((n) => {
+        if ('read' in n) return !n.read;
+        return !seen.has(n.id);
+      }).length;
       setNotifCount(unseen);
       setNotifPreview(
         all
@@ -81,7 +103,7 @@ export default function Navbar() {
       );
     };
     void loadNotifData();
-  }, [user, location.pathname]);
+  }, [user, location.pathname, fsNotifs]);
 
   const isActive = (path: string) => location.pathname === path;
 

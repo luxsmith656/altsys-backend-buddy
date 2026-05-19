@@ -1,7 +1,38 @@
 rules_version = '2';
+
+// Firestore rules for the `notifications` collection.
+// Reads/updates/deletes restricted to the notification owner.
+// Creates are blocked from clients — notifications are created server-side
+// (Lovable Cloud edge functions / Firebase Admin SDK) which bypass these rules.
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Default deny-all. Open only the collections your app needs.
+
+    match /notifications/{notifId} {
+      allow read: if request.auth != null
+                  && request.auth.uid == resource.data.userId;
+
+      // Owner can only flip `read` to true or delete their notification.
+      allow update: if request.auth != null
+                    && request.auth.uid == resource.data.userId
+                    && request.resource.data.userId == resource.data.userId
+                    && request.resource.data.diff(resource.data)
+                         .affectedKeys()
+                         .hasOnly(['read']);
+
+      allow delete: if request.auth != null
+                    && request.auth.uid == resource.data.userId;
+
+      // Clients may only create notifications addressed to themselves.
+      // For cross-user broadcasts, use Firebase Admin SDK from a backend.
+      allow create: if request.auth != null
+                    && request.auth.uid == request.resource.data.userId
+                    && request.resource.data.read == false
+                    && request.resource.data.keys().hasOnly(
+                         ['userId', 'title', 'body', 'category', 'link', 'read', 'createdAt']
+                       );
+    }
+
+    // Deny everything else by default.
     match /{document=**} {
       allow read, write: if false;
     }
