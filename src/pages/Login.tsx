@@ -39,6 +39,7 @@ export default function Login() {
   };
 
   const handleGoogle = async () => {
+    if (googleLoading) return;
     if (!isFirebaseConfigured()) {
       toast.error('Google sign-in unavailable — Firebase not configured.');
       return;
@@ -104,7 +105,7 @@ export default function Login() {
                 <path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.2-2.2 4.1-4.1 5.6l6.2 5.2c-.4.4 6.6-4.8 6.6-14.8 0-1.2-.1-2.3-.4-3.5z"/>
               </svg>
             )}
-            Continue with Google
+            Sign in / Sign up with Google
           </Button>
           {!isFirebaseConfigured() && (
             <p className="mt-2 text-[11px] text-muted-foreground text-center">
