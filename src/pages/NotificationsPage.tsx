@@ -6,13 +6,19 @@ import { Button } from '@/components/ui/button';
 import { Bell, Megaphone, CalendarCheck, AlertTriangle, CheckCheck, Trash2 } from 'lucide-react';
 import { loadAnnouncements } from '@/lib/announcements';
 import { loadRemovedNotificationIds, loadSeenNotificationIds, markNotificationRemoved, saveSeenNotificationIds } from '@/lib/notifications';
+import {
+  deleteFsNotification,
+  markFsNotificationRead,
+  subscribeUserNotifications,
+  type FsNotification,
+} from '@/lib/firestoreNotifications';
 
 type AppNotification = {
   id: string;
   title: string;
   body: string;
   createdAt: string;
-  category: 'announcement' | 'booking';
+  category: 'announcement' | 'booking' | 'system' | 'alert';
 };
 
 export default function NotificationsPage() {
@@ -20,6 +26,18 @@ export default function NotificationsPage() {
   const [items, setItems] = useState<AppNotification[]>([]);
   const [seen, setSeen] = useState<string[]>([]);
   const [removed, setRemoved] = useState<string[]>([]);
+
+  const [fsNotifs, setFsNotifs] = useState<FsNotification[]>([]);
+
+  // Realtime Firestore subscription
+  useEffect(() => {
+    if (!user) {
+      setFsNotifs([]);
+      return;
+    }
+    const unsub = subscribeUserNotifications(user.id, setFsNotifs);
+    return () => unsub();
+  }, [user]);
 
   useEffect(() => {
     if (!user) return;
@@ -51,15 +69,23 @@ export default function NotificationsPage() {
         category: 'booking' as const,
       }));
 
+      const fsItems: AppNotification[] = fsNotifs.map((n) => ({
+        id: `fs:${n.id}`,
+        title: n.title,
+        body: n.body,
+        createdAt: n.createdAt,
+        category: n.category,
+      }));
+
       setItems(
-        [...anns, ...bookingNotifs]
+        [...anns, ...bookingNotifs, ...fsItems]
           .filter((item) => !removedIds.has(item.id))
           .sort((a, b) => +new Date(b.createdAt) - +new Date(a.createdAt)),
       );
     };
 
     void loadAll();
-  }, [user]);
+  }, [user, fsNotifs]);
 
   const unread = useMemo(
     () => items.filter((i) => !seen.includes(i.id) && !removed.includes(i.id)).length,
