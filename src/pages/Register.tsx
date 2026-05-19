@@ -23,6 +23,7 @@ export default function Register() {
   const [searchParams] = useSearchParams();
 
   const handleGoogle = async () => {
+    if (googleLoading) return;
     if (!isFirebaseConfigured()) {
       toast.error('Google sign-up unavailable — Firebase not configured.');
       return;

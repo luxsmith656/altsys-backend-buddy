@@ -5,11 +5,14 @@
 
 import { createClient } from 'npm:@supabase/supabase-js@2';
 import { corsHeaders } from 'npm:@supabase/supabase-js@2/cors';
-import { createRemoteJWKSet, jwtVerify } from 'npm:jose@5';
+import { createRemoteJWKSet, jwtVerify, type JWTPayload } from 'npm:jose@5';
 
-const FIREBASE_PROJECT_ID = (Deno.env.get('FIREBASE_PROJECT_ID') ?? '').trim().replace(/^["']|["']$/g, '');
-const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
-const SERVICE_ROLE = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+const FIREBASE_PROJECT_ID = cleanEnv('FIREBASE_PROJECT_ID');
+const SUPABASE_URL = cleanEnv('SUPABASE_URL');
+const SERVICE_ROLE = cleanEnv('SUPABASE_SERVICE_ROLE_KEY');
+const ALLOWED_FIREBASE_PROJECT_IDS = Array.from(
+  new Set([FIREBASE_PROJECT_ID, 'altsys-backend-buddy'].filter(Boolean)),
+);
 
 // Firebase ID tokens are signed with these public keys.
 const JWKS = createRemoteJWKSet(
@@ -20,8 +23,8 @@ Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
 
   try {
-    if (!FIREBASE_PROJECT_ID) {
-      return json({ error: 'FIREBASE_PROJECT_ID not configured' }, 500);
+    if (!SUPABASE_URL || !SERVICE_ROLE || ALLOWED_FIREBASE_PROJECT_IDS.length === 0) {
+      return json({ error: 'Google sign-in is not configured correctly' }, 500);
     }
 
     const { idToken } = await req.json().catch(() => ({}));
@@ -30,24 +33,16 @@ Deno.serve(async (req) => {
     }
 
     // Verify Firebase ID token: signature, issuer, audience.
-    const { payload } = await jwtVerify(idToken, JWKS, {
-      issuer: `https://securetoken.google.com/${FIREBASE_PROJECT_ID}`,
-      audience: FIREBASE_PROJECT_ID,
-    }).catch((err) => {
-      console.error('[firebase-auth-bridge] jwtVerify failed', {
-        expectedIss: `https://securetoken.google.com/${FIREBASE_PROJECT_ID}`,
-        expectedAud: FIREBASE_PROJECT_ID,
-        projectIdLen: FIREBASE_PROJECT_ID.length,
-      });
-      throw err;
-    });
+    const payload = await verifyFirebaseToken(idToken);
 
     const email = (payload.email as string | undefined)?.toLowerCase();
     const emailVerified = payload.email_verified === true;
     const fullName = (payload.name as string | undefined) ?? '';
+    const signInProvider = (payload.firebase as { sign_in_provider?: string } | undefined)?.sign_in_provider;
 
     if (!email) return json({ error: 'Firebase token has no email' }, 400);
     if (!emailVerified) return json({ error: 'Email not verified with Google' }, 400);
+    if (signInProvider !== 'google.com') return json({ error: 'Firebase token is not a Google sign-in' }, 400);
 
     const admin = createClient(SUPABASE_URL, SERVICE_ROLE, {
       auth: { persistSession: false, autoRefreshToken: false },
@@ -78,14 +73,17 @@ Deno.serve(async (req) => {
 
     // First-time setup: ensure profile + default 'hiker' role exist.
     if (userId) {
-      await admin.from('profiles').upsert(
+      const { error: profileError } = await admin.from('profiles').upsert(
         { user_id: userId, full_name: fullName },
         { onConflict: 'user_id', ignoreDuplicates: true },
       );
-      await admin.from('user_roles').upsert(
+      if (profileError) return json({ error: profileError.message }, 500);
+
+      const { error: roleError } = await admin.from('user_roles').upsert(
         { user_id: userId, role: 'hiker' },
         { onConflict: 'user_id,role', ignoreDuplicates: true },
       );
+      if (roleError) return json({ error: roleError.message }, 500);
     }
 
     // Mint a magiclink; the client exchanges its token_hash for a session.
@@ -112,4 +110,30 @@ function json(body: unknown, status = 200) {
     status,
     headers: { ...corsHeaders, 'Content-Type': 'application/json' },
   });
+}
+
+async function verifyFirebaseToken(idToken: string): Promise<JWTPayload> {
+  let lastError: unknown;
+
+  for (const projectId of ALLOWED_FIREBASE_PROJECT_IDS) {
+    try {
+      const { payload } = await jwtVerify(idToken, JWKS, {
+        issuer: `https://securetoken.google.com/${projectId}`,
+        audience: projectId,
+      });
+      return payload;
+    } catch (err) {
+      lastError = err;
+    }
+  }
+
+  console.error('[firebase-auth-bridge] jwtVerify failed', {
+    allowedAudiences: ALLOWED_FIREBASE_PROJECT_IDS,
+    configuredProjectIdLen: FIREBASE_PROJECT_ID.length,
+  });
+  throw lastError instanceof Error ? lastError : new Error('Invalid Firebase token');
+}
+
+function cleanEnv(name: string): string {
+  return (Deno.env.get(name) ?? '').trim().replace(/^["']|["']$/g, '');
 }
