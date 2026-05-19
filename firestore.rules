@@ -22,8 +22,14 @@ service cloud.firestore {
       allow delete: if request.auth != null
                     && request.auth.uid == resource.data.userId;
 
-      // Client creates are disallowed. Use Admin SDK or a trusted backend.
-      allow create: if false;
+      // Clients may only create notifications addressed to themselves.
+      // For cross-user broadcasts, use Firebase Admin SDK from a backend.
+      allow create: if request.auth != null
+                    && request.auth.uid == request.resource.data.userId
+                    && request.resource.data.read == false
+                    && request.resource.data.keys().hasOnly(
+                         ['userId', 'title', 'body', 'category', 'link', 'read', 'createdAt']
+                       );
     }
 
     // Deny everything else by default.
