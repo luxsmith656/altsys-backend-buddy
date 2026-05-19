@@ -14,16 +14,644 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      admin_logs: {
+        Row: {
+          action: string
+          created_at: string
+          entity: string
+          entity_id: string
+          id: string
+          metadata: Json
+          user_id: string | null
+        }
+        Insert: {
+          action: string
+          created_at?: string
+          entity?: string
+          entity_id?: string
+          id?: string
+          metadata?: Json
+          user_id?: string | null
+        }
+        Update: {
+          action?: string
+          created_at?: string
+          entity?: string
+          entity_id?: string
+          id?: string
+          metadata?: Json
+          user_id?: string | null
+        }
+        Relationships: []
+      }
+      booking_assignments: {
+        Row: {
+          booking_id: string
+          created_at: string
+          decided_at: string | null
+          guide_id: string
+          id: string
+          location_id: string | null
+          status: string
+        }
+        Insert: {
+          booking_id: string
+          created_at?: string
+          decided_at?: string | null
+          guide_id: string
+          id?: string
+          location_id?: string | null
+          status?: string
+        }
+        Update: {
+          booking_id?: string
+          created_at?: string
+          decided_at?: string | null
+          guide_id?: string
+          id?: string
+          location_id?: string | null
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "booking_assignments_booking_id_fkey"
+            columns: ["booking_id"]
+            isOneToOne: false
+            referencedRelation: "bookings"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "booking_assignments_guide_id_fkey"
+            columns: ["guide_id"]
+            isOneToOne: false
+            referencedRelation: "guides"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "booking_assignments_location_id_fkey"
+            columns: ["location_id"]
+            isOneToOne: false
+            referencedRelation: "locations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      bookings: {
+        Row: {
+          booking_date: string
+          created_at: string
+          emergency_contact_name: string
+          emergency_contact_phone: string
+          group_size: number
+          id: string
+          location_id: string | null
+          notes: string
+          qr_code_data: string
+          status: string
+          user_id: string
+        }
+        Insert: {
+          booking_date: string
+          created_at?: string
+          emergency_contact_name?: string
+          emergency_contact_phone?: string
+          group_size?: number
+          id?: string
+          location_id?: string | null
+          notes?: string
+          qr_code_data?: string
+          status?: string
+          user_id: string
+        }
+        Update: {
+          booking_date?: string
+          created_at?: string
+          emergency_contact_name?: string
+          emergency_contact_phone?: string
+          group_size?: number
+          id?: string
+          location_id?: string | null
+          notes?: string
+          qr_code_data?: string
+          status?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "bookings_location_id_fkey"
+            columns: ["location_id"]
+            isOneToOne: false
+            referencedRelation: "locations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      checkpoint_surveys: {
+        Row: {
+          checkpoint_id: string
+          created_at: string
+          id: string
+          response: Json
+          session_id: string
+        }
+        Insert: {
+          checkpoint_id: string
+          created_at?: string
+          id?: string
+          response?: Json
+          session_id: string
+        }
+        Update: {
+          checkpoint_id?: string
+          created_at?: string
+          id?: string
+          response?: Json
+          session_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "checkpoint_surveys_checkpoint_id_fkey"
+            columns: ["checkpoint_id"]
+            isOneToOne: false
+            referencedRelation: "checkpoints"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "checkpoint_surveys_session_id_fkey"
+            columns: ["session_id"]
+            isOneToOne: false
+            referencedRelation: "hiker_sessions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      checkpoints: {
+        Row: {
+          created_at: string
+          description: string
+          id: string
+          latitude: number
+          location_id: string
+          longitude: number
+          name: string
+          order_index: number
+        }
+        Insert: {
+          created_at?: string
+          description?: string
+          id?: string
+          latitude?: number
+          location_id: string
+          longitude?: number
+          name: string
+          order_index?: number
+        }
+        Update: {
+          created_at?: string
+          description?: string
+          id?: string
+          latitude?: number
+          location_id?: string
+          longitude?: number
+          name?: string
+          order_index?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "checkpoints_location_id_fkey"
+            columns: ["location_id"]
+            isOneToOne: false
+            referencedRelation: "locations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      daily_capacity: {
+        Row: {
+          current_count: number
+          date: string
+          id: string
+          location_id: string | null
+          max_capacity: number
+        }
+        Insert: {
+          current_count?: number
+          date: string
+          id?: string
+          location_id?: string | null
+          max_capacity?: number
+        }
+        Update: {
+          current_count?: number
+          date?: string
+          id?: string
+          location_id?: string | null
+          max_capacity?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "daily_capacity_location_id_fkey"
+            columns: ["location_id"]
+            isOneToOne: false
+            referencedRelation: "locations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      guides: {
+        Row: {
+          created_at: string
+          full_name: string
+          id: string
+          is_active: boolean
+          location_id: string
+          per_trip_fee: number
+          phone: string
+          specialty: string
+          updated_at: string
+          user_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          full_name: string
+          id?: string
+          is_active?: boolean
+          location_id: string
+          per_trip_fee?: number
+          phone?: string
+          specialty?: string
+          updated_at?: string
+          user_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          full_name?: string
+          id?: string
+          is_active?: boolean
+          location_id?: string
+          per_trip_fee?: number
+          phone?: string
+          specialty?: string
+          updated_at?: string
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "guides_location_id_fkey"
+            columns: ["location_id"]
+            isOneToOne: false
+            referencedRelation: "locations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      hiker_locations: {
+        Row: {
+          altitude: number
+          id: string
+          latitude: number
+          longitude: number
+          session_id: string
+          timestamp: string
+        }
+        Insert: {
+          altitude?: number
+          id?: string
+          latitude: number
+          longitude: number
+          session_id: string
+          timestamp?: string
+        }
+        Update: {
+          altitude?: number
+          id?: string
+          latitude?: number
+          longitude?: number
+          session_id?: string
+          timestamp?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "hiker_locations_session_id_fkey"
+            columns: ["session_id"]
+            isOneToOne: false
+            referencedRelation: "hiker_sessions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      hiker_sessions: {
+        Row: {
+          booking_id: string | null
+          created_at: string
+          end_time: string | null
+          id: string
+          start_time: string
+          status: string
+          total_distance_km: number
+          trail_zone_id: string | null
+          user_id: string
+        }
+        Insert: {
+          booking_id?: string | null
+          created_at?: string
+          end_time?: string | null
+          id?: string
+          start_time?: string
+          status?: string
+          total_distance_km?: number
+          trail_zone_id?: string | null
+          user_id: string
+        }
+        Update: {
+          booking_id?: string | null
+          created_at?: string
+          end_time?: string | null
+          id?: string
+          start_time?: string
+          status?: string
+          total_distance_km?: number
+          trail_zone_id?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "hiker_sessions_booking_id_fkey"
+            columns: ["booking_id"]
+            isOneToOne: false
+            referencedRelation: "bookings"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "hiker_sessions_trail_zone_id_fkey"
+            columns: ["trail_zone_id"]
+            isOneToOne: false
+            referencedRelation: "trail_zones"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      locations: {
+        Row: {
+          address: string
+          center_lat: number
+          center_lng: number
+          created_at: string
+          currency: string
+          default_guide_fee: number
+          description: string
+          entry_fee: number
+          id: string
+          lgu: string
+          name: string
+          region: string
+          slug: string
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          address?: string
+          center_lat?: number
+          center_lng?: number
+          created_at?: string
+          currency?: string
+          default_guide_fee?: number
+          description?: string
+          entry_fee?: number
+          id?: string
+          lgu?: string
+          name: string
+          region?: string
+          slug: string
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          address?: string
+          center_lat?: number
+          center_lng?: number
+          created_at?: string
+          currency?: string
+          default_guide_fee?: number
+          description?: string
+          entry_fee?: number
+          id?: string
+          lgu?: string
+          name?: string
+          region?: string
+          slug?: string
+          status?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      profiles: {
+        Row: {
+          avatar_url: string
+          created_at: string
+          emergency_contact: string
+          full_name: string
+          id: string
+          phone: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          avatar_url?: string
+          created_at?: string
+          emergency_contact?: string
+          full_name?: string
+          id?: string
+          phone?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          avatar_url?: string
+          created_at?: string
+          emergency_contact?: string
+          full_name?: string
+          id?: string
+          phone?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      reviews: {
+        Row: {
+          created_at: string
+          id: string
+          is_approved: boolean
+          rating: number
+          review_text: string
+          reviewer_name: string
+          trail_name: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          is_approved?: boolean
+          rating?: number
+          review_text?: string
+          reviewer_name?: string
+          trail_name?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          is_approved?: boolean
+          rating?: number
+          review_text?: string
+          reviewer_name?: string
+          trail_name?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      trail_reports: {
+        Row: {
+          condition: string
+          created_at: string
+          description: string
+          id: string
+          ranger_id: string
+          zone_id: string
+        }
+        Insert: {
+          condition?: string
+          created_at?: string
+          description?: string
+          id?: string
+          ranger_id: string
+          zone_id: string
+        }
+        Update: {
+          condition?: string
+          created_at?: string
+          description?: string
+          id?: string
+          ranger_id?: string
+          zone_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "trail_reports_zone_id_fkey"
+            columns: ["zone_id"]
+            isOneToOne: false
+            referencedRelation: "trail_zones"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      trail_zones: {
+        Row: {
+          coordinates_json: Json
+          created_at: string
+          description: string
+          difficulty: string
+          elevation_meters: number
+          id: string
+          location_id: string | null
+          max_capacity: number
+          name: string
+          status: string
+        }
+        Insert: {
+          coordinates_json?: Json
+          created_at?: string
+          description?: string
+          difficulty?: string
+          elevation_meters?: number
+          id?: string
+          location_id?: string | null
+          max_capacity?: number
+          name: string
+          status?: string
+        }
+        Update: {
+          coordinates_json?: Json
+          created_at?: string
+          description?: string
+          difficulty?: string
+          elevation_meters?: number
+          id?: string
+          location_id?: string | null
+          max_capacity?: number
+          name?: string
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "trail_zones_location_id_fkey"
+            columns: ["location_id"]
+            isOneToOne: false
+            referencedRelation: "locations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      user_locations: {
+        Row: {
+          id: string
+          location_id: string
+          user_id: string
+        }
+        Insert: {
+          id?: string
+          location_id: string
+          user_id: string
+        }
+        Update: {
+          id?: string
+          location_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "user_locations_location_id_fkey"
+            columns: ["location_id"]
+            isOneToOne: false
+            referencedRelation: "locations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      user_roles: {
+        Row: {
+          id: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Insert: {
+          id?: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Update: {
+          id?: string
+          role?: Database["public"]["Enums"]["app_role"]
+          user_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      has_role: {
+        Args: {
+          _role: Database["public"]["Enums"]["app_role"]
+          _user_id: string
+        }
+        Returns: boolean
+      }
     }
     Enums: {
-      [_ in never]: never
+      app_role: "super_admin" | "admin" | "ranger" | "guide" | "hiker"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -150,6 +778,8 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {},
+    Enums: {
+      app_role: ["super_admin", "admin", "ranger", "guide", "hiker"],
+    },
   },
 } as const
