@@ -38,6 +38,23 @@ export default function Login() {
     setPassword(password);
   };
 
+  const handleGoogle = async () => {
+    if (!isFirebaseConfigured()) {
+      toast.error('Google sign-in unavailable — Firebase not configured.');
+      return;
+    }
+    setGoogleLoading(true);
+    const { error } = await signInWithFirebaseGoogle();
+    setGoogleLoading(false);
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
+    toast.success('Signed in with Google');
+    const redirectPath = searchParams.get('redirect');
+    navigate(redirectPath || '/dashboard');
+  };
+
   return (
     <div className="min-h-screen flex items-center justify-center px-4 pt-16">
       <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,_hsl(152_60%_42%/0.06)_0%,_transparent_50%)]" />
