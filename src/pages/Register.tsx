@@ -31,12 +31,19 @@ export default function Register() {
       return;
     }
     setGoogleLoading(true);
-    const { error } = await signInWithFirebaseGoogle();
+    const { error, isNewUser } = await signInWithFirebaseGoogle();
     if (error) { setGoogleLoading(false); toast.error(error.message); return; }
+    const redirect = searchParams.get('redirect');
+    if (isNewUser) {
+      setGoogleLoading(false);
+      toast.success('Account ready — finish your profile');
+      navigate(redirect ? `/onboarding?redirect=${encodeURIComponent(redirect)}` : '/onboarding');
+      return;
+    }
     const { data: { user } } = await supabase.auth.getUser();
-    const next = user ? await resolvePostLoginPath(user.id, searchParams.get('redirect')) : '/onboarding';
+    const next = user ? await resolvePostLoginPath(user.id, redirect) : '/onboarding';
     setGoogleLoading(false);
-    toast.success('Account ready — finish your profile');
+    toast.success('Signed in with Google');
     navigate(next);
   };
 

@@ -155,33 +155,58 @@ export default function Onboarding() {
             <Input id="age" type="number" inputMode="numeric" min={13} max={120} value={age} onChange={(e) => setAge(e.target.value)} placeholder="e.g. 24" required />
           </div>
 
-          <button
-            type="button"
-            onClick={() => handleCheckboxChange(!agreed)}
-            className={`w-full flex items-start gap-3 p-4 rounded-lg border text-left transition ${
+          <div
+            className={`w-full rounded-lg border transition ${
               agreed
                 ? 'border-primary/60 bg-primary/10 ring-1 ring-primary/40'
-                : 'border-primary/40 bg-primary/5 hover:bg-primary/10 animate-pulse'
+                : 'border-primary/40 bg-primary/5 animate-pulse'
             }`}
           >
-            <Checkbox checked={agreed} onCheckedChange={() => handleCheckboxChange(!agreed)} className="mt-0.5 pointer-events-none" />
-            <span className="text-sm leading-snug flex-1">
-              <span className="flex items-center gap-1.5 font-semibold">
-                <ShieldCheck className="h-4 w-4 text-primary" />
-                Do you agree with our Terms & Agreements?
+            <button
+              type="button"
+              onClick={() => { if (!agreed) setDialogOpen(true); }}
+              className="w-full flex items-start gap-3 p-4 text-left disabled:cursor-default"
+              disabled={agreed}
+            >
+              <Checkbox checked={agreed} className="mt-0.5 pointer-events-none" tabIndex={-1} />
+              <span className="text-sm leading-snug flex-1">
+                <span className="flex items-center gap-1.5 font-semibold">
+                  <ShieldCheck className="h-4 w-4 text-primary" />
+                  Do you agree with our Terms & Agreements?
+                </span>
+                <span className="text-muted-foreground mt-1 block">
+                  {agreed ? (
+                    <span className="inline-flex items-center gap-1 text-primary">
+                      <CheckCircle2 className="h-3.5 w-3.5" /> Agreement acknowledged.
+                    </span>
+                  ) : (
+                    <>Tap to open and read the full document. You must scroll to the bottom before you can agree.</>
+                  )}
+                </span>
               </span>
-              <span className="text-muted-foreground mt-1 block">
-                {agreed ? (
-                  <span className="inline-flex items-center gap-1 text-primary">
-                    <CheckCircle2 className="h-3.5 w-3.5" /> Agreement acknowledged. Click to revoke.
-                  </span>
-                ) : (
-                  <>Tap to open and read the full document. You must scroll to the bottom before you can agree.</>
-                )}
-              </span>
-            </span>
-            <FileText className="h-4 w-4 text-muted-foreground mt-1 shrink-0" />
-          </button>
+              <FileText className="h-4 w-4 text-muted-foreground mt-1 shrink-0" />
+            </button>
+            {agreed && (
+              <div className="px-4 pb-3 -mt-1 flex items-center gap-3 text-xs">
+                <button
+                  type="button"
+                  onClick={() => setDialogOpen(true)}
+                  className="text-muted-foreground hover:text-foreground underline-offset-2 hover:underline"
+                >
+                  View document
+                </button>
+                <span className="text-muted-foreground/40">·</span>
+                <button
+                  type="button"
+                  onClick={() => setAgreed(false)}
+                  className="text-muted-foreground hover:text-destructive underline-offset-2 hover:underline"
+                >
+                  Revoke
+                </button>
+              </div>
+            )}
+          </div>
+
 
           <Button type="submit" className="w-full h-11 font-bold" disabled={saving || !agreed}>
             {saving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
