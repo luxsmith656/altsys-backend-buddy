@@ -9,11 +9,6 @@ import { motion } from 'framer-motion';
 import { Building2, Users, DollarSign, TrendingUp, MapPin, Loader2, AlertTriangle, RefreshCw } from 'lucide-react';
 import LocationSwitcher from '@/components/layout/LocationSwitcher';
 import RealtimeMonitorMap from '@/components/admin/RealtimeMonitorMap';
-import LGUDemographicsPanel from '@/components/admin/LGUDemographicsPanel';
-import LGUFinancialPanel from '@/components/admin/LGUFinancialPanel';
-import ForecastPanel from '@/components/admin/ForecastPanel';
-import SOSAlertsPanel from '@/components/admin/SOSAlertsPanel';
-import ProvisionLocationWizard from '@/components/admin/ProvisionLocationWizard';
 import { format, subDays, startOfMonth } from 'date-fns';
 
 interface LocStats {
@@ -122,18 +117,9 @@ export default function CentralDashboard() {
           ))}
         </div>
 
-        <div className="grid lg:grid-cols-3 gap-4 mb-6">
-          <div className="lg:col-span-2">
-            <ProvisionLocationWizard onCreated={loadStats} />
-          </div>
-          <SOSAlertsPanel locationId={null} />
-        </div>
-
         <Tabs defaultValue="overview">
           <TabsList className="glass-card">
-            <TabsTrigger value="overview">Overview</TabsTrigger>
-            <TabsTrigger value="demographics">Demographics</TabsTrigger>
-            <TabsTrigger value="financial">Financial</TabsTrigger>
+            <TabsTrigger value="overview">Overview by location</TabsTrigger>
             <TabsTrigger value="monitor">Live monitor</TabsTrigger>
           </TabsList>
 
@@ -164,16 +150,6 @@ export default function CentralDashboard() {
                 </Card>
               )}
             </div>
-
-            <ForecastPanel locationId={activeLocationId} readOnly={false} />
-          </TabsContent>
-
-          <TabsContent value="demographics" className="mt-4 space-y-4">
-            <LGUDemographicsPanel locationId={activeLocationId} />
-          </TabsContent>
-
-          <TabsContent value="financial" className="mt-4">
-            <LGUFinancialPanel locationId={activeLocationId} />
           </TabsContent>
 
           <TabsContent value="monitor" className="mt-4">

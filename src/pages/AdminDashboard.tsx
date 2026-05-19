@@ -84,8 +84,6 @@ import {
 import TrailRecorder from '@/components/map/TrailRecorder';
 import QRCameraScanner from '@/components/admin/QRCameraScanner';
 import DemographicsTab from '@/components/admin/DemographicsTab';
-import ForecastPanel from '@/components/admin/ForecastPanel';
-import SOSAlertsPanel from '@/components/admin/SOSAlertsPanel';
 import PaymentSummaryTab from '@/components/admin/PaymentSummaryTab';
 import { Calendar } from '@/components/ui/calendar';
 import { format } from 'date-fns';
@@ -394,7 +392,6 @@ export default function AdminDashboard() {
       .insert({
         user_id: scannedBooking.user_id,
         booking_id: scannedBooking.id,
-        location_id: scannedBooking.location_id ?? scannedBooking.start_location_id ?? null,
         start_time: new Date().toISOString(),
         status: 'active',
         total_distance_km: 0,
@@ -1438,8 +1435,6 @@ export default function AdminDashboard() {
                 )}
               </CardContent>
             </Card>
-
-            <ForecastPanel locationId={null} />
           </TabsContent>
 
           {/* ─────────────────────────────── ANNOUNCEMENTS TAB ── */}
@@ -2058,15 +2053,10 @@ export default function AdminDashboard() {
           </TabsContent>
 
           {/* ─────────────────────────────── DEMOGRAPHICS TAB ── */}
-          <TabsContent value="demographics" className="space-y-6">
+          <TabsContent value="demographics">
             <DemographicsTab />
           </TabsContent>
         </Tabs>
-
-        {/* Real-time SOS alerts for this admin's locations */}
-        <div className="mt-6">
-          <SOSAlertsPanel locationId={null} />
-        </div>
       </div>
 
       {/* Floating collapsible booking calendar */}

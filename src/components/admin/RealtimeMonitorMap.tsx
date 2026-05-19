@@ -102,8 +102,8 @@ export default function RealtimeMonitorMap({ locationId, canAddCheckpoints = fal
 
   /* ── recenter on location change ── */
   useEffect(() => {
-    if (mapRef.current) mapRef.current.setView(center, 14);
-  }, [center[0], center[1]]);
+    mapRef.current?.setView(center, 14);
+  }, [center]);
 
   /* ── load checkpoints + active sessions + survey progress ── */
   const loadData = async () => {

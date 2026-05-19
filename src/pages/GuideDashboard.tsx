@@ -13,7 +13,6 @@ import { parseMeta } from '@/lib/bookingMeta';
 import { format } from 'date-fns';
 import { toast } from 'sonner';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import GuideIncidentsPanel from '@/components/guide/GuideIncidentsPanel';
 
 const QUOTA_PER_GUIDE_PER_DAY = 5;
 
@@ -236,7 +235,6 @@ export default function GuideDashboard() {
           <TabsList className="glass-card">
             <TabsTrigger value="my">My Assignments</TabsTrigger>
             <TabsTrigger value="peers">Peer Guides ({peerGuides.length})</TabsTrigger>
-            <TabsTrigger value="incidents">Incidents</TabsTrigger>
           </TabsList>
 
           <TabsContent value="my" className="mt-4">
@@ -332,10 +330,6 @@ export default function GuideDashboard() {
                 })}
               </CardContent>
             </Card>
-          </TabsContent>
-
-          <TabsContent value="incidents" className="mt-4">
-            <GuideIncidentsPanel guideId={guideRow.id} locationId={guideRow.location_id} />
           </TabsContent>
         </Tabs>
 
