@@ -21,6 +21,7 @@ import DashboardRedirect from "./pages/DashboardRedirect";
 import GuideDashboard from "./pages/GuideDashboard";
 import CentralDashboard from "./pages/CentralDashboard";
 import NotificationsPage from "./pages/NotificationsPage";
+import Onboarding from "./pages/Onboarding";
 import NotFound from "./pages/NotFound";
 import RoleRoute from "@/components/auth/RoleRoute";
 
@@ -60,6 +61,7 @@ const App = () => (
                 <Route path="/profile" element={<ProfilePage />} />
                 <Route path="/dashboard" element={<DashboardRedirect />} />
                 <Route path="/notifications" element={<NotificationsPage />} />
+                <Route path="/onboarding" element={<Onboarding />} />
                 <Route path="*" element={<NotFound />} />
               </Routes>
             </LocationsProvider>
