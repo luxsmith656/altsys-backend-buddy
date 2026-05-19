@@ -157,6 +157,9 @@ export default function NotificationsPage() {
                               const next = [...seen, n.id];
                               setSeen(next);
                               saveSeenNotificationIds(user.id, next);
+                              if (n.id.startsWith('fs:')) {
+                                void markFsNotificationRead(n.id.slice(3));
+                              }
                             }}
                           >
                             Mark as seen
