@@ -8,6 +8,8 @@ import { Loader2, Phone, Mail, MessageSquare, ShieldCheck, RefreshCw, ChevronLef
 import { toast } from 'sonner';
 import logo from '@/assets/logo.png';
 import { sendSms, sendOtpEmail } from '@/lib/notification-service';
+import { signInWithFirebaseGoogle } from '@/lib/firebase-auth';
+import { isFirebaseConfigured } from '@/lib/firebase';
 
 export default function Register() {
   const [fullName, setFullName] = useState('');
@@ -15,9 +17,24 @@ export default function Register() {
   const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
+  const [googleLoading, setGoogleLoading] = useState(false);
   const { signUp } = useAuth();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
+
+  const handleGoogle = async () => {
+    if (!isFirebaseConfigured()) {
+      toast.error('Google sign-up unavailable — Firebase not configured.');
+      return;
+    }
+    setGoogleLoading(true);
+    const { error } = await signInWithFirebaseGoogle();
+    setGoogleLoading(false);
+    if (error) { toast.error(error.message); return; }
+    toast.success('Account ready — signed in with Google');
+    const redirectPath = searchParams.get('redirect');
+    navigate(redirectPath || '/dashboard');
+  };
 
   // Verification States
   const [step, setStep] = useState(1); // 1 = form, 2 = verification
@@ -109,7 +126,37 @@ export default function Register() {
 
         <div className="glass-card rounded-xl p-6">
           {step === 1 ? (
-            <form onSubmit={handleSubmit} className="space-y-4">
+            <>
+              <Button
+                type="button"
+                variant="outline"
+                className="w-full"
+                onClick={handleGoogle}
+                disabled={googleLoading || !isFirebaseConfigured()}
+              >
+                {googleLoading ? (
+                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                ) : (
+                  <svg className="h-4 w-4 mr-2" viewBox="0 0 48 48" aria-hidden="true">
+                    <path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3c-1.6 4.6-6 8-11.3 8-6.6 0-12-5.4-12-12s5.4-12 12-12c3 0 5.8 1.1 7.9 3l5.7-5.7C34 6.1 29.3 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.2-.1-2.3-.4-3.5z"/>
+                    <path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.7 16 19 13 24 13c3 0 5.8 1.1 7.9 3l5.7-5.7C34 6.1 29.3 4 24 4 16.3 4 9.7 8.3 6.3 14.7z"/>
+                    <path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2c-2 1.5-4.5 2.4-7.2 2.4-5.3 0-9.7-3.4-11.3-8l-6.5 5C9.5 39.6 16.2 44 24 44z"/>
+                    <path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.2-2.2 4.1-4.1 5.6l6.2 5.2c-.4.4 6.6-4.8 6.6-14.8 0-1.2-.1-2.3-.4-3.5z"/>
+                  </svg>
+                )}
+                Sign up with Google
+              </Button>
+              {!isFirebaseConfigured() && (
+                <p className="mt-2 text-[11px] text-muted-foreground text-center">
+                  Google sign-up requires Firebase config in .env
+                </p>
+              )}
+              <div className="my-4 flex items-center gap-3">
+                <div className="h-px flex-1 bg-border" />
+                <span className="text-xs text-muted-foreground">or sign up with email</span>
+                <div className="h-px flex-1 bg-border" />
+              </div>
+              <form onSubmit={handleSubmit} className="space-y-4">
               <div className="space-y-2">
                 <Label htmlFor="name">Full Name</Label>
                 <Input id="name" value={fullName} onChange={(e) => setFullName(e.target.value)} placeholder="Juan Dela Cruz" required />
@@ -152,6 +199,7 @@ export default function Register() {
                 {verificationMethod === 'sms' ? 'Send SMS OTP' : 'Send Email OTP'}
               </Button>
             </form>
+            </>
           ) : (
             <form onSubmit={handleVerifyOtp} className="space-y-6">
               <div className="text-center">
