@@ -62,7 +62,11 @@ import {
   UserPlus,
   ChevronDown,
   ChevronUp,
+  MessageCircle,
 } from 'lucide-react';
+import BookingChat from '@/components/booking/BookingChat';
+import { AdminOffDutyApprovals } from '@/components/booking/OffDutyManager';
+import { useAuth } from '@/hooks/useAuth';
 import { parseMeta, encodeMeta } from '@/lib/bookingMeta';
 import { calculateFees, formatPeso, PAYMENT_METHOD_LABELS, type PaymentMethod } from '@/lib/payments';
 import { addAnnouncement, loadAnnouncements, removeAnnouncement, type AdminAnnouncement } from '@/lib/announcements';
