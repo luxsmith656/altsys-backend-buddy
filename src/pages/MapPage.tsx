@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { MapContainer, TileLayer, Polyline, Polygon, Marker, Popup, Circle, useMap } from 'react-leaflet';
+import { useSearchParams } from 'react-router-dom';
 import L from 'leaflet';
 import { MT_KALISUNGAN_CENTER, DEFAULT_ZOOM, TRAILS, POI, ZONES, haversineDistance, distanceToTrail } from '@/lib/map-data';
 import { Button } from '@/components/ui/button';
@@ -10,6 +11,7 @@ import MapLegend from '@/components/map/MapLegend';
 import TrailStats from '@/components/map/TrailStats';
 import TrailNavigation from '@/components/map/TrailNavigation';
 import MapCompass from '@/components/map/MapCompass';
+import WeatherPanel from '@/components/map/WeatherPanel';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { useAuth } from '@/hooks/useAuth';
 import SOSPanel from '@/components/core/SOSPanel';
@@ -18,6 +20,7 @@ import HikeSummary from '@/components/map/HikeSummary';
 import { HikeTracker } from '@/lib/tracking/HikeTracker';
 import { downloadArea } from '@/lib/tracking/tileCache';
 import type { OfflineSession } from '@/lib/offlineDb';
+import type { RouteAdvice } from '@/lib/weather';
 
 import 'leaflet/dist/leaflet.css';
 
