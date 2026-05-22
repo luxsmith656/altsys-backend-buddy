@@ -1210,6 +1210,16 @@ export default function AdminDashboard() {
                                 </AlertDialogContent>
                               </AlertDialog>
                             )}
+                            <Button size="sm" variant="outline" className="gap-1.5"
+                              onClick={() => setChatBooking({ id: b.id, date: b.booking_date })}>
+                              <MessageCircle className="h-3.5 w-3.5" /> Chat
+                            </Button>
+                            {duplicateWeekIds.has(b.id) && (
+                              <Button size="sm" variant="outline" className="gap-1.5 text-amber-600 border-amber-500/40"
+                                onClick={() => sendDuplicateWeekReminder(b)}>
+                                <AlertTriangle className="h-3.5 w-3.5" /> Send dup-week reminder
+                              </Button>
+                            )}
                           </div>
                         </div>
                       </CardContent>
