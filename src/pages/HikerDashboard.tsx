@@ -34,7 +34,9 @@ import {
   CalendarClock,
   Star,
   Send,
+  MessageCircle,
 } from 'lucide-react';
+import BookingChat from '@/components/booking/BookingChat';
 import { QRCodeSVG } from 'qrcode.react';
 import { toast } from 'sonner';
 import { motion, AnimatePresence } from 'framer-motion';
