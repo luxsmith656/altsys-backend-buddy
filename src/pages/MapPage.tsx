@@ -153,7 +153,7 @@ export default function MapPage() {
   const [tracking, setTracking] = useState(false);
   const [mapInstance, setMapInstance] = useState<L.Map | null>(null);
   const mapRef = useRef<L.Map | null>(null);
-  const [baseLayer, setBaseLayer] = useState<BaseLayer>('street');
+  // Street map only (other layers removed by design)
   const [userPos, setUserPos] = useState<[number, number] | null>(null);
   const [displayPos, setDisplayPos] = useState<[number, number] | null>(null);
   const [distance, setDistance] = useState(0);
