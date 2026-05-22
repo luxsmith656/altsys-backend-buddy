@@ -13,6 +13,7 @@ import { parseMeta } from '@/lib/bookingMeta';
 import { format } from 'date-fns';
 import { toast } from 'sonner';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { GuideOffDutyForm } from '@/components/booking/OffDutyManager';
 
 const QUOTA_PER_GUIDE_PER_DAY = 5;
 
