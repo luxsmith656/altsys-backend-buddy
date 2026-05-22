@@ -753,7 +753,7 @@ export default function AdminDashboard() {
     setGuideHistoryLoading(false);
   };
 
-  const handleSelectGuide = (guide: typeof MOCK_GUIDES[0]) => {
+  const handleSelectGuide = (guide: UIGuide) => {
     if (selectedGuideId === guide.id) {
       setSelectedGuideId(null);
       setGuideHistoryBookings([]);
@@ -796,35 +796,67 @@ export default function AdminDashboard() {
     toast.success('Announcement removed.');
   };
 
-  /* ── Toggle guide status ── */
-  const cycleGuideStatus = (id: string) => {
+  /* ── Toggle guide status (persisted) ── */
+  const cycleGuideStatus = async (id: string) => {
     const cycle: Record<string, 'available' | 'on-duty' | 'off-duty'> = {
       available: 'on-duty',
       'on-duty': 'off-duty',
       'off-duty': 'available',
     };
-    setGuides((prev) => prev.map((g) => (g.id === id ? { ...g, status: cycle[g.status] } : g)));
+    const guide = guides.find((g) => g.id === id);
+    if (!guide) return;
+    const next = cycle[guide.status] || 'available';
+    setGuides((prev) => prev.map((g) => (g.id === id ? { ...g, status: next } : g)));
+    await supabase.from('guides').update({ status: next, is_active: next !== 'off-duty' }).eq('id', id);
   };
 
-  const handleAddGuide = () => {
+  const handleAddGuide = async () => {
     const name = newGuideName.trim();
-    if (!name) {
-      toast.error('Guide name is required.');
+    const email = newGuideEmail.trim();
+    const password = newGuidePassword.trim();
+    if (!name || !email || !password) {
+      toast.error('Name, email and temp password are required.');
       return;
     }
-    const guide = {
-      id: `g-${Date.now()}`,
-      name,
-      phone: newGuidePhone.trim() || 'N/A',
-      status: 'available',
-      trail: newGuideTrail.trim() || 'Unassigned',
-      totalHikes: 0,
-    };
-    setGuides((prev) => [guide as any, ...prev]);
-    setNewGuideName('');
-    setNewGuidePhone('');
-    setNewGuideTrail('');
-    toast.success(`Guide "${name}" added.`);
+    if (password.length < 8) {
+      toast.error('Temp password must be at least 8 characters.');
+      return;
+    }
+    const locId = activeLocationId;
+    if (!locId) {
+      toast.error('Pick an active location first.');
+      return;
+    }
+    setAddGuideSaving(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const r = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/admin-create-guide`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${session?.access_token ?? import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+        },
+        body: JSON.stringify({
+          email,
+          password,
+          full_name: name,
+          phone: newGuidePhone.trim(),
+          specialty: newGuideTrail.trim(),
+          per_trip_fee: Number(newGuideFee) || 0,
+          location_id: locId,
+        }),
+      });
+      const j = await r.json();
+      if (!r.ok) throw new Error(j?.error || 'Failed to create guide');
+      toast.success(`Guide "${name}" created. They can sign in with ${email}.`);
+      setNewGuideName(''); setNewGuidePhone(''); setNewGuideTrail('');
+      setNewGuideEmail(''); setNewGuidePassword(''); setNewGuideFee('500');
+      await loadGuides();
+    } catch (e: any) {
+      toast.error(e.message);
+    } finally {
+      setAddGuideSaving(false);
+    }
   };
 
   const handleRemoveGuide = () => {
