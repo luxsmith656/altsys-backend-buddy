@@ -41,6 +41,11 @@ Deno.serve(async (req) => {
       roles.includes('ranger') ? 'ranger' :
       roles.includes('guide') ? 'guide' : 'hiker';
 
+    // Resolve display name (for greeting). NEVER expose email/phone to the model.
+    const { data: prof } = await admin.from('profiles').select('full_name').eq('user_id', userId).maybeSingle();
+    const displayName = (prof as any)?.full_name?.trim() || '';
+
+
     const body = await req.json().catch(() => ({}));
     const { message, conversation_id } = body ?? {};
     if (!message || typeof message !== 'string') return json({ error: 'message is required' }, 400);
