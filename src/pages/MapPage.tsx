@@ -288,6 +288,11 @@ export default function MapPage() {
 
   const startTracking = () => {
     setTracking(true);
+    if (user && !trackerRef.current) {
+      const tr = new HikeTracker({ userId: user.id });
+      trackerRef.current = tr;
+      void tr.start().catch((e) => console.warn('HikeTracker start failed', e));
+    }
   };
 
 
