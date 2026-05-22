@@ -648,7 +648,7 @@ export default function AdminDashboard() {
           .eq('booking_id', acceptDialogId)
           .eq('guide_id', guideRow.id)
           .maybeSingle();
-        const existing = existingRaw as { id: string } | null;
+        const existing = existingRaw as unknown as { id: string } | null;
         if (existing?.id) {
           await supabase.from('booking_assignments' as any)
             .update({ status: 'pending', decided_at: null } as any)
