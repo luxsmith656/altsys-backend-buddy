@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { MapContainer, TileLayer, Polyline, Polygon, Marker, Popup, Circle, useMap } from 'react-leaflet';
+import { useSearchParams } from 'react-router-dom';
 import L from 'leaflet';
 import { MT_KALISUNGAN_CENTER, DEFAULT_ZOOM, TRAILS, POI, ZONES, haversineDistance, distanceToTrail } from '@/lib/map-data';
 import { Button } from '@/components/ui/button';
@@ -10,6 +11,7 @@ import MapLegend from '@/components/map/MapLegend';
 import TrailStats from '@/components/map/TrailStats';
 import TrailNavigation from '@/components/map/TrailNavigation';
 import MapCompass from '@/components/map/MapCompass';
+import WeatherPanel from '@/components/map/WeatherPanel';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { useAuth } from '@/hooks/useAuth';
 import SOSPanel from '@/components/core/SOSPanel';
@@ -18,6 +20,7 @@ import HikeSummary from '@/components/map/HikeSummary';
 import { HikeTracker } from '@/lib/tracking/HikeTracker';
 import { downloadArea } from '@/lib/tracking/tileCache';
 import type { OfflineSession } from '@/lib/offlineDb';
+import type { RouteAdvice } from '@/lib/weather';
 
 import 'leaflet/dist/leaflet.css';
 
@@ -150,7 +153,7 @@ export default function MapPage() {
   const [tracking, setTracking] = useState(false);
   const [mapInstance, setMapInstance] = useState<L.Map | null>(null);
   const mapRef = useRef<L.Map | null>(null);
-  const [baseLayer, setBaseLayer] = useState<BaseLayer>('street');
+  // Street map only (other layers removed by design)
   const [userPos, setUserPos] = useState<[number, number] | null>(null);
   const [displayPos, setDisplayPos] = useState<[number, number] | null>(null);
   const [distance, setDistance] = useState(0);
@@ -286,14 +289,45 @@ export default function MapPage() {
 
   const speedTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const startTracking = () => {
+  const startTracking = useCallback(() => {
     setTracking(true);
     if (user && !trackerRef.current) {
       const tr = new HikeTracker({ userId: user.id });
       trackerRef.current = tr;
       void tr.start().catch((e) => console.warn('HikeTracker start failed', e));
     }
-  };
+  }, [user]);
+
+  // Weather-aware routing: if 'avoid', recommend an easier trail.
+  const lastAdviceRef = useRef<string | null>(null);
+  const handleWeatherAdvice = useCallback((advice: RouteAdvice) => {
+    const key = `${advice.level}:${advice.headline}`;
+    if (lastAdviceRef.current === key) return;
+    lastAdviceRef.current = key;
+    if (advice.level === 'avoid') {
+      toast.error(advice.headline, { description: advice.reasons[0], duration: 8000 });
+      // Switch to easiest trail
+      const easyIdx = TRAILS.findIndex((t) => t.difficulty === 'easy');
+      if (easyIdx >= 0) setSelectedTrail(easyIdx);
+    } else if (advice.level === 'caution') {
+      toast.warning(advice.headline, { description: advice.reasons[0], duration: 6000 });
+    }
+  }, []);
+
+  // Auto-start tracking when admin checks in the hiker (?auto=1)
+  const [searchParams, setSearchParams] = useSearchParams();
+  const autoStartedRef = useRef(false);
+  useEffect(() => {
+    if (autoStartedRef.current) return;
+    if (searchParams.get('auto') !== '1') return;
+    if (!user) return;
+    autoStartedRef.current = true;
+    toast.success('Check-in confirmed — tracking started.');
+    startTracking();
+    const next = new URLSearchParams(searchParams);
+    next.delete('auto');
+    setSearchParams(next, { replace: true });
+  }, [searchParams, user, startTracking, setSearchParams]);
 
 
 
@@ -433,11 +467,7 @@ export default function MapPage() {
     toast.info('Downloading map tiles for offline use…');
     setTileDownloadProgress({ done: 0, total: 0 });
     try {
-      const tpl = baseLayer === 'topo'
-        ? 'https://a.tile.opentopomap.org/{z}/{x}/{y}.png'
-        : baseLayer === 'sat'
-          ? 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'
-          : 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
+      const tpl = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
       const res = await downloadArea({
         centerLat: 14.1475, centerLng: 121.3454,
         zMin: 13, zMax: 16, radiusTiles: 4,
@@ -711,15 +741,8 @@ export default function MapPage() {
             whenReady={() => {}}
           >
             <MapInstanceBridge onReady={setMapInstance} />
-            {baseLayer === 'street' && (
-              <OfflineLayer url="https://tile.openstreetmap.org/{z}/{x}/{y}.png" maxZoom={20} />
-            )}
-            {baseLayer === 'topo' && (
-              <OfflineLayer url="https://a.tile.opentopomap.org/{z}/{x}/{y}.png" maxZoom={17} />
-            )}
-            {baseLayer === 'sat' && (
-              <OfflineLayer url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}" maxZoom={19} />
-            )}
+            <OfflineLayer url="https://tile.openstreetmap.org/{z}/{x}/{y}.png" maxZoom={20} attribution="© OpenStreetMap" />
+
 
             {TRAILS.map((t, i) => (
               <Polyline
@@ -836,7 +859,7 @@ export default function MapPage() {
 
         {/* Desktop right-side stack: layers + elevation + locate */}
         <div className="hidden md:flex absolute right-4 bottom-4 z-[1100] flex-col items-end gap-2">
-          <MapLayersControl value={baseLayer} onChange={setBaseLayer} />
+          <WeatherPanel lat={MT_KALISUNGAN_CENTER[0]} lng={MT_KALISUNGAN_CENTER[1]} onAdvice={handleWeatherAdvice} />
           <ElevationProfile
             trailPath={currentTrail.path}
             trailName={currentTrail.name}
@@ -886,7 +909,7 @@ export default function MapPage() {
             mobileControlsOpen ? 'bottom-[14.5rem]' : 'bottom-[6.5rem]'
           }`}
         >
-          <MapLayersControl value={baseLayer} onChange={setBaseLayer} />
+          <WeatherPanel lat={MT_KALISUNGAN_CENTER[0]} lng={MT_KALISUNGAN_CENTER[1]} onAdvice={handleWeatherAdvice} />
           <ElevationProfile
             trailPath={currentTrail.path}
             trailName={currentTrail.name}

@@ -1,7 +1,10 @@
+import { useEffect, useState } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
-import { Mountain, Activity, TrendingUp, TrendingDown, Timer, PauseCircle, MapPin, Trophy } from 'lucide-react';
+import { Mountain, Activity, TrendingUp, TrendingDown, Timer, PauseCircle, MapPin, Trophy, Box } from 'lucide-react';
 import type { OfflineSession } from '@/lib/offlineDb';
+import { getSessionPoints } from '@/lib/offlineDb';
+import Replay3D from './Replay3D';
 
 function fmtTime(sec: number) {
   const h = Math.floor(sec / 3600);
@@ -17,6 +20,16 @@ interface Props {
 }
 
 export default function HikeSummary({ session, open, onClose }: Props) {
+  const [showReplay, setShowReplay] = useState(false);
+  const [pts, setPts] = useState<{ lat: number; lng: number; alt: number }[]>([]);
+
+  useEffect(() => {
+    if (!showReplay || !session) return;
+    void getSessionPoints(session.id).then((p) =>
+      setPts(p.map((x) => ({ lat: x.lat, lng: x.lng, alt: x.alt }))),
+    );
+  }, [showReplay, session]);
+
   if (!session) return null;
   const km = (session.distanceM / 1000).toFixed(2);
   const totalTimeSec = session.movingSec + session.restingSec;
@@ -31,7 +44,7 @@ export default function HikeSummary({ session, open, onClose }: Props) {
 
   return (
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="max-w-lg">
+      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Mountain className="h-5 w-5 text-primary" /> Hike summary
@@ -60,7 +73,21 @@ export default function HikeSummary({ session, open, onClose }: Props) {
           Total time: {fmtTime(totalTimeSec)} · Track points compressed and stored offline.
         </div>
 
-        <Button onClick={onClose}>Done</Button>
+        <div className="flex gap-2">
+          <Button variant="outline" className="gap-1.5 flex-1" onClick={() => setShowReplay((v) => !v)}>
+            <Box className="h-4 w-4" /> {showReplay ? 'Hide 3D replay' : 'View 3D replay'}
+          </Button>
+          <Button onClick={onClose} className="flex-1">Done</Button>
+        </div>
+
+        {showReplay && (
+          <div className="space-y-2">
+            <Replay3D points={pts} />
+            <p className="text-[11px] text-muted-foreground text-center">
+              Drag to rotate · scroll to zoom · the orange marker animates your ascent path.
+            </p>
+          </div>
+        )}
       </DialogContent>
     </Dialog>
   );

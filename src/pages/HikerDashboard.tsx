@@ -15,7 +15,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import {
   CalendarCheck,
   Map,
@@ -64,6 +64,7 @@ const STATUS_LABELS: Record<string, string> = {
 
 export default function HikerDashboard() {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const [bookings, setBookings] = useState<any[]>([]);
   const [sessions, setSessions] = useState<any[]>([]);
   const [cancellingId, setCancellingId] = useState<string | null>(null);
@@ -85,7 +86,25 @@ export default function HikerDashboard() {
   useEffect(() => {
     if (!user) return;
     loadData();
-  }, [user]);
+
+    // Auto-start: when admin checks in the hiker via QR, a new active
+    // hiker_session is inserted. We detect it via realtime and jump to /map.
+    const ch = supabase
+      .channel(`hiker-autostart-${user.id}`)
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'hiker_sessions', filter: `user_id=eq.${user.id}` },
+        (payload) => {
+          const row = payload.new as { status?: string };
+          if (row?.status === 'active') {
+            toast.success('Check-in confirmed! Opening tracker…');
+            navigate('/map?auto=1');
+          }
+        },
+      )
+      .subscribe();
+    return () => { supabase.removeChannel(ch); };
+  }, [user, navigate]);
 
   const loadData = async () => {
     const [{ data: b }, { data: s }] = await Promise.all([
