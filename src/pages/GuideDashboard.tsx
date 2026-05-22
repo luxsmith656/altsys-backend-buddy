@@ -13,6 +13,7 @@ import { parseMeta } from '@/lib/bookingMeta';
 import { format } from 'date-fns';
 import { toast } from 'sonner';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { GuideOffDutyForm } from '@/components/booking/OffDutyManager';
 
 const QUOTA_PER_GUIDE_PER_DAY = 5;
 
@@ -235,7 +236,12 @@ export default function GuideDashboard() {
           <TabsList className="glass-card">
             <TabsTrigger value="my">My Assignments</TabsTrigger>
             <TabsTrigger value="peers">Peer Guides ({peerGuides.length})</TabsTrigger>
+            <TabsTrigger value="off">Off-Duty</TabsTrigger>
           </TabsList>
+
+          <TabsContent value="off" className="mt-4">
+            {guideRow ? <GuideOffDutyForm guideId={guideRow.id} onChange={load} /> : <p className="text-sm text-muted-foreground">Loading guide profile…</p>}
+          </TabsContent>
 
           <TabsContent value="my" className="mt-4">
             <div className="flex gap-2 flex-wrap mb-4">

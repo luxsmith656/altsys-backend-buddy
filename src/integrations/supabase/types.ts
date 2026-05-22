@@ -155,6 +155,36 @@ export type Database = {
           },
         ]
       }
+      booking_messages: {
+        Row: {
+          booking_id: string
+          content: string
+          created_at: string
+          id: string
+          kind: string
+          sender_id: string | null
+          sender_role: string
+        }
+        Insert: {
+          booking_id: string
+          content: string
+          created_at?: string
+          id?: string
+          kind?: string
+          sender_id?: string | null
+          sender_role?: string
+        }
+        Update: {
+          booking_id?: string
+          content?: string
+          created_at?: string
+          id?: string
+          kind?: string
+          sender_id?: string | null
+          sender_role?: string
+        }
+        Relationships: []
+      }
       bookings: {
         Row: {
           booking_date: string
@@ -166,6 +196,8 @@ export type Database = {
           location_id: string | null
           notes: string
           qr_code_data: string
+          requested_at: string | null
+          requested_new_date: string | null
           status: string
           user_id: string
         }
@@ -179,6 +211,8 @@ export type Database = {
           location_id?: string | null
           notes?: string
           qr_code_data?: string
+          requested_at?: string | null
+          requested_new_date?: string | null
           status?: string
           user_id: string
         }
@@ -192,6 +226,8 @@ export type Database = {
           location_id?: string | null
           notes?: string
           qr_code_data?: string
+          requested_at?: string | null
+          requested_new_date?: string | null
           status?: string
           user_id?: string
         }
@@ -316,6 +352,42 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      guide_off_duty_requests: {
+        Row: {
+          created_at: string
+          end_date: string
+          guide_id: string
+          id: string
+          reason: string
+          reviewed_at: string | null
+          reviewed_by: string | null
+          start_date: string
+          status: string
+        }
+        Insert: {
+          created_at?: string
+          end_date: string
+          guide_id: string
+          id?: string
+          reason?: string
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          start_date: string
+          status?: string
+        }
+        Update: {
+          created_at?: string
+          end_date?: string
+          guide_id?: string
+          id?: string
+          reason?: string
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          start_date?: string
+          status?: string
+        }
+        Relationships: []
       }
       guides: {
         Row: {

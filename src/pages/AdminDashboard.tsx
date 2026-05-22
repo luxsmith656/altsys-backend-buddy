@@ -62,7 +62,11 @@ import {
   UserPlus,
   ChevronDown,
   ChevronUp,
+  MessageCircle,
 } from 'lucide-react';
+import BookingChat from '@/components/booking/BookingChat';
+import { AdminOffDutyApprovals } from '@/components/booking/OffDutyManager';
+import { useAuth } from '@/hooks/useAuth';
 import { parseMeta, encodeMeta } from '@/lib/bookingMeta';
 import { calculateFees, formatPeso, PAYMENT_METHOD_LABELS, type PaymentMethod } from '@/lib/payments';
 import { addAnnouncement, loadAnnouncements, removeAnnouncement, type AdminAnnouncement } from '@/lib/announcements';
@@ -139,12 +143,43 @@ export default function AdminDashboard() {
   /* ── Guide state ── */
   /* ── Real guides loaded from DB, mapped to the legacy UI shape ── */
   const { activeLocationId, isSuperAdmin, locations } = useLocations();
+  const { user: adminUser } = useAuth();
   type UIGuide = { id: string; name: string; phone: string; status: string; trail: string; totalHikes: number; user_id: string | null; per_trip_fee: number; location_id: string | null };
   const [guides, setGuides] = useState<UIGuide[]>([]);
+  const [chatBooking, setChatBooking] = useState<{ id: string; date: string } | null>(null);
 
   /* ── All bookings (used by Bookings tab + Payments tab) ── */
   const [allTabBookings, setAllTabBookings] = useState<any[]>([]);
   const [allTabLoading, setAllTabLoading] = useState(false);
+
+  /* ── Duplicate-week detection: same hiker, same ISO week ── */
+  const isoWeekKey = (d: string) => {
+    const dt = new Date(d);
+    const day = (dt.getUTCDay() + 6) % 7;
+    dt.setUTCDate(dt.getUTCDate() - day);
+    return `${dt.getUTCFullYear()}-${dt.getUTCMonth()}-${dt.getUTCDate()}`;
+  };
+  const duplicateWeekIds = useMemo(() => {
+    const map = new Map<string, string[]>();
+    for (const b of (allTabBookings ?? [])) {
+      if (b.status === 'cancelled') continue;
+      const k = `${b.user_id}|${isoWeekKey(b.booking_date)}`;
+      if (!map.has(k)) map.set(k, []);
+      map.get(k)!.push(b.id);
+    }
+    const dups = new Set<string>();
+    for (const ids of map.values()) if (ids.length > 1) ids.forEach((id) => dups.add(id));
+    return dups;
+  }, [allTabBookings]);
+
+  const sendDuplicateWeekReminder = async (b: any) => {
+    const meta = parseMeta(b.notes);
+    const msg = `Heads-up: you have more than one booking this week (current date ${b.booking_date}). Is this intentional, or would you like to reschedule one of them?`;
+    await supabase.from('booking_messages' as any).insert({
+      booking_id: b.id, sender_id: adminUser?.id, sender_role: 'admin', kind: 'system', content: msg,
+    });
+    toast.success(`Reminder sent to ${meta.fullName || b.emergency_contact_name || 'hiker'}`);
+  };
 
   /* ── Bookings tab filter/search ── */
   const [bookingTabFilter, setBookingTabFilter] = useState<string>('all');
@@ -153,6 +188,7 @@ export default function AdminDashboard() {
   /* ── Legacy pending state (used for dialogs only) ── */
   const [pendingBookings, setPendingBookings] = useState<any[]>([]);
   const [pendingLoading, setPendingLoading] = useState(false);
+
 
   /* ── QR Scan / Onsite Check-in state ── */
   const [qrInput, setQrInput] = useState('');
@@ -1210,6 +1246,16 @@ export default function AdminDashboard() {
                                 </AlertDialogContent>
                               </AlertDialog>
                             )}
+                            <Button size="sm" variant="outline" className="gap-1.5"
+                              onClick={() => setChatBooking({ id: b.id, date: b.booking_date })}>
+                              <MessageCircle className="h-3.5 w-3.5" /> Chat
+                            </Button>
+                            {duplicateWeekIds.has(b.id) && (
+                              <Button size="sm" variant="outline" className="gap-1.5 text-amber-600 border-amber-500/40"
+                                onClick={() => sendDuplicateWeekReminder(b)}>
+                                <AlertTriangle className="h-3.5 w-3.5" /> Send dup-week reminder
+                              </Button>
+                            )}
                           </div>
                         </div>
                       </CardContent>
@@ -1767,6 +1813,8 @@ export default function AdminDashboard() {
                 </div>
               </CardContent>
             </Card>
+
+            <AdminOffDutyApprovals />
           </TabsContent>
 
           {/* ─────────────────────────────── DAILY CAPACITY TAB ── */}
@@ -2214,6 +2262,17 @@ export default function AdminDashboard() {
           )}
         </Card>
       </div>
+
+      {chatBooking && (
+        <BookingChat
+          bookingId={chatBooking.id}
+          bookingDate={chatBooking.date}
+          open={!!chatBooking}
+          onOpenChange={(o) => !o && setChatBooking(null)}
+          isAdmin
+          onAfterReschedule={() => { setChatBooking(null); void loadAllTabBookings(); }}
+        />
+      )}
     </div>
   );
 }
