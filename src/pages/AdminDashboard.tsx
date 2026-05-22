@@ -2316,6 +2316,18 @@ export default function AdminDashboard() {
           onAfterReschedule={() => { setChatBooking(null); void loadAllTabBookings(); }}
         />
       )}
+
+      {reassignFor && (
+        <ReassignGuideDialog
+          bookingId={reassignFor.bookingId}
+          currentGuideId={reassignFor.guideId}
+          currentGuideName={reassignFor.guideName}
+          locationId={reassignFor.locationId}
+          open={!!reassignFor}
+          onClose={() => setReassignFor(null)}
+          onDone={() => { void loadAllTabBookings(); }}
+        />
+      )}
     </div>
   );
 }
