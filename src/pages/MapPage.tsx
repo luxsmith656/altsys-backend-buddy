@@ -406,8 +406,11 @@ export default function MapPage() {
   const stopTracking = () => {
     setTracking(false);
     setGpsSignal('None');
-    // The `useEffect` hooks for tracking and polling will handle clearing their respective intervals/watches
-    // when the `tracking` state becomes false. This function just initiates that state change.
+    const tr = trackerRef.current;
+    if (tr) {
+      trackerRef.current = null;
+      void tr.stop().then((sess) => setSummarySession(sess)).catch((e) => console.warn('HikeTracker stop failed', e));
+    }
   };
 
   useEffect(() => {
@@ -418,11 +421,8 @@ export default function MapPage() {
       setDistance(0);
       setElapsed(0);
       setCurrentSpeed(0);
-      kalmanStateRef.current = null; // Reset Kalman filter
+      kalmanStateRef.current = null;
       timerRef.current = setInterval(() => setElapsed((s) => s + 1), 1000);
-
-      // watchPosition was removed in favor of the adaptive polling useEffect.
-      // This effect now only manages state resets and the elapsed timer.
       return () => {
         if (timerRef.current) clearInterval(timerRef.current);
       };
@@ -430,23 +430,26 @@ export default function MapPage() {
   }, [tracking]);
 
   const handleOfflineCache = async () => {
-    toast.info('Caching map tiles for offline use...');
+    toast.info('Downloading map tiles for offline use…');
+    setTileDownloadProgress({ done: 0, total: 0 });
     try {
-      const cache = await caches.open('map-tiles-v1');
-      const z = 15;
-      const cx = Math.floor(((121.3454 + 180) / 360) * Math.pow(2, z));
-      const cy = Math.floor(((1 - Math.log(Math.tan((14.1475 * Math.PI) / 180) + 1 / Math.cos((14.1475 * Math.PI) / 180)) / Math.PI) / 2) * Math.pow(2, z));
-      const urls: string[] = [];
-      for (let dx = -3; dx <= 3; dx++) {
-        for (let dy = -3; dy <= 3; dy++) {
-          urls.push(`https://tile.openstreetmap.org/${z}/${cx + dx}/${cy + dy}.png`);
-        }
-      }
-      await cache.addAll(urls);
+      const tpl = baseLayer === 'topo'
+        ? 'https://a.tile.opentopomap.org/{z}/{x}/{y}.png'
+        : baseLayer === 'sat'
+          ? 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'
+          : 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
+      const res = await downloadArea({
+        centerLat: 14.1475, centerLng: 121.3454,
+        zMin: 13, zMax: 16, radiusTiles: 4,
+        template: tpl,
+        onProgress: (done, total) => setTileDownloadProgress({ done, total }),
+      });
       setOfflineReady(true);
-      toast.success('Map tiles cached!');
+      toast.success(`Cached ${res.downloaded} map tiles offline`);
     } catch {
       toast.error('Failed to cache tiles.');
+    } finally {
+      setTileDownloadProgress(null);
     }
   };
 
