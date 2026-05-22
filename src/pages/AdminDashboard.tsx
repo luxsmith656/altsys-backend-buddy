@@ -65,6 +65,7 @@ import {
   MessageCircle,
 } from 'lucide-react';
 import BookingChat from '@/components/booking/BookingChat';
+import ReassignGuideDialog from '@/components/booking/ReassignGuideDialog';
 import { AdminOffDutyApprovals } from '@/components/booking/OffDutyManager';
 import { useAuth } from '@/hooks/useAuth';
 import { parseMeta, encodeMeta } from '@/lib/bookingMeta';
@@ -147,6 +148,7 @@ export default function AdminDashboard() {
   type UIGuide = { id: string; name: string; phone: string; status: string; trail: string; totalHikes: number; user_id: string | null; per_trip_fee: number; location_id: string | null };
   const [guides, setGuides] = useState<UIGuide[]>([]);
   const [chatBooking, setChatBooking] = useState<{ id: string; date: string } | null>(null);
+  const [reassignFor, setReassignFor] = useState<{ bookingId: string; guideName: string | null; guideId: string | null; locationId: string | null } | null>(null);
 
   /* ── All bookings (used by Bookings tab + Payments tab) ── */
   const [allTabBookings, setAllTabBookings] = useState<any[]>([]);
@@ -1253,28 +1255,39 @@ export default function AdminDashboard() {
                               </>
                             )}
                             {displayStatus === 'confirmed' && (
-                              <AlertDialog>
-                                <AlertDialogTrigger asChild>
-                                  <Button size="sm" variant="outline" className="gap-1.5 text-destructive border-destructive/30 hover:bg-destructive/10">
-                                    <XCircle className="h-3.5 w-3.5" /> Cancel Booking
+                              <>
+                                {meta.assignedGuide && (
+                                  <Button size="sm" variant="outline" className="gap-1.5 border-amber-500/40 text-amber-600 dark:text-amber-400 hover:bg-amber-500/10"
+                                    onClick={() => {
+                                      const gid = guides.find((g) => g.name === meta.assignedGuide)?.id ?? null;
+                                      setReassignFor({ bookingId: b.id, guideName: meta.assignedGuide || null, guideId: gid, locationId: b.location_id ?? null });
+                                    }}>
+                                    <UserCog className="h-3.5 w-3.5" /> Reassign Guide
                                   </Button>
-                                </AlertDialogTrigger>
-                                <AlertDialogContent>
-                                  <AlertDialogHeader>
-                                    <AlertDialogTitle>Cancel this confirmed booking?</AlertDialogTitle>
-                                    <AlertDialogDescription>
-                                      This will cancel the confirmed booking for <strong>{meta.fullName || b.emergency_contact_name}</strong> on <strong>{b.booking_date}</strong>. Slots will be restored.
-                                    </AlertDialogDescription>
-                                  </AlertDialogHeader>
-                                  <AlertDialogFooter>
-                                    <AlertDialogCancel>Keep Booking</AlertDialogCancel>
-                                    <AlertDialogAction className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                                      onClick={() => handleCancelConfirmedBooking(b.id)}>
-                                      Yes, Cancel
-                                    </AlertDialogAction>
-                                  </AlertDialogFooter>
-                                </AlertDialogContent>
-                              </AlertDialog>
+                                )}
+                                <AlertDialog>
+                                  <AlertDialogTrigger asChild>
+                                    <Button size="sm" variant="outline" className="gap-1.5 text-destructive border-destructive/30 hover:bg-destructive/10">
+                                      <XCircle className="h-3.5 w-3.5" /> Cancel Booking
+                                    </Button>
+                                  </AlertDialogTrigger>
+                                  <AlertDialogContent>
+                                    <AlertDialogHeader>
+                                      <AlertDialogTitle>Cancel this confirmed booking?</AlertDialogTitle>
+                                      <AlertDialogDescription>
+                                        This will cancel the confirmed booking for <strong>{meta.fullName || b.emergency_contact_name}</strong> on <strong>{b.booking_date}</strong>. Slots will be restored.
+                                      </AlertDialogDescription>
+                                    </AlertDialogHeader>
+                                    <AlertDialogFooter>
+                                      <AlertDialogCancel>Keep Booking</AlertDialogCancel>
+                                      <AlertDialogAction className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                                        onClick={() => handleCancelConfirmedBooking(b.id)}>
+                                        Yes, Cancel
+                                      </AlertDialogAction>
+                                    </AlertDialogFooter>
+                                  </AlertDialogContent>
+                                </AlertDialog>
+                              </>
                             )}
                             <Button size="sm" variant="outline" className="gap-1.5"
                               onClick={() => setChatBooking({ id: b.id, date: b.booking_date })}>
@@ -2301,6 +2314,18 @@ export default function AdminDashboard() {
           onOpenChange={(o) => !o && setChatBooking(null)}
           isAdmin
           onAfterReschedule={() => { setChatBooking(null); void loadAllTabBookings(); }}
+        />
+      )}
+
+      {reassignFor && (
+        <ReassignGuideDialog
+          bookingId={reassignFor.bookingId}
+          currentGuideId={reassignFor.guideId}
+          currentGuideName={reassignFor.guideName}
+          locationId={reassignFor.locationId}
+          open={!!reassignFor}
+          onClose={() => setReassignFor(null)}
+          onDone={() => { void loadAllTabBookings(); }}
         />
       )}
     </div>

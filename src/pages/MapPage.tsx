@@ -13,6 +13,11 @@ import MapCompass from '@/components/map/MapCompass';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { useAuth } from '@/hooks/useAuth';
 import SOSPanel from '@/components/core/SOSPanel';
+import OfflineLayer from '@/components/map/OfflineLayer';
+import HikeSummary from '@/components/map/HikeSummary';
+import { HikeTracker } from '@/lib/tracking/HikeTracker';
+import { downloadArea } from '@/lib/tracking/tileCache';
+import type { OfflineSession } from '@/lib/offlineDb';
 
 import 'leaflet/dist/leaflet.css';
 
@@ -168,7 +173,7 @@ export default function MapPage() {
   const recordWatchRef = useRef<number | null>(null);
   const watchRef = useRef<number | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const { role } = useAuth();
+  const { role, user } = useAuth();
   const isRanger = role === 'ranger';
 
 
@@ -180,6 +185,12 @@ export default function MapPage() {
     variance: number; // Error covariance
     lastTimestamp: number;
   } | null>(null);
+
+  // Offline-first session tracker (parallel to legacy GPS UI)
+  const trackerRef = useRef<HikeTracker | null>(null);
+  const [summarySession, setSummarySession] = useState<OfflineSession | null>(null);
+  const [tileDownloadProgress, setTileDownloadProgress] = useState<{ done: number; total: number } | null>(null);
+  
 
   // Smooth interpolation for the hiker marker
   useEffect(() => {
@@ -277,6 +288,11 @@ export default function MapPage() {
 
   const startTracking = () => {
     setTracking(true);
+    if (user && !trackerRef.current) {
+      const tr = new HikeTracker({ userId: user.id });
+      trackerRef.current = tr;
+      void tr.start().catch((e) => console.warn('HikeTracker start failed', e));
+    }
   };
 
 
@@ -390,8 +406,11 @@ export default function MapPage() {
   const stopTracking = () => {
     setTracking(false);
     setGpsSignal('None');
-    // The `useEffect` hooks for tracking and polling will handle clearing their respective intervals/watches
-    // when the `tracking` state becomes false. This function just initiates that state change.
+    const tr = trackerRef.current;
+    if (tr) {
+      trackerRef.current = null;
+      void tr.stop().then((sess) => setSummarySession(sess)).catch((e) => console.warn('HikeTracker stop failed', e));
+    }
   };
 
   useEffect(() => {
@@ -402,11 +421,8 @@ export default function MapPage() {
       setDistance(0);
       setElapsed(0);
       setCurrentSpeed(0);
-      kalmanStateRef.current = null; // Reset Kalman filter
+      kalmanStateRef.current = null;
       timerRef.current = setInterval(() => setElapsed((s) => s + 1), 1000);
-
-      // watchPosition was removed in favor of the adaptive polling useEffect.
-      // This effect now only manages state resets and the elapsed timer.
       return () => {
         if (timerRef.current) clearInterval(timerRef.current);
       };
@@ -414,23 +430,26 @@ export default function MapPage() {
   }, [tracking]);
 
   const handleOfflineCache = async () => {
-    toast.info('Caching map tiles for offline use...');
+    toast.info('Downloading map tiles for offline use…');
+    setTileDownloadProgress({ done: 0, total: 0 });
     try {
-      const cache = await caches.open('map-tiles-v1');
-      const z = 15;
-      const cx = Math.floor(((121.3454 + 180) / 360) * Math.pow(2, z));
-      const cy = Math.floor(((1 - Math.log(Math.tan((14.1475 * Math.PI) / 180) + 1 / Math.cos((14.1475 * Math.PI) / 180)) / Math.PI) / 2) * Math.pow(2, z));
-      const urls: string[] = [];
-      for (let dx = -3; dx <= 3; dx++) {
-        for (let dy = -3; dy <= 3; dy++) {
-          urls.push(`https://tile.openstreetmap.org/${z}/${cx + dx}/${cy + dy}.png`);
-        }
-      }
-      await cache.addAll(urls);
+      const tpl = baseLayer === 'topo'
+        ? 'https://a.tile.opentopomap.org/{z}/{x}/{y}.png'
+        : baseLayer === 'sat'
+          ? 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'
+          : 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
+      const res = await downloadArea({
+        centerLat: 14.1475, centerLng: 121.3454,
+        zMin: 13, zMax: 16, radiusTiles: 4,
+        template: tpl,
+        onProgress: (done, total) => setTileDownloadProgress({ done, total }),
+      });
       setOfflineReady(true);
-      toast.success('Map tiles cached!');
+      toast.success(`Cached ${res.downloaded} map tiles offline`);
     } catch {
       toast.error('Failed to cache tiles.');
+    } finally {
+      setTileDownloadProgress(null);
     }
   };
 
@@ -693,13 +712,13 @@ export default function MapPage() {
           >
             <MapInstanceBridge onReady={setMapInstance} />
             {baseLayer === 'street' && (
-              <TileLayer url="https://tile.openstreetmap.org/{z}/{x}/{y}.png" maxZoom={20} />
+              <OfflineLayer url="https://tile.openstreetmap.org/{z}/{x}/{y}.png" maxZoom={20} />
             )}
             {baseLayer === 'topo' && (
-              <TileLayer url="https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png" maxZoom={17} />
+              <OfflineLayer url="https://a.tile.opentopomap.org/{z}/{x}/{y}.png" maxZoom={17} />
             )}
             {baseLayer === 'sat' && (
-              <TileLayer url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}" maxZoom={19} />
+              <OfflineLayer url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}" maxZoom={19} />
             )}
 
             {TRAILS.map((t, i) => (
@@ -1021,6 +1040,18 @@ export default function MapPage() {
           </div>
         </div>
       </div>
+
+      {tileDownloadProgress && tileDownloadProgress.total > 0 && (
+        <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-[2000] glass-card-strong rounded-full px-4 py-2 text-xs">
+          Caching tiles {tileDownloadProgress.done}/{tileDownloadProgress.total}
+        </div>
+      )}
+
+      <HikeSummary
+        session={summarySession}
+        open={!!summarySession}
+        onClose={() => setSummarySession(null)}
+      />
     </div>
   );
 }

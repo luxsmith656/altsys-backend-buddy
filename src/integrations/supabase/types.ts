@@ -111,6 +111,9 @@ export type Database = {
           guide_id: string
           id: string
           location_id: string | null
+          reassignment_reason: string | null
+          replaced_by: string | null
+          replaces: string | null
           status: string
         }
         Insert: {
@@ -120,6 +123,9 @@ export type Database = {
           guide_id: string
           id?: string
           location_id?: string | null
+          reassignment_reason?: string | null
+          replaced_by?: string | null
+          replaces?: string | null
           status?: string
         }
         Update: {
@@ -129,6 +135,9 @@ export type Database = {
           guide_id?: string
           id?: string
           location_id?: string | null
+          reassignment_reason?: string | null
+          replaced_by?: string | null
+          replaces?: string | null
           status?: string
         }
         Relationships: [
@@ -476,34 +485,64 @@ export type Database = {
       }
       hiker_sessions: {
         Row: {
+          ascent_time_sec: number
           booking_id: string | null
+          client_session_id: string | null
           created_at: string
+          descent_time_sec: number
+          elevation_gain_m: number
+          elevation_loss_m: number
+          encoded_path: string
           end_time: string | null
           id: string
+          last_synced_at: string | null
+          moving_time_sec: number
+          resting_time_sec: number
           start_time: string
           status: string
+          summit_reached: boolean
           total_distance_km: number
           trail_zone_id: string | null
           user_id: string
         }
         Insert: {
+          ascent_time_sec?: number
           booking_id?: string | null
+          client_session_id?: string | null
           created_at?: string
+          descent_time_sec?: number
+          elevation_gain_m?: number
+          elevation_loss_m?: number
+          encoded_path?: string
           end_time?: string | null
           id?: string
+          last_synced_at?: string | null
+          moving_time_sec?: number
+          resting_time_sec?: number
           start_time?: string
           status?: string
+          summit_reached?: boolean
           total_distance_km?: number
           trail_zone_id?: string | null
           user_id: string
         }
         Update: {
+          ascent_time_sec?: number
           booking_id?: string | null
+          client_session_id?: string | null
           created_at?: string
+          descent_time_sec?: number
+          elevation_gain_m?: number
+          elevation_loss_m?: number
+          encoded_path?: string
           end_time?: string | null
           id?: string
+          last_synced_at?: string | null
+          moving_time_sec?: number
+          resting_time_sec?: number
           start_time?: string
           status?: string
+          summit_reached?: boolean
           total_distance_km?: number
           trail_zone_id?: string | null
           user_id?: string
@@ -627,6 +666,39 @@ export type Database = {
           terms_accepted_at?: string | null
           updated_at?: string
           user_id?: string
+        }
+        Relationships: []
+      }
+      rescue_points: {
+        Row: {
+          created_at: string
+          description: string
+          id: string
+          latitude: number
+          location_id: string | null
+          longitude: number
+          name: string
+          type: string
+        }
+        Insert: {
+          created_at?: string
+          description?: string
+          id?: string
+          latitude: number
+          location_id?: string | null
+          longitude: number
+          name: string
+          type?: string
+        }
+        Update: {
+          created_at?: string
+          description?: string
+          id?: string
+          latitude?: number
+          location_id?: string | null
+          longitude?: number
+          name?: string
+          type?: string
         }
         Relationships: []
       }
