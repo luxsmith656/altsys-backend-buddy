@@ -80,7 +80,8 @@ Deno.serve(async (req) => {
 
     const llmMessages = [
       { role: 'system', content: sys },
-      { role: 'system', content: `Operational context (live, filtered — no PII or financial data):\n\n${ragContext}` },
+      { role: 'system', content: roleSalutation(role, displayName) },
+      { role: 'system', content: `Operational context (live, filtered — aggregate counts and weather only):\n\n${ragContext}` },
       ...(history ?? []).map((m: any) => ({ role: m.role, content: m.content })),
     ];
 
@@ -131,6 +132,18 @@ ABSOLUTE BOUNDARIES (never violate):
   const adaptive = `\n\nADAPTIVE STYLE: Match the user's expertise based on how they phrase questions. Brief technical answers for short/technical questions; richer step-by-step explanations for beginner-style questions. Offer one concrete next action when relevant.`;
 
   return base + (roleAddendum[role] ?? roleAddendum.hiker) + adaptive;
+}
+
+function roleSalutation(role: string, name: string): string {
+  const titles: Record<string, string> = {
+    super_admin: 'LGU Super Admin',
+    admin: 'Location Admin',
+    ranger: 'Ranger',
+    guide: 'Guide',
+    hiker: 'Hiker',
+  };
+  const title = titles[role] ?? 'Hiker';
+  return name ? `The current user is **${name}** (role: ${title}). Address them by name or as "${title}" when greeting. ` : `The current user's role is **${title}**. Address them as "${title}" when greeting. `;
 }
 
 async function buildOpsContext(admin: ReturnType<typeof createClient>, role: string): Promise<string> {
