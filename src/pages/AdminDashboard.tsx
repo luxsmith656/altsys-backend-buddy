@@ -194,7 +194,7 @@ export default function AdminDashboard() {
   const [calendarFloatingOpen, setCalendarFloatingOpen] = useState(false);
   const [newGuideName, setNewGuideName] = useState('');
   const [newGuidePhone, setNewGuidePhone] = useState('');
-  const [newGuideTrail, setNewGuideTrail] = useState('');
+  
   const [newGuideEmail, setNewGuideEmail] = useState('');
   const [newGuidePassword, setNewGuidePassword] = useState('');
   const [newGuideFee, setNewGuideFee] = useState('500');
