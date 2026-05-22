@@ -204,6 +204,7 @@ export default function BookingPage() {
   const [medicalNotes, setMedicalNotes] = useState('');
   const [preferredGuide, setPreferredGuide] = useState('');
   const [locationSearch, setLocationSearch] = useState('');
+  const [cityPicked, setCityPicked] = useState(false);
 
   // ── Multi-location: hiker picks where to start (Lamot 1, Lamot 2, etc.) ──
   const { locations: allLocations } = useLocations();
