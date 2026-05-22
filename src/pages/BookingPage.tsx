@@ -146,7 +146,46 @@ type SubmittedBooking = {
   totalFee: number;
 };
 
+/* ─── City autocomplete (compact, used inline) ─── */
+function CityAutocomplete({ value, options, onPick, placeholder }: { value: string; options: string[]; onPick: (city: string, province: string) => void; placeholder?: string }) {
+  const [q, setQ] = useState(value || '');
+  const [picked, setPicked] = useState(!!value);
+  useEffect(() => { setQ(value || ''); setPicked(!!value); }, [value]);
+  const matches = q && !picked ? options.filter((o) => o.toLowerCase().includes(q.toLowerCase())).slice(0, 15) : [];
+  return (
+    <div className="relative">
+      <Input
+        value={q}
+        placeholder={placeholder || 'Search city / municipality…'}
+        onChange={(e) => { setQ(e.target.value); setPicked(false); if (!e.target.value) onPick('', ''); }}
+        className="text-sm"
+      />
+      {matches.length > 0 && (
+        <div className="absolute top-full left-0 right-0 z-50 mt-1 max-h-44 overflow-y-auto rounded-xl border border-border/40 bg-card shadow-xl">
+          {matches.map((loc) => (
+            <button
+              key={loc}
+              type="button"
+              className="w-full text-left px-3 py-1.5 text-xs hover:bg-primary/10 hover:text-primary transition-colors"
+              onMouseDown={(e) => {
+                e.preventDefault();
+                const [c, p] = loc.split(', ');
+                onPick(c, p || '');
+                setQ(loc);
+                setPicked(true);
+              }}
+            >
+              {loc}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 /* ─── Helpers ─── */
+
 function formatTimeInput(time24: string): string {
   if (!time24) return '';
   const [h, m] = time24.split(':').map(Number);
@@ -1357,12 +1396,14 @@ export default function BookingPage() {
                                   </div>
                                   <div className="space-y-1.5">
                                     <Label className="text-xs">City / Municipality</Label>
-                                    <Input
+                                    <CityAutocomplete
                                       value={cd.city || ''}
-                                      onChange={(e) => updateCompanionDetail(idx, 'city', e.target.value)}
-                                      placeholder="e.g. Calauan, Laguna"
+                                      options={phLocations}
+                                      onPick={(c) => updateCompanionDetail(idx, 'city', c)}
+                                      placeholder="Search PH city/municipality…"
                                     />
                                   </div>
+
                                 </div>
                               </div>
                             );
