@@ -138,7 +138,7 @@ export default function AdminDashboard() {
 
   /* ── Guide state ── */
   /* ── Real guides loaded from DB, mapped to the legacy UI shape ── */
-  const { activeLocationId, isSuperAdmin } = useLocations();
+  const { activeLocationId, isSuperAdmin, locations } = useLocations();
   type UIGuide = { id: string; name: string; phone: string; status: string; trail: string; totalHikes: number; user_id: string | null; per_trip_fee: number; location_id: string | null };
   const [guides, setGuides] = useState<UIGuide[]>([]);
 
@@ -843,7 +843,7 @@ export default function AdminDashboard() {
           password,
           full_name: name,
           phone: newGuidePhone.trim(),
-          specialty: newGuideTrail.trim(),
+          specialty: (locations.find((l) => l.id === locId)?.name || '').trim(),
           per_trip_fee: Number(newGuideFee) || 0,
           location_id: locId,
         }),
@@ -851,7 +851,7 @@ export default function AdminDashboard() {
       const j = await r.json();
       if (!r.ok) throw new Error(j?.error || 'Failed to create guide');
       toast.success(`Guide "${name}" created. They can sign in with ${email}.`);
-      setNewGuideName(''); setNewGuidePhone(''); setNewGuideTrail('');
+      setNewGuideName(''); setNewGuidePhone('');
       setNewGuideEmail(''); setNewGuidePassword(''); setNewGuideFee('500');
       await loadGuides();
     } catch (e: any) {
@@ -1613,8 +1613,11 @@ export default function AdminDashboard() {
                 <Input placeholder="Login email *" type="email" value={newGuideEmail} onChange={(e) => setNewGuideEmail(e.target.value)} />
                 <Input placeholder="Temp password (min 8) *" type="text" value={newGuidePassword} onChange={(e) => setNewGuidePassword(e.target.value)} />
                 <Input placeholder="Phone" value={newGuidePhone} onChange={(e) => setNewGuidePhone(e.target.value)} />
-                <Input placeholder="Assigned trail / specialty" value={newGuideTrail} onChange={(e) => setNewGuideTrail(e.target.value)} />
                 <Input placeholder="Per-trip fee (PHP)" type="number" value={newGuideFee} onChange={(e) => setNewGuideFee(e.target.value)} />
+                <div className="text-xs text-muted-foreground self-center px-1">
+                  Trail: <span className="text-foreground font-medium">{locations.find((l) => l.id === activeLocationId)?.name || 'Pick active location'}</span> (auto-assigned)
+                </div>
+
                 <p className="sm:col-span-2 text-[11px] text-muted-foreground self-center">
                   Creates a real sign-in account for this guide at the currently active location. Share the temp password with them.
                 </p>
