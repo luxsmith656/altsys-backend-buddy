@@ -686,15 +686,17 @@ export default function AdminDashboard() {
   };
 
   const loadData = async () => {
+    // Scope to current location when the admin has one selected (super_admin sees all).
+    const scopeBookings = (q: any) => (activeLocationId ? q.eq('location_id', activeLocationId) : q);
     const [
       { count: totalBookings },
       { count: activeHikers },
       { data: bookingsData },
       { data: zonesData },
     ] = await Promise.all([
-      supabase.from('bookings').select('*', { count: 'exact', head: true }),
+      scopeBookings(supabase.from('bookings').select('*', { count: 'exact', head: true })),
       supabase.from('hiker_sessions').select('*', { count: 'exact', head: true }).eq('status', 'active'),
-      supabase.from('bookings').select('*').order('created_at', { ascending: false }).limit(20),
+      scopeBookings(supabase.from('bookings').select('*').order('created_at', { ascending: false }).limit(20)),
       supabase.from('trail_zones').select('*'),
     ]);
 
@@ -710,6 +712,27 @@ export default function AdminDashboard() {
     setBookings(bookingsData || []);
     setZones(zonesData || []);
   };
+
+  /* ── Load real guides from DB (scoped to active location for admins) ── */
+  const loadGuides = async () => {
+    let q: any = supabase.from('guides').select('id, user_id, full_name, phone, specialty, status, per_trip_fee, location_id, is_active');
+    if (activeLocationId) q = q.eq('location_id', activeLocationId);
+    const { data } = await q.order('full_name');
+    const mapped: UIGuide[] = (data ?? []).map((g: any) => ({
+      id: g.id,
+      user_id: g.user_id,
+      name: g.full_name,
+      phone: g.phone || '—',
+      status: g.is_active ? (g.status || 'available') : 'off-duty',
+      trail: g.specialty || 'Unassigned',
+      totalHikes: 0,
+      per_trip_fee: Number(g.per_trip_fee || 0),
+      location_id: g.location_id,
+    }));
+    setGuides(mapped);
+  };
+
+  useEffect(() => { void loadGuides(); /* eslint-disable-next-line */ }, [activeLocationId]);
 
   /* ── Guide history ── */
   const loadGuideHistory = async (guideName: string) => {
