@@ -629,7 +629,10 @@ export default function AdminDashboard() {
     setAcceptSaving(true);
     const booking = allTabBookings.find((b) => b.id === acceptDialogId);
     const meta = parseMeta(booking?.notes);
-    const updatedMeta = encodeMeta({ ...meta, assignedGuide: selectedGuide });
+    // selectedGuide now stores guide.id; resolve display name
+    const guideRow = guides.find((g) => g.id === selectedGuide);
+    const guideName = guideRow?.name ?? selectedGuide;
+    const updatedMeta = encodeMeta({ ...meta, assignedGuide: guideName });
     const { error } = await supabase
       .from('bookings')
       .update({ status: 'confirmed', notes: updatedMeta })
@@ -637,14 +640,41 @@ export default function AdminDashboard() {
     if (error) {
       toast.error('Failed to accept booking');
     } else {
-      toast.success(`✅ Booking accepted! Guide "${selectedGuide}" assigned and notified.`);
-      // Update available slots
+      // Notify the guide immediately by upserting an assignment row
+      if (guideRow) {
+        const { data: existingRaw } = await supabase
+          .from('booking_assignments' as any)
+          .select('id')
+          .eq('booking_id', acceptDialogId)
+          .eq('guide_id', guideRow.id)
+          .maybeSingle();
+        const existing = existingRaw as unknown as { id: string } | null;
+        if (existing?.id) {
+          await supabase.from('booking_assignments' as any)
+            .update({ status: 'pending', decided_at: null } as any)
+            .eq('id', existing.id);
+        } else {
+          await supabase.from('booking_assignments' as any).insert({
+            booking_id: acceptDialogId,
+            guide_id: guideRow.id,
+            location_id: guideRow.location_id ?? booking?.location_id,
+            status: 'pending',
+          } as any);
+        }
+        await supabase.from('booking_messages' as any).insert({
+          booking_id: acceptDialogId,
+          sender_role: 'system',
+          kind: 'system',
+          content: `Admin assigned guide ${guideName}. Please accept or decline.`,
+        } as any);
+      }
+      toast.success(`✅ Booking accepted! Guide "${guideName}" notified immediately.`);
       if (booking) await updateDailySlots(booking.booking_date, booking.group_size, 1);
       void writeActivityLog({
         action: 'booking_confirmed',
         entity_type: 'booking',
         entity_id: acceptDialogId,
-        after_state: { status: 'confirmed', assignedGuide: selectedGuide },
+        after_state: { status: 'confirmed', assignedGuide: guideName },
       });
       setPendingBookings((prev) => prev.filter((b) => b.id !== acceptDialogId));
       setAcceptDialogId(null);
@@ -1281,8 +1311,8 @@ export default function AdminDashboard() {
                       <Select value={selectedGuide} onValueChange={setSelectedGuide}>
                         <SelectTrigger><SelectValue placeholder="Select a guide…" /></SelectTrigger>
                         <SelectContent>
-                          {guides.filter((g) => g.status !== 'off-duty').map((g) => (
-                            <SelectItem key={g.id} value={g.name}>
+                          {guides.filter((g) => g.status !== 'off-duty' && g.status !== 'off_duty').map((g) => (
+                            <SelectItem key={g.id} value={g.id}>
                               {g.name} — <span className="capitalize">{g.status}</span> ({g.trail})
                             </SelectItem>
                           ))}
