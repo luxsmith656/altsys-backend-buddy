@@ -186,6 +186,12 @@ export default function MapPage() {
     lastTimestamp: number;
   } | null>(null);
 
+  // Offline-first session tracker (parallel to legacy GPS UI)
+  const trackerRef = useRef<HikeTracker | null>(null);
+  const [summarySession, setSummarySession] = useState<OfflineSession | null>(null);
+  const [tileDownloadProgress, setTileDownloadProgress] = useState<{ done: number; total: number } | null>(null);
+  const { user } = useAuth();
+
   // Smooth interpolation for the hiker marker
   useEffect(() => {
     if (!userPos) return;
