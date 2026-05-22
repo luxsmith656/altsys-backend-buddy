@@ -289,14 +289,45 @@ export default function MapPage() {
 
   const speedTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const startTracking = () => {
+  const startTracking = useCallback(() => {
     setTracking(true);
     if (user && !trackerRef.current) {
       const tr = new HikeTracker({ userId: user.id });
       trackerRef.current = tr;
       void tr.start().catch((e) => console.warn('HikeTracker start failed', e));
     }
-  };
+  }, [user]);
+
+  // Weather-aware routing: if 'avoid', recommend an easier trail.
+  const lastAdviceRef = useRef<string | null>(null);
+  const handleWeatherAdvice = useCallback((advice: RouteAdvice) => {
+    const key = `${advice.level}:${advice.headline}`;
+    if (lastAdviceRef.current === key) return;
+    lastAdviceRef.current = key;
+    if (advice.level === 'avoid') {
+      toast.error(advice.headline, { description: advice.reasons[0], duration: 8000 });
+      // Switch to easiest trail
+      const easyIdx = TRAILS.findIndex((t) => t.difficulty === 'easy');
+      if (easyIdx >= 0) setSelectedTrail(easyIdx);
+    } else if (advice.level === 'caution') {
+      toast.warning(advice.headline, { description: advice.reasons[0], duration: 6000 });
+    }
+  }, []);
+
+  // Auto-start tracking when admin checks in the hiker (?auto=1)
+  const [searchParams, setSearchParams] = useSearchParams();
+  const autoStartedRef = useRef(false);
+  useEffect(() => {
+    if (autoStartedRef.current) return;
+    if (searchParams.get('auto') !== '1') return;
+    if (!user) return;
+    autoStartedRef.current = true;
+    toast.success('Check-in confirmed — tracking started.');
+    startTracking();
+    const next = new URLSearchParams(searchParams);
+    next.delete('auto');
+    setSearchParams(next, { replace: true });
+  }, [searchParams, user, startTracking, setSearchParams]);
 
 
 
