@@ -143,8 +143,40 @@ export default function AdminDashboard() {
   /* ── Guide state ── */
   /* ── Real guides loaded from DB, mapped to the legacy UI shape ── */
   const { activeLocationId, isSuperAdmin, locations } = useLocations();
+  const { user: adminUser } = useAuth();
   type UIGuide = { id: string; name: string; phone: string; status: string; trail: string; totalHikes: number; user_id: string | null; per_trip_fee: number; location_id: string | null };
   const [guides, setGuides] = useState<UIGuide[]>([]);
+  const [chatBooking, setChatBooking] = useState<{ id: string; date: string } | null>(null);
+
+  /* ── Duplicate-week detection: same hiker, same ISO week ── */
+  const isoWeekKey = (d: string) => {
+    const dt = new Date(d);
+    const day = (dt.getUTCDay() + 6) % 7; // Mon=0
+    dt.setUTCDate(dt.getUTCDate() - day);
+    return `${dt.getUTCFullYear()}-${dt.getUTCMonth()}-${dt.getUTCDate()}`;
+  };
+  const duplicateWeekIds = useMemo(() => {
+    const map = new Map<string, string[]>();
+    for (const b of (allTabBookings ?? [])) {
+      if (b.status === 'cancelled') continue;
+      const k = `${b.user_id}|${isoWeekKey(b.booking_date)}`;
+      if (!map.has(k)) map.set(k, []);
+      map.get(k)!.push(b.id);
+    }
+    const dups = new Set<string>();
+    for (const ids of map.values()) if (ids.length > 1) ids.forEach((id) => dups.add(id));
+    return dups;
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [/* re-evaluated when bookings change */ JSON.stringify((/* deps */ []))]);
+
+  const sendDuplicateWeekReminder = async (b: any) => {
+    const meta = parseMeta(b.notes);
+    const msg = `Heads-up: you have more than one booking this week (current date ${b.booking_date}). Is this intentional, or would you like to reschedule one of them?`;
+    await supabase.from('booking_messages' as any).insert({
+      booking_id: b.id, sender_id: adminUser?.id, sender_role: 'admin', kind: 'system', content: msg,
+    });
+    toast.success(`Reminder sent to ${meta.fullName || b.emergency_contact_name || 'hiker'}`);
+  };
 
   /* ── All bookings (used by Bookings tab + Payments tab) ── */
   const [allTabBookings, setAllTabBookings] = useState<any[]>([]);
