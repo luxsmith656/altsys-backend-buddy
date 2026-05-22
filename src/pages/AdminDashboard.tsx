@@ -321,11 +321,13 @@ export default function AdminDashboard() {
   /* ── Load all bookings (for Bookings tab + Payments tab) ── */
   const loadAllTabBookings = async () => {
     setAllTabLoading(true);
-    const { data } = await supabase
+    let q: any = supabase
       .from('bookings')
       .select('*')
       .order('created_at', { ascending: false })
       .limit(200);
+    if (activeLocationId) q = q.eq('location_id', activeLocationId);
+    const { data } = await q;
     setAllTabBookings(data || []);
     setAllTabLoading(false);
   };
