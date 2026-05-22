@@ -132,62 +132,33 @@ async function buildOpsContext(admin: ReturnType<typeof createClient>, role: str
   const today = new Date().toISOString().slice(0, 10);
   const in7 = new Date(Date.now() + 7 * 86400_000).toISOString().slice(0, 10);
 
-  const [{ data: locs }, { data: bks }, { data: caps }, { data: zones }] = await Promise.all([
-    admin.from('locations').select('id, name, slug, status').eq('status', 'active'),
-    admin.from('bookings')
-      .select('booking_date, group_size, status, location_id')
-      .gte('booking_date', today).lte('booking_date', in7),
-    admin.from('daily_capacity')
-      .select('date, max_capacity, current_count, location_id')
-      .gte('date', today).lte('date', in7),
-    admin.from('trail_zones').select('name, difficulty, elevation_meters, max_capacity, status'),
-  ]);
+  // STRICT data access: only the TOTAL number of bookings. No per-person, no fees, no PII.
+  const { count: totalBookings } = await admin
+    .from('bookings')
+    .select('*', { count: 'exact', head: true })
+    .neq('status', 'cancelled');
 
-  const locById = new Map((locs ?? []).map((l: any) => [l.id, l.name]));
+  const { count: upcomingBookings } = await admin
+    .from('bookings')
+    .select('*', { count: 'exact', head: true })
+    .neq('status', 'cancelled')
+    .gte('booking_date', today)
+    .lte('booking_date', in7);
 
-  // Aggregate bookings per (date, location)
-  const agg = new Map<string, { date: string; loc: string; groups: number; people: number }>();
-  for (const b of (bks ?? []) as any[]) {
-    if (b.status === 'cancelled') continue;
-    const key = `${b.booking_date}|${b.location_id ?? 'unspecified'}`;
-    const prev = agg.get(key) ?? { date: b.booking_date, loc: locById.get(b.location_id) ?? 'Unspecified', groups: 0, people: 0 };
-    prev.groups += 1;
-    prev.people += Number(b.group_size ?? 0);
-    agg.set(key, prev);
-  }
-
-  const bookingLines = Array.from(agg.values())
-    .sort((a, b) => a.date.localeCompare(b.date))
-    .map((r) => `- ${r.date} • ${r.loc}: ${r.groups} groups, ${r.people} hikers`);
-
-  const capLines = (caps ?? []).map((c: any) =>
-    `- ${c.date} • ${locById.get(c.location_id) ?? 'All'}: ${c.current_count}/${c.max_capacity} (${Math.round((c.current_count / Math.max(c.max_capacity, 1)) * 100)}% full)`,
-  );
-
-  const zoneLines = (zones ?? []).map((z: any) =>
-    `- ${z.name}: ${z.difficulty}, ${z.elevation_meters}m, cap ${z.max_capacity}, status ${z.status}`,
-  );
-
-  // Live weather (Open-Meteo, no API key)
   const weather = await fetchWeather().catch(() => 'Weather unavailable.');
 
   return [
     `Today: ${today}`,
-    `Active locations: ${(locs ?? []).map((l: any) => l.name).join(', ') || 'none'}`,
     '',
-    'Upcoming bookings (next 7 days):',
-    bookingLines.length ? bookingLines.join('\n') : '- none',
-    '',
-    'Daily capacity (next 7 days):',
-    capLines.length ? capLines.join('\n') : '- not set; default cap applies',
-    '',
-    'Trail zones:',
-    zoneLines.length ? zoneLines.join('\n') : '- none configured',
+    'Bookings (aggregate counts only — no names, no fees, no contact info):',
+    `- Total bookings in database: ${totalBookings ?? 0}`,
+    `- Upcoming bookings (next 7 days): ${upcomingBookings ?? 0}`,
     '',
     'Weather (Calauan, Laguna):',
     weather,
   ].join('\n');
 }
+
 
 async function fetchWeather(): Promise<string> {
   const url = 'https://api.open-meteo.com/v1/forecast?latitude=14.148&longitude=121.345&current=temperature_2m,precipitation,weather_code,wind_speed_10m&daily=precipitation_sum,temperature_2m_max,temperature_2m_min,weather_code&timezone=Asia%2FManila&forecast_days=5';
