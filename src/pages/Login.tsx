@@ -35,9 +35,38 @@ export default function Login() {
     }
   };
 
-  const quickLogin = (email: string, password: string) => {
-    setEmail(email);
-    setPassword(password);
+  const quickLogin = async (qEmail: string, qPassword: string) => {
+    if (loading) return;
+    setEmail(qEmail);
+    setPassword(qPassword);
+    setLoading(true);
+    const { error } = await signIn(qEmail, qPassword);
+    setLoading(false);
+    if (error) {
+      toast.error(`${error.message}. Try "Reset test accounts" below.`);
+      return;
+    }
+    toast.success('Signed in');
+    const redirectPath = searchParams.get('redirect');
+    navigate(redirectPath || '/dashboard');
+  };
+
+  const [reseeding, setReseeding] = useState(false);
+  const reseedTestAccounts = async () => {
+    setReseeding(true);
+    try {
+      const r = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/admin-seed-accounts`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}` },
+      });
+      const j = await r.json();
+      if (!r.ok) throw new Error(j?.error || 'Reseed failed');
+      toast.success(`Reseeded ${j.results?.length ?? 0} test accounts`);
+    } catch (e: any) {
+      toast.error(e.message);
+    } finally {
+      setReseeding(false);
+    }
   };
 
   const handleGoogle = async () => {
