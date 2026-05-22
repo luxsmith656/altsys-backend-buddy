@@ -1606,11 +1606,20 @@ export default function AdminDashboard() {
                   <UserPlus className="h-4 w-4 text-primary" /> Add Guide
                 </CardTitle>
               </CardHeader>
-              <CardContent className="grid sm:grid-cols-4 gap-2">
-                <Input placeholder="Full name" value={newGuideName} onChange={(e) => setNewGuideName(e.target.value)} />
+              <CardContent className="grid sm:grid-cols-3 gap-2">
+                <Input placeholder="Full name *" value={newGuideName} onChange={(e) => setNewGuideName(e.target.value)} />
+                <Input placeholder="Login email *" type="email" value={newGuideEmail} onChange={(e) => setNewGuideEmail(e.target.value)} />
+                <Input placeholder="Temp password (min 8) *" type="text" value={newGuidePassword} onChange={(e) => setNewGuidePassword(e.target.value)} />
                 <Input placeholder="Phone" value={newGuidePhone} onChange={(e) => setNewGuidePhone(e.target.value)} />
-                <Input placeholder="Assigned trail" value={newGuideTrail} onChange={(e) => setNewGuideTrail(e.target.value)} />
-                <Button onClick={handleAddGuide}>Add Guide</Button>
+                <Input placeholder="Assigned trail / specialty" value={newGuideTrail} onChange={(e) => setNewGuideTrail(e.target.value)} />
+                <Input placeholder="Per-trip fee (PHP)" type="number" value={newGuideFee} onChange={(e) => setNewGuideFee(e.target.value)} />
+                <p className="sm:col-span-2 text-[11px] text-muted-foreground self-center">
+                  Creates a real sign-in account for this guide at the currently active location. Share the temp password with them.
+                </p>
+                <Button onClick={handleAddGuide} disabled={addGuideSaving}>
+                  {addGuideSaving ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : null}
+                  Add Guide
+                </Button>
               </CardContent>
             </Card>
 
