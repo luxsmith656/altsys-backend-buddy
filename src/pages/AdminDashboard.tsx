@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { supabase } from '@/integrations/supabase/client';
+import { useLocations } from '@/hooks/useLocations';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -136,7 +137,10 @@ export default function AdminDashboard() {
   const [annSending, setAnnSending] = useState(false);
 
   /* ── Guide state ── */
-  const [guides, setGuides] = useState(MOCK_GUIDES);
+  /* ── Real guides loaded from DB, mapped to the legacy UI shape ── */
+  const { activeLocationId, isSuperAdmin } = useLocations();
+  type UIGuide = { id: string; name: string; phone: string; status: string; trail: string; totalHikes: number; user_id: string | null; per_trip_fee: number; location_id: string | null };
+  const [guides, setGuides] = useState<UIGuide[]>([]);
 
   /* ── All bookings (used by Bookings tab + Payments tab) ── */
   const [allTabBookings, setAllTabBookings] = useState<any[]>([]);
@@ -191,6 +195,10 @@ export default function AdminDashboard() {
   const [newGuideName, setNewGuideName] = useState('');
   const [newGuidePhone, setNewGuidePhone] = useState('');
   const [newGuideTrail, setNewGuideTrail] = useState('');
+  const [newGuideEmail, setNewGuideEmail] = useState('');
+  const [newGuidePassword, setNewGuidePassword] = useState('');
+  const [newGuideFee, setNewGuideFee] = useState('500');
+  const [addGuideSaving, setAddGuideSaving] = useState(false);
   const [removeGuideId, setRemoveGuideId] = useState<string | null>(null);
   const [removeGuidePassword, setRemoveGuidePassword] = useState('');
 
@@ -266,7 +274,8 @@ export default function AdminDashboard() {
     loadPendingBookings();
     loadUpcomingCapacities();
     setAnnouncements(loadAnnouncements());
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeLocationId]);
 
   useEffect(() => {
     if (!scannedBooking) {
@@ -313,11 +322,13 @@ export default function AdminDashboard() {
   /* ── Load all bookings (for Bookings tab + Payments tab) ── */
   const loadAllTabBookings = async () => {
     setAllTabLoading(true);
-    const { data } = await supabase
+    let q: any = supabase
       .from('bookings')
       .select('*')
       .order('created_at', { ascending: false })
       .limit(200);
+    if (activeLocationId) q = q.eq('location_id', activeLocationId);
+    const { data } = await q;
     setAllTabBookings(data || []);
     setAllTabLoading(false);
   };
@@ -678,15 +689,17 @@ export default function AdminDashboard() {
   };
 
   const loadData = async () => {
+    // Scope to current location when the admin has one selected (super_admin sees all).
+    const scopeBookings = (q: any) => (activeLocationId ? q.eq('location_id', activeLocationId) : q);
     const [
       { count: totalBookings },
       { count: activeHikers },
       { data: bookingsData },
       { data: zonesData },
     ] = await Promise.all([
-      supabase.from('bookings').select('*', { count: 'exact', head: true }),
+      scopeBookings(supabase.from('bookings').select('*', { count: 'exact', head: true })),
       supabase.from('hiker_sessions').select('*', { count: 'exact', head: true }).eq('status', 'active'),
-      supabase.from('bookings').select('*').order('created_at', { ascending: false }).limit(20),
+      scopeBookings(supabase.from('bookings').select('*').order('created_at', { ascending: false }).limit(20)),
       supabase.from('trail_zones').select('*'),
     ]);
 
@@ -702,6 +715,27 @@ export default function AdminDashboard() {
     setBookings(bookingsData || []);
     setZones(zonesData || []);
   };
+
+  /* ── Load real guides from DB (scoped to active location for admins) ── */
+  const loadGuides = async () => {
+    let q: any = supabase.from('guides').select('id, user_id, full_name, phone, specialty, status, per_trip_fee, location_id, is_active');
+    if (activeLocationId) q = q.eq('location_id', activeLocationId);
+    const { data } = await q.order('full_name');
+    const mapped: UIGuide[] = (data ?? []).map((g: any) => ({
+      id: g.id,
+      user_id: g.user_id,
+      name: g.full_name,
+      phone: g.phone || '—',
+      status: g.is_active ? (g.status || 'available') : 'off-duty',
+      trail: g.specialty || 'Unassigned',
+      totalHikes: 0,
+      per_trip_fee: Number(g.per_trip_fee || 0),
+      location_id: g.location_id,
+    }));
+    setGuides(mapped);
+  };
+
+  useEffect(() => { void loadGuides(); /* eslint-disable-next-line */ }, [activeLocationId]);
 
   /* ── Guide history ── */
   const loadGuideHistory = async (guideName: string) => {
@@ -719,7 +753,7 @@ export default function AdminDashboard() {
     setGuideHistoryLoading(false);
   };
 
-  const handleSelectGuide = (guide: typeof MOCK_GUIDES[0]) => {
+  const handleSelectGuide = (guide: UIGuide) => {
     if (selectedGuideId === guide.id) {
       setSelectedGuideId(null);
       setGuideHistoryBookings([]);
@@ -762,35 +796,67 @@ export default function AdminDashboard() {
     toast.success('Announcement removed.');
   };
 
-  /* ── Toggle guide status ── */
-  const cycleGuideStatus = (id: string) => {
+  /* ── Toggle guide status (persisted) ── */
+  const cycleGuideStatus = async (id: string) => {
     const cycle: Record<string, 'available' | 'on-duty' | 'off-duty'> = {
       available: 'on-duty',
       'on-duty': 'off-duty',
       'off-duty': 'available',
     };
-    setGuides((prev) => prev.map((g) => (g.id === id ? { ...g, status: cycle[g.status] } : g)));
+    const guide = guides.find((g) => g.id === id);
+    if (!guide) return;
+    const next = cycle[guide.status] || 'available';
+    setGuides((prev) => prev.map((g) => (g.id === id ? { ...g, status: next } : g)));
+    await supabase.from('guides').update({ status: next, is_active: next !== 'off-duty' }).eq('id', id);
   };
 
-  const handleAddGuide = () => {
+  const handleAddGuide = async () => {
     const name = newGuideName.trim();
-    if (!name) {
-      toast.error('Guide name is required.');
+    const email = newGuideEmail.trim();
+    const password = newGuidePassword.trim();
+    if (!name || !email || !password) {
+      toast.error('Name, email and temp password are required.');
       return;
     }
-    const guide = {
-      id: `g-${Date.now()}`,
-      name,
-      phone: newGuidePhone.trim() || 'N/A',
-      status: 'available',
-      trail: newGuideTrail.trim() || 'Unassigned',
-      totalHikes: 0,
-    };
-    setGuides((prev) => [guide as any, ...prev]);
-    setNewGuideName('');
-    setNewGuidePhone('');
-    setNewGuideTrail('');
-    toast.success(`Guide "${name}" added.`);
+    if (password.length < 8) {
+      toast.error('Temp password must be at least 8 characters.');
+      return;
+    }
+    const locId = activeLocationId;
+    if (!locId) {
+      toast.error('Pick an active location first.');
+      return;
+    }
+    setAddGuideSaving(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const r = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/admin-create-guide`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${session?.access_token ?? import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+        },
+        body: JSON.stringify({
+          email,
+          password,
+          full_name: name,
+          phone: newGuidePhone.trim(),
+          specialty: newGuideTrail.trim(),
+          per_trip_fee: Number(newGuideFee) || 0,
+          location_id: locId,
+        }),
+      });
+      const j = await r.json();
+      if (!r.ok) throw new Error(j?.error || 'Failed to create guide');
+      toast.success(`Guide "${name}" created. They can sign in with ${email}.`);
+      setNewGuideName(''); setNewGuidePhone(''); setNewGuideTrail('');
+      setNewGuideEmail(''); setNewGuidePassword(''); setNewGuideFee('500');
+      await loadGuides();
+    } catch (e: any) {
+      toast.error(e.message);
+    } finally {
+      setAddGuideSaving(false);
+    }
   };
 
   const handleRemoveGuide = () => {
@@ -1540,11 +1606,20 @@ export default function AdminDashboard() {
                   <UserPlus className="h-4 w-4 text-primary" /> Add Guide
                 </CardTitle>
               </CardHeader>
-              <CardContent className="grid sm:grid-cols-4 gap-2">
-                <Input placeholder="Full name" value={newGuideName} onChange={(e) => setNewGuideName(e.target.value)} />
+              <CardContent className="grid sm:grid-cols-3 gap-2">
+                <Input placeholder="Full name *" value={newGuideName} onChange={(e) => setNewGuideName(e.target.value)} />
+                <Input placeholder="Login email *" type="email" value={newGuideEmail} onChange={(e) => setNewGuideEmail(e.target.value)} />
+                <Input placeholder="Temp password (min 8) *" type="text" value={newGuidePassword} onChange={(e) => setNewGuidePassword(e.target.value)} />
                 <Input placeholder="Phone" value={newGuidePhone} onChange={(e) => setNewGuidePhone(e.target.value)} />
-                <Input placeholder="Assigned trail" value={newGuideTrail} onChange={(e) => setNewGuideTrail(e.target.value)} />
-                <Button onClick={handleAddGuide}>Add Guide</Button>
+                <Input placeholder="Assigned trail / specialty" value={newGuideTrail} onChange={(e) => setNewGuideTrail(e.target.value)} />
+                <Input placeholder="Per-trip fee (PHP)" type="number" value={newGuideFee} onChange={(e) => setNewGuideFee(e.target.value)} />
+                <p className="sm:col-span-2 text-[11px] text-muted-foreground self-center">
+                  Creates a real sign-in account for this guide at the currently active location. Share the temp password with them.
+                </p>
+                <Button onClick={handleAddGuide} disabled={addGuideSaving}>
+                  {addGuideSaving ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : null}
+                  Add Guide
+                </Button>
               </CardContent>
             </Card>
 

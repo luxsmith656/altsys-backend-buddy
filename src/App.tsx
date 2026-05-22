@@ -12,6 +12,7 @@ import Login from "./pages/Login";
 import Register from "./pages/Register";
 import MapPage from "./pages/MapPage";
 import ChatPage from "./pages/ChatPage";
+import OpsAIPage from "./pages/OpsAIPage";
 import BookingPage from "./pages/BookingPage";
 import AdminDashboard from "./pages/AdminDashboard";
 import RangerDashboard from "./pages/RangerDashboard";
@@ -53,6 +54,7 @@ const App = () => (
                 <Route path="/map" element={<MapPage />} />
                 <Route path="/chat" element={<ChatPage />} />
                 <Route path="/booking" element={<BookingPage />} />
+                <Route path="/ops-ai" element={<RoleRoute allowedRoles={['admin','super_admin','ranger','guide']}><OpsAIPage /></RoleRoute>} />
                 <Route path="/admin" element={<RoleRoute allowedRoles={['admin', 'super_admin']}><AdminDashboard /></RoleRoute>} />
                 <Route path="/central" element={<RoleRoute allowedRoles={['super_admin']}><CentralDashboard /></RoleRoute>} />
                 <Route path="/ranger" element={<RoleRoute allowedRoles={['ranger']}><RangerDashboard /></RoleRoute>} />

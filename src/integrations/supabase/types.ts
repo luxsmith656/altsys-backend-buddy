@@ -44,6 +44,65 @@ export type Database = {
         }
         Relationships: []
       }
+      ai_conversations: {
+        Row: {
+          created_at: string
+          id: string
+          title: string
+          updated_at: string
+          user_id: string
+          user_role: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          title?: string
+          updated_at?: string
+          user_id: string
+          user_role?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          title?: string
+          updated_at?: string
+          user_id?: string
+          user_role?: string
+        }
+        Relationships: []
+      }
+      ai_messages: {
+        Row: {
+          content: string
+          conversation_id: string
+          created_at: string
+          id: string
+          role: string
+        }
+        Insert: {
+          content: string
+          conversation_id: string
+          created_at?: string
+          id?: string
+          role: string
+        }
+        Update: {
+          content?: string
+          conversation_id?: string
+          created_at?: string
+          id?: string
+          role?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ai_messages_conversation_id_fkey"
+            columns: ["conversation_id"]
+            isOneToOne: false
+            referencedRelation: "ai_conversations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       booking_assignments: {
         Row: {
           booking_id: string
@@ -268,6 +327,7 @@ export type Database = {
           per_trip_fee: number
           phone: string
           specialty: string
+          status: string
           updated_at: string
           user_id: string | null
         }
@@ -280,6 +340,7 @@ export type Database = {
           per_trip_fee?: number
           phone?: string
           specialty?: string
+          status?: string
           updated_at?: string
           user_id?: string | null
         }
@@ -292,6 +353,7 @@ export type Database = {
           per_trip_fee?: number
           phone?: string
           specialty?: string
+          status?: string
           updated_at?: string
           user_id?: string | null
         }
