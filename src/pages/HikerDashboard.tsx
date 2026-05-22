@@ -64,6 +64,7 @@ const STATUS_LABELS: Record<string, string> = {
 
 export default function HikerDashboard() {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const [bookings, setBookings] = useState<any[]>([]);
   const [sessions, setSessions] = useState<any[]>([]);
   const [cancellingId, setCancellingId] = useState<string | null>(null);
