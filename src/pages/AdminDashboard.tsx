@@ -1311,8 +1311,8 @@ export default function AdminDashboard() {
                       <Select value={selectedGuide} onValueChange={setSelectedGuide}>
                         <SelectTrigger><SelectValue placeholder="Select a guide…" /></SelectTrigger>
                         <SelectContent>
-                          {guides.filter((g) => g.status !== 'off-duty').map((g) => (
-                            <SelectItem key={g.id} value={g.name}>
+                          {guides.filter((g) => g.status !== 'off-duty' && g.status !== 'off_duty').map((g) => (
+                            <SelectItem key={g.id} value={g.id}>
                               {g.name} — <span className="capitalize">{g.status}</span> ({g.trail})
                             </SelectItem>
                           ))}
