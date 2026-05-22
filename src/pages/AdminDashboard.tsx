@@ -274,7 +274,8 @@ export default function AdminDashboard() {
     loadPendingBookings();
     loadUpcomingCapacities();
     setAnnouncements(loadAnnouncements());
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeLocationId]);
 
   useEffect(() => {
     if (!scannedBooking) {
