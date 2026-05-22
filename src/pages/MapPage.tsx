@@ -13,6 +13,11 @@ import MapCompass from '@/components/map/MapCompass';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { useAuth } from '@/hooks/useAuth';
 import SOSPanel from '@/components/core/SOSPanel';
+import OfflineLayer from '@/components/map/OfflineLayer';
+import HikeSummary from '@/components/map/HikeSummary';
+import { HikeTracker } from '@/lib/tracking/HikeTracker';
+import { downloadArea } from '@/lib/tracking/tileCache';
+import type { OfflineSession } from '@/lib/offlineDb';
 
 import 'leaflet/dist/leaflet.css';
 
@@ -693,13 +698,13 @@ export default function MapPage() {
           >
             <MapInstanceBridge onReady={setMapInstance} />
             {baseLayer === 'street' && (
-              <TileLayer url="https://tile.openstreetmap.org/{z}/{x}/{y}.png" maxZoom={20} />
+              <OfflineLayer url="https://tile.openstreetmap.org/{z}/{x}/{y}.png" maxZoom={20} />
             )}
             {baseLayer === 'topo' && (
-              <TileLayer url="https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png" maxZoom={17} />
+              <OfflineLayer url="https://a.tile.opentopomap.org/{z}/{x}/{y}.png" maxZoom={17} />
             )}
             {baseLayer === 'sat' && (
-              <TileLayer url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}" maxZoom={19} />
+              <OfflineLayer url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}" maxZoom={19} />
             )}
 
             {TRAILS.map((t, i) => (
