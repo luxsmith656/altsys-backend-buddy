@@ -80,6 +80,7 @@ export default function HikerDashboard() {
     try { return new Set(JSON.parse(localStorage.getItem('reviewed_sessions') || '[]')); } catch { return new Set(); }
   });
   const [submittingReview, setSubmittingReview] = useState(false);
+  const [chatBooking, setChatBooking] = useState<{ id: string; date: string } | null>(null);
 
   useEffect(() => {
     if (!user) return;
