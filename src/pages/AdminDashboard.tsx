@@ -721,17 +721,19 @@ export default function AdminDashboard() {
     let q: any = supabase.from('guides').select('id, user_id, full_name, phone, specialty, status, per_trip_fee, location_id, is_active');
     if (activeLocationId) q = q.eq('location_id', activeLocationId);
     const { data } = await q.order('full_name');
+    const activeLocName = locations.find((l) => l.id === activeLocationId)?.name || '';
     const mapped: UIGuide[] = (data ?? []).map((g: any) => ({
       id: g.id,
       user_id: g.user_id,
       name: g.full_name,
       phone: g.phone || '—',
       status: g.is_active ? (g.status || 'available') : 'off-duty',
-      trail: g.specialty || 'Unassigned',
+      trail: g.specialty || activeLocName || 'Local trail',
       totalHikes: 0,
       per_trip_fee: Number(g.per_trip_fee || 0),
       location_id: g.location_id,
     }));
+
     setGuides(mapped);
   };
 
