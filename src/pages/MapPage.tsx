@@ -828,7 +828,7 @@ export default function MapPage() {
 
         {/* Desktop right-side stack: layers + elevation + locate */}
         <div className="hidden md:flex absolute right-4 bottom-4 z-[1100] flex-col items-end gap-2">
-          <MapLayersControl value={baseLayer} onChange={setBaseLayer} />
+          <WeatherPanel lat={MT_KALISUNGAN_CENTER[0]} lng={MT_KALISUNGAN_CENTER[1]} onAdvice={handleWeatherAdvice} />
           <ElevationProfile
             trailPath={currentTrail.path}
             trailName={currentTrail.name}
