@@ -146,7 +146,46 @@ type SubmittedBooking = {
   totalFee: number;
 };
 
+/* ─── City autocomplete (compact, used inline) ─── */
+function CityAutocomplete({ value, options, onPick, placeholder }: { value: string; options: string[]; onPick: (city: string, province: string) => void; placeholder?: string }) {
+  const [q, setQ] = useState(value || '');
+  const [picked, setPicked] = useState(!!value);
+  useEffect(() => { setQ(value || ''); setPicked(!!value); }, [value]);
+  const matches = q && !picked ? options.filter((o) => o.toLowerCase().includes(q.toLowerCase())).slice(0, 15) : [];
+  return (
+    <div className="relative">
+      <Input
+        value={q}
+        placeholder={placeholder || 'Search city / municipality…'}
+        onChange={(e) => { setQ(e.target.value); setPicked(false); if (!e.target.value) onPick('', ''); }}
+        className="text-sm"
+      />
+      {matches.length > 0 && (
+        <div className="absolute top-full left-0 right-0 z-50 mt-1 max-h-44 overflow-y-auto rounded-xl border border-border/40 bg-card shadow-xl">
+          {matches.map((loc) => (
+            <button
+              key={loc}
+              type="button"
+              className="w-full text-left px-3 py-1.5 text-xs hover:bg-primary/10 hover:text-primary transition-colors"
+              onMouseDown={(e) => {
+                e.preventDefault();
+                const [c, p] = loc.split(', ');
+                onPick(c, p || '');
+                setQ(loc);
+                setPicked(true);
+              }}
+            >
+              {loc}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 /* ─── Helpers ─── */
+
 function formatTimeInput(time24: string): string {
   if (!time24) return '';
   const [h, m] = time24.split(':').map(Number);
@@ -204,6 +243,7 @@ export default function BookingPage() {
   const [medicalNotes, setMedicalNotes] = useState('');
   const [preferredGuide, setPreferredGuide] = useState('');
   const [locationSearch, setLocationSearch] = useState('');
+  const [cityPicked, setCityPicked] = useState(false);
 
   // ── Multi-location: hiker picks where to start (Lamot 1, Lamot 2, etc.) ──
   const { locations: allLocations } = useLocations();
@@ -714,18 +754,10 @@ export default function BookingPage() {
         notes: metaNotes,
         status: 'pending',
         location_id: startLocationId,
-        start_location_id: startLocationId,
-        preferred_guide_id: preferredGuideId || null,
-        entry_fee: fees.entryFee,
-        guide_fee: fees.guideFee,
-        total_amount: fees.totalFee,
-        age_bracket: age ? (Number(age) < 18 ? 'minor' : Number(age) < 30 ? '18-29' : Number(age) < 45 ? '30-44' : Number(age) < 60 ? '45-59' : '60+') : '',
-        gender: sex || '',
-        origin_city: city || '',
-        group_type: groupSize > 1 ? 'group' : 'solo',
       } as any)
       .select()
       .single();
+
 
     // Auto-create assignment row if hiker requested a specific guide.
     if (data && preferredGuideId) {
@@ -1237,11 +1269,13 @@ export default function BookingPage() {
                             value={locationSearch}
                             onChange={(e) => {
                               setLocationSearch(e.target.value);
+                              setCityPicked(false);
                               if (!e.target.value) { setCity(''); setProvince(''); }
                             }}
+                            onFocus={() => { if (city) setCityPicked(true); }}
                             className="text-sm"
                           />
-                          {locationSearch && (
+                          {locationSearch && !cityPicked && (
                             <div className="absolute top-full left-0 right-0 z-50 mt-1 max-h-52 overflow-y-auto rounded-xl border border-border/40 bg-card shadow-xl">
                               {phLocations
                                 .filter((loc) => loc.toLowerCase().includes(locationSearch.toLowerCase()))
@@ -1251,11 +1285,13 @@ export default function BookingPage() {
                                     key={loc}
                                     type="button"
                                     className="w-full text-left px-3 py-2 text-sm hover:bg-primary/10 hover:text-primary transition-colors"
-                                    onClick={() => {
+                                    onMouseDown={(e) => {
+                                      e.preventDefault();
                                       const [locCity, locProv] = loc.split(', ');
                                       setCity(locCity);
                                       setProvince(locProv || '');
                                       setLocationSearch(loc);
+                                      setCityPicked(true);
                                     }}
                                   >
                                     {loc}
@@ -1268,6 +1304,7 @@ export default function BookingPage() {
                           )}
                         </div>
                         {city && <p className="text-xs text-primary font-medium">Selected: {city}{province ? `, ${province}` : ''}</p>}
+
                       </div>
 
                       {/* Companions with full details */}
@@ -1359,12 +1396,14 @@ export default function BookingPage() {
                                   </div>
                                   <div className="space-y-1.5">
                                     <Label className="text-xs">City / Municipality</Label>
-                                    <Input
+                                    <CityAutocomplete
                                       value={cd.city || ''}
-                                      onChange={(e) => updateCompanionDetail(idx, 'city', e.target.value)}
-                                      placeholder="e.g. Calauan, Laguna"
+                                      options={phLocations}
+                                      onPick={(c) => updateCompanionDetail(idx, 'city', c)}
+                                      placeholder="Search PH city/municipality…"
                                     />
                                   </div>
+
                                 </div>
                               </div>
                             );
