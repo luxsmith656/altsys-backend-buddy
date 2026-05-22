@@ -189,6 +189,16 @@ export default function Login() {
               Hiker
             </Button>
           </div>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="w-full mt-3 text-[11px] text-muted-foreground"
+            onClick={reseedTestAccounts}
+            disabled={reseeding}
+          >
+            {reseeding ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : null}
+            Reset test accounts
+          </Button>
         </div>
       </div>
     </div>
