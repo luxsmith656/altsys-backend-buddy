@@ -72,7 +72,8 @@ Deno.serve(async (req) => {
       { onConflict: 'user_id' },
     );
 
-    // Guide role (idempotent)
+    // Replace any auto-assigned 'hiker' role with 'guide'
+    await admin.from('user_roles').delete().eq('user_id', userId).eq('role', 'hiker');
     await admin.from('user_roles').upsert(
       { user_id: userId, role: 'guide' },
       { onConflict: 'user_id,role', ignoreDuplicates: true },
