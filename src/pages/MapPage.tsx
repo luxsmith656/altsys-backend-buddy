@@ -710,15 +710,8 @@ export default function MapPage() {
             whenReady={() => {}}
           >
             <MapInstanceBridge onReady={setMapInstance} />
-            {baseLayer === 'street' && (
-              <OfflineLayer url="https://tile.openstreetmap.org/{z}/{x}/{y}.png" maxZoom={20} />
-            )}
-            {baseLayer === 'topo' && (
-              <OfflineLayer url="https://a.tile.opentopomap.org/{z}/{x}/{y}.png" maxZoom={17} />
-            )}
-            {baseLayer === 'sat' && (
-              <OfflineLayer url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}" maxZoom={19} />
-            )}
+            <OfflineLayer url="https://tile.openstreetmap.org/{z}/{x}/{y}.png" maxZoom={20} attribution="© OpenStreetMap" />
+
 
             {TRAILS.map((t, i) => (
               <Polyline
