@@ -2262,6 +2262,17 @@ export default function AdminDashboard() {
           )}
         </Card>
       </div>
+
+      {chatBooking && (
+        <BookingChat
+          bookingId={chatBooking.id}
+          bookingDate={chatBooking.date}
+          open={!!chatBooking}
+          onOpenChange={(o) => !o && setChatBooking(null)}
+          isAdmin
+          onAfterReschedule={() => { setChatBooking(null); void loadAllTabBookings(); }}
+        />
+      )}
     </div>
   );
 }
