@@ -1813,6 +1813,8 @@ export default function AdminDashboard() {
                 </div>
               </CardContent>
             </Card>
+
+            <AdminOffDutyApprovals />
           </TabsContent>
 
           {/* ─────────────────────────────── DAILY CAPACITY TAB ── */}
