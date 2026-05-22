@@ -166,8 +166,7 @@ export default function AdminDashboard() {
     const dups = new Set<string>();
     for (const ids of map.values()) if (ids.length > 1) ids.forEach((id) => dups.add(id));
     return dups;
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [/* re-evaluated when bookings change */ JSON.stringify((/* deps */ []))]);
+  }, [allTabBookings]);
 
   const sendDuplicateWeekReminder = async (b: any) => {
     const meta = parseMeta(b.notes);
