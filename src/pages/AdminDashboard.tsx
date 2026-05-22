@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { supabase } from '@/integrations/supabase/client';
+import { useLocations } from '@/hooks/useLocations';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -136,7 +137,10 @@ export default function AdminDashboard() {
   const [annSending, setAnnSending] = useState(false);
 
   /* ── Guide state ── */
-  const [guides, setGuides] = useState(MOCK_GUIDES);
+  /* ── Real guides loaded from DB, mapped to the legacy UI shape ── */
+  const { activeLocationId, isSuperAdmin } = useLocations();
+  type UIGuide = { id: string; name: string; phone: string; status: string; trail: string; totalHikes: number; user_id: string | null; per_trip_fee: number; location_id: string | null };
+  const [guides, setGuides] = useState<UIGuide[]>([]);
 
   /* ── All bookings (used by Bookings tab + Payments tab) ── */
   const [allTabBookings, setAllTabBookings] = useState<any[]>([]);
@@ -191,6 +195,10 @@ export default function AdminDashboard() {
   const [newGuideName, setNewGuideName] = useState('');
   const [newGuidePhone, setNewGuidePhone] = useState('');
   const [newGuideTrail, setNewGuideTrail] = useState('');
+  const [newGuideEmail, setNewGuideEmail] = useState('');
+  const [newGuidePassword, setNewGuidePassword] = useState('');
+  const [newGuideFee, setNewGuideFee] = useState('500');
+  const [addGuideSaving, setAddGuideSaving] = useState(false);
   const [removeGuideId, setRemoveGuideId] = useState<string | null>(null);
   const [removeGuidePassword, setRemoveGuidePassword] = useState('');
 
