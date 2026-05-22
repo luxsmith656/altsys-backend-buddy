@@ -878,7 +878,7 @@ export default function MapPage() {
             mobileControlsOpen ? 'bottom-[14.5rem]' : 'bottom-[6.5rem]'
           }`}
         >
-          <MapLayersControl value={baseLayer} onChange={setBaseLayer} />
+          <WeatherPanel lat={MT_KALISUNGAN_CENTER[0]} lng={MT_KALISUNGAN_CENTER[1]} onAdvice={handleWeatherAdvice} />
           <ElevationProfile
             trailPath={currentTrail.path}
             trailName={currentTrail.name}
