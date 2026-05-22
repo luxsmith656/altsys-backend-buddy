@@ -436,11 +436,7 @@ export default function MapPage() {
     toast.info('Downloading map tiles for offline use…');
     setTileDownloadProgress({ done: 0, total: 0 });
     try {
-      const tpl = baseLayer === 'topo'
-        ? 'https://a.tile.opentopomap.org/{z}/{x}/{y}.png'
-        : baseLayer === 'sat'
-          ? 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'
-          : 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
+      const tpl = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
       const res = await downloadArea({
         centerLat: 14.1475, centerLng: 121.3454,
         zMin: 13, zMax: 16, radiusTiles: 4,
