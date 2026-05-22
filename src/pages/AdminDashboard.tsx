@@ -148,10 +148,14 @@ export default function AdminDashboard() {
   const [guides, setGuides] = useState<UIGuide[]>([]);
   const [chatBooking, setChatBooking] = useState<{ id: string; date: string } | null>(null);
 
+  /* ── All bookings (used by Bookings tab + Payments tab) ── */
+  const [allTabBookings, setAllTabBookings] = useState<any[]>([]);
+  const [allTabLoading, setAllTabLoading] = useState(false);
+
   /* ── Duplicate-week detection: same hiker, same ISO week ── */
   const isoWeekKey = (d: string) => {
     const dt = new Date(d);
-    const day = (dt.getUTCDay() + 6) % 7; // Mon=0
+    const day = (dt.getUTCDay() + 6) % 7;
     dt.setUTCDate(dt.getUTCDate() - day);
     return `${dt.getUTCFullYear()}-${dt.getUTCMonth()}-${dt.getUTCDate()}`;
   };
@@ -177,10 +181,6 @@ export default function AdminDashboard() {
     toast.success(`Reminder sent to ${meta.fullName || b.emergency_contact_name || 'hiker'}`);
   };
 
-  /* ── All bookings (used by Bookings tab + Payments tab) ── */
-  const [allTabBookings, setAllTabBookings] = useState<any[]>([]);
-  const [allTabLoading, setAllTabLoading] = useState(false);
-
   /* ── Bookings tab filter/search ── */
   const [bookingTabFilter, setBookingTabFilter] = useState<string>('all');
   const [bookingSearch, setBookingSearch] = useState('');
@@ -188,6 +188,7 @@ export default function AdminDashboard() {
   /* ── Legacy pending state (used for dialogs only) ── */
   const [pendingBookings, setPendingBookings] = useState<any[]>([]);
   const [pendingLoading, setPendingLoading] = useState(false);
+
 
   /* ── QR Scan / Onsite Check-in state ── */
   const [qrInput, setQrInput] = useState('');
