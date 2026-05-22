@@ -247,6 +247,29 @@ export default function RealtimeMonitorMap({ locationId, canAddCheckpoints = fal
     });
   }, [sessions, checkpoints, progress]);
 
+  /* ── Inactivity alert: warn admin when a hiker hasn't pinged in 20+ min ── */
+  const alertedRef = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    const check = () => {
+      sessions.forEach((s) => {
+        if (!s.lastTs) return;
+        const ageMin = (Date.now() - new Date(s.lastTs).getTime()) / 60000;
+        if (ageMin >= 20 && !alertedRef.current.has(s.id)) {
+          alertedRef.current.add(s.id);
+          toast.error(`⚠ Inactivity alert: ${s.hiker_name} has not pinged in ${Math.round(ageMin)} min.`, {
+            duration: 12000,
+            id: `inactivity-${s.id}`,
+          });
+        }
+        // Reset once they ping again
+        if (ageMin < 5) alertedRef.current.delete(s.id);
+      });
+    };
+    check();
+    const id = setInterval(check, 60_000);
+    return () => clearInterval(id);
+  }, [sessions]);
+
   const saveCheckpoint = async () => {
     if (!pendingCp || !cpName.trim()) {
       toast.error('Please name the checkpoint.');
