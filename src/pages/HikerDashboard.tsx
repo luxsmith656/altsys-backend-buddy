@@ -639,6 +639,16 @@ export default function HikerDashboard() {
                             </AlertDialogContent>
                           </AlertDialog>
                         )}
+
+                      {/* Per-booking chat with admin */}
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="w-full gap-1.5"
+                        onClick={() => setChatBooking({ id: b.id, date: b.booking_date })}
+                      >
+                        <MessageCircle className="h-3.5 w-3.5" /> Message admin
+                      </Button>
                     </div>
                   );
                 })}
@@ -647,6 +657,17 @@ export default function HikerDashboard() {
           </CardContent>
         </Card>
       </div>
+
+      {chatBooking && (
+        <BookingChat
+          bookingId={chatBooking.id}
+          bookingDate={chatBooking.date}
+          open={!!chatBooking}
+          onOpenChange={(o) => !o && setChatBooking(null)}
+          canRequestReschedule
+          onAfterReschedule={() => { setChatBooking(null); window.location.reload(); }}
+        />
+      )}
     </div>
   );
 }
