@@ -1040,6 +1040,18 @@ export default function MapPage() {
           </div>
         </div>
       </div>
+
+      {tileDownloadProgress && tileDownloadProgress.total > 0 && (
+        <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-[2000] glass-card-strong rounded-full px-4 py-2 text-xs">
+          Caching tiles {tileDownloadProgress.done}/{tileDownloadProgress.total}
+        </div>
+      )}
+
+      <HikeSummary
+        session={summarySession}
+        open={!!summarySession}
+        onClose={() => setSummarySession(null)}
+      />
     </div>
   );
 }
