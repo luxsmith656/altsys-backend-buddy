@@ -173,7 +173,7 @@ export default function MapPage() {
   const recordWatchRef = useRef<number | null>(null);
   const watchRef = useRef<number | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const { role } = useAuth();
+  const { role, user } = useAuth();
   const isRanger = role === 'ranger';
 
 
@@ -190,7 +190,7 @@ export default function MapPage() {
   const trackerRef = useRef<HikeTracker | null>(null);
   const [summarySession, setSummarySession] = useState<OfflineSession | null>(null);
   const [tileDownloadProgress, setTileDownloadProgress] = useState<{ done: number; total: number } | null>(null);
-  const { user } = useAuth();
+  
 
   // Smooth interpolation for the hiker marker
   useEffect(() => {
