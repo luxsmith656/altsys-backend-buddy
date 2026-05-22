@@ -25,6 +25,13 @@ import NotificationsPage from "./pages/NotificationsPage";
 import Onboarding from "./pages/Onboarding";
 import NotFound from "./pages/NotFound";
 import RoleRoute from "@/components/auth/RoleRoute";
+import { useEffect } from "react";
+import { startSyncEngine } from "@/lib/tracking/syncEngine";
+
+function OfflineSyncBoot() {
+  useEffect(() => { startSyncEngine(); }, []);
+  return null;
+}
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -46,6 +53,7 @@ const App = () => (
         <ThemeProvider>
           <AuthProvider>
             <LocationsProvider>
+              <OfflineSyncBoot />
               <Navbar />
               <Routes>
                 <Route path="/" element={<Index />} />
