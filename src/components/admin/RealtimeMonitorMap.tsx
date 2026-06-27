@@ -355,7 +355,7 @@ export default function RealtimeMonitorMap({ locationId, canAddCheckpoints = fal
           <strong>${esc(s.hiker_name)}</strong>
           <div style="margin-top:6px;font-size:12px;line-height:1.45">
             <div><b>Tracker:</b> ${esc(role)} ${s.tracking_phase ? `- ${esc(s.tracking_phase)}` : ''}</div>
-            ${s.trail_zone_id && trailZoneMap[s.trail_zone_id] ? `<div><b>Route:</b> ${esc(trailZoneMap[s.trail_zone_id].name)}</div>` : ''}
+            ${(s as any).trail_zone_name ? `<div><b>Route:</b> ${esc((s as any).trail_zone_name)}</div>` : ''}
             <div><b>Group:</b> ${s.groupSize ?? 1} hiker${(s.groupSize ?? 1) === 1 ? '' : 's'}</div>
             <div><b>Assigned guide:</b> ${esc(s.guideName || 'Not assigned')}</div>
             ${s.guidePhone ? `<div><b>Guide phone:</b> ${esc(s.guidePhone)}</div>` : ''}
