@@ -5,9 +5,14 @@ export interface OfflineSession {
   serverSessionId?: string | null;
   bookingId?: string | null;
   userId: string;
+  participantRole?: 'hiker' | 'guide' | 'ranger' | 'admin';
+  locationId?: string | null;
   startedAt: number;
   endedAt?: number | null;
   status: 'active' | 'paused' | 'completed' | 'synced';
+  phase?: 'ascent' | 'peak' | 'descent' | 'completed';
+  peakReachedAt?: number | null;
+  descentStartedAt?: number | null;
   // Stats
   distanceM: number;
   movingSec: number;
@@ -30,8 +35,9 @@ export interface OfflinePoint {
   alt: number;
   accuracy: number;
   speed: number;
+  heading?: number | null;
   ts: number;
-  segment: 'ascent' | 'descent' | 'flat';
+  segment: 'ascent' | 'descent' | 'flat' | 'peak';
 }
 
 export interface TileRecord {
@@ -90,6 +96,15 @@ export async function listSessions(userId: string): Promise<OfflineSession[]> {
   const db = await getDb();
   const all = (await db.getAll('sessions')) as OfflineSession[];
   return all.filter((s) => s.userId === userId).sort((a, b) => b.startedAt - a.startedAt);
+}
+
+export async function getActiveSession(userId: string, serverSessionId?: string | null): Promise<OfflineSession | undefined> {
+  const sessions = await listSessions(userId);
+  return sessions.find((s) => {
+    if (s.status !== 'active' && s.status !== 'paused') return false;
+    if (serverSessionId) return s.serverSessionId === serverSessionId;
+    return true;
+  });
 }
 
 export async function appendPoint(p: OfflinePoint) {

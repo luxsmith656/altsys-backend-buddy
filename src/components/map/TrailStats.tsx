@@ -14,6 +14,12 @@ interface TrailStatsProps {
   offlineReady: boolean;
   trailName?: string;
   trailColor?: string;
+  phase?: 'ascent' | 'peak' | 'descent' | 'completed';
+  remainingKm?: number;
+  etaMinutes?: number | null;
+  wrongDirection?: boolean;
+  onMarkPeak?: () => void;
+  onStartDescent?: () => void;
   onStartTracking: () => void;
   onStopTracking: () => void;
   onOfflineCache: () => void;
@@ -30,6 +36,12 @@ export default function TrailStats({
   distance, elapsed, currentSpeed, gpsSignal, selectedTrail, offTrail, tracking, offlineReady,
   trailName,
   trailColor,
+  phase = 'ascent',
+  remainingKm = 0,
+  etaMinutes,
+  wrongDirection = false,
+  onMarkPeak,
+  onStartDescent,
   onStartTracking, onStopTracking, onOfflineCache,
 }: TrailStatsProps) {
   const avgPace = elapsed > 0 && distance > 0 ? elapsed / 60 / distance : 0;
@@ -74,6 +86,12 @@ export default function TrailStats({
                   <span className="hidden xs:inline">Off Trail</span>
                 </div>
               )}
+              {wrongDirection && !offTrail && (
+                <div className="inline-flex items-center gap-1 text-destructive text-xs animate-pulse">
+                  <AlertTriangle className="h-3.5 w-3.5" />
+                  <span className="hidden xs:inline">Wrong Way</span>
+                </div>
+              )}
             </div>
             <div className="flex items-baseline gap-3 text-xs text-muted-foreground">
               <GpsIndicator />
@@ -86,6 +104,13 @@ export default function TrailStats({
               <span className="whitespace-nowrap">
                 <span className="text-foreground font-semibold">{displayPace > 0 ? displayPace.toFixed(1) : '--'}</span> min/km
               </span>
+              <span className="whitespace-nowrap">
+                <span className="text-foreground font-semibold">{remainingKm.toFixed(2)}</span> km left
+              </span>
+              <span className="whitespace-nowrap">
+                ETA <span className="text-foreground font-semibold">{etaMinutes == null ? '--' : `${etaMinutes}m`}</span>
+              </span>
+              <span className="capitalize text-primary font-semibold">{phase}</span>
 
             </div>
           </div>
@@ -105,9 +130,21 @@ export default function TrailStats({
             {offlineReady ? 'Downloaded' : 'Download Map'}
           </Button>
           {tracking ? (
-            <Button size="sm" variant="destructive" onClick={onStopTracking} aria-label="Stop tracking" className="gap-1">
-              <Pause className="h-4 w-4" /> Stop
-            </Button>
+            <>
+              {phase === 'ascent' && (
+                <Button size="sm" variant="outline" onClick={onMarkPeak} className="gap-1">
+                  Peak
+                </Button>
+              )}
+              {phase === 'peak' && (
+                <Button size="sm" variant="outline" onClick={onStartDescent} className="gap-1">
+                  Descend
+                </Button>
+              )}
+              <Button size="sm" variant="destructive" onClick={onStopTracking} aria-label="Stop tracking" className="gap-1">
+                <Pause className="h-4 w-4" /> Stop
+              </Button>
+            </>
           ) : (
             <Button size="sm" onClick={onStartTracking} aria-label="Start hike" className="gap-1" style={{ backgroundColor: displayTrailColor }}>
               <Play className="h-4 w-4" /> Start

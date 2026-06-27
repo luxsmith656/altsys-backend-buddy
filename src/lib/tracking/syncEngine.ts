@@ -11,11 +11,16 @@ async function pushOne(item: any) {
     const row = {
       client_session_id: s.id,
       user_id: s.userId,
+      participant_role: s.participantRole ?? 'hiker',
+      location_id: s.locationId ?? null,
       booking_id: s.bookingId ?? null,
       trail_zone_id: s.trailZoneId ?? null,
       start_time: new Date(s.startedAt).toISOString(),
       end_time: s.endedAt ? new Date(s.endedAt).toISOString() : null,
       status: s.status,
+      tracking_phase: s.phase ?? 'ascent',
+      peak_reached_at: s.peakReachedAt ? new Date(s.peakReachedAt).toISOString() : null,
+      descent_started_at: s.descentStartedAt ? new Date(s.descentStartedAt).toISOString() : null,
       total_distance_km: +(s.distanceM / 1000).toFixed(3),
       moving_time_sec: s.movingSec,
       resting_time_sec: s.restingSec,
@@ -26,6 +31,7 @@ async function pushOne(item: any) {
       summit_reached: s.summitReached,
       encoded_path: s.encodedPath,
       last_synced_at: new Date().toISOString(),
+      last_track_at: new Date().toISOString(),
     } as any;
 
     const { error } = s.serverSessionId
@@ -50,6 +56,10 @@ async function pushOne(item: any) {
     if (!realSessionId) throw new Error('Session not found for points upload');
     const rows = (points as any[]).map((p) => ({
       session_id: realSessionId, latitude: p.lat, longitude: p.lng, altitude: p.alt,
+      accuracy: p.accuracy ?? null,
+      speed_m_s: p.speed ?? null,
+      heading: p.heading ?? null,
+      segment: p.segment ?? null,
       timestamp: new Date(p.ts).toISOString(),
     }));
     // Batched
@@ -61,7 +71,7 @@ async function pushOne(item: any) {
   }
 
   if (item.kind === 'ping') {
-    const { sessionId, serverSessionId, lat, lng, alt, ts } = item.payload;
+    const { sessionId, serverSessionId, lat, lng, alt, accuracy, speed, heading, segment, ts } = item.payload;
     let realSessionId = serverSessionId as string | undefined;
     if (!realSessionId) {
       const { data: sess } = await supabase
@@ -71,6 +81,10 @@ async function pushOne(item: any) {
     if (!realSessionId) return; // Skip silently
     await supabase.from('hiker_locations').insert({
       session_id: realSessionId, latitude: lat, longitude: lng, altitude: alt,
+      accuracy: accuracy ?? null,
+      speed_m_s: speed ?? null,
+      heading: heading ?? null,
+      segment: segment ?? null,
       timestamp: new Date(ts).toISOString(),
     });
   }

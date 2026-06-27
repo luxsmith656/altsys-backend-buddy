@@ -23,6 +23,7 @@ import type { OfflineSession } from '@/lib/offlineDb';
 import type { RouteAdvice } from '@/lib/weather';
 import { supabase } from '@/integrations/supabase/client';
 import { useLocations } from '@/hooks/useLocations';
+import type { LatLngTuple } from 'leaflet';
 
 import 'leaflet/dist/leaflet.css';
 
@@ -34,12 +35,43 @@ L.Icon.Default.mergeOptions({
   shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-shadow.png',
 });
 
-const hikerIcon = new L.DivIcon({
-  html: `<div style="width:16px;height:16px;background:#22c55e;border:3px solid #fff;border-radius:50%;box-shadow:0 0 10px #22c55e80;"></div>`,
-  className: '',
-  iconSize: [16, 16],
-  iconAnchor: [8, 8],
-});
+function makeUserIcon(heading: number | null, alert: boolean) {
+  const color = alert ? '#ef4444' : '#22c55e';
+  const rotation = Number.isFinite(heading ?? NaN) ? heading : 0;
+  return new L.DivIcon({
+    html: `<div style="width:24px;height:24px;display:flex;align-items:center;justify-content:center;transform:rotate(${rotation}deg);">
+      <div style="width:0;height:0;border-left:8px solid transparent;border-right:8px solid transparent;border-bottom:18px solid ${color};filter:drop-shadow(0 1px 4px rgba(0,0,0,.45));"></div>
+    </div>`,
+    className: '',
+    iconSize: [24, 24],
+    iconAnchor: [12, 12],
+  });
+}
+
+function bearingDeg(from: [number, number], to: [number, number]) {
+  const lat1 = from[0] * Math.PI / 180;
+  const lat2 = to[0] * Math.PI / 180;
+  const dLon = (to[1] - from[1]) * Math.PI / 180;
+  const y = Math.sin(dLon) * Math.cos(lat2);
+  const x = Math.cos(lat1) * Math.sin(lat2) - Math.sin(lat1) * Math.cos(lat2) * Math.cos(dLon);
+  return (Math.atan2(y, x) * 180 / Math.PI + 360) % 360;
+}
+
+function angleDelta(a: number, b: number) {
+  return Math.abs(((a - b + 540) % 360) - 180);
+}
+
+function trailDistanceKm(path: LatLngTuple[], start: number, end: number) {
+  if (path.length < 2 || start === end) return 0;
+  const step = start < end ? 1 : -1;
+  let d = 0;
+  for (let i = start; i !== end; i += step) {
+    const next = i + step;
+    if (!path[i] || !path[next]) break;
+    d += haversineDistance(path[i][0], path[i][1], path[next][0], path[next][1]);
+  }
+  return d;
+}
 
 const poiIcons: Record<string, L.DivIcon> = {
   checkpoint: new L.DivIcon({ html: `<div style="width:12px;height:12px;background:#f59e0b;border:2px solid #fff;border-radius:50%;"></div>`, className: '', iconSize: [12, 12], iconAnchor: [6, 6] }),
@@ -161,6 +193,8 @@ export default function MapPage() {
   const [distance, setDistance] = useState(0);
   const [elapsed, setElapsed] = useState(0);
   const [currentSpeed, setCurrentSpeed] = useState<number | null>(null);
+  const [currentHeading, setCurrentHeading] = useState<number | null>(null);
+  const [wrongDirection, setWrongDirection] = useState(false);
   const [offTrail, setOffTrail] = useState(false);
   const [gpsSignal, setGpsSignal] = useState<'Strong' | 'Medium' | 'Weak' | 'None'>('None');
   const [selectedTrail, setSelectedTrail] = useState(0);
@@ -194,7 +228,9 @@ export default function MapPage() {
 
   // Offline-first session tracker (parallel to legacy GPS UI)
   const trackerRef = useRef<HikeTracker | null>(null);
+  const trackerUnsubRef = useRef<(() => void) | null>(null);
   const [summarySession, setSummarySession] = useState<OfflineSession | null>(null);
+  const [trackingPhase, setTrackingPhase] = useState<'ascent' | 'peak' | 'descent' | 'completed'>('ascent');
   const [tileDownloadProgress, setTileDownloadProgress] = useState<{ done: number; total: number } | null>(null);
   const [dbTrails, setDbTrails] = useState<typeof TRAILS>([]);
   
@@ -296,11 +332,13 @@ export default function MapPage() {
   useEffect(() => {
     let active = true;
     void (async () => {
-      const { data } = await supabase
+      let q: any = supabase
         .from('trail_zones' as any)
-        .select('id,name,difficulty,elevation_meters,coordinates_json,status')
+        .select('id,location_id,name,difficulty,elevation_meters,coordinates_json,status')
         .eq('status', 'active')
         .order('created_at', { ascending: true });
+      if (activeLocationId) q = q.eq('location_id', activeLocationId);
+      const { data } = await q;
       if (!active) return;
       const loaded = ((data as any[]) ?? [])
         .map((trail, index) => {
@@ -327,7 +365,7 @@ export default function MapPage() {
       setDbTrails(loaded);
     })();
     return () => { active = false; };
-  }, []);
+  }, [activeLocationId]);
 
   const availableTrails = dbTrails.length > 0 ? dbTrails : TRAILS;
 
@@ -338,24 +376,66 @@ export default function MapPage() {
   const startTracking = useCallback(async () => {
     setTracking(true);
     if (user && !trackerRef.current) {
-      const { data: activeSession } = await supabase
+      let { data: activeSession } = await supabase
         .from('hiker_sessions' as any)
-        .select('id,booking_id,trail_zone_id,start_time')
+        .select('id,booking_id,trail_zone_id,location_id,start_time,tracking_phase')
         .eq('user_id', user.id)
         .eq('status', 'active')
         .order('start_time', { ascending: false })
         .limit(1)
         .maybeSingle();
-      const tr = new HikeTracker({
+
+      const participantRole =
+        role === 'guide' || role === 'ranger' || role === 'admin' || role === 'super_admin'
+          ? role === 'super_admin' ? 'admin' : role
+          : 'hiker';
+      const sessionLocationId = activeSession?.location_id ?? activeLocationId ?? locations[0]?.id ?? null;
+
+      if (!activeSession) {
+        const { data: created, error } = await supabase
+          .from('hiker_sessions' as any)
+          .insert({
+            user_id: user.id,
+            location_id: sessionLocationId,
+            participant_role: participantRole,
+            tracking_phase: 'ascent',
+            start_time: new Date().toISOString(),
+            status: 'active',
+            total_distance_km: 0,
+          })
+          .select('id,booking_id,trail_zone_id,location_id,start_time,tracking_phase')
+          .single();
+        if (error) {
+          toast.error(`Unable to start live session: ${error.message}`);
+          setTracking(false);
+          return;
+        }
+        activeSession = created;
+      }
+
+      const tr = await HikeTracker.createOrResume({
         userId: user.id,
         serverSessionId: activeSession?.id ?? null,
         bookingId: activeSession?.booking_id ?? null,
         trailZoneId: activeSession?.trail_zone_id ?? null,
+        locationId: activeSession?.location_id ?? sessionLocationId,
+        participantRole,
       });
       trackerRef.current = tr;
+      trackerUnsubRef.current?.();
+      trackerUnsubRef.current = tr.subscribe((snap) => {
+        setTrackingPhase(snap.phase);
+        setElapsed(snap.elapsedSec);
+        setDistance(snap.distanceM / 1000);
+        setFilteredPath(snap.path.map((p) => ({ lat: p.lat, lon: p.lng })));
+        if (snap.lastFix) {
+          setUserPos([snap.lastFix.lat, snap.lastFix.lng]);
+          setGpsSignal(snap.lastFix.accuracy <= 10 ? 'Strong' : snap.lastFix.accuracy <= 30 ? 'Medium' : 'Weak');
+        }
+      });
       void tr.start().catch((e) => console.warn('HikeTracker start failed', e));
     }
-  }, [user]);
+  }, [activeLocationId, locations, role, user]);
 
   // Weather-aware routing: if 'avoid', recommend an easier trail.
   const lastAdviceRef = useRef<string | null>(null);
@@ -418,6 +498,8 @@ export default function MapPage() {
       setRawGpsPoints(prev => [...prev, raw]);
 
       const rawSpeed = pos.coords.speed != null && pos.coords.speed > 0.3 ? pos.coords.speed * 3.6 : 0;
+      const heading = pos.coords.heading;
+      if (heading != null && Number.isFinite(heading)) setCurrentHeading(heading);
       
       const filtered = applyKalmanFilter(raw, rawSpeed);
       const newPos: [number, number] = [filtered.lat, filtered.lon];
@@ -450,18 +532,27 @@ export default function MapPage() {
       });
 
       // Track progress along selected trail
-      const idx = findNearestTrailIndex(newPos, availableTrails[selectedTrail]?.path ?? availableTrails[0].path);
+      const activePath = availableTrails[selectedTrail]?.path ?? availableTrails[0].path;
+      const idx = findNearestTrailIndex(newPos, activePath);
       setUserTrailProgress(idx);
 
       // Check if off-trail (> 100m from nearest trail point)
-      const minDist = Math.min(...availableTrails.map((t) => distanceToTrail(newPos[0], newPos[1], t.path)));
+      const minDist = distanceToTrail(newPos[0], newPos[1], activePath);
+      const targetIdx = trackingPhase === 'descent'
+        ? Math.max(0, idx - 1)
+        : Math.min(activePath.length - 1, idx + 1);
+      const expectedBearing = activePath[targetIdx] ? bearingDeg(newPos, activePath[targetIdx]) : null;
+      const facingWrongWay = expectedBearing != null && heading != null && rawSpeed > 1 && angleDelta(heading, expectedBearing) > 110;
+      setWrongDirection(!isGpsTestMode && (minDist > 0.1 || facingWrongWay));
       if (!isGpsTestMode && minDist > 0.1) {
         setOffTrail(true);
         toast.warning('You are off the marked trail!', { id: 'off-trail' });
+      } else if (!isGpsTestMode && facingWrongWay) {
+        toast.warning('Your direction looks away from the route.', { id: 'wrong-direction' });
       } else {
         setOffTrail(false);
       }
-    }, [selectedTrail, applyKalmanFilter, isGpsTestMode, availableTrails]);
+    }, [selectedTrail, applyKalmanFilter, isGpsTestMode, availableTrails, trackingPhase]);
 
   const handleError = useCallback((err: GeolocationPositionError) => {
     if (err.code === err.PERMISSION_DENIED) {
@@ -501,18 +592,41 @@ export default function MapPage() {
     setGpsSignal('None');
     const tr = trackerRef.current;
     if (tr) {
+      trackerUnsubRef.current?.();
+      trackerUnsubRef.current = null;
       trackerRef.current = null;
       void tr.stop().then((sess) => setSummarySession(sess)).catch((e) => console.warn('HikeTracker stop failed', e));
     }
+  };
+
+  const markPeakReached = () => {
+    const tr = trackerRef.current;
+    if (!tr) {
+      toast.error('Start tracking before marking the peak.');
+      return;
+    }
+    void tr.markPeak().then(() => {
+      setTrackingPhase('peak');
+      toast.success('Peak marked. Your ascent is saved.');
+    });
+  };
+
+  const startDescentTracking = () => {
+    const tr = trackerRef.current;
+    if (!tr) {
+      toast.error('Start tracking before descent.');
+      return;
+    }
+    void tr.startDescent().then(() => {
+      setTrackingPhase('descent');
+      toast.success('Descent tracking started.');
+    });
   };
 
   useEffect(() => {
     if (tracking) {
       if (!navigator.geolocation) { toast.error('Geolocation not supported'); return; }
       setRawGpsPoints([]);
-      setFilteredPath([]);
-      setDistance(0);
-      setElapsed(0);
       setCurrentSpeed(0);
       kalmanStateRef.current = null;
       timerRef.current = setInterval(() => setElapsed((s) => s + 1), 1000);
@@ -543,9 +657,15 @@ export default function MapPage() {
   };
 
   const currentTrail = availableTrails[selectedTrail] ?? availableTrails[0];
+  const currentProgressIndex = userTrailProgress ?? 0;
+  const remainingDistanceKm = trackingPhase === 'descent'
+    ? trailDistanceKm(currentTrail.path, currentProgressIndex, 0)
+    : trailDistanceKm(currentTrail.path, currentProgressIndex, currentTrail.path.length - 1);
   const avgPace = elapsed > 0 && distance > 0 ? (elapsed / 60) / distance : 0;
   const realTimePace = currentSpeed && currentSpeed > 0 ? 60 / currentSpeed : 0;
   const displayPace = realTimePace > 0 ? realTimePace : avgPace;
+  const etaMinutes = remainingDistanceKm > 0 && displayPace > 0 ? Math.round(remainingDistanceKm * displayPace) : null;
+  const userOrientationIcon = useMemo(() => makeUserIcon(currentHeading, wrongDirection || offTrail), [currentHeading, wrongDirection, offTrail]);
 
   useEffect(() => {
     // keep the map clean by default on mobile when switching trails
@@ -647,6 +767,8 @@ export default function MapPage() {
 
   useEffect(() => {
     return () => {
+      trackerUnsubRef.current?.();
+      trackerUnsubRef.current = null;
       if (recordWatchRef.current != null) {
         navigator.geolocation.clearWatch(recordWatchRef.current);
       }
@@ -777,6 +899,12 @@ export default function MapPage() {
           offlineReady={offlineReady}
           trailName={currentTrail.name}
           trailColor={currentTrail.color}
+          phase={trackingPhase}
+          remainingKm={remainingDistanceKm}
+          etaMinutes={etaMinutes}
+          wrongDirection={wrongDirection}
+          onMarkPeak={markPeakReached}
+          onStartDescent={startDescentTracking}
           onStartTracking={startTracking}
           onStopTracking={stopTracking}
           onOfflineCache={handleOfflineCache}
@@ -904,8 +1032,11 @@ export default function MapPage() {
             {/* User Location Hiker Marker */}
             {(displayPos || userPos) && (
               <>
-                <Marker position={displayPos || userPos!} icon={hikerIcon}>
-                  <Popup>Your Position</Popup>
+                <Marker position={displayPos || userPos!} icon={userOrientationIcon}>
+                  <Popup>
+                    Your Position<br />
+                    {wrongDirection ? 'Direction warning' : trackingPhase}
+                  </Popup>
                 </Marker>
                 <Circle center={displayPos || userPos!} radius={15} pathOptions={{ color: '#22c55e', fillColor: '#22c55e', fillOpacity: 0.15 }} />
               </>
@@ -1058,7 +1189,15 @@ export default function MapPage() {
                   <span>
                     <span className="text-foreground font-semibold">{displayPace > 0 ? displayPace.toFixed(1) : '--'}</span> min/km
                   </span>
+                  <span>
+                    <span className="text-foreground font-semibold">{remainingDistanceKm.toFixed(2)}</span> km left
+                  </span>
 
+                </div>
+                <div className="text-[10px] text-muted-foreground">
+                  <span className="capitalize text-primary font-semibold">{trackingPhase}</span>
+                  <span> ETA {etaMinutes == null ? '--' : `${etaMinutes}m`}</span>
+                  {wrongDirection && <span className="text-destructive font-semibold"> Wrong direction</span>}
                 </div>
                 {gpsSignal !== 'None' && (
                   <div className="text-[10px] text-muted-foreground">
@@ -1138,6 +1277,20 @@ export default function MapPage() {
                     </Button>
                   )}
                 </div>
+                {tracking && (
+                  <div className="flex items-center gap-2">
+                    {trackingPhase === 'ascent' && (
+                      <Button size="sm" variant="outline" onClick={markPeakReached} className="gap-1 flex-1">
+                        I'm on Peak
+                      </Button>
+                    )}
+                    {trackingPhase === 'peak' && (
+                      <Button size="sm" variant="outline" onClick={startDescentTracking} className="gap-1 flex-1">
+                        Start Descent
+                      </Button>
+                    )}
+                  </div>
+                )}
                 {isTrailRecorder && (
                   <div className="flex flex-col gap-2 pt-2 border-t border-border/30">
                     <div className="flex items-center gap-2">

@@ -7,7 +7,7 @@
  */
 import polyline from '@mapbox/polyline';
 import {
-  appendPoint, saveSession, getSession, getSessionPoints,
+  appendPoint, saveSession, getActiveSession, getSessionPoints,
   type OfflineSession, type OfflinePoint, enqueue,
 } from '@/lib/offlineDb';
 import { supabase } from '@/integrations/supabase/client';
@@ -24,6 +24,9 @@ export interface TrackerSnapshot {
   ascentM: number;
   descentM: number;
   currentPaceSecPerKm: number | null;
+  phase: 'ascent' | 'peak' | 'descent' | 'completed';
+  peakReachedAt: number | null;
+  descentStartedAt: number | null;
   lastFix: { lat: number; lng: number; alt: number; ts: number; accuracy: number } | null;
   path: { lat: number; lng: number }[];   // simplified for display
 }
@@ -40,19 +43,59 @@ export class HikeTracker {
   private startTs: number;
   private tickHandle: ReturnType<typeof setInterval> | null = null;
 
-  constructor(opts: { userId: string; bookingId?: string | null; trailZoneId?: string | null; sessionId?: string; serverSessionId?: string | null }) {
+  constructor(opts: {
+    userId: string;
+    bookingId?: string | null;
+    trailZoneId?: string | null;
+    sessionId?: string;
+    serverSessionId?: string | null;
+    participantRole?: OfflineSession['participantRole'];
+    locationId?: string | null;
+    existingSession?: OfflineSession;
+    existingPoints?: OfflinePoint[];
+  }) {
     const id = opts.sessionId ?? crypto.randomUUID();
-    this.startTs = Date.now();
-    this.session = {
+    this.startTs = opts.existingSession?.startedAt ?? Date.now();
+    this.session = opts.existingSession ?? {
       id, serverSessionId: opts.serverSessionId ?? null,
-      userId: opts.userId, bookingId: opts.bookingId ?? null, trailZoneId: opts.trailZoneId ?? null,
-      startedAt: this.startTs, status: 'active',
+      userId: opts.userId,
+      participantRole: opts.participantRole ?? 'hiker',
+      locationId: opts.locationId ?? null,
+      bookingId: opts.bookingId ?? null,
+      trailZoneId: opts.trailZoneId ?? null,
+      startedAt: this.startTs, status: 'active', phase: 'ascent',
       distanceM: 0, movingSec: 0, restingSec: 0, ascentM: 0, descentM: 0,
       ascentSec: 0, descentSec: 0, summitReached: false, encodedPath: '',
     };
+    this.session.serverSessionId = this.session.serverSessionId ?? opts.serverSessionId ?? null;
+    this.session.participantRole = this.session.participantRole ?? opts.participantRole ?? 'hiker';
+    this.session.locationId = this.session.locationId ?? opts.locationId ?? null;
+    this.session.phase = this.session.phase ?? 'ascent';
+    this.points = opts.existingPoints ?? [];
+    const last = this.points[this.points.length - 1];
+    if (last) {
+      this.lastFix = { lat: last.lat, lng: last.lng, alt: last.alt, ts: last.ts, accuracy: last.accuracy };
+      this.altEMA = last.alt;
+    }
   }
 
   get sessionId() { return this.session.id; }
+
+  static async createOrResume(opts: {
+    userId: string;
+    bookingId?: string | null;
+    trailZoneId?: string | null;
+    serverSessionId?: string | null;
+    participantRole?: OfflineSession['participantRole'];
+    locationId?: string | null;
+  }) {
+    const existing = await getActiveSession(opts.userId, opts.serverSessionId ?? null);
+    if (existing) {
+      const points = await getSessionPoints(existing.id);
+      return new HikeTracker({ ...opts, sessionId: existing.id, existingSession: existing, existingPoints: points });
+    }
+    return new HikeTracker(opts);
+  }
 
   async start() {
     await saveSession(this.session);
@@ -82,6 +125,7 @@ export class HikeTracker {
     if (this.tickHandle) clearInterval(this.tickHandle);
     this.watchId = null; this.tickHandle = null;
     this.session.status = 'completed';
+    this.session.phase = 'completed';
     this.session.endedAt = Date.now();
 
     // Build simplified encoded path
@@ -103,6 +147,23 @@ export class HikeTracker {
 
   subscribe(l: Listener) { this.listeners.add(l); return () => this.listeners.delete(l); }
 
+  async markPeak() {
+    this.session.summitReached = true;
+    this.session.phase = 'peak';
+    this.session.peakReachedAt = Date.now();
+    await saveSession(this.session);
+    await enqueue({ kind: 'session', payload: { ...this.session } });
+    this.emit();
+  }
+
+  async startDescent() {
+    this.session.phase = 'descent';
+    this.session.descentStartedAt = Date.now();
+    await saveSession(this.session);
+    await enqueue({ kind: 'session', payload: { ...this.session } });
+    this.emit();
+  }
+
   private onFix(pos: GeolocationPosition) {
     if (this.session.status !== 'active') return;
     const accuracy = pos.coords.accuracy ?? 999;
@@ -119,6 +180,7 @@ export class HikeTracker {
     const alt = this.altEMA;
     const ts = Date.now();
     const speed = pos.coords.speed ?? 0;
+    const heading = pos.coords.heading ?? null;
 
     // Adaptive sample: skip near-duplicates within 3m unless idle for 30s
     if (this.lastFix) {
@@ -145,11 +207,12 @@ export class HikeTracker {
     this.lastFix = { lat, lng, alt, ts, accuracy };
     const point: OfflinePoint = {
       sessionId: this.session.id, lat, lng, alt,
-      accuracy, speed, ts, segment: 'flat',
+      accuracy, speed, heading, ts, segment: this.session.phase === 'descent' ? 'descent' : this.session.phase === 'peak' ? 'peak' : 'ascent',
     };
     this.points.push(point);
     void appendPoint(point);
     void saveSession(this.session);
+    void enqueue({ kind: 'session', payload: { ...this.session } });
     void this.pushLivePing(point);
     this.emit();
   }
@@ -161,6 +224,10 @@ export class HikeTracker {
       lat: point.lat,
       lng: point.lng,
       alt: point.alt,
+      accuracy: point.accuracy,
+      speed: point.speed,
+      heading: point.heading,
+      segment: point.segment,
       ts: point.ts,
     };
 
@@ -189,8 +256,12 @@ export class HikeTracker {
         latitude: point.lat,
         longitude: point.lng,
         altitude: point.alt,
+        accuracy: point.accuracy,
+        speed_m_s: point.speed,
+        heading: point.heading,
+        segment: point.segment,
         timestamp: new Date(point.ts).toISOString(),
-      });
+      } as any);
       if (error) throw error;
     } catch {
       await enqueue({ kind: 'ping', payload });
@@ -221,6 +292,9 @@ export class HikeTracker {
       ascentM: Math.round(this.session.ascentM),
       descentM: Math.round(this.session.descentM),
       currentPaceSecPerKm: pace ? Math.round(pace) : null,
+      phase: this.session.phase ?? 'ascent',
+      peakReachedAt: this.session.peakReachedAt ?? null,
+      descentStartedAt: this.session.descentStartedAt ?? null,
       lastFix: this.lastFix,
       path: simplify(this.points.map((p) => ({ lat: p.lat, lng: p.lng })), 3),
     };

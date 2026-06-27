@@ -25,7 +25,15 @@ interface ActiveSession {
   id: string;
   user_id: string;
   booking_id: string | null;
+  trail_zone_id?: string | null;
   location_id?: string | null;
+  participant_role?: 'hiker' | 'guide' | 'ranger' | 'admin';
+  tracking_phase?: 'ascent' | 'peak' | 'descent' | 'completed';
+  total_distance_km?: number;
+  moving_time_sec?: number;
+  resting_time_sec?: number;
+  peak_reached_at?: string | null;
+  descent_started_at?: string | null;
   start_time: string;
   hiker_name?: string;
   groupSize?: number;
@@ -42,6 +50,12 @@ interface ActiveSession {
   lastLng?: number;
   lastTs?: string;
   path?: [number, number][];
+}
+
+interface TrailZoneRef {
+  id: string;
+  location_id: string | null;
+  name: string;
 }
 
 interface Checkpoint {
@@ -138,10 +152,20 @@ export default function RealtimeMonitorMap({ locationId, canAddCheckpoints = fal
 
     const sessQuery = supabase
       .from('hiker_sessions' as any)
-      .select('id,user_id,booking_id,trail_zone_id,start_time')
+      .select('id,user_id,booking_id,trail_zone_id,location_id,participant_role,tracking_phase,total_distance_km,moving_time_sec,resting_time_sec,peak_reached_at,descent_started_at,start_time')
       .eq('status', 'active');
     const { data: sessData } = await sessQuery;
     let sessList = ((sessData as any[]) ?? []) as ActiveSession[];
+
+    const trailZoneIds = Array.from(new Set(sessList.map((s) => s.trail_zone_id).filter(Boolean))) as string[];
+    const trailZoneMap: Record<string, TrailZoneRef> = {};
+    if (trailZoneIds.length > 0) {
+      const { data: zoneData } = await supabase
+        .from('trail_zones' as any)
+        .select('id,location_id,name')
+        .in('id', trailZoneIds);
+      ((zoneData as TrailZoneRef[] | null) ?? []).forEach((z) => { trailZoneMap[z.id] = z; });
+    }
 
     const bookingIds = Array.from(new Set(sessList.map((s) => s.booking_id).filter(Boolean))) as string[];
     const bookingMap: Record<string, any> = {};
@@ -152,7 +176,11 @@ export default function RealtimeMonitorMap({ locationId, canAddCheckpoints = fal
         .in('id', bookingIds);
       ((bookingData as any[]) ?? []).forEach((b) => { bookingMap[b.id] = b; });
       if (locationId) {
-        sessList = sessList.filter((s) => s.booking_id && bookingMap[s.booking_id]?.location_id === locationId);
+        sessList = sessList.filter((s) => {
+          const bookingLocationId = s.booking_id ? bookingMap[s.booking_id]?.location_id : null;
+          const trailLocationId = s.trail_zone_id ? trailZoneMap[s.trail_zone_id]?.location_id : null;
+          return (bookingLocationId ?? s.location_id ?? trailLocationId) === locationId;
+        });
       }
       sessList.forEach((s) => {
         const booking = s.booking_id ? bookingMap[s.booking_id] : null;
@@ -172,6 +200,11 @@ export default function RealtimeMonitorMap({ locationId, canAddCheckpoints = fal
         s.medicalNotes = meta.medicalNotes;
         s.hasMinors = meta.hasMinors;
         s.minorCount = meta.minorCount;
+      });
+    } else if (locationId) {
+      sessList = sessList.filter((s) => {
+        const trailLocationId = s.trail_zone_id ? trailZoneMap[s.trail_zone_id]?.location_id : null;
+        return (s.location_id ?? trailLocationId) === locationId;
       });
     }
 
@@ -295,9 +328,14 @@ export default function RealtimeMonitorMap({ locationId, canAddCheckpoints = fal
       const ageMin = s.lastTs ? Math.round((Date.now() - new Date(s.lastTs).getTime()) / 60000) : null;
       const stale = ageMin != null && ageMin > 5;
       const reached = (progress[s.id] ?? []).length;
+      const role = s.participant_role ?? 'hiker';
+      const markerColor = stale ? '#f97316' : role === 'guide' ? '#3b82f6' : role === 'ranger' ? '#a855f7' : '#22c55e';
+      const distanceKm = Number(s.total_distance_km ?? 0);
+      const movingMin = Math.round(Number(s.moving_time_sec ?? 0) / 60);
+      const pace = distanceKm > 0 && movingMin > 0 ? movingMin / distanceKm : null;
       if ((s.path?.length ?? 0) > 1) {
         L.polyline(s.path!, {
-          color: stale ? '#f97316' : '#22c55e',
+          color: markerColor,
           weight: 3,
           opacity: 0.55,
         }).addTo(hikerLayer.current!);
@@ -311,6 +349,8 @@ export default function RealtimeMonitorMap({ locationId, canAddCheckpoints = fal
         <div style="min-width:240px;max-width:300px">
           <strong>${esc(s.hiker_name)}</strong>
           <div style="margin-top:6px;font-size:12px;line-height:1.45">
+            <div><b>Tracker:</b> ${esc(role)} ${s.tracking_phase ? `- ${esc(s.tracking_phase)}` : ''}</div>
+            ${s.trail_zone_id && trailZoneMap[s.trail_zone_id] ? `<div><b>Route:</b> ${esc(trailZoneMap[s.trail_zone_id].name)}</div>` : ''}
             <div><b>Group:</b> ${s.groupSize ?? 1} hiker${(s.groupSize ?? 1) === 1 ? '' : 's'}</div>
             <div><b>Assigned guide:</b> ${esc(s.guideName || 'Not assigned')}</div>
             ${s.guidePhone ? `<div><b>Guide phone:</b> ${esc(s.guidePhone)}</div>` : ''}
@@ -318,6 +358,9 @@ export default function RealtimeMonitorMap({ locationId, canAddCheckpoints = fal
             ${s.emergencyContact ? `<div><b>Emergency:</b> ${esc(s.emergencyContact)}</div>` : ''}
             <div><b>Started:</b> ${new Date(s.start_time).toLocaleTimeString()}</div>
             <div><b>Last ping:</b> ${ageMin == null ? 'no ping yet' : `${ageMin} min ago`}</div>
+            <div><b>Distance:</b> ${distanceKm.toFixed(2)} km</div>
+            <div><b>Moving:</b> ${movingMin} min</div>
+            <div><b>Pace:</b> ${pace == null ? 'not enough data' : `${pace.toFixed(1)} min/km`}</div>
             <div><b>Checkpoints:</b> ${reached}/${checkpoints.length}</div>
             <div><b>Trail points:</b> ${s.path?.length ?? 0}</div>
             ${s.hasMinors ? `<div style="color:#b45309"><b>Minors:</b> ${s.minorCount ?? 1}</div>` : ''}
@@ -329,7 +372,7 @@ export default function RealtimeMonitorMap({ locationId, canAddCheckpoints = fal
       const m = L.marker([s.lastLat, s.lastLng], {
         icon: L.divIcon({
           className: '',
-          html: `<div style="background:${stale ? '#f97316' : '#22c55e'};width:16px;height:16px;border-radius:50%;border:3px solid white;box-shadow:0 0 0 3px ${stale ? 'rgba(249,115,22,.3)' : 'rgba(34,197,94,.3)'}"></div>`,
+          html: `<div style="background:${markerColor};width:${role === 'guide' ? 18 : 16}px;height:${role === 'guide' ? 18 : 16}px;border-radius:${role === 'guide' ? '4px' : '50%'};border:3px solid white;box-shadow:0 0 0 3px ${stale ? 'rgba(249,115,22,.3)' : 'rgba(34,197,94,.3)'}"></div>`,
           iconSize: [16, 16],
           iconAnchor: [8, 8],
         }),
@@ -431,9 +474,11 @@ export default function RealtimeMonitorMap({ locationId, canAddCheckpoints = fal
                   <div className="flex items-center gap-2 min-w-0">
                     <div className={`w-2 h-2 rounded-full ${stale ? 'bg-orange-500' : 'bg-emerald-500 animate-pulse'}`} />
                     <span className="font-medium truncate">{s.hiker_name}</span>
+                    <span className="text-[10px] uppercase text-muted-foreground">{s.participant_role ?? 'hiker'}</span>
                   </div>
                   <div className="flex items-center gap-3 text-muted-foreground">
                     <span>📍 {reached}/{checkpoints.length}</span>
+                    <span className="capitalize">{s.tracking_phase ?? 'ascent'}</span>
                     <span className={stale ? 'text-orange-500' : ''}>{ageMin == null ? 'no ping' : `${ageMin}m ago`}</span>
                   </div>
                 </div>
