@@ -815,9 +815,14 @@ export type Database = {
           difficulty: string
           elevation_meters: number
           id: string
+          is_official: boolean
           location_id: string | null
           max_capacity: number
           name: string
+          official_at: string | null
+          recorded_by: string | null
+          review_status: string
+          source: string
           status: string
         }
         Insert: {
@@ -827,9 +832,14 @@ export type Database = {
           difficulty?: string
           elevation_meters?: number
           id?: string
+          is_official?: boolean
           location_id?: string | null
           max_capacity?: number
           name: string
+          official_at?: string | null
+          recorded_by?: string | null
+          review_status?: string
+          source?: string
           status?: string
         }
         Update: {
@@ -839,9 +849,14 @@ export type Database = {
           difficulty?: string
           elevation_meters?: number
           id?: string
+          is_official?: boolean
           location_id?: string | null
           max_capacity?: number
           name?: string
+          official_at?: string | null
+          recorded_by?: string | null
+          review_status?: string
+          source?: string
           status?: string
         }
         Relationships: [
