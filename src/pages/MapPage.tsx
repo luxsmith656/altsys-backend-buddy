@@ -598,7 +598,7 @@ export default function MapPage() {
       const targetIdx = trackingPhase === 'descent'
         ? Math.max(0, idx - 1)
         : Math.min(activePath.length - 1, idx + 1);
-      const expectedBearing = activePath[targetIdx] ? bearingDeg(newPos, activePath[targetIdx]) : null;
+      const expectedBearing = activePath[targetIdx] ? bearingDeg(newPos, [activePath[targetIdx][0], activePath[targetIdx][1]] as [number, number]) : null;
       const facingWrongWay = expectedBearing != null && heading != null && rawSpeed > 1 && angleDelta(heading, expectedBearing) > 110;
       setWrongDirection(!isGpsTestMode && (minDist > 0.1 || facingWrongWay));
       if (!isGpsTestMode && minDist > 0.1) {
