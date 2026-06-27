@@ -2,7 +2,6 @@ import { Button } from '@/components/ui/button';
 import { Pause, Play, AlertTriangle, Download, CheckCircle2 } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { TRAILS } from '@/lib/map-data';
-import { useMemo } from 'react';
 
 interface TrailStatsProps {
   distance: number;
@@ -13,6 +12,8 @@ interface TrailStatsProps {
   offTrail: boolean;
   tracking: boolean;
   offlineReady: boolean;
+  trailName?: string;
+  trailColor?: string;
   onStartTracking: () => void;
   onStopTracking: () => void;
   onOfflineCache: () => void;
@@ -27,13 +28,17 @@ function formatTime(s: number) {
 
 export default function TrailStats({
   distance, elapsed, currentSpeed, gpsSignal, selectedTrail, offTrail, tracking, offlineReady,
+  trailName,
+  trailColor,
   onStartTracking, onStopTracking, onOfflineCache,
 }: TrailStatsProps) {
   const avgPace = elapsed > 0 && distance > 0 ? elapsed / 60 / distance : 0;
   const realTimePace = currentSpeed && currentSpeed > 0 ? 60 / currentSpeed : 0;
   const displayPace = realTimePace > 0 ? realTimePace : avgPace;
 
-  const trailColor = useMemo(() => TRAILS[selectedTrail].color, [selectedTrail]);
+  const activeTrail = TRAILS[selectedTrail] ?? TRAILS[0];
+  const displayTrailName = trailName ?? activeTrail.name;
+  const displayTrailColor = trailColor ?? activeTrail.color;
 
   const GpsIndicator = () => {
     const color = gpsSignal === 'Strong' ? 'text-success' : gpsSignal === 'Medium' ? 'text-warning' : 'text-destructive';
@@ -60,8 +65,8 @@ export default function TrailStats({
         <div className="min-w-0 flex items-center gap-2">
           <div className="min-w-0">
             <div className="flex items-center gap-2">
-              <div className="text-sm font-semibold truncate" style={{ color: TRAILS[selectedTrail].color }}>
-                {TRAILS[selectedTrail].name}
+              <div className="text-sm font-semibold truncate" style={{ color: displayTrailColor }}>
+                {displayTrailName}
               </div>
               {offTrail && (
                 <div className="inline-flex items-center gap-1 text-destructive text-xs animate-pulse">
@@ -104,7 +109,7 @@ export default function TrailStats({
               <Pause className="h-4 w-4" /> Stop
             </Button>
           ) : (
-            <Button size="sm" onClick={onStartTracking} aria-label="Start hike" className="gap-1" style={{ backgroundColor: trailColor }}>
+            <Button size="sm" onClick={onStartTracking} aria-label="Start hike" className="gap-1" style={{ backgroundColor: displayTrailColor }}>
               <Play className="h-4 w-4" /> Start
             </Button>
           )}

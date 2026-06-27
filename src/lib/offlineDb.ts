@@ -2,6 +2,7 @@ import { openDB, type IDBPDatabase } from 'idb';
 
 export interface OfflineSession {
   id: string;                 // client UUID
+  serverSessionId?: string | null;
   bookingId?: string | null;
   userId: string;
   startedAt: number;

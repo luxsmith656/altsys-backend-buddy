@@ -1521,7 +1521,19 @@ export default function AdminDashboard() {
               </Card>
             </div>
 
-            <TrailRecorder existingTrails={zones.map((z: any) => ({ id: z.id, name: z.name, coordinates_json: z.coordinates_json }))} onSaved={loadData} />
+            <TrailRecorder
+              existingTrails={zones.map((z: any) => ({
+                id: z.id,
+                name: z.name,
+                coordinates_json: z.coordinates_json,
+                status: z.status,
+                difficulty: z.difficulty,
+                elevation_meters: z.elevation_meters,
+                review_status: z.review_status,
+                source: z.source,
+              }))}
+              onSaved={loadData}
+            />
 
             <Card className="glass-card">
               <CardHeader><CardTitle className="text-lg flex items-center gap-2"><MapPin className="h-5 w-5 text-primary" /> Zone Management</CardTitle></CardHeader>

@@ -220,6 +220,7 @@ export default function HikerDashboard() {
   const adjustmentPending = bookings.filter((b) => b.status === 'adjustment_pending');
   const hasNotifications = adjustmentPending.length > 0;
   const completedSessions = sessions.filter((s) => s.status === 'completed');
+  const activeSession = sessions.find((s) => s.status === 'active');
 
   return (
     <div className="min-h-screen pt-20 pb-12 px-4">
@@ -424,6 +425,28 @@ export default function HikerDashboard() {
             </Button>
           ))}
         </div>
+
+        {activeSession && (
+          <Card className="glass-card border-primary/30 mb-6">
+            <CardContent className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div>
+                <p className="font-semibold flex items-center gap-2">
+                  <Clock className="h-4 w-4 text-primary" />
+                  Live hike tracking is active
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  GPS stays on during the session and stores your path offline until it can sync.
+                </p>
+              </div>
+              <Button asChild className="gap-2">
+                <Link to="/map?auto=1">
+                  <Map className="h-4 w-4" />
+                  Open Live Tracker
+                </Link>
+              </Button>
+            </CardContent>
+          </Card>
+        )}
 
         {/* Emergency SOS */}
         <div className="mb-6">

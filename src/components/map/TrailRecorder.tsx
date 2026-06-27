@@ -31,7 +31,16 @@ function ClickDrawHandler({ active, onAddPoint }: { active: boolean; onAddPoint:
 }
 
 interface TrailRecorderProps {
-  existingTrails?: { id: string; name: string; coordinates_json: any }[];
+  existingTrails?: {
+    id: string;
+    name: string;
+    coordinates_json: any;
+    status?: string;
+    difficulty?: string;
+    elevation_meters?: number;
+    review_status?: string;
+    source?: string;
+  }[];
   onSaved?: () => void;
 }
 
@@ -41,6 +50,7 @@ export default function TrailRecorder({ existingTrails, onSaved }: TrailRecorder
   const [name, setName] = useState('');
   const [difficulty, setDifficulty] = useState('moderate');
   const [elevation, setElevation] = useState('');
+  const [status, setStatus] = useState<'draft' | 'active'>('active');
   const [saving, setSaving] = useState(false);
   const [editingTrailId, setEditingTrailId] = useState<string | null>(null);
   const watchRef = useRef<number | null>(null);
@@ -104,6 +114,9 @@ export default function TrailRecorder({ existingTrails, onSaved }: TrailRecorder
     if (trail) {
       setEditingTrailId(trailId);
       setName(trail.name);
+      setDifficulty(trail.difficulty || 'moderate');
+      setElevation(trail.elevation_meters ? String(trail.elevation_meters) : '');
+      setStatus(trail.status === 'draft' ? 'draft' : 'active');
       const coords = Array.isArray(trail.coordinates_json) ? trail.coordinates_json : [];
       const parsed = coords.map((c: any) => [c.lat, c.lng] as LatLngTuple);
       setPath(parsed);
@@ -129,7 +142,10 @@ export default function TrailRecorder({ existingTrails, onSaved }: TrailRecorder
         difficulty,
         elevation_meters: elevation ? parseInt(elevation) : 0,
         coordinates_json: coordsJson,
-        status: 'active',
+        status,
+        review_status: status === 'active' ? 'approved' : 'pending',
+        is_official: status === 'active',
+        official_at: status === 'active' ? new Date().toISOString() : null,
         max_capacity: 50,
       };
 
@@ -146,6 +162,7 @@ export default function TrailRecorder({ existingTrails, onSaved }: TrailRecorder
       setPath([]);
       setName('');
       setElevation('');
+      setStatus('active');
       setEditingTrailId(null);
       onSaved?.();
     } catch (err: any) {
@@ -180,7 +197,9 @@ export default function TrailRecorder({ existingTrails, onSaved }: TrailRecorder
               <SelectTrigger><SelectValue placeholder="Select trail to edit..." /></SelectTrigger>
               <SelectContent>
                 {existingTrails.map((t) => (
-                  <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>
+                  <SelectItem key={t.id} value={t.id}>
+                    {t.name} {t.status === 'draft' ? '(draft)' : '(official)'}
+                  </SelectItem>
                 ))}
               </SelectContent>
             </Select>
@@ -188,7 +207,7 @@ export default function TrailRecorder({ existingTrails, onSaved }: TrailRecorder
         )}
 
         {/* Trail info inputs */}
-        <div className="grid grid-cols-3 gap-2">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
           <Input placeholder="Trail name" value={name} onChange={(e) => setName(e.target.value)} className="col-span-1" />
           <Select value={difficulty} onValueChange={setDifficulty}>
             <SelectTrigger><SelectValue /></SelectTrigger>
@@ -199,6 +218,13 @@ export default function TrailRecorder({ existingTrails, onSaved }: TrailRecorder
             </SelectContent>
           </Select>
           <Input placeholder="Elevation (m)" type="number" value={elevation} onChange={(e) => setElevation(e.target.value)} />
+          <Select value={status} onValueChange={(v) => setStatus(v as 'draft' | 'active')}>
+            <SelectTrigger><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="active">Official Active</SelectItem>
+              <SelectItem value="draft">Draft Review</SelectItem>
+            </SelectContent>
+          </Select>
         </div>
 
         {/* Recording controls */}

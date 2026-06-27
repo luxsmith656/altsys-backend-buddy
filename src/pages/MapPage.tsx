@@ -21,6 +21,8 @@ import { HikeTracker } from '@/lib/tracking/HikeTracker';
 import { downloadArea } from '@/lib/tracking/tileCache';
 import type { OfflineSession } from '@/lib/offlineDb';
 import type { RouteAdvice } from '@/lib/weather';
+import { supabase } from '@/integrations/supabase/client';
+import { useLocations } from '@/hooks/useLocations';
 
 import 'leaflet/dist/leaflet.css';
 
@@ -177,7 +179,8 @@ export default function MapPage() {
   const watchRef = useRef<number | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const { role, user } = useAuth();
-  const isRanger = role === 'ranger';
+  const { activeLocationId, locations } = useLocations();
+  const isTrailRecorder = role === 'ranger' || role === 'guide' || role === 'admin' || role === 'super_admin';
 
 
 
@@ -193,6 +196,7 @@ export default function MapPage() {
   const trackerRef = useRef<HikeTracker | null>(null);
   const [summarySession, setSummarySession] = useState<OfflineSession | null>(null);
   const [tileDownloadProgress, setTileDownloadProgress] = useState<{ done: number; total: number } | null>(null);
+  const [dbTrails, setDbTrails] = useState<typeof TRAILS>([]);
   
 
   // Smooth interpolation for the hiker marker
@@ -289,10 +293,65 @@ export default function MapPage() {
 
   const speedTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const startTracking = useCallback(() => {
+  useEffect(() => {
+    let active = true;
+    void (async () => {
+      const { data } = await supabase
+        .from('trail_zones' as any)
+        .select('id,name,difficulty,elevation_meters,coordinates_json,status')
+        .eq('status', 'active')
+        .order('created_at', { ascending: true });
+      if (!active) return;
+      const loaded = ((data as any[]) ?? [])
+        .map((trail, index) => {
+          const coords = Array.isArray(trail.coordinates_json) ? trail.coordinates_json : [];
+          const path = coords
+            .map((p: any) => [Number(p.lat), Number(p.lng)] as [number, number])
+            .filter(([lat, lng]) => Number.isFinite(lat) && Number.isFinite(lng));
+          if (path.length < 2) return null;
+          let distanceKm = 0;
+          for (let i = 1; i < path.length; i++) {
+            distanceKm += haversineDistance(path[i - 1][0], path[i - 1][1], path[i][0], path[i][1]);
+          }
+          const colors = ['#16a34a', '#2563eb', '#dc2626', '#9333ea', '#ea580c'];
+          return {
+            name: trail.name || `Official Trail ${index + 1}`,
+            difficulty: (trail.difficulty || 'moderate') as 'easy' | 'moderate' | 'hard',
+            color: colors[index % colors.length],
+            elevation: `${Number(trail.elevation_meters || 0)}m`,
+            distance: `${distanceKm.toFixed(1)} km`,
+            path,
+          };
+        })
+        .filter(Boolean) as typeof TRAILS;
+      setDbTrails(loaded);
+    })();
+    return () => { active = false; };
+  }, []);
+
+  const availableTrails = dbTrails.length > 0 ? dbTrails : TRAILS;
+
+  useEffect(() => {
+    if (selectedTrail >= availableTrails.length) setSelectedTrail(0);
+  }, [availableTrails.length, selectedTrail]);
+
+  const startTracking = useCallback(async () => {
     setTracking(true);
     if (user && !trackerRef.current) {
-      const tr = new HikeTracker({ userId: user.id });
+      const { data: activeSession } = await supabase
+        .from('hiker_sessions' as any)
+        .select('id,booking_id,trail_zone_id,start_time')
+        .eq('user_id', user.id)
+        .eq('status', 'active')
+        .order('start_time', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      const tr = new HikeTracker({
+        userId: user.id,
+        serverSessionId: activeSession?.id ?? null,
+        bookingId: activeSession?.booking_id ?? null,
+        trailZoneId: activeSession?.trail_zone_id ?? null,
+      });
       trackerRef.current = tr;
       void tr.start().catch((e) => console.warn('HikeTracker start failed', e));
     }
@@ -307,12 +366,12 @@ export default function MapPage() {
     if (advice.level === 'avoid') {
       toast.error(advice.headline, { description: advice.reasons[0], duration: 8000 });
       // Switch to easiest trail
-      const easyIdx = TRAILS.findIndex((t) => t.difficulty === 'easy');
+      const easyIdx = availableTrails.findIndex((t) => t.difficulty === 'easy');
       if (easyIdx >= 0) setSelectedTrail(easyIdx);
     } else if (advice.level === 'caution') {
       toast.warning(advice.headline, { description: advice.reasons[0], duration: 6000 });
     }
-  }, []);
+  }, [availableTrails]);
 
   // Auto-start tracking when admin checks in the hiker (?auto=1)
   const [searchParams, setSearchParams] = useSearchParams();
@@ -391,18 +450,18 @@ export default function MapPage() {
       });
 
       // Track progress along selected trail
-      const idx = findNearestTrailIndex(newPos, TRAILS[selectedTrail].path);
+      const idx = findNearestTrailIndex(newPos, availableTrails[selectedTrail]?.path ?? availableTrails[0].path);
       setUserTrailProgress(idx);
 
       // Check if off-trail (> 100m from nearest trail point)
-      const minDist = Math.min(...TRAILS.map((t) => distanceToTrail(newPos[0], newPos[1], t.path)));
+      const minDist = Math.min(...availableTrails.map((t) => distanceToTrail(newPos[0], newPos[1], t.path)));
       if (!isGpsTestMode && minDist > 0.1) {
         setOffTrail(true);
         toast.warning('You are off the marked trail!', { id: 'off-trail' });
       } else {
         setOffTrail(false);
       }
-    }, [selectedTrail, applyKalmanFilter, isGpsTestMode]);
+    }, [selectedTrail, applyKalmanFilter, isGpsTestMode, availableTrails]);
 
   const handleError = useCallback((err: GeolocationPositionError) => {
     if (err.code === err.PERMISSION_DENIED) {
@@ -483,7 +542,7 @@ export default function MapPage() {
     }
   };
 
-  const currentTrail = TRAILS[selectedTrail];
+  const currentTrail = availableTrails[selectedTrail] ?? availableTrails[0];
   const avgPace = elapsed > 0 && distance > 0 ? (elapsed / 60) / distance : 0;
   const realTimePace = currentSpeed && currentSpeed > 0 ? 60 / currentSpeed : 0;
   const displayPace = realTimePace > 0 ? realTimePace : avgPace;
@@ -615,6 +674,38 @@ export default function MapPage() {
     }
   };
 
+  const saveRecordedRouteDraft = async () => {
+    if (!user || recordedPoints.length < 2) {
+      toast.error('Record at least two GPS points before saving a route.');
+      return;
+    }
+    const locationId = activeLocationId ?? locations[0]?.id;
+    if (!locationId) {
+      toast.error('No trail location is available for this route.');
+      return;
+    }
+    const path = recordedPoints.map((p) => ({ lat: p.lat, lng: p.lon }));
+    const { error } = await supabase.from('trail_zones' as any).insert({
+      location_id: locationId,
+      name: `${currentTrail.name} recorded ${new Date().toLocaleDateString('en-PH')}`,
+      description: `GPS draft recorded by ${role ?? 'staff'} for admin review. Distance ${formatDistance(recordDistanceMeters)}.`,
+      difficulty: currentTrail.difficulty,
+      elevation_meters: Number.parseInt(currentTrail.elevation, 10) || 0,
+      coordinates_json: path,
+      status: 'draft',
+      max_capacity: 50,
+      recorded_by: user.id,
+      source: 'gps_recording',
+      review_status: 'pending',
+      is_official: false,
+    });
+    if (error) {
+      toast.error(`Failed to save route draft: ${error.message}`);
+      return;
+    }
+    toast.success('Route draft saved for admin review.');
+  };
+
   const recordDistanceMeters = useMemo(() => {
     if (recordedPoints.length < 2) return 0;
     let d = 0;
@@ -684,13 +775,15 @@ export default function MapPage() {
           offTrail={offTrail}
           tracking={tracking}
           offlineReady={offlineReady}
+          trailName={currentTrail.name}
+          trailColor={currentTrail.color}
           onStartTracking={startTracking}
           onStopTracking={stopTracking}
           onOfflineCache={handleOfflineCache}
         />
       </div>
 
-      {isRanger && (
+      {isTrailRecorder && (
         <div className="hidden md:flex justify-end items-center gap-2 px-4 py-2">
           <Button
             size="sm"
@@ -708,12 +801,22 @@ export default function MapPage() {
           >
             Test GPS Accuracy
           </Button>
+          {recordedPoints.length > 1 && !isRecording && !isGpsTestMode && (
+            <Button
+              size="sm"
+              variant="secondary"
+              className="gap-1"
+              onClick={saveRecordedRouteDraft}
+            >
+              Save Route Draft
+            </Button>
+          )}
         </div>
       )}
 
       {/* Desktop/tablet trail selector */}
       <div className="hidden md:flex glass-card border-b border-border/30 px-4 py-2 items-center gap-2 overflow-x-auto">
-        {TRAILS.map((t, i) => (
+        {availableTrails.map((t, i) => (
           <button
             key={t.name}
             onClick={() => setSelectedTrail(i)}
@@ -744,7 +847,7 @@ export default function MapPage() {
             <OfflineLayer url="https://tile.openstreetmap.org/{z}/{x}/{y}.png" maxZoom={20} attribution="© OpenStreetMap" />
 
 
-            {TRAILS.map((t, i) => (
+            {availableTrails.map((t, i) => (
               <Polyline
                 key={t.name}
                 positions={t.path}
@@ -832,7 +935,7 @@ export default function MapPage() {
         </div>
 
         {/* Ranger recording / accuracy badge + stats */}
-        {isRanger && (isRecording || isGpsTestMode) && (
+        {isTrailRecorder && (isRecording || isGpsTestMode) && (
           <div className="absolute top-24 left-4 z-[1000] glass-card rounded-lg px-3 py-2 text-xs flex flex-col gap-1 max-w-xs">
             <div className="font-semibold">
               {isGpsTestMode ? 'Accuracy Test Active' : 'Recording Trail'}
@@ -1001,7 +1104,7 @@ export default function MapPage() {
             {mobileControlsOpen && (
               <div className="border-t border-border/30 px-3 py-2 space-y-2">
                 <div className="flex items-center gap-2 overflow-x-auto pb-1">
-                  {TRAILS.map((t, i) => (
+                  {availableTrails.map((t, i) => (
                     <button
                       key={t.name}
                       onClick={() => setSelectedTrail(i)}
@@ -1035,7 +1138,7 @@ export default function MapPage() {
                     </Button>
                   )}
                 </div>
-                {isRanger && (
+                {isTrailRecorder && (
                   <div className="flex flex-col gap-2 pt-2 border-t border-border/30">
                     <div className="flex items-center gap-2">
                       <Button
@@ -1047,7 +1150,7 @@ export default function MapPage() {
                       >
                         {isRecording && !isGpsTestMode ? 'Stop Recording' : 'Record Trail'}
                       </Button>
-                      <Button
+                    <Button
                         size="sm"
                         variant={isGpsTestMode ? 'secondary' : 'ghost'}
                         className="gap-1 flex-1"
@@ -1056,6 +1159,16 @@ export default function MapPage() {
                         {isGpsTestMode ? 'Stop Test' : 'Test Accuracy'}
                       </Button>
                     </div>
+                    {recordedPoints.length > 1 && !isRecording && !isGpsTestMode && (
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        className="gap-1 w-full"
+                        onClick={saveRecordedRouteDraft}
+                      >
+                        Save Route Draft
+                      </Button>
+                    )}
                   </div>
                 )}
               </div>

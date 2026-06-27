@@ -10,6 +10,7 @@ import {
   appendPoint, saveSession, getSession, getSessionPoints,
   type OfflineSession, type OfflinePoint, enqueue,
 } from '@/lib/offlineDb';
+import { supabase } from '@/integrations/supabase/client';
 import { haversineM, simplify } from './geo';
 
 type Listener = (snap: TrackerSnapshot) => void;
@@ -39,11 +40,12 @@ export class HikeTracker {
   private startTs: number;
   private tickHandle: ReturnType<typeof setInterval> | null = null;
 
-  constructor(opts: { userId: string; bookingId?: string | null; trailZoneId?: string | null; sessionId?: string }) {
+  constructor(opts: { userId: string; bookingId?: string | null; trailZoneId?: string | null; sessionId?: string; serverSessionId?: string | null }) {
     const id = opts.sessionId ?? crypto.randomUUID();
     this.startTs = Date.now();
     this.session = {
-      id, userId: opts.userId, bookingId: opts.bookingId ?? null, trailZoneId: opts.trailZoneId ?? null,
+      id, serverSessionId: opts.serverSessionId ?? null,
+      userId: opts.userId, bookingId: opts.bookingId ?? null, trailZoneId: opts.trailZoneId ?? null,
       startedAt: this.startTs, status: 'active',
       distanceM: 0, movingSec: 0, restingSec: 0, ascentM: 0, descentM: 0,
       ascentSec: 0, descentSec: 0, summitReached: false, encodedPath: '',
@@ -92,7 +94,10 @@ export class HikeTracker {
 
     // Queue for sync
     await enqueue({ kind: 'session', payload: { ...this.session } });
-    await enqueue({ kind: 'points', payload: { sessionId: this.session.id, points: all } });
+    await enqueue({
+      kind: 'points',
+      payload: { sessionId: this.session.id, serverSessionId: this.session.serverSessionId ?? null, points: all },
+    });
     return this.session;
   }
 
@@ -145,7 +150,51 @@ export class HikeTracker {
     this.points.push(point);
     void appendPoint(point);
     void saveSession(this.session);
+    void this.pushLivePing(point);
     this.emit();
+  }
+
+  private async pushLivePing(point: OfflinePoint) {
+    const payload = {
+      sessionId: this.session.id,
+      serverSessionId: this.session.serverSessionId ?? null,
+      lat: point.lat,
+      lng: point.lng,
+      alt: point.alt,
+      ts: point.ts,
+    };
+
+    if (!navigator.onLine) {
+      await enqueue({ kind: 'ping', payload });
+      return;
+    }
+
+    try {
+      let realSessionId = this.session.serverSessionId ?? null;
+      if (!realSessionId) {
+        const { data, error } = await supabase
+          .from('hiker_sessions')
+          .select('id')
+          .eq('client_session_id', this.session.id)
+          .maybeSingle();
+        if (error) throw error;
+        realSessionId = data?.id ?? null;
+      }
+      if (!realSessionId) {
+        await enqueue({ kind: 'ping', payload });
+        return;
+      }
+      const { error } = await supabase.from('hiker_locations').insert({
+        session_id: realSessionId,
+        latitude: point.lat,
+        longitude: point.lng,
+        altitude: point.alt,
+        timestamp: new Date(point.ts).toISOString(),
+      });
+      if (error) throw error;
+    } catch {
+      await enqueue({ kind: 'ping', payload });
+    }
   }
 
   private tick() {

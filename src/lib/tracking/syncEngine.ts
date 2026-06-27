@@ -8,7 +8,7 @@ let running = false;
 async function pushOne(item: any) {
   if (item.kind === 'session') {
     const s = item.payload;
-    const { error } = await supabase.from('hiker_sessions').upsert({
+    const row = {
       client_session_id: s.id,
       user_id: s.userId,
       booking_id: s.bookingId ?? null,
@@ -26,22 +26,30 @@ async function pushOne(item: any) {
       summit_reached: s.summitReached,
       encoded_path: s.encodedPath,
       last_synced_at: new Date().toISOString(),
-    } as any, { onConflict: 'client_session_id' });
+    } as any;
+
+    const { error } = s.serverSessionId
+      ? await supabase.from('hiker_sessions').update(row).eq('id', s.serverSessionId)
+      : await supabase.from('hiker_sessions').upsert(row, { onConflict: 'client_session_id' });
     if (error) throw error;
     return;
   }
 
   if (item.kind === 'points') {
-    const { sessionId, points } = item.payload;
+    const { sessionId, serverSessionId, points } = item.payload;
     // Resolve real session id
-    const { data: sess } = await supabase
-      .from('hiker_sessions')
-      .select('id')
-      .eq('client_session_id', sessionId)
-      .maybeSingle();
-    if (!sess?.id) throw new Error('Session not found for points upload');
+    let realSessionId = serverSessionId as string | undefined;
+    if (!realSessionId) {
+      const { data: sess } = await supabase
+        .from('hiker_sessions')
+        .select('id')
+        .eq('client_session_id', sessionId)
+        .maybeSingle();
+      realSessionId = sess?.id;
+    }
+    if (!realSessionId) throw new Error('Session not found for points upload');
     const rows = (points as any[]).map((p) => ({
-      session_id: sess.id, latitude: p.lat, longitude: p.lng, altitude: p.alt,
+      session_id: realSessionId, latitude: p.lat, longitude: p.lng, altitude: p.alt,
       timestamp: new Date(p.ts).toISOString(),
     }));
     // Batched
@@ -53,12 +61,16 @@ async function pushOne(item: any) {
   }
 
   if (item.kind === 'ping') {
-    const { sessionId, lat, lng, alt, ts } = item.payload;
-    const { data: sess } = await supabase
-      .from('hiker_sessions').select('id').eq('client_session_id', sessionId).maybeSingle();
-    if (!sess?.id) return; // Skip silently
+    const { sessionId, serverSessionId, lat, lng, alt, ts } = item.payload;
+    let realSessionId = serverSessionId as string | undefined;
+    if (!realSessionId) {
+      const { data: sess } = await supabase
+        .from('hiker_sessions').select('id').eq('client_session_id', sessionId).maybeSingle();
+      realSessionId = sess?.id;
+    }
+    if (!realSessionId) return; // Skip silently
     await supabase.from('hiker_locations').insert({
-      session_id: sess.id, latitude: lat, longitude: lng, altitude: alt,
+      session_id: realSessionId, latitude: lat, longitude: lng, altitude: alt,
       timestamp: new Date(ts).toISOString(),
     });
   }

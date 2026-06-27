@@ -11,6 +11,8 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { useLocations } from '@/hooks/useLocations';
+import { parseMeta } from '@/lib/bookingMeta';
+import type { CompanionDetail } from '@/types';
 
 interface Props {
   /** When set, only show data for this location. null = all (super_admin). */
@@ -22,12 +24,24 @@ interface Props {
 interface ActiveSession {
   id: string;
   user_id: string;
-  location_id: string | null;
+  booking_id: string | null;
+  location_id?: string | null;
   start_time: string;
   hiker_name?: string;
+  groupSize?: number;
+  guideName?: string;
+  guidePhone?: string;
+  hikerPhone?: string;
+  emergencyContact?: string;
+  companions?: string[];
+  companionDetails?: CompanionDetail[];
+  medicalNotes?: string;
+  hasMinors?: boolean;
+  minorCount?: number;
   lastLat?: number;
   lastLng?: number;
   lastTs?: string;
+  path?: [number, number][];
 }
 
 interface Checkpoint {
@@ -42,6 +56,14 @@ interface Checkpoint {
 }
 
 const DEFAULT_CENTER: [number, number] = [14.149, 121.347];
+
+const esc = (value: unknown) =>
+  String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
 
 export default function RealtimeMonitorMap({ locationId, canAddCheckpoints = false }: Props) {
   const { locations } = useLocations();
@@ -114,13 +136,44 @@ export default function RealtimeMonitorMap({ locationId, canAddCheckpoints = fal
     const { data: cpData } = await cpQuery;
     setCheckpoints(((cpData as unknown as Checkpoint[]) ?? []));
 
-    let sessQuery = supabase
+    const sessQuery = supabase
       .from('hiker_sessions' as any)
-      .select('id,user_id,location_id,start_time')
+      .select('id,user_id,booking_id,trail_zone_id,start_time')
       .eq('status', 'active');
-    if (locationId) sessQuery = sessQuery.eq('location_id', locationId);
     const { data: sessData } = await sessQuery;
-    const sessList = ((sessData as any[]) ?? []) as ActiveSession[];
+    let sessList = ((sessData as any[]) ?? []) as ActiveSession[];
+
+    const bookingIds = Array.from(new Set(sessList.map((s) => s.booking_id).filter(Boolean))) as string[];
+    const bookingMap: Record<string, any> = {};
+    if (bookingIds.length > 0) {
+      const { data: bookingData } = await supabase
+        .from('bookings')
+        .select('id,location_id,group_size,emergency_contact_name,emergency_contact_phone,notes')
+        .in('id', bookingIds);
+      ((bookingData as any[]) ?? []).forEach((b) => { bookingMap[b.id] = b; });
+      if (locationId) {
+        sessList = sessList.filter((s) => s.booking_id && bookingMap[s.booking_id]?.location_id === locationId);
+      }
+      sessList.forEach((s) => {
+        const booking = s.booking_id ? bookingMap[s.booking_id] : null;
+        if (!booking) return;
+        const meta = parseMeta(booking.notes);
+        s.location_id = booking.location_id;
+        s.groupSize = booking.group_size;
+        s.hiker_name = meta.fullName || booking.emergency_contact_name || s.hiker_name || 'Hiker';
+        s.guideName = meta.assignedGuide || meta.preferredGuide || 'Not assigned';
+        s.guidePhone = meta.guidePhone;
+        s.hikerPhone = meta.phoneNumber || booking.emergency_contact_phone;
+        s.emergencyContact = booking.emergency_contact_name
+          ? `${booking.emergency_contact_name}${booking.emergency_contact_phone ? ` (${booking.emergency_contact_phone})` : ''}`
+          : undefined;
+        s.companions = meta.companions ?? [];
+        s.companionDetails = meta.companionDetails ?? [];
+        s.medicalNotes = meta.medicalNotes;
+        s.hasMinors = meta.hasMinors;
+        s.minorCount = meta.minorCount;
+      });
+    }
 
     // Get latest location for each session
     if (sessList.length > 0) {
@@ -146,6 +199,18 @@ export default function RealtimeMonitorMap({ locationId, canAddCheckpoints = fal
         }
       });
 
+      const { data: pathData } = await supabase
+        .from('hiker_locations' as any)
+        .select('session_id,latitude,longitude,timestamp')
+        .in('session_id', ids)
+        .order('timestamp', { ascending: true })
+        .limit(1500);
+      const paths: Record<string, [number, number][]> = {};
+      ((pathData as any[]) ?? []).forEach((row) => {
+        (paths[row.session_id] ??= []).push([Number(row.latitude), Number(row.longitude)]);
+      });
+      sessList.forEach((s) => { s.path = paths[s.id] ?? []; });
+
       // Names
       const userIds = Array.from(new Set(sessList.map((s) => s.user_id)));
       const { data: profs } = await supabase
@@ -154,7 +219,7 @@ export default function RealtimeMonitorMap({ locationId, canAddCheckpoints = fal
         .in('user_id', userIds);
       const nameMap: Record<string, string> = {};
       (profs ?? []).forEach((p: any) => { nameMap[p.user_id] = p.full_name; });
-      sessList.forEach((s) => { s.hiker_name = nameMap[s.user_id] || 'Hiker'; });
+      sessList.forEach((s) => { s.hiker_name = s.hiker_name || nameMap[s.user_id] || 'Hiker'; });
 
       // Survey progress per session = checkpoints answered
       const { data: surveys } = await supabase
@@ -230,6 +295,37 @@ export default function RealtimeMonitorMap({ locationId, canAddCheckpoints = fal
       const ageMin = s.lastTs ? Math.round((Date.now() - new Date(s.lastTs).getTime()) / 60000) : null;
       const stale = ageMin != null && ageMin > 5;
       const reached = (progress[s.id] ?? []).length;
+      if ((s.path?.length ?? 0) > 1) {
+        L.polyline(s.path!, {
+          color: stale ? '#f97316' : '#22c55e',
+          weight: 3,
+          opacity: 0.55,
+        }).addTo(hikerLayer.current!);
+      }
+      const companionRows = s.companionDetails?.length
+        ? s.companionDetails.map((c, i) =>
+          `<li>${esc(c.name || `Companion ${i + 1}`)}${c.age ? `, ${esc(c.age)}` : ''}${c.city ? ` - ${esc(c.city)}` : ''}</li>`,
+        ).join('')
+        : (s.companions ?? []).map((c) => `<li>${esc(c)}</li>`).join('');
+      const popupHtml = `
+        <div style="min-width:240px;max-width:300px">
+          <strong>${esc(s.hiker_name)}</strong>
+          <div style="margin-top:6px;font-size:12px;line-height:1.45">
+            <div><b>Group:</b> ${s.groupSize ?? 1} hiker${(s.groupSize ?? 1) === 1 ? '' : 's'}</div>
+            <div><b>Assigned guide:</b> ${esc(s.guideName || 'Not assigned')}</div>
+            ${s.guidePhone ? `<div><b>Guide phone:</b> ${esc(s.guidePhone)}</div>` : ''}
+            ${s.hikerPhone ? `<div><b>Hiker phone:</b> ${esc(s.hikerPhone)}</div>` : ''}
+            ${s.emergencyContact ? `<div><b>Emergency:</b> ${esc(s.emergencyContact)}</div>` : ''}
+            <div><b>Started:</b> ${new Date(s.start_time).toLocaleTimeString()}</div>
+            <div><b>Last ping:</b> ${ageMin == null ? 'no ping yet' : `${ageMin} min ago`}</div>
+            <div><b>Checkpoints:</b> ${reached}/${checkpoints.length}</div>
+            <div><b>Trail points:</b> ${s.path?.length ?? 0}</div>
+            ${s.hasMinors ? `<div style="color:#b45309"><b>Minors:</b> ${s.minorCount ?? 1}</div>` : ''}
+            ${s.medicalNotes ? `<div style="color:#dc2626"><b>Medical:</b> ${esc(s.medicalNotes)}</div>` : ''}
+            ${companionRows ? `<div style="margin-top:6px"><b>Companions</b><ul style="margin:3px 0 0 16px;padding:0">${companionRows}</ul></div>` : ''}
+          </div>
+        </div>
+      `;
       const m = L.marker([s.lastLat, s.lastLng], {
         icon: L.divIcon({
           className: '',
@@ -237,12 +333,7 @@ export default function RealtimeMonitorMap({ locationId, canAddCheckpoints = fal
           iconSize: [16, 16],
           iconAnchor: [8, 8],
         }),
-      }).bindPopup(
-        `<strong>${s.hiker_name}</strong><br/>` +
-        `Started: ${new Date(s.start_time).toLocaleTimeString()}<br/>` +
-        `Last ping: ${ageMin == null ? '—' : `${ageMin} min ago`}<br/>` +
-        `Checkpoints reached: ${reached}/${checkpoints.length}`,
-      );
+      }).bindPopup(popupHtml);
       hikerLayer.current!.addLayer(m);
     });
   }, [sessions, checkpoints, progress]);
