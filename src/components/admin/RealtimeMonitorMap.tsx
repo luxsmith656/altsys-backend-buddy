@@ -164,7 +164,12 @@ export default function RealtimeMonitorMap({ locationId, canAddCheckpoints = fal
         .from('trail_zones' as any)
         .select('id,location_id,name')
         .in('id', trailZoneIds);
-      ((zoneData as TrailZoneRef[] | null) ?? []).forEach((z) => { trailZoneMap[z.id] = z; });
+      ((zoneData as unknown as TrailZoneRef[] | null) ?? []).forEach((z) => { trailZoneMap[z.id] = z; });
+      sessList.forEach((s) => {
+        if (s.trail_zone_id && trailZoneMap[s.trail_zone_id]) {
+          (s as any).trail_zone_name = trailZoneMap[s.trail_zone_id].name;
+        }
+      });
     }
 
     const bookingIds = Array.from(new Set(sessList.map((s) => s.booking_id).filter(Boolean))) as string[];
