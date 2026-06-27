@@ -785,7 +785,7 @@ export default function MapPage() {
         // Update speed for real-time display even if stationary
         if (filtered.speed != null) {
           const updated = [...prev];
-          updated[updated.length - 1] = { ...updated[updated.length - 1], speed: isStationary ? 0 : filtered.speed };
+          updated[updated.length - 1] = { ...updated[updated.length - 1], speed: rawSpeed < 0.5 ? 0 : filtered.speed };
           return updated;
         }
 
