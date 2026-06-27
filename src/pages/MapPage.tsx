@@ -409,7 +409,7 @@ export default function MapPage() {
         .eq('status', 'active')
         .order('start_time', { ascending: false })
         .limit(1)
-        .maybeSingle();
+        .maybeSingle() as { data: any; error: any };
       if (activeSessionError && isSchemaCacheError(activeSessionError)) {
         const fallback = await supabase
           .from('hiker_sessions' as any)
