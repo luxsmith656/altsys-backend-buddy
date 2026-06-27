@@ -409,7 +409,7 @@ export default function MapPage() {
         .eq('status', 'active')
         .order('start_time', { ascending: false })
         .limit(1)
-        .maybeSingle();
+        .maybeSingle() as { data: any; error: any };
       if (activeSessionError && isSchemaCacheError(activeSessionError)) {
         const fallback = await supabase
           .from('hiker_sessions' as any)
@@ -598,7 +598,7 @@ export default function MapPage() {
       const targetIdx = trackingPhase === 'descent'
         ? Math.max(0, idx - 1)
         : Math.min(activePath.length - 1, idx + 1);
-      const expectedBearing = activePath[targetIdx] ? bearingDeg(newPos, activePath[targetIdx]) : null;
+      const expectedBearing = activePath[targetIdx] ? bearingDeg(newPos, [activePath[targetIdx][0], activePath[targetIdx][1]] as [number, number]) : null;
       const facingWrongWay = expectedBearing != null && heading != null && rawSpeed > 1 && angleDelta(heading, expectedBearing) > 110;
       setWrongDirection(!isGpsTestMode && (minDist > 0.1 || facingWrongWay));
       if (!isGpsTestMode && minDist > 0.1) {
@@ -785,7 +785,7 @@ export default function MapPage() {
         // Update speed for real-time display even if stationary
         if (filtered.speed != null) {
           const updated = [...prev];
-          updated[updated.length - 1] = { ...updated[updated.length - 1], speed: isStationary ? 0 : filtered.speed };
+          updated[updated.length - 1] = { ...updated[updated.length - 1], speed: rawSpeed < 0.5 ? 0 : filtered.speed };
           return updated;
         }
 
