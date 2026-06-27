@@ -15,6 +15,11 @@ import { haversineM, simplify } from './geo';
 
 type Listener = (snap: TrackerSnapshot) => void;
 
+function isSchemaCacheError(error: unknown) {
+  const message = String((error as { message?: unknown } | null)?.message ?? error ?? '').toLowerCase();
+  return message.includes('schema cache') || message.includes('could not find') || message.includes('column');
+}
+
 export interface TrackerSnapshot {
   sessionId: string;
   distanceM: number;
@@ -100,6 +105,11 @@ export class HikeTracker {
   async start() {
     await saveSession(this.session);
     if (!navigator.geolocation) throw new Error('Geolocation not supported');
+    navigator.geolocation.getCurrentPosition(
+      (p) => this.onFix(p),
+      (e) => console.warn('Initial GPS error', e),
+      { enableHighAccuracy: true, maximumAge: 0, timeout: 30000 },
+    );
     this.watchId = navigator.geolocation.watchPosition(
       (p) => this.onFix(p),
       (e) => console.warn('GPS error', e),
@@ -251,7 +261,7 @@ export class HikeTracker {
         await enqueue({ kind: 'ping', payload });
         return;
       }
-      const { error } = await supabase.from('hiker_locations').insert({
+      let { error } = await supabase.from('hiker_locations').insert({
         session_id: realSessionId,
         latitude: point.lat,
         longitude: point.lng,
@@ -262,6 +272,16 @@ export class HikeTracker {
         segment: point.segment,
         timestamp: new Date(point.ts).toISOString(),
       } as any);
+      if (error && isSchemaCacheError(error)) {
+        const fallback = await supabase.from('hiker_locations').insert({
+          session_id: realSessionId,
+          latitude: point.lat,
+          longitude: point.lng,
+          altitude: point.alt,
+          timestamp: new Date(point.ts).toISOString(),
+        } as any);
+        error = fallback.error;
+      }
       if (error) throw error;
     } catch {
       await enqueue({ kind: 'ping', payload });

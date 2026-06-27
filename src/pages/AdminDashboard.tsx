@@ -436,7 +436,7 @@ export default function AdminDashboard() {
   const handleStartHike = async () => {
     if (!scannedBooking) return;
     setStartingHike(true);
-    const { data: session, error: sessionErr } = await supabase
+    let { data: session, error: sessionErr } = await supabase
       .from('hiker_sessions')
       .insert({
         user_id: scannedBooking.user_id,
@@ -450,6 +450,25 @@ export default function AdminDashboard() {
       })
       .select()
       .single();
+    if (sessionErr && (
+      String(sessionErr.message).toLowerCase().includes('schema cache') ||
+      String(sessionErr.message).toLowerCase().includes('could not find') ||
+      String(sessionErr.message).toLowerCase().includes('column')
+    )) {
+      const fallback = await supabase
+        .from('hiker_sessions')
+        .insert({
+          user_id: scannedBooking.user_id,
+          booking_id: scannedBooking.id,
+          start_time: new Date().toISOString(),
+          status: 'active',
+          total_distance_km: 0,
+        })
+        .select()
+        .single();
+      session = fallback.data;
+      sessionErr = fallback.error;
+    }
 
     if (sessionErr) {
       toast.error('Failed to start hike: ' + sessionErr.message);

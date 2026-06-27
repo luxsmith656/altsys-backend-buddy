@@ -73,6 +73,11 @@ function trailDistanceKm(path: LatLngTuple[], start: number, end: number) {
   return d;
 }
 
+function isSchemaCacheError(error: unknown) {
+  const message = String((error as { message?: unknown } | null)?.message ?? error ?? '').toLowerCase();
+  return message.includes('schema cache') || message.includes('could not find') || message.includes('column');
+}
+
 const poiIcons: Record<string, L.DivIcon> = {
   checkpoint: new L.DivIcon({ html: `<div style="width:12px;height:12px;background:#f59e0b;border:2px solid #fff;border-radius:50%;"></div>`, className: '', iconSize: [12, 12], iconAnchor: [6, 6] }),
   summit: new L.DivIcon({ html: `<div style="width:14px;height:14px;background:#ef4444;border:2px solid #fff;border-radius:3px;transform:rotate(45deg);"></div>`, className: '', iconSize: [14, 14], iconAnchor: [7, 7] }),
@@ -209,6 +214,7 @@ export default function MapPage() {
   const [filteredPath, setFilteredPath] = useState<FilteredPoint[]>([]);
 
   const [recordedPoints, setRecordedPoints] = useState<RecordedPoint[]>([]);
+  const [recordingPreviewReady, setRecordingPreviewReady] = useState(false);
   const recordWatchRef = useRef<number | null>(null);
   const watchRef = useRef<number | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -373,10 +379,30 @@ export default function MapPage() {
     if (selectedTrail >= availableTrails.length) setSelectedTrail(0);
   }, [availableTrails.length, selectedTrail]);
 
+  useEffect(() => {
+    if (!mapInstance) return;
+    const onFound = (e: L.LocationEvent) => {
+      const next: [number, number] = [e.latlng.lat, e.latlng.lng];
+      setUserPos(next);
+      setDisplayPos(next);
+      setGpsSignal(e.accuracy <= 12 ? 'Strong' : e.accuracy <= 50 ? 'Medium' : 'Weak');
+      mapInstance.setView(next, Math.max(mapInstance.getZoom(), 17));
+    };
+    const onError = (e: L.ErrorEvent) => {
+      toast.error(e.message || 'Unable to locate you. Check phone location permission.');
+    };
+    mapInstance.on('locationfound', onFound);
+    mapInstance.on('locationerror', onError);
+    return () => {
+      mapInstance.off('locationfound', onFound);
+      mapInstance.off('locationerror', onError);
+    };
+  }, [mapInstance]);
+
   const startTracking = useCallback(async () => {
     setTracking(true);
     if (user && !trackerRef.current) {
-      let { data: activeSession } = await supabase
+      let { data: activeSession, error: activeSessionError } = await supabase
         .from('hiker_sessions' as any)
         .select('id,booking_id,trail_zone_id,location_id,start_time,tracking_phase')
         .eq('user_id', user.id)
@@ -384,6 +410,23 @@ export default function MapPage() {
         .order('start_time', { ascending: false })
         .limit(1)
         .maybeSingle();
+      if (activeSessionError && isSchemaCacheError(activeSessionError)) {
+        const fallback = await supabase
+          .from('hiker_sessions' as any)
+          .select('id,booking_id,trail_zone_id,start_time')
+          .eq('user_id', user.id)
+          .eq('status', 'active')
+          .order('start_time', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        activeSession = fallback.data;
+        activeSessionError = fallback.error;
+      }
+      if (activeSessionError) {
+        toast.error(`Unable to check active session: ${activeSessionError.message}`);
+        setTracking(false);
+        return;
+      }
 
       const participantRole =
         role === 'guide' || role === 'ranger' || role === 'admin' || role === 'super_admin'
@@ -392,7 +435,7 @@ export default function MapPage() {
       const sessionLocationId = activeSession?.location_id ?? activeLocationId ?? locations[0]?.id ?? null;
 
       if (!activeSession) {
-        const { data: created, error } = await supabase
+        let { data: created, error } = await supabase
           .from('hiker_sessions' as any)
           .insert({
             user_id: user.id,
@@ -405,6 +448,20 @@ export default function MapPage() {
           })
           .select('id,booking_id,trail_zone_id,location_id,start_time,tracking_phase')
           .single();
+        if (error && isSchemaCacheError(error)) {
+          const fallback = await supabase
+            .from('hiker_sessions' as any)
+            .insert({
+              user_id: user.id,
+              start_time: new Date().toISOString(),
+              status: 'active',
+              total_distance_km: 0,
+            })
+            .select('id,booking_id,trail_zone_id,start_time')
+            .single();
+          created = fallback.data;
+          error = fallback.error;
+        }
         if (error) {
           toast.error(`Unable to start live session: ${error.message}`);
           setTracking(false);
@@ -678,26 +735,20 @@ export default function MapPage() {
       return;
     }
     setRecordedPoints([]);
+    setRecordingPreviewReady(false);
     kalmanStateRef.current = null; // Reset Kalman filter
     setIsRecording(true);
+    toast.info('Locating you. Keep the phone outside or near open sky for best trail accuracy.');
 
     const handleNewRecordPoint = (pos: GeolocationPosition) => {
       // Step 1: GPS Signal Quality Filter
       const accuracy = pos.coords.accuracy;
-      const signal: typeof gpsSignal = accuracy <= 10 ? 'Strong' : accuracy <= 30 ? 'Medium' : 'Weak';
+      const signal: typeof gpsSignal = accuracy <= 12 ? 'Strong' : accuracy <= 50 ? 'Medium' : 'Weak';
       setGpsSignal(signal);
 
-      if (signal === 'Weak') {
-        console.warn(`Recording: GPS signal is weak (accuracy: ${accuracy}m), discarding point.`);
-        return; // Discard points with weak signal
-      }
-
       const rawSpeed = pos.coords.speed != null && pos.coords.speed > 0.3 ? pos.coords.speed * 3.6 : 0;
-      const isStationary = rawSpeed < 1.0; // Stationary if speed < 1km/h
-      const isPoorAccuracy = pos.coords.accuracy > 25;
+      const isPoorAccuracy = accuracy > 75;
       
-      if (isStationary && isPoorAccuracy) return;
-
       const raw: RecordedPoint = {
         timestamp: Date.now(),
         lat: pos.coords.latitude,
@@ -708,17 +759,26 @@ export default function MapPage() {
         heading: pos.coords.heading,
       };
 
+      setUserPos([raw.lat, raw.lon]);
+      setDisplayPos([raw.lat, raw.lon]);
+      if (isPoorAccuracy) {
+        setRecordedPoints((prev) => (prev.length === 0 ? [raw] : prev));
+        return;
+      }
+
       const filtered = applyKalmanFilter(raw, rawSpeed);
+      setUserPos([filtered.lat, filtered.lon]);
+      setDisplayPos([filtered.lat, filtered.lon]);
+      if (mapInstance) mapInstance.setView([filtered.lat, filtered.lon], Math.max(mapInstance.getZoom(), 17));
 
       setRecordedPoints((prev) => {
         if (prev.length === 0) return [filtered];
 
         const last = prev[prev.length - 1];
         const dist = haversineDistance(last.lat, last.lon, filtered.lat, filtered.lon) * 1000;
+        const dt = filtered.timestamp - last.timestamp;
 
-        // Increased threshold to 3.0 meters for recording stability
-        // Only record if moving or significant jump
-        if (dist > 3.0 && !isStationary) {
+        if (dist >= 2.5 || (dist >= 1 && dt >= 10_000) || dt >= 30_000) {
           return [...prev, filtered];
         }
 
@@ -743,6 +803,7 @@ export default function MapPage() {
 
     const options = { enableHighAccuracy: true, maximumAge: 0, timeout: 30000 };
 
+    navigator.geolocation.getCurrentPosition(handleNewRecordPoint, handleRecordError, options);
     recordWatchRef.current = navigator.geolocation.watchPosition(handleNewRecordPoint, handleRecordError, options);
 
     // High-frequency polling heartbeat for recording (every 1s)
@@ -752,8 +813,7 @@ export default function MapPage() {
 
     // Store polling interval in a ref
     (recordWatchRef as any).polling = pollingInterval;
-
-  }, [applyKalmanFilter]);
+  }, [applyKalmanFilter, mapInstance]);
 
   const stopRecording = useCallback(() => {
     setIsRecording(false);
@@ -763,7 +823,24 @@ export default function MapPage() {
       if ((recordWatchRef as any).polling) clearInterval((recordWatchRef as any).polling);
       recordWatchRef.current = null;
     }
-  }, []);
+    setRecordingPreviewReady(recordedPoints.length > 1);
+    if (mapInstance && recordedPoints.length > 1) {
+      mapInstance.fitBounds(L.latLngBounds(recordedPoints.map((p) => [p.lat, p.lon] as [number, number])), { padding: [40, 40] });
+    }
+    if (recordedPoints.length > 1) {
+      let previewMeters = 0;
+      for (let i = 1; i < recordedPoints.length; i++) {
+        previewMeters += haversineDistance(recordedPoints[i - 1].lat, recordedPoints[i - 1].lon, recordedPoints[i].lat, recordedPoints[i].lon) * 1000;
+      }
+      const previewDurationSec = Math.round((recordedPoints[recordedPoints.length - 1].timestamp - recordedPoints[0].timestamp) / 1000);
+      const distanceLabel = previewMeters < 1000 ? `${previewMeters.toFixed(0)} m` : `${(previewMeters / 1000).toFixed(2)} km`;
+      const minutes = Math.floor(previewDurationSec / 60);
+      const seconds = previewDurationSec % 60;
+      toast.success(`Recording stopped. Preview ready: ${distanceLabel} over ${minutes}:${String(seconds).padStart(2, '0')}.`);
+    } else {
+      toast.warning('No walking trail recorded yet. Move outdoors and try again.');
+    }
+  }, [mapInstance, recordedPoints]);
 
   useEffect(() => {
     return () => {
@@ -807,7 +884,7 @@ export default function MapPage() {
       return;
     }
     const path = recordedPoints.map((p) => ({ lat: p.lat, lng: p.lon }));
-    const { error } = await supabase.from('trail_zones' as any).insert({
+    const baseRoute = {
       location_id: locationId,
       name: `${currentTrail.name} recorded ${new Date().toLocaleDateString('en-PH')}`,
       description: `GPS draft recorded by ${role ?? 'staff'} for admin review. Distance ${formatDistance(recordDistanceMeters)}.`,
@@ -816,11 +893,18 @@ export default function MapPage() {
       coordinates_json: path,
       status: 'draft',
       max_capacity: 50,
+    };
+    let { error } = await supabase.from('trail_zones' as any).insert({
+      ...baseRoute,
       recorded_by: user.id,
       source: 'gps_recording',
       review_status: 'pending',
       is_official: false,
     });
+    if (error && isSchemaCacheError(error)) {
+      const fallback = await supabase.from('trail_zones' as any).insert(baseRoute);
+      error = fallback.error;
+    }
     if (error) {
       toast.error(`Failed to save route draft: ${error.message}`);
       return;
@@ -987,10 +1071,10 @@ export default function MapPage() {
               />
             ))}
 
-            {isRecording && recordedPoints.length > 1 && (
+            {recordedPoints.length > 1 && (
               <Polyline
                 positions={recordedPoints.map((p) => [p.lat, p.lon] as [number, number])}
-                pathOptions={{ color: '#f97316', weight: 4, dashArray: '4 8' }}
+                pathOptions={{ color: '#f97316', weight: 5, opacity: 0.95, dashArray: isRecording ? '4 8' : undefined }}
               />
             )}
 
@@ -1065,19 +1149,25 @@ export default function MapPage() {
           />
         </div>
 
-        {/* Ranger recording / accuracy badge + stats */}
-        {isTrailRecorder && (isRecording || isGpsTestMode) && (
-          <div className="absolute top-24 left-4 z-[1000] glass-card rounded-lg px-3 py-2 text-xs flex flex-col gap-1 max-w-xs">
+        {/* Route recording / accuracy badge + stopped preview */}
+        {isTrailRecorder && (isRecording || isGpsTestMode || recordingPreviewReady) && (
+          <div className="absolute top-24 left-4 z-[1000] glass-card rounded-lg px-3 py-2 text-xs flex flex-col gap-2 max-w-xs">
             <div className="font-semibold">
-              {isGpsTestMode ? 'Accuracy Test Active' : 'Recording Trail'}
+              {isGpsTestMode ? 'Accuracy Test Active' : recordingPreviewReady && !isRecording ? 'Recorded Trail Preview' : 'Recording Trail'}
             </div>
             <div className="flex flex-wrap gap-3 text-muted-foreground">
               <span>Dist: <span className="text-foreground font-medium">{formatDistance(recordDistanceMeters)}</span></span>
               <span>Time: <span className="text-foreground font-medium">{formatDuration(recordDurationSec)}</span></span>
+              <span>Points: <span className="text-foreground font-medium">{recordedPoints.length}</span></span>
               <span>Speed: <span className="text-foreground font-medium">
                 {recordSpeedKmh > 0 ? `${recordSpeedKmh.toFixed(1)} km/h` : '--'}
               </span></span>
             </div>
+            {recordingPreviewReady && !isRecording && (
+              <Button size="sm" className="h-7 text-xs" onClick={saveRecordedRouteDraft}>
+                Save Route Draft
+              </Button>
+            )}
           </div>
         )}
 

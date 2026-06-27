@@ -5,6 +5,11 @@ import { drainQueue, removeQueueItem, bumpQueueAttempt } from '@/lib/offlineDb';
 let timer: ReturnType<typeof setInterval> | null = null;
 let running = false;
 
+function isSchemaCacheError(error: unknown) {
+  const message = String((error as { message?: unknown } | null)?.message ?? error ?? '').toLowerCase();
+  return message.includes('schema cache') || message.includes('could not find') || message.includes('column');
+}
+
 async function pushOne(item: any) {
   if (item.kind === 'session') {
     const s = item.payload;
@@ -34,9 +39,34 @@ async function pushOne(item: any) {
       last_track_at: new Date().toISOString(),
     } as any;
 
-    const { error } = s.serverSessionId
+    let { error } = s.serverSessionId
       ? await supabase.from('hiker_sessions').update(row).eq('id', s.serverSessionId)
       : await supabase.from('hiker_sessions').upsert(row, { onConflict: 'client_session_id' });
+    if (error && isSchemaCacheError(error)) {
+      const legacyRow = {
+        client_session_id: s.id,
+        user_id: s.userId,
+        booking_id: s.bookingId ?? null,
+        trail_zone_id: s.trailZoneId ?? null,
+        start_time: new Date(s.startedAt).toISOString(),
+        end_time: s.endedAt ? new Date(s.endedAt).toISOString() : null,
+        status: s.status,
+        total_distance_km: +(s.distanceM / 1000).toFixed(3),
+        moving_time_sec: s.movingSec,
+        resting_time_sec: s.restingSec,
+        elevation_gain_m: Math.round(s.ascentM),
+        elevation_loss_m: Math.round(s.descentM),
+        ascent_time_sec: s.ascentSec,
+        descent_time_sec: s.descentSec,
+        summit_reached: s.summitReached,
+        encoded_path: s.encodedPath,
+        last_synced_at: new Date().toISOString(),
+      } as any;
+      const fallback = s.serverSessionId
+        ? await supabase.from('hiker_sessions').update(legacyRow).eq('id', s.serverSessionId)
+        : await supabase.from('hiker_sessions').upsert(legacyRow, { onConflict: 'client_session_id' });
+      error = fallback.error;
+    }
     if (error) throw error;
     return;
   }
@@ -64,7 +94,18 @@ async function pushOne(item: any) {
     }));
     // Batched
     for (let i = 0; i < rows.length; i += 500) {
-      const { error } = await supabase.from('hiker_locations').insert(rows.slice(i, i + 500));
+      let { error } = await supabase.from('hiker_locations').insert(rows.slice(i, i + 500));
+      if (error && isSchemaCacheError(error)) {
+        const legacyRows = rows.slice(i, i + 500).map((r) => ({
+          session_id: r.session_id,
+          latitude: r.latitude,
+          longitude: r.longitude,
+          altitude: r.altitude,
+          timestamp: r.timestamp,
+        }));
+        const fallback = await supabase.from('hiker_locations').insert(legacyRows);
+        error = fallback.error;
+      }
       if (error) throw error;
     }
     return;
@@ -79,14 +120,22 @@ async function pushOne(item: any) {
       realSessionId = sess?.id;
     }
     if (!realSessionId) return; // Skip silently
-    await supabase.from('hiker_locations').insert({
+    let { error } = await supabase.from('hiker_locations').insert({
       session_id: realSessionId, latitude: lat, longitude: lng, altitude: alt,
       accuracy: accuracy ?? null,
       speed_m_s: speed ?? null,
       heading: heading ?? null,
       segment: segment ?? null,
       timestamp: new Date(ts).toISOString(),
-    });
+    } as any);
+    if (error && isSchemaCacheError(error)) {
+      const fallback = await supabase.from('hiker_locations').insert({
+        session_id: realSessionId, latitude: lat, longitude: lng, altitude: alt,
+        timestamp: new Date(ts).toISOString(),
+      } as any);
+      error = fallback.error;
+    }
+    if (error) throw error;
   }
 }
 

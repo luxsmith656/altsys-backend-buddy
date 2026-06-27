@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Cloud, CloudRain, Wind, Thermometer, AlertTriangle, CheckCircle2, RefreshCw } from 'lucide-react';
+import { Cloud, CloudRain, Wind, Thermometer, AlertTriangle, CheckCircle2, RefreshCw, ChevronDown } from 'lucide-react';
 import { fetchWeather, adviseRoute, type WeatherSnapshot, type RouteAdvice } from '@/lib/weather';
 import { Button } from '@/components/ui/button';
 
@@ -15,6 +15,7 @@ export default function WeatherPanel({ lat, lng, onAdvice }: Props) {
   const [advice, setAdvice] = useState<RouteAdvice | null>(null);
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const [collapsed, setCollapsed] = useState(true);
 
   const load = async () => {
     setLoading(true); setErr(null);
@@ -41,7 +42,20 @@ export default function WeatherPanel({ lat, lng, onAdvice }: Props) {
     'border-emerald-400/40 bg-emerald-400/10';
 
   return (
-    <div className={`glass-card rounded-lg p-3 text-xs border ${tone} max-w-xs`}>
+    <div className={`glass-card rounded-lg text-xs border ${tone} max-w-xs`}>
+      {collapsed ? (
+        <button
+          type="button"
+          onClick={() => setCollapsed(false)}
+          className="w-10 h-10 flex items-center justify-center hover:bg-background/40 transition-colors"
+          aria-label="Show weather routing"
+        >
+          {advice?.level === 'avoid' ? <AlertTriangle className="h-4 w-4 text-destructive" /> :
+           advice?.level === 'caution' ? <AlertTriangle className="h-4 w-4 text-amber-500" /> :
+           <Cloud className="h-4 w-4 text-emerald-500" />}
+        </button>
+      ) : (
+      <div className="p-3">
       <div className="flex items-center justify-between gap-2 mb-2">
         <div className="flex items-center gap-1.5 font-semibold">
           {advice?.level === 'avoid' ? <AlertTriangle className="h-4 w-4 text-destructive" /> :
@@ -49,9 +63,14 @@ export default function WeatherPanel({ lat, lng, onAdvice }: Props) {
            <CheckCircle2 className="h-4 w-4 text-emerald-500" />}
           <span>Weather routing</span>
         </div>
-        <Button size="icon" variant="ghost" className="h-6 w-6" onClick={load} disabled={loading} aria-label="Refresh weather">
-          <RefreshCw className={`h-3 w-3 ${loading ? 'animate-spin' : ''}`} />
-        </Button>
+        <div className="flex items-center gap-1">
+          <Button size="icon" variant="ghost" className="h-6 w-6" onClick={load} disabled={loading} aria-label="Refresh weather">
+            <RefreshCw className={`h-3 w-3 ${loading ? 'animate-spin' : ''}`} />
+          </Button>
+          <Button size="icon" variant="ghost" className="h-6 w-6" onClick={() => setCollapsed(true)} aria-label="Collapse weather">
+            <ChevronDown className="h-3 w-3" />
+          </Button>
+        </div>
       </div>
 
       {err && <div className="text-destructive text-[11px]">{err}</div>}
@@ -84,6 +103,8 @@ export default function WeatherPanel({ lat, lng, onAdvice }: Props) {
       )}
 
       {!w && !err && <div className="flex items-center gap-1 text-muted-foreground"><Cloud className="h-3 w-3" /> Loading…</div>}
+      </div>
+      )}
     </div>
   );
 }
