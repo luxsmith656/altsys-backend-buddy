@@ -450,27 +450,39 @@ export type Database = {
       }
       hiker_locations: {
         Row: {
+          accuracy: number | null
           altitude: number
+          heading: number | null
           id: string
           latitude: number
           longitude: number
+          segment: string | null
           session_id: string
+          speed_m_s: number | null
           timestamp: string
         }
         Insert: {
+          accuracy?: number | null
           altitude?: number
+          heading?: number | null
           id?: string
           latitude: number
           longitude: number
+          segment?: string | null
           session_id: string
+          speed_m_s?: number | null
           timestamp?: string
         }
         Update: {
+          accuracy?: number | null
           altitude?: number
+          heading?: number | null
           id?: string
           latitude?: number
           longitude?: number
+          segment?: string | null
           session_id?: string
+          speed_m_s?: number | null
           timestamp?: string
         }
         Relationships: [
@@ -489,6 +501,7 @@ export type Database = {
           booking_id: string | null
           client_session_id: string | null
           created_at: string
+          descent_started_at: string | null
           descent_time_sec: number
           elevation_gain_m: number
           elevation_loss_m: number
@@ -496,12 +509,17 @@ export type Database = {
           end_time: string | null
           id: string
           last_synced_at: string | null
+          last_track_at: string | null
+          location_id: string | null
           moving_time_sec: number
+          participant_role: string
+          peak_reached_at: string | null
           resting_time_sec: number
           start_time: string
           status: string
           summit_reached: boolean
           total_distance_km: number
+          tracking_phase: string
           trail_zone_id: string | null
           user_id: string
         }
@@ -510,6 +528,7 @@ export type Database = {
           booking_id?: string | null
           client_session_id?: string | null
           created_at?: string
+          descent_started_at?: string | null
           descent_time_sec?: number
           elevation_gain_m?: number
           elevation_loss_m?: number
@@ -517,12 +536,17 @@ export type Database = {
           end_time?: string | null
           id?: string
           last_synced_at?: string | null
+          last_track_at?: string | null
+          location_id?: string | null
           moving_time_sec?: number
+          participant_role?: string
+          peak_reached_at?: string | null
           resting_time_sec?: number
           start_time?: string
           status?: string
           summit_reached?: boolean
           total_distance_km?: number
+          tracking_phase?: string
           trail_zone_id?: string | null
           user_id: string
         }
@@ -531,6 +555,7 @@ export type Database = {
           booking_id?: string | null
           client_session_id?: string | null
           created_at?: string
+          descent_started_at?: string | null
           descent_time_sec?: number
           elevation_gain_m?: number
           elevation_loss_m?: number
@@ -538,12 +563,17 @@ export type Database = {
           end_time?: string | null
           id?: string
           last_synced_at?: string | null
+          last_track_at?: string | null
+          location_id?: string | null
           moving_time_sec?: number
+          participant_role?: string
+          peak_reached_at?: string | null
           resting_time_sec?: number
           start_time?: string
           status?: string
           summit_reached?: boolean
           total_distance_km?: number
+          tracking_phase?: string
           trail_zone_id?: string | null
           user_id?: string
         }
@@ -553,6 +583,13 @@ export type Database = {
             columns: ["booking_id"]
             isOneToOne: false
             referencedRelation: "bookings"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "hiker_sessions_location_id_fkey"
+            columns: ["location_id"]
+            isOneToOne: false
+            referencedRelation: "locations"
             referencedColumns: ["id"]
           },
           {
