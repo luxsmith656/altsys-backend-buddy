@@ -19,6 +19,7 @@ import OfflineLayer from '@/components/map/OfflineLayer';
 import HikeSummary from '@/components/map/HikeSummary';
 import { HikeTracker } from '@/lib/tracking/HikeTracker';
 import { downloadArea } from '@/lib/tracking/tileCache';
+import { MotionGpsFilter, postProcessTrack, type GpsTrackPoint } from '@/lib/tracking/gpsFilter';
 import type { OfflineSession } from '@/lib/offlineDb';
 import type { RouteAdvice } from '@/lib/weather';
 import { supabase } from '@/integrations/supabase/client';
@@ -98,6 +99,32 @@ function deviceOrientationHeading(e: DeviceOrientationEvent) {
 
 function pointDistanceMeters(a: RecordedPoint, b: RecordedPoint) {
   return haversineDistance(a.lat, a.lon, b.lat, b.lon) * 1000;
+}
+
+function toTrackPoint(point: RecordedPoint): GpsTrackPoint {
+  return {
+    lat: point.lat,
+    lng: point.lon,
+    ts: point.timestamp,
+    alt: point.alt,
+    accuracy: point.accuracy,
+    speed: point.speed,
+    heading: point.heading,
+    inferred: point.inferred,
+  };
+}
+
+function fromTrackPoint(point: GpsTrackPoint): RecordedPoint {
+  return {
+    timestamp: point.ts,
+    lat: point.lat,
+    lon: point.lng,
+    alt: point.alt,
+    speed: point.speed,
+    accuracy: point.accuracy,
+    heading: point.heading,
+    inferred: point.inferred,
+  };
 }
 
 function gpsSignalFromAccuracy(accuracy: number | null | undefined): 'Strong' | 'Medium' | 'Weak' {
@@ -391,6 +418,7 @@ export default function MapPage() {
   const recordingActiveRef = useRef(false);
   const recordSessionStartedAtRef = useRef<number | null>(null);
   const recordPredictedCountRef = useRef(0);
+  const recordingFilterRef = useRef<MotionGpsFilter | null>(null);
   const watchRef = useRef<number | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const currentHeadingRef = useRef<number | null>(null);
@@ -1074,6 +1102,14 @@ export default function MapPage() {
       setRecordedPoints([]);
       recordPredictedCountRef.current = 0;
     }
+    recordingFilterRef.current = new MotionGpsFilter({
+      minAccuracyForStartM: 50,
+      maxAccuracyM: 85,
+      minAppendDistanceM: 1.6,
+    });
+    if (resumeExisting && recordedPointsRef.current.length > 0) {
+      recordingFilterRef.current.seed(recordedPointsRef.current.map(toTrackPoint));
+    }
     setRecordingPreviewReady(false);
     recordSessionStartedAtRef.current = resumeExisting
       ? recordSessionStartedAtRef.current ?? existingPoints[0]?.timestamp ?? Date.now()
@@ -1092,7 +1128,7 @@ export default function MapPage() {
       setGpsSignal(signal);
 
       const raw: RecordedPoint = {
-        timestamp: Date.now(),
+        timestamp: Number.isFinite(pos.timestamp) ? pos.timestamp : Date.now(),
         lat: pos.coords.latitude,
         lon: pos.coords.longitude,
         alt: pos.coords.altitude,
@@ -1106,31 +1142,40 @@ export default function MapPage() {
       const motionFresh = Date.now() - motionState.lastMotionAt < 2500;
       const hasRecentPace = recordedPointsRef.current.length > 1 && recentWalkingSpeedMps(recordedPointsRef.current) > 0.45;
       const inferredMoving = motionFresh ? motionState.moving : (raw.speed ?? 0) > 0.35 || hasRecentPace;
-      const cleaned = cleanRecordingPoint(recordedPointsRef.current, raw, {
+      const filter = recordingFilterRef.current ?? new MotionGpsFilter({
+        minAccuracyForStartM: 50,
+        maxAccuracyM: 85,
+        minAppendDistanceM: 1.6,
+      });
+      recordingFilterRef.current = filter;
+      const filtered = filter.filter(toTrackPoint(raw), {
         heading: normalizeHeading(raw.heading ?? currentHeadingRef.current),
         moving: inferredMoving,
         consecutivePredicted: recordPredictedCountRef.current,
       });
-      if (cleaned.reason === 'waiting') {
+      if (filtered.reason === 'waiting') {
         toast.warning(`Waiting for a cleaner GPS lock (${Math.round(accuracy)}m accuracy). Step into open sky if possible.`, { id: 'recording-accuracy' });
         return;
       }
-      if (cleaned.reason === 'weak' && !cleaned.appended) {
+      if (filtered.reason === 'weak' && !filtered.appended) {
         toast.warning(`Weak GPS ignored (${Math.round(accuracy)}m). Trail recording is still running offline.`, { id: 'recording-accuracy' });
         return;
       }
-      if (cleaned.reason === 'jump' && !cleaned.appended) {
+      if (filtered.reason === 'jump' && !filtered.appended) {
         console.warn(`GPS jump rejected while recording: ${Math.round(accuracy)}m accuracy`);
         return;
       }
 
-      updateRecordedPoints(() => cleaned.points);
-      const lastClean = cleaned.points[cleaned.points.length - 1];
+      const cleanPoint = filtered.point ? fromTrackPoint(filtered.point) : null;
+      const displayPoint = filtered.displayPoint ? fromTrackPoint(filtered.displayPoint) : cleanPoint;
+      if (cleanPoint && filtered.appended) {
+        updateRecordedPoints((prev) => [...prev, cleanPoint]);
+      }
+      const lastClean = cleanPoint;
       recordPredictedCountRef.current = lastClean?.inferred ? recordPredictedCountRef.current + 1 : 0;
-      if (cleaned.appended && cleaned.points.length === 1) {
+      if (filtered.appended && recordedPointsRef.current.length === 1) {
         toast.success('Trail recording started. First clean GPS point saved offline.', { id: 'recording-started' });
       }
-      const displayPoint = cleaned.displayPoint;
       if (displayPoint) {
         setUserPos([displayPoint.lat, displayPoint.lon]);
         setDisplayPos([displayPoint.lat, displayPoint.lon]);
@@ -1158,7 +1203,7 @@ export default function MapPage() {
   }, [ensureCompassEnabled, ensureMotionEnabled, mapInstance, persistRecording, updateRecordedPoints]);
 
   const stopRecording = useCallback(() => {
-    const points = recordedPointsRef.current;
+    let points = recordedPointsRef.current;
     recordingActiveRef.current = false;
     setIsRecording(false);
     setGpsSignal('None');
@@ -1169,6 +1214,11 @@ export default function MapPage() {
     if (recordPollingRef.current) {
       clearInterval(recordPollingRef.current);
       recordPollingRef.current = null;
+    }
+    if (points.length > 2) {
+      points = postProcessTrack(points.map(toTrackPoint), 1.4).map(fromTrackPoint);
+      recordedPointsRef.current = points;
+      setRecordedPoints(points);
     }
     persistRecording(points, false);
     setRecordingPreviewReady(points.length > 1);
@@ -1231,6 +1281,9 @@ export default function MapPage() {
     }
     recordedPointsRef.current = [];
     recordSessionStartedAtRef.current = null;
+    recordPredictedCountRef.current = 0;
+    recordingFilterRef.current?.reset();
+    recordingFilterRef.current = null;
     setRecordedPoints([]);
     setRecordingPreviewReady(false);
     setIsGpsTestMode(false);
@@ -1280,7 +1333,10 @@ export default function MapPage() {
       toast.error('No trail location is available for this route.');
       return;
     }
-    const path = points.map((p) => ({ lat: p.lat, lng: p.lon }));
+    const cleanedPoints = postProcessTrack(points.map(toTrackPoint), 1.2).map(fromTrackPoint);
+    recordedPointsRef.current = cleanedPoints;
+    setRecordedPoints(cleanedPoints);
+    const path = cleanedPoints.map((p) => ({ lat: p.lat, lng: p.lon }));
     const baseRoute = {
       location_id: locationId,
       name: `${currentTrail.name} recorded ${new Date().toLocaleDateString('en-PH')}`,
@@ -1315,6 +1371,9 @@ export default function MapPage() {
     });
     localStorage.removeItem(recordingStorageKey);
     recordedPointsRef.current = [];
+    recordPredictedCountRef.current = 0;
+    recordingFilterRef.current?.reset();
+    recordingFilterRef.current = null;
     setRecordedPoints([]);
     setRecordingPreviewReady(false);
   };

@@ -12,6 +12,7 @@ import {
 } from '@/lib/offlineDb';
 import { supabase } from '@/integrations/supabase/client';
 import { haversineM, simplify } from './geo';
+import { MotionGpsFilter } from './gpsFilter';
 
 type Listener = (snap: TrackerSnapshot) => void;
 
@@ -47,6 +48,11 @@ export class HikeTracker {
   private altEMA: number | null = null;
   private startTs: number;
   private tickHandle: ReturnType<typeof setInterval> | null = null;
+  private gpsFilter = new MotionGpsFilter({
+    minAccuracyForStartM: 55,
+    maxAccuracyM: 90,
+    minAppendDistanceM: 1.8,
+  });
 
   constructor(opts: {
     userId: string;
@@ -81,6 +87,15 @@ export class HikeTracker {
     if (last) {
       this.lastFix = { lat: last.lat, lng: last.lng, alt: last.alt, ts: last.ts, accuracy: last.accuracy };
       this.altEMA = last.alt;
+      this.gpsFilter.seed(this.points.map((p) => ({
+        lat: p.lat,
+        lng: p.lng,
+        alt: p.alt,
+        accuracy: p.accuracy,
+        speed: p.speed,
+        heading: p.heading,
+        ts: p.ts,
+      })));
     }
   }
 
@@ -184,24 +199,32 @@ export class HikeTracker {
   private onFix(pos: GeolocationPosition) {
     if (this.session.status !== 'active') return;
     const accuracy = pos.coords.accuracy ?? 999;
-    // Reject very noisy fixes unless we haven't had one in a while
-    const tooNoisy = accuracy > 60;
-    const sinceLast = this.lastFix ? (Date.now() - this.lastFix.ts) / 1000 : 999;
-    if (!this.lastFix && accuracy > 45) return;
-    if (accuracy > 85) return;
-    if (tooNoisy && sinceLast < 45) return;
+    const ts = Number.isFinite(pos.timestamp) ? pos.timestamp : Date.now();
+    const speed = pos.coords.speed ?? 0;
+    const heading = pos.coords.heading ?? null;
+    const filtered = this.gpsFilter.filter({
+      lat: pos.coords.latitude,
+      lng: pos.coords.longitude,
+      alt: pos.coords.altitude,
+      accuracy,
+      speed,
+      heading,
+      ts,
+    }, {
+      heading,
+      moving: speed > 0.35 || Boolean(this.lastMoveTs && ts - this.lastMoveTs < 8000),
+      consecutivePredicted: 0,
+    });
+    if (!filtered.appended || !filtered.point) return;
 
-    const lat = pos.coords.latitude;
-    const lng = pos.coords.longitude;
+    const lat = filtered.point.lat;
+    const lng = filtered.point.lng;
     const altRaw = pos.coords.altitude ?? this.altEMA ?? 0;
     // EMA altitude
     this.altEMA = this.altEMA == null ? altRaw : this.altEMA * 0.7 + altRaw * 0.3;
     const alt = this.altEMA;
-    const ts = Date.now();
-    const speed = pos.coords.speed ?? 0;
-    const heading = pos.coords.heading ?? null;
 
-    // Adaptive sample: skip near-duplicates within 3m unless idle for 30s
+    // Adaptive sample: skip near-duplicates within 3m unless idle for 30s.
     if (this.lastFix) {
       const d = haversineM(this.lastFix, { lat, lng });
       const dt = (ts - this.lastFix.ts) / 1000;

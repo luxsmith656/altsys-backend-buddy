@@ -1,0 +1,47 @@
+import { describe, expect, it } from 'vitest';
+import { MotionGpsFilter, postProcessTrack, type GpsTrackPoint } from '@/lib/tracking/gpsFilter';
+import { haversineM } from '@/lib/tracking/geo';
+
+function offsetPoint(lat: number, lng: number, northM: number, eastM: number) {
+  const earthM = 6371000;
+  return {
+    lat: lat + (northM / earthM) * 180 / Math.PI,
+    lng: lng + (eastM / (earthM * Math.cos(lat * Math.PI / 180))) * 180 / Math.PI,
+  };
+}
+
+describe('MotionGpsFilter', () => {
+  it('smooths walking jitter and rejects large GPS spikes', () => {
+    const filter = new MotionGpsFilter({ minAccuracyForStartM: 50, maxAccuracyM: 85, minAppendDistanceM: 1.5 });
+    const origin = { lat: 14.1766, lng: 121.2193 };
+    const accepted: GpsTrackPoint[] = [];
+
+    for (let i = 0; i <= 18; i++) {
+      const jitterEast = i % 2 === 0 ? 3.5 : -3.5;
+      const base = offsetPoint(origin.lat, origin.lng, i * 3, jitterEast);
+      const raw = i === 9 ? offsetPoint(origin.lat, origin.lng, i * 3, 140) : base;
+      const result = filter.filter({
+        lat: raw.lat,
+        lng: raw.lng,
+        ts: 1_000_000 + i * 3000,
+        accuracy: i === 9 ? 28 : 10,
+        speed: 1,
+        heading: 0,
+      }, { moving: true, heading: 0, consecutivePredicted: 0 });
+      if (result.appended && result.point) accepted.push(result.point);
+    }
+
+    const cleaned = postProcessTrack(accepted, 1.2);
+    const maxSegment = cleaned.slice(1).reduce((max, point, index) => {
+      return Math.max(max, haversineM(cleaned[index], point));
+    }, 0);
+    const totalDistance = cleaned.slice(1).reduce((sum, point, index) => {
+      return sum + haversineM(cleaned[index], point);
+    }, 0);
+
+    expect(cleaned.length).toBeGreaterThan(5);
+    expect(maxSegment).toBeLessThan(18);
+    expect(totalDistance).toBeGreaterThan(35);
+    expect(totalDistance).toBeLessThan(80);
+  });
+});

@@ -9,6 +9,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { Play, Square, MousePointer, Navigation, Trash2, Save, Undo2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { MT_KALISUNGAN_CENTER, DEFAULT_ZOOM } from '@/lib/map-data';
+import { MotionGpsFilter, postProcessTrack, type GpsTrackPoint } from '@/lib/tracking/gpsFilter';
 import type { LatLngTuple } from 'leaflet';
 
 const pointIcon = new L.DivIcon({
@@ -32,6 +33,19 @@ function ClickDrawHandler({ active, onAddPoint }: { active: boolean; onAddPoint:
 
 function distanceMeters(a: LatLngTuple, b: LatLngTuple) {
   return L.latLng(a[0], a[1]).distanceTo(L.latLng(b[0], b[1]));
+}
+
+function toLatLng(point: GpsTrackPoint): LatLngTuple {
+  return [point.lat, point.lng];
+}
+
+function pathToTrack(points: LatLngTuple[]): GpsTrackPoint[] {
+  return points.map(([lat, lng], index) => ({
+    lat,
+    lng,
+    ts: Date.now() + index,
+    accuracy: 8,
+  }));
 }
 
 function RecordingMapFollower({ path, active }: { path: LatLngTuple[]; active: boolean }) {
@@ -72,9 +86,13 @@ export default function TrailRecorder({ existingTrails, onSaved }: TrailRecorder
   const [saving, setSaving] = useState(false);
   const [editingTrailId, setEditingTrailId] = useState<string | null>(null);
   const watchRef = useRef<number | null>(null);
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const gpsFilterRef = useRef<MotionGpsFilter | null>(null);
+  const predictedCountRef = useRef(0);
   const [recordingStartedAt, setRecordingStartedAt] = useState<number | null>(null);
   const [recordingNow, setRecordingNow] = useState(Date.now());
   const pathRef = useRef<LatLngTuple[]>([]);
+  const offlineDraftKey = 'altsys-admin-trail-recorder-draft';
 
   useEffect(() => {
     pathRef.current = path;
@@ -86,6 +104,14 @@ export default function TrailRecorder({ existingTrails, onSaved }: TrailRecorder
       toast.error('Geolocation not supported on this device');
       return;
     }
+    if (watchRef.current !== null) navigator.geolocation.clearWatch(watchRef.current);
+    if (pollRef.current) clearInterval(pollRef.current);
+    gpsFilterRef.current = new MotionGpsFilter({
+      minAccuracyForStartM: 50,
+      maxAccuracyM: 85,
+      minAppendDistanceM: 1.6,
+    });
+    predictedCountRef.current = 0;
     setMode('recording');
     setPath([]);
     pathRef.current = [];
@@ -93,19 +119,52 @@ export default function TrailRecorder({ existingTrails, onSaved }: TrailRecorder
     toast.info('GPS recording started. Walk the trail path.');
 
     const acceptPosition = (pos: GeolocationPosition) => {
-      if ((pos.coords.accuracy ?? 999) > 100) {
-        toast.warning(`GPS accuracy is weak (${Math.round(pos.coords.accuracy)}m). Waiting for a cleaner fix.`, { id: 'trail-recorder-accuracy' });
+      const accuracy = pos.coords.accuracy ?? 999;
+      const filter = gpsFilterRef.current ?? new MotionGpsFilter({
+        minAccuracyForStartM: 50,
+        maxAccuracyM: 85,
+        minAppendDistanceM: 1.6,
+      });
+      gpsFilterRef.current = filter;
+      const filtered = filter.filter({
+        lat: pos.coords.latitude,
+        lng: pos.coords.longitude,
+        alt: pos.coords.altitude,
+        accuracy,
+        speed: pos.coords.speed,
+        heading: pos.coords.heading,
+        ts: Number.isFinite(pos.timestamp) ? pos.timestamp : Date.now(),
+      }, {
+        heading: pos.coords.heading,
+        moving: (pos.coords.speed ?? 0) > 0.35 || pathRef.current.length > 1,
+        consecutivePredicted: predictedCountRef.current,
+      });
+      if (filtered.reason === 'waiting') {
+        toast.warning(`Waiting for cleaner GPS (${Math.round(accuracy)}m). Keep the phone near open sky.`, { id: 'trail-recorder-accuracy' });
         return;
       }
-      const point: LatLngTuple = [pos.coords.latitude, pos.coords.longitude];
+      if (!filtered.appended || !filtered.point) {
+        if (filtered.reason === 'weak') {
+          toast.warning(`Weak GPS ignored (${Math.round(accuracy)}m). Recording is still active offline.`, { id: 'trail-recorder-accuracy' });
+        }
+        return;
+      }
+      predictedCountRef.current = filtered.point.inferred ? predictedCountRef.current + 1 : 0;
+      const point = toLatLng(filtered.point);
       setPath((prev) => {
         if (prev.length === 0) {
           toast.success('First GPS point saved.');
-          return [point];
+          const next = [point];
+          localStorage.setItem(offlineDraftKey, JSON.stringify(next));
+          pathRef.current = next;
+          return next;
         }
         const last = prev[prev.length - 1];
         if (distanceMeters(last, point) < 1.5) return prev;
-        return [...prev, point];
+        const next = [...prev, point];
+        pathRef.current = next;
+        localStorage.setItem(offlineDraftKey, JSON.stringify(next));
+        return next;
       });
     };
 
@@ -120,12 +179,25 @@ export default function TrailRecorder({ existingTrails, onSaved }: TrailRecorder
       (err) => toast.error(`GPS Error: ${err.message}`),
       options
     );
+    pollRef.current = setInterval(() => {
+      navigator.geolocation.getCurrentPosition(acceptPosition, () => {}, options);
+    }, 3500);
   }, []);
 
   const stopRecording = useCallback(() => {
     if (watchRef.current !== null) {
       navigator.geolocation.clearWatch(watchRef.current);
       watchRef.current = null;
+    }
+    if (pollRef.current) {
+      clearInterval(pollRef.current);
+      pollRef.current = null;
+    }
+    if (pathRef.current.length > 2) {
+      const cleaned = postProcessTrack(pathToTrack(pathRef.current), 1.4).map(toLatLng);
+      pathRef.current = cleaned;
+      setPath(cleaned);
+      localStorage.setItem(offlineDraftKey, JSON.stringify(cleaned));
     }
     setMode('idle');
     setRecordingStartedAt(null);
@@ -154,6 +226,10 @@ export default function TrailRecorder({ existingTrails, onSaved }: TrailRecorder
     setPath([]);
     pathRef.current = [];
     setEditingTrailId(null);
+    gpsFilterRef.current?.reset();
+    gpsFilterRef.current = null;
+    predictedCountRef.current = 0;
+    localStorage.removeItem(offlineDraftKey);
   };
 
   const [originalPath, setOriginalPath] = useState<LatLngTuple[]>([]);
@@ -169,6 +245,7 @@ export default function TrailRecorder({ existingTrails, onSaved }: TrailRecorder
       const coords = Array.isArray(trail.coordinates_json) ? trail.coordinates_json : [];
       const parsed = coords.map((c: any) => [c.lat, c.lng] as LatLngTuple);
       setPath(parsed);
+      pathRef.current = parsed;
       setOriginalPath(parsed);
       toast.info(`Loaded trail "${trail.name}" for editing`);
     }
@@ -185,7 +262,8 @@ export default function TrailRecorder({ existingTrails, onSaved }: TrailRecorder
     }
     setSaving(true);
     try {
-      const coordsJson = path.map(([lat, lng]) => ({ lat, lng }));
+      const finalPath = path.length > 2 ? postProcessTrack(pathToTrack(path), 1.2).map(toLatLng) : path;
+      const coordsJson = finalPath.map(([lat, lng]) => ({ lat, lng }));
       const payload = {
         name: name.trim(),
         difficulty,
@@ -214,6 +292,7 @@ export default function TrailRecorder({ existingTrails, onSaved }: TrailRecorder
       setStatus('active');
       setEditingTrailId(null);
       pathRef.current = [];
+      localStorage.removeItem(offlineDraftKey);
       onSaved?.();
     } catch (err: any) {
       toast.error(`Failed to save: ${err.message}`);
@@ -239,7 +318,27 @@ export default function TrailRecorder({ existingTrails, onSaved }: TrailRecorder
       if (watchRef.current !== null) {
         navigator.geolocation.clearWatch(watchRef.current);
       }
+      if (pollRef.current) clearInterval(pollRef.current);
     };
+  }, []);
+
+  useEffect(() => {
+    const raw = localStorage.getItem(offlineDraftKey);
+    if (!raw || pathRef.current.length > 0) return;
+    try {
+      const saved = JSON.parse(raw);
+      if (!Array.isArray(saved)) return;
+      const recovered = saved
+        .map((p: any) => Array.isArray(p) ? [Number(p[0]), Number(p[1])] as LatLngTuple : null)
+        .filter((p: LatLngTuple | null): p is LatLngTuple => Boolean(p && Number.isFinite(p[0]) && Number.isFinite(p[1])));
+      if (recovered.length > 1) {
+        pathRef.current = recovered;
+        setPath(recovered);
+        toast.info('Recovered an offline route recording draft.');
+      }
+    } catch {
+      localStorage.removeItem(offlineDraftKey);
+    }
   }, []);
 
   return (
