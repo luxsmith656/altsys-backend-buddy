@@ -1411,9 +1411,10 @@ export default function MapPage() {
       toast.error(`Failed to save route draft: ${error.message}`);
       return;
     }
-    if (savedDraft?.id) {
+    const savedDraftId = (savedDraft as { id?: string } | null)?.id ?? null;
+    if (savedDraftId) {
       await supabase.from('trail_recordings' as any).insert({
-        trail_zone_id: savedDraft.id,
+        trail_zone_id: savedDraftId,
         location_id: locationId,
         recorded_by: user.id,
         source: 'gps_recording',
@@ -1426,7 +1427,7 @@ export default function MapPage() {
     toast.success('Route draft saved. Open the route editor to publish or test it.', {
       action: {
         label: 'Open editor',
-        onClick: () => navigate(`/admin?tab=overview&routeDraft=${savedDraft?.id ?? 'latest'}#trail-recorder`),
+        onClick: () => navigate(`/admin?tab=overview&routeDraft=${savedDraftId ?? 'latest'}#trail-recorder`),
       },
     });
     localStorage.removeItem(recordingStorageKey);
