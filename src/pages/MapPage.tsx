@@ -235,6 +235,7 @@ export default function MapPage() {
   const [offlineReady, setOfflineReady] = useState(false);
   const [userTrailProgress, setUserTrailProgress] = useState<number | undefined>(undefined);
   const [mobileControlsOpen, setMobileControlsOpen] = useState(false);
+  const [mobileViewportBottomInset, setMobileViewportBottomInset] = useState(0);
   const [legendOpen, setLegendOpen] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
   const [isGpsTestMode, setIsGpsTestMode] = useState(false);
@@ -361,6 +362,28 @@ export default function MapPage() {
   }, []);
 
   const speedTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const viewport = window.visualViewport;
+    const updateInset = () => {
+      if (!viewport) {
+        setMobileViewportBottomInset(0);
+        return;
+      }
+      const bottomInset = Math.max(0, window.innerHeight - viewport.height - viewport.offsetTop);
+      setMobileViewportBottomInset(Math.round(bottomInset));
+    };
+    updateInset();
+    viewport?.addEventListener('resize', updateInset);
+    viewport?.addEventListener('scroll', updateInset);
+    window.addEventListener('orientationchange', updateInset);
+    return () => {
+      viewport?.removeEventListener('resize', updateInset);
+      viewport?.removeEventListener('scroll', updateInset);
+      window.removeEventListener('orientationchange', updateInset);
+    };
+  }, []);
 
   useEffect(() => {
     currentHeadingRef.current = currentHeading;
@@ -1139,9 +1162,10 @@ export default function MapPage() {
     if (h > 0) return `${h}:${String(m).padStart(2, '0')}:${String(sec).padStart(2, '0')}`;
     return `${String(m).padStart(2, '0')}:${String(sec).padStart(2, '0')}`;
   };
+  const mobileControlsBottom = `calc(env(safe-area-inset-bottom) + ${mobileViewportBottomInset}px + 0.75rem)`;
 
   return (
-    <div className={`h-screen pt-16 flex flex-col ${mobileControlsOpen ? 'map-mobile-controls-open' : ''}`}>
+    <div className={`h-[100dvh] pt-16 flex flex-col ${mobileControlsOpen ? 'map-mobile-controls-open' : ''}`}>
       {/* Desktop/tablet top bar */}
       <div className="hidden md:block">
         <TrailStats
@@ -1417,18 +1441,25 @@ export default function MapPage() {
         </div>
 
         {/* Mobile bottom controls (collapsible) */}
-        <div className="md:hidden absolute left-3 right-3 bottom-[calc(env(safe-area-inset-bottom)+0.75rem)] z-[1000]">
-          <div className="glass-card-strong rounded-lg overflow-hidden max-h-[48dvh] overflow-y-auto overscroll-contain">
+        <div
+          className="md:hidden absolute left-3 right-3 z-[1000]"
+          style={{ bottom: mobileControlsBottom }}
+        >
+          <button
+            type="button"
+            onClick={() => setMobileControlsOpen((v) => !v)}
+            className="absolute -top-11 left-1/2 z-10 flex h-11 min-w-36 -translate-x-1/2 items-center justify-center gap-2 rounded-t-xl border border-border/40 border-b-0 bg-background/95 px-4 text-xs font-semibold shadow-lg backdrop-blur"
+            aria-expanded={mobileControlsOpen}
+            aria-label={mobileControlsOpen ? 'Hide map controls' : 'Show map controls'}
+          >
+            <span>{mobileControlsOpen ? 'Hide Controls' : 'Map Controls'}</span>
+            {mobileControlsOpen ? <ChevronDown className="h-4 w-4" /> : <ChevronUp className="h-4 w-4" />}
+          </button>
+          <div className="glass-card-strong rounded-lg overflow-hidden max-h-[min(58dvh,calc(100dvh-10rem))] overflow-y-auto overscroll-contain">
             <div
-              onClick={() => setMobileControlsOpen((v) => !v)}
               className="w-full px-3 py-2 flex items-center gap-2 hover:bg-white/5 transition-colors"
               aria-expanded={mobileControlsOpen}
               aria-label={mobileControlsOpen ? 'Collapse controls' : 'Expand controls'}
-              role="button"
-              tabIndex={0}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' || e.key === ' ') setMobileControlsOpen((v) => !v);
-              }}
             >
               <div className="flex-1 min-w-0 text-left">
                 <div className="flex items-center gap-2">
@@ -1500,9 +1531,6 @@ export default function MapPage() {
                     <Play className="h-4 w-4" />
                   </Button>
                 )}
-                <div className="text-muted-foreground pl-1">
-                  {mobileControlsOpen ? <ChevronDown className="h-4 w-4" /> : <ChevronUp className="h-4 w-4" />}
-                </div>
               </div>
             </div>
 
