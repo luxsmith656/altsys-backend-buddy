@@ -185,9 +185,11 @@ export class HikeTracker {
     if (this.session.status !== 'active') return;
     const accuracy = pos.coords.accuracy ?? 999;
     // Reject very noisy fixes unless we haven't had one in a while
-    const tooNoisy = accuracy > 50;
+    const tooNoisy = accuracy > 60;
     const sinceLast = this.lastFix ? (Date.now() - this.lastFix.ts) / 1000 : 999;
-    if (tooNoisy && sinceLast < 30) return;
+    if (!this.lastFix && accuracy > 45) return;
+    if (accuracy > 85) return;
+    if (tooNoisy && sinceLast < 45) return;
 
     const lat = pos.coords.latitude;
     const lng = pos.coords.longitude;
@@ -203,6 +205,14 @@ export class HikeTracker {
     if (this.lastFix) {
       const d = haversineM(this.lastFix, { lat, lng });
       const dt = (ts - this.lastFix.ts) / 1000;
+      const noiseRadius = Math.max(2, Math.min(12, (accuracy + this.lastFix.accuracy) * 0.18));
+      const impliedSpeed = dt > 0 ? d / Math.max(1, dt) : 0;
+      if (dt < 120 && accuracy > 25 && (d > 90 || impliedSpeed > Math.max(4.5, speed + 2.5))) return;
+      if (d < noiseRadius && dt < 45) {
+        this.lastFix = { ...this.lastFix, ts, accuracy: Math.min(this.lastFix.accuracy, accuracy) };
+        this.emit();
+        return;
+      }
       const isMoving = speed > 0.5 || d > 3;
       if (!isMoving && dt < 30) return;
 

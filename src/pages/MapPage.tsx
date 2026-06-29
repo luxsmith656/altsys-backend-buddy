@@ -37,14 +37,19 @@ L.Icon.Default.mergeOptions({
 
 function makeUserIcon(heading: number | null, alert: boolean) {
   const color = alert ? '#ef4444' : '#22c55e';
+  const outline = alert ? '#fee2e2' : '#dcfce7';
   const rotation = Number.isFinite(heading ?? NaN) ? heading : 0;
   return new L.DivIcon({
-    html: `<div style="width:24px;height:24px;display:flex;align-items:center;justify-content:center;transform:rotate(${rotation}deg);">
-      <div style="width:0;height:0;border-left:8px solid transparent;border-right:8px solid transparent;border-bottom:18px solid ${color};filter:drop-shadow(0 1px 4px rgba(0,0,0,.45));"></div>
+    html: `<div style="width:36px;height:36px;display:flex;align-items:center;justify-content:center;transform:rotate(${rotation}deg);filter:drop-shadow(0 2px 6px rgba(0,0,0,.55));">
+      <svg width="34" height="34" viewBox="0 0 34 34" aria-hidden="true">
+        <circle cx="17" cy="17" r="15" fill="rgba(8,18,14,.82)" stroke="${outline}" stroke-width="2" />
+        <path d="M17 3.8 L26 28.5 L17 23.2 L8 28.5 Z" fill="${color}" stroke="${outline}" stroke-width="2" stroke-linejoin="round" />
+        <path d="M17 7.2 L21.3 22 L17 19.5 L12.7 22 Z" fill="rgba(255,255,255,.32)" />
+      </svg>
     </div>`,
     className: '',
-    iconSize: [24, 24],
-    iconAnchor: [12, 12],
+    iconSize: [36, 36],
+    iconAnchor: [18, 18],
   });
 }
 
@@ -88,6 +93,71 @@ function deviceOrientationHeading(e: DeviceOrientationEvent) {
   if (Number.isFinite(iosHeading)) return normalizeHeading(Number(iosHeading));
   if (e.alpha == null || !Number.isFinite(e.alpha)) return null;
   return normalizeHeading(360 - e.alpha);
+}
+
+function pointDistanceMeters(a: RecordedPoint, b: RecordedPoint) {
+  return haversineDistance(a.lat, a.lon, b.lat, b.lon) * 1000;
+}
+
+function gpsSignalFromAccuracy(accuracy: number | null | undefined): 'Strong' | 'Medium' | 'Weak' {
+  const value = accuracy ?? 999;
+  if (value <= 12) return 'Strong';
+  if (value <= 40) return 'Medium';
+  return 'Weak';
+}
+
+function cleanRecordingPoint(prev: RecordedPoint[], raw: RecordedPoint): {
+  points: RecordedPoint[];
+  displayPoint?: RecordedPoint;
+  appended: boolean;
+  reason?: 'waiting' | 'weak' | 'jump' | 'noise';
+} {
+  const accuracy = raw.accuracy ?? 999;
+  if (prev.length === 0) {
+    if (accuracy > 45) return { points: prev, reason: 'waiting', appended: false };
+    return { points: [raw], displayPoint: raw, appended: true };
+  }
+
+  const last = prev[prev.length - 1];
+  const dtMs = Math.max(0, raw.timestamp - last.timestamp);
+  const dtSec = Math.max(1, dtMs / 1000);
+  const distanceM = pointDistanceMeters(last, raw);
+  const lastAccuracy = last.accuracy ?? 25;
+  const noiseRadiusM = Math.max(2, Math.min(12, (accuracy + lastAccuracy) * 0.18));
+  const impliedSpeedMps = distanceM / dtSec;
+  const reportedSpeedMps = raw.speed ?? 0;
+
+  if (accuracy > 85) return { points: prev, reason: 'weak', appended: false };
+  if (dtMs < 800) return { points: prev, reason: 'noise', appended: false };
+  if (dtMs < 120_000 && accuracy > 25 && (distanceM > 90 || impliedSpeedMps > Math.max(4.5, reportedSpeedMps + 2.5))) {
+    return { points: prev, reason: 'jump', appended: false };
+  }
+
+  if (distanceM < noiseRadiusM && dtMs < 45_000) {
+    const updated = [...prev];
+    updated[updated.length - 1] = {
+      ...last,
+      timestamp: raw.timestamp,
+      speed: 0,
+      heading: raw.heading ?? last.heading,
+      accuracy: Math.min(lastAccuracy, accuracy),
+    };
+    return { points: updated, displayPoint: updated[updated.length - 1], appended: false, reason: 'noise' };
+  }
+
+  const alpha = accuracy <= 10 ? 0.92 : accuracy <= 20 ? 0.76 : accuracy <= 40 ? 0.58 : 0.42;
+  const smoothed = dtMs >= 45_000 || distanceM > 35
+    ? raw
+    : {
+        ...raw,
+        lat: last.lat + (raw.lat - last.lat) * alpha,
+        lon: last.lon + (raw.lon - last.lon) * alpha,
+      };
+  const smoothedDistanceM = pointDistanceMeters(last, smoothed);
+  if (smoothedDistanceM < 1.2 && dtMs < 60_000) {
+    return { points: prev, displayPoint: last, appended: false, reason: 'noise' };
+  }
+  return { points: [...prev, smoothed], displayPoint: smoothed, appended: true };
 }
 
 function trailDistanceKm(path: LatLngTuple[], start: number, end: number) {
@@ -291,7 +361,7 @@ export default function MapPage() {
     const startPos = displayPos;
     const endPos = userPos;
     const startTime = performance.now();
-    const duration = 1000; // Interpolate over 1 second (typical GPS interval)
+    const duration = 220; // Keep the marker responsive; long easing made the arrow feel delayed.
 
     const animate = (currentTime: number) => {
       const elapsed = currentTime - startTime;
@@ -897,12 +967,9 @@ export default function MapPage() {
 
     const handleNewRecordPoint = (pos: GeolocationPosition) => {
       const accuracy = pos.coords.accuracy;
-      const signal: typeof gpsSignal = accuracy <= 12 ? 'Strong' : accuracy <= 50 ? 'Medium' : 'Weak';
+      const signal: typeof gpsSignal = gpsSignalFromAccuracy(accuracy);
       setGpsSignal(signal);
 
-      const rawSpeed = pos.coords.speed != null && pos.coords.speed > 0.3 ? pos.coords.speed * 3.6 : 0;
-      const isPoorAccuracy = accuracy > 100;
-      
       const raw: RecordedPoint = {
         timestamp: Date.now(),
         lat: pos.coords.latitude,
@@ -914,52 +981,30 @@ export default function MapPage() {
       };
       if (raw.heading != null) setCurrentHeading(raw.heading);
 
-      setUserPos([raw.lat, raw.lon]);
-      setDisplayPos([raw.lat, raw.lon]);
-      if (isPoorAccuracy) {
-        if (recordedPointsRef.current.length === 0) {
-          updateRecordedPoints(() => [raw]);
-        }
-        toast.warning(`GPS accuracy is weak (${Math.round(accuracy)}m). Recording is waiting for a cleaner fix.`, { id: 'recording-accuracy' });
+      const cleaned = cleanRecordingPoint(recordedPointsRef.current, raw);
+      if (cleaned.reason === 'waiting') {
+        toast.warning(`Waiting for a cleaner GPS lock (${Math.round(accuracy)}m accuracy). Step into open sky if possible.`, { id: 'recording-accuracy' });
+        return;
+      }
+      if (cleaned.reason === 'weak') {
+        toast.warning(`Weak GPS ignored (${Math.round(accuracy)}m). Trail recording is still running offline.`, { id: 'recording-accuracy' });
+        return;
+      }
+      if (cleaned.reason === 'jump') {
+        console.warn(`GPS jump rejected while recording: ${Math.round(accuracy)}m accuracy`);
         return;
       }
 
-      const accepted = raw;
-      setUserPos([accepted.lat, accepted.lon]);
-      setDisplayPos([accepted.lat, accepted.lon]);
-      if (mapInstance) mapInstance.setView([accepted.lat, accepted.lon], Math.max(mapInstance.getZoom(), 17));
-
-      updateRecordedPoints((prev) => {
-        if (prev.length === 0) {
-          toast.success('Trail recording started. First GPS point saved offline.', { id: 'recording-started' });
-          return [accepted];
-        }
-
-        const last = prev[prev.length - 1];
-        const dist = haversineDistance(last.lat, last.lon, accepted.lat, accepted.lon) * 1000;
-        const dt = accepted.timestamp - last.timestamp;
-        const dtSeconds = Math.max(1, dt / 1000);
-        const impliedSpeed = dist / dtSeconds;
-        const obviousJump = dist > 120 && dt < 120_000 && impliedSpeed > 8 && accuracy > 35;
-
-        if (!obviousJump && (dist >= 1.5 || (dist >= 0.5 && dt >= 10_000) || dt >= 60_000)) {
-          return [...prev, accepted];
-        }
-
-        // Update speed for real-time display even if stationary
-        if (accepted.speed != null || accepted.heading != null) {
-          const updated = [...prev];
-          updated[updated.length - 1] = {
-            ...updated[updated.length - 1],
-            speed: rawSpeed > 0.5 ? accepted.speed : 0,
-            heading: accepted.heading ?? updated[updated.length - 1].heading,
-            accuracy: accepted.accuracy,
-          };
-          return updated;
-        }
-
-        return prev;
-      });
+      updateRecordedPoints(() => cleaned.points);
+      if (cleaned.appended && cleaned.points.length === 1) {
+        toast.success('Trail recording started. First clean GPS point saved offline.', { id: 'recording-started' });
+      }
+      const displayPoint = cleaned.displayPoint;
+      if (displayPoint) {
+        setUserPos([displayPoint.lat, displayPoint.lon]);
+        setDisplayPos([displayPoint.lat, displayPoint.lon]);
+        if (mapInstance) mapInstance.setView([displayPoint.lat, displayPoint.lon], Math.max(mapInstance.getZoom(), 17));
+      }
     };
 
     const handleRecordError = (err: GeolocationPositionError) => {
