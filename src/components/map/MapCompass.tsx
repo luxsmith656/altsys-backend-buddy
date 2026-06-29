@@ -5,9 +5,10 @@ import { motion } from 'framer-motion';
 interface MapCompassProps {
   userPos: [number, number] | null;
   headingOverride?: number | null;
+  compact?: boolean;
 }
 
-export default function MapCompass({ userPos, headingOverride }: MapCompassProps) {
+export default function MapCompass({ userPos, headingOverride, compact = false }: MapCompassProps) {
   const [heading, setHeading] = useState<number | null>(null);
   const [supported, setSupported] = useState(true);
   const [permission, setPermission] = useState<'prompt' | 'granted' | 'denied'>('prompt');
@@ -68,9 +69,9 @@ export default function MapCompass({ userPos, headingOverride }: MapCompassProps
   };
 
   return (
-    <div className="glass-card rounded-lg p-3 flex flex-col items-center gap-2">
+    <div className={`glass-card rounded-lg flex flex-col items-center ${compact ? 'gap-1 p-2' : 'gap-2 p-3'}`}>
       {/* Compass Rose */}
-      <div className="relative w-20 h-20">
+      <div className={`relative ${compact ? 'h-10 w-10' : 'h-20 w-20'}`}>
         {/* Outer ring */}
         <div className="absolute inset-0 rounded-full border-2 border-border/50" />
         
@@ -78,7 +79,7 @@ export default function MapCompass({ userPos, headingOverride }: MapCompassProps
         {['N', 'E', 'S', 'W'].map((dir, i) => (
           <div
             key={dir}
-            className="absolute text-[8px] font-bold"
+            className={`absolute font-bold ${compact ? 'text-[6px]' : 'text-[8px]'}`}
             style={{
               top: i === 0 ? '2px' : i === 2 ? 'auto' : '50%',
               bottom: i === 2 ? '2px' : 'auto',
@@ -98,7 +99,7 @@ export default function MapCompass({ userPos, headingOverride }: MapCompassProps
           animate={{ rotate: displayHeading != null ? -displayHeading : 0 }}
           transition={{ type: 'spring', stiffness: 100, damping: 15 }}
         >
-          <svg width="40" height="40" viewBox="0 0 40 40">
+          <svg width={compact ? '24' : '40'} height={compact ? '24' : '40'} viewBox="0 0 40 40">
             {/* North (red) */}
             <polygon
               points="20,4 17,20 23,20"
@@ -118,7 +119,7 @@ export default function MapCompass({ userPos, headingOverride }: MapCompassProps
       </div>
 
       {/* Heading readout */}
-      <div className="text-center">
+      <div className={`text-center ${compact ? '[&>button]:text-[10px] [&>div]:text-xs [&>div:nth-child(2)]:hidden' : ''}`}>
         {!supported ? (
           <div className="text-xs text-muted-foreground">Compass not available</div>
         ) : permission === 'prompt' && displayHeading == null ? (
@@ -139,7 +140,7 @@ export default function MapCompass({ userPos, headingOverride }: MapCompassProps
       </div>
 
       {/* Coordinates */}
-      {userPos && (
+      {userPos && !compact && (
         <div className="text-[9px] text-muted-foreground text-center leading-tight">
           {userPos[0].toFixed(5)}°N<br />
           {userPos[1].toFixed(5)}°E

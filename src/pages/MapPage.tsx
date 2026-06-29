@@ -1310,7 +1310,7 @@ export default function MapPage() {
         </ErrorBoundary>
 
         {/* Turn-by-turn navigation overlay */}
-        <div className="absolute top-4 left-4 z-[1000] w-[calc(100%-7.5rem)] md:w-72">
+        <div className={`${tracking ? 'absolute' : 'hidden md:block absolute'} top-3 left-3 right-16 z-[1000] md:top-4 md:left-4 md:right-auto md:w-72`}>
           <TrailNavigation
             trailPath={currentTrail.path}
             trailName={currentTrail.name}
@@ -1323,11 +1323,11 @@ export default function MapPage() {
 
         {/* Route recording / accuracy badge + stopped preview */}
         {isTrailRecorder && (isRecording || isGpsTestMode || recordingPreviewReady) && (
-          <div className="absolute top-24 left-4 z-[1000] glass-card rounded-lg px-3 py-2 text-xs flex flex-col gap-2 max-w-xs">
-            <div className="font-semibold">
+          <div className="absolute top-3 left-3 right-16 z-[1000] glass-card rounded-lg px-2 py-2 text-[11px] flex flex-col gap-1.5 md:top-24 md:left-4 md:right-auto md:max-w-xs md:px-3 md:text-xs">
+            <div className="font-semibold leading-tight">
               {isGpsTestMode ? 'Accuracy Test Active' : recordingPreviewReady && !isRecording ? 'Recorded Trail Preview' : 'Recording Trail'}
             </div>
-            <div className="flex flex-wrap gap-3 text-muted-foreground">
+            <div className="flex flex-wrap gap-x-2 gap-y-1 text-muted-foreground">
               <span>Dist: <span className="text-foreground font-medium">{formatDistance(recordDistanceMeters)}</span></span>
               <span>Time: <span className="text-foreground font-medium">{formatDuration(recordDurationSec)}</span></span>
               <span>Points: <span className="text-foreground font-medium">{recordedPoints.length}</span></span>
@@ -1336,7 +1336,7 @@ export default function MapPage() {
               </span></span>
             </div>
             {recordingPreviewReady && !isRecording && (
-              <Button size="sm" className="h-7 text-xs" onClick={saveRecordedRouteDraft}>
+              <Button size="sm" className="h-7 text-xs md:h-8" onClick={saveRecordedRouteDraft}>
                 Save Route Draft
               </Button>
             )}
@@ -1344,12 +1344,15 @@ export default function MapPage() {
         )}
 
         {/* Compass */}
-        <div className="absolute top-24 right-4 md:top-4 md:right-16 z-[1000] w-24">
+        <div className="absolute top-3 right-3 z-[1000] md:hidden">
+          <MapCompass userPos={userPos} headingOverride={currentHeading} compact />
+        </div>
+        <div className="hidden md:block absolute top-4 right-16 z-[1000] w-24">
           <MapCompass userPos={userPos} headingOverride={currentHeading} />
         </div>
 
         {/* SOS compact button — bottom-left above mobile controls */}
-        <div className="absolute bottom-[7.5rem] md:bottom-[11rem] left-4 z-[1100]">
+        <div className="hidden md:block absolute md:bottom-[11rem] left-4 z-[1100]">
           <SOSPanel compact />
         </div>
 
@@ -1371,7 +1374,7 @@ export default function MapPage() {
         {/* Mobile legend toggle (other side) */}
         <div
           className={`md:hidden absolute left-4 z-[1100] flex flex-col items-start gap-2 ${
-            mobileControlsOpen ? 'bottom-[14.5rem]' : 'bottom-[6.5rem]'
+            mobileControlsOpen ? 'bottom-[52dvh]' : 'bottom-[6.5rem]'
           }`}
         >
           {!legendOpen ? (
@@ -1401,9 +1404,7 @@ export default function MapPage() {
 
         {/* Mobile right-side stack: ONLY 3 controls (layers, elevation, locate) */}
         <div
-          className={`md:hidden absolute right-4 z-[1100] flex flex-col items-end gap-2 ${
-            mobileControlsOpen ? 'bottom-[14.5rem]' : 'bottom-[6.5rem]'
-          }`}
+          className="md:hidden absolute right-3 top-[5.25rem] z-[1100] flex flex-col items-end gap-2"
         >
           <WeatherPanel lat={MT_KALISUNGAN_CENTER[0]} lng={MT_KALISUNGAN_CENTER[1]} onAdvice={handleWeatherAdvice} />
           <ElevationProfile
@@ -1416,11 +1417,11 @@ export default function MapPage() {
         </div>
 
         {/* Mobile bottom controls (collapsible) */}
-        <div className="md:hidden absolute bottom-4 left-4 right-4 z-[1000]">
-          <div className="glass-card-strong rounded-lg overflow-hidden">
+        <div className="md:hidden absolute left-3 right-3 bottom-[calc(env(safe-area-inset-bottom)+0.75rem)] z-[1000]">
+          <div className="glass-card-strong rounded-lg overflow-hidden max-h-[48dvh] overflow-y-auto overscroll-contain">
             <div
               onClick={() => setMobileControlsOpen((v) => !v)}
-              className="w-full px-3 py-2 flex items-center gap-3 hover:bg-white/5 transition-colors"
+              className="w-full px-3 py-2 flex items-center gap-2 hover:bg-white/5 transition-colors"
               aria-expanded={mobileControlsOpen}
               aria-label={mobileControlsOpen ? 'Collapse controls' : 'Expand controls'}
               role="button"
@@ -1441,7 +1442,7 @@ export default function MapPage() {
                     </div>
                   )}
                 </div>
-                <div className="text-[11px] text-muted-foreground flex gap-3">
+                <div className="text-[11px] text-muted-foreground grid grid-cols-4 gap-2">
                   <span>
                     <span className="text-foreground font-semibold">{distance.toFixed(2)}</span> km
                   </span>
@@ -1469,6 +1470,9 @@ export default function MapPage() {
               </div>
 
               <div className="flex items-center gap-1 shrink-0">
+                <div onClick={(e) => { e.preventDefault(); e.stopPropagation(); }}>
+                  <SOSPanel compact />
+                </div>
                 <Button
                   size="icon"
                   variant="outline"
