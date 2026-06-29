@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { MotionGpsFilter, postProcessTrack, type GpsTrackPoint } from '@/lib/tracking/gpsFilter';
+import { buildRecordingQuality, MotionGpsFilter, postProcessTrack, type GpsTrackPoint } from '@/lib/tracking/gpsFilter';
 import { haversineM } from '@/lib/tracking/geo';
 
 function offsetPoint(lat: number, lng: number, northM: number, eastM: number) {
@@ -43,5 +43,27 @@ describe('MotionGpsFilter', () => {
     expect(maxSegment).toBeLessThan(18);
     expect(totalDistance).toBeGreaterThan(35);
     expect(totalDistance).toBeLessThan(80);
+  });
+
+  it('summarizes raw and cleaned recording quality separately', () => {
+    const raw: GpsTrackPoint[] = [
+      { lat: 14.1766, lng: 121.2193, ts: 1_000, accuracy: 8, source: 'gps' },
+      { lat: 14.17661, lng: 121.21931, ts: 2_000, accuracy: 60, source: 'gps' },
+      { lat: 14.17662, lng: 121.21932, ts: 3_000, accuracy: 10, source: 'gps' },
+    ];
+    const clean: GpsTrackPoint[] = [
+      { ...raw[0], quality: 'high' },
+      { ...raw[2], quality: 'high' },
+      { lat: 14.17663, lng: 121.21933, ts: 4_000, accuracy: 35, inferred: true, source: 'estimated' },
+    ];
+
+    const summary = buildRecordingQuality(raw, clean);
+
+    expect(summary.rawPointCount).toBe(3);
+    expect(summary.cleanedPointCount).toBe(3);
+    expect(summary.estimatedPointCount).toBe(1);
+    expect(summary.rejectedPointCount).toBe(1);
+    expect(summary.averageAccuracyM).toBe(26);
+    expect(summary.filterVersion).toBe('motion-kalman-v2');
   });
 });

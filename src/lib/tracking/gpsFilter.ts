@@ -9,6 +9,9 @@ export type GpsTrackPoint = {
   speed?: number | null;
   heading?: number | null;
   inferred?: boolean;
+  source?: 'gps' | 'estimated';
+  filterReason?: 'accepted' | 'estimated' | 'weak' | 'jump' | 'noise' | 'waiting' | 'manual';
+  quality?: 'high' | 'medium' | 'low' | 'estimated';
 };
 
 export type MotionFilterResult = {
@@ -104,14 +107,25 @@ function updateAxis(axis: AxisState, measurement: number, measurementVariance: n
 
 function pointFromState(state: FilterState, ts: number, raw: GpsTrackPoint, inferred = false): GpsTrackPoint {
   const ll = metersToLatLng(state.x.pos, state.y.pos, state.originLat, state.originLng);
+  const accuracy = Math.max(4, Math.min(raw.accuracy ?? state.accuracy, 65));
   return {
     ...raw,
     lat: ll.lat,
     lng: ll.lng,
     ts,
-    accuracy: Math.max(4, Math.min(raw.accuracy ?? state.accuracy, 65)),
+    accuracy,
     inferred,
+    source: inferred ? 'estimated' : 'gps',
+    filterReason: inferred ? 'estimated' : 'accepted',
+    quality: inferred ? 'estimated' : qualityFromAccuracy(accuracy),
   };
+}
+
+function qualityFromAccuracy(accuracy: number | null | undefined): GpsTrackPoint['quality'] {
+  const value = accuracy ?? 999;
+  if (value <= 12) return 'high';
+  if (value <= 35) return 'medium';
+  return 'low';
 }
 
 export class MotionGpsFilter {
@@ -154,7 +168,13 @@ export class MotionGpsFilter {
         return { appended: false, reason: 'waiting' };
       }
       const variance = Math.max(accuracy, 8) ** 2;
-      const first = { ...raw, heading };
+      const first = {
+        ...raw,
+        heading,
+        source: 'gps' as const,
+        filterReason: 'accepted' as const,
+        quality: qualityFromAccuracy(accuracy),
+      };
       this.state = {
         originLat: raw.lat,
         originLng: raw.lng,
@@ -250,6 +270,51 @@ export class MotionGpsFilter {
     this.state.accuracy = predicted.accuracy ?? this.state.accuracy;
     return predicted;
   }
+}
+
+export function normalizeTrackPoint(point: GpsTrackPoint): GpsTrackPoint {
+  const accuracy = Number.isFinite(point.accuracy ?? NaN) ? point.accuracy ?? null : null;
+  return {
+    lat: point.lat,
+    lng: point.lng,
+    ts: point.ts,
+    alt: point.alt ?? null,
+    accuracy,
+    speed: Number.isFinite(point.speed ?? NaN) ? point.speed ?? null : null,
+    heading: Number.isFinite(point.heading ?? NaN) ? point.heading ?? null : null,
+    inferred: Boolean(point.inferred),
+    source: point.source ?? (point.inferred ? 'estimated' : 'gps'),
+    filterReason: point.filterReason ?? (point.inferred ? 'estimated' : 'accepted'),
+    quality: point.quality ?? (point.inferred ? 'estimated' : qualityFromAccuracy(accuracy)),
+  };
+}
+
+export function buildRecordingQuality(rawPoints: GpsTrackPoint[], cleanedPoints: GpsTrackPoint[]) {
+  const clean = cleanedPoints.map(normalizeTrackPoint);
+  const raw = rawPoints.map(normalizeTrackPoint);
+  const accuracies = raw
+    .map((p) => p.accuracy)
+    .filter((v): v is number => typeof v === 'number' && Number.isFinite(v));
+  const distanceM = clean.slice(1).reduce((sum, point, index) => sum + haversineM(clean[index], point), 0);
+  const startedAt = raw[0]?.ts ?? clean[0]?.ts ?? null;
+  const endedAt = raw[raw.length - 1]?.ts ?? clean[clean.length - 1]?.ts ?? null;
+  return {
+    rawPointCount: raw.length,
+    cleanedPointCount: clean.length,
+    rejectedPointCount: Math.max(0, raw.length - clean.filter((p) => !p.inferred).length),
+    estimatedPointCount: clean.filter((p) => p.inferred || p.source === 'estimated').length,
+    highQualityPointCount: clean.filter((p) => p.quality === 'high').length,
+    mediumQualityPointCount: clean.filter((p) => p.quality === 'medium').length,
+    lowQualityPointCount: clean.filter((p) => p.quality === 'low').length,
+    averageAccuracyM: accuracies.length ? Math.round((accuracies.reduce((sum, v) => sum + v, 0) / accuracies.length) * 10) / 10 : null,
+    bestAccuracyM: accuracies.length ? Math.min(...accuracies) : null,
+    worstAccuracyM: accuracies.length ? Math.max(...accuracies) : null,
+    distanceM: Math.round(distanceM * 10) / 10,
+    durationSec: startedAt && endedAt ? Math.max(0, Math.round((endedAt - startedAt) / 1000)) : 0,
+    startedAt: startedAt ? new Date(startedAt).toISOString() : null,
+    endedAt: endedAt ? new Date(endedAt).toISOString() : null,
+    filterVersion: 'motion-kalman-v2',
+  };
 }
 
 function angleAt(a: GpsTrackPoint, b: GpsTrackPoint, c: GpsTrackPoint) {

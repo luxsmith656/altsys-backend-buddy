@@ -19,7 +19,7 @@ import OfflineLayer from '@/components/map/OfflineLayer';
 import HikeSummary from '@/components/map/HikeSummary';
 import { HikeTracker } from '@/lib/tracking/HikeTracker';
 import { downloadArea } from '@/lib/tracking/tileCache';
-import { MotionGpsFilter, postProcessTrack, type GpsTrackPoint } from '@/lib/tracking/gpsFilter';
+import { buildRecordingQuality, MotionGpsFilter, normalizeTrackPoint, postProcessTrack, type GpsTrackPoint } from '@/lib/tracking/gpsFilter';
 import type { OfflineSession } from '@/lib/offlineDb';
 import type { RouteAdvice } from '@/lib/weather';
 import { supabase } from '@/integrations/supabase/client';
@@ -83,6 +83,7 @@ type StoredRecording = {
   startedAt: number;
   updatedAt: number;
   points: RecordedPoint[];
+  rawPoints?: RecordedPoint[];
 };
 
 function normalizeHeading(value: number | null | undefined) {
@@ -124,6 +125,34 @@ function fromTrackPoint(point: GpsTrackPoint): RecordedPoint {
     accuracy: point.accuracy,
     heading: point.heading,
     inferred: point.inferred,
+  };
+}
+
+function serializeRoutePoint(point: RecordedPoint, source: 'gps' | 'estimated' = point.inferred ? 'estimated' : 'gps') {
+  const normalized = normalizeTrackPoint({
+    lat: point.lat,
+    lng: point.lon,
+    ts: point.timestamp,
+    alt: point.alt,
+    accuracy: point.accuracy,
+    speed: point.speed,
+    heading: point.heading,
+    inferred: point.inferred,
+    source,
+  });
+  return {
+    lat: normalized.lat,
+    lng: normalized.lng,
+    timestamp: new Date(normalized.ts).toISOString(),
+    timestamp_ms: normalized.ts,
+    altitude_m: normalized.alt,
+    accuracy_m: normalized.accuracy,
+    speed_m_s: normalized.speed,
+    heading_deg: normalized.heading,
+    estimated: normalized.inferred || normalized.source === 'estimated',
+    source: normalized.source,
+    filter_reason: normalized.filterReason,
+    quality: normalized.quality,
   };
 }
 
@@ -415,6 +444,7 @@ export default function MapPage() {
   const recordWatchRef = useRef<number | null>(null);
   const recordPollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const recordedPointsRef = useRef<RecordedPoint[]>([]);
+  const rawRecordedPointsRef = useRef<RecordedPoint[]>([]);
   const recordingActiveRef = useRef(false);
   const recordSessionStartedAtRef = useRef<number | null>(null);
   const recordPredictedCountRef = useRef(0);
@@ -567,18 +597,19 @@ export default function MapPage() {
     recordingActiveRef.current = isRecording;
   }, [isRecording]);
 
-  const persistRecording = useCallback((points: RecordedPoint[], active = recordingActiveRef.current) => {
+  const persistRecording = useCallback((points: RecordedPoint[], active = recordingActiveRef.current, rawPoints = rawRecordedPointsRef.current) => {
     if (typeof window === 'undefined') return;
-    if (points.length === 0 && !active) {
+    if (points.length === 0 && rawPoints.length === 0 && !active) {
       localStorage.removeItem(recordingStorageKey);
       return;
     }
     const now = Date.now();
     const payload: StoredRecording = {
       active,
-      startedAt: recordSessionStartedAtRef.current ?? points[0]?.timestamp ?? now,
+      startedAt: recordSessionStartedAtRef.current ?? points[0]?.timestamp ?? rawPoints[0]?.timestamp ?? now,
       updatedAt: now,
       points,
+      rawPoints,
     };
     localStorage.setItem(recordingStorageKey, JSON.stringify(payload));
   }, [recordingStorageKey]);
@@ -1099,6 +1130,7 @@ export default function MapPage() {
     }
     if (!resumeExisting) {
       recordedPointsRef.current = [];
+      rawRecordedPointsRef.current = [];
       setRecordedPoints([]);
       recordPredictedCountRef.current = 0;
     }
@@ -1117,7 +1149,7 @@ export default function MapPage() {
     recordingActiveRef.current = true;
     setIsRecording(true);
     setRecordingNow(Date.now());
-    persistRecording(resumeExisting ? recordedPointsRef.current : [], true);
+    persistRecording(resumeExisting ? recordedPointsRef.current : [], true, resumeExisting ? rawRecordedPointsRef.current : []);
     toast.info(opts?.recovered
       ? 'Recovered recording. GPS is reconnecting and will continue the trail.'
       : 'Locating you. Keep the phone outside or near open sky for best trail accuracy.');
@@ -1136,6 +1168,8 @@ export default function MapPage() {
         accuracy: pos.coords.accuracy,
         heading: normalizeHeading(pos.coords.heading ?? currentHeadingRef.current),
       };
+      rawRecordedPointsRef.current = [...rawRecordedPointsRef.current, raw];
+      persistRecording(recordedPointsRef.current, true, rawRecordedPointsRef.current);
       if (raw.heading != null) setCurrentHeading(raw.heading);
 
       const motionState = motionStateRef.current;
@@ -1280,6 +1314,7 @@ export default function MapPage() {
       stopRecording();
     }
     recordedPointsRef.current = [];
+    rawRecordedPointsRef.current = [];
     recordSessionStartedAtRef.current = null;
     recordPredictedCountRef.current = 0;
     recordingFilterRef.current?.reset();
@@ -1300,9 +1335,13 @@ export default function MapPage() {
       const points = Array.isArray(stored.points)
         ? stored.points.filter((p) => Number.isFinite(p.lat) && Number.isFinite(p.lon) && Number.isFinite(p.timestamp))
         : [];
-      if (points.length === 0) return;
-      recordSessionStartedAtRef.current = stored.startedAt ?? points[0].timestamp;
+      const rawPoints = Array.isArray(stored.rawPoints)
+        ? stored.rawPoints.filter((p) => Number.isFinite(p.lat) && Number.isFinite(p.lon) && Number.isFinite(p.timestamp))
+        : points;
+      if (points.length === 0 && rawPoints.length === 0) return;
+      recordSessionStartedAtRef.current = stored.startedAt ?? points[0]?.timestamp ?? rawPoints[0]?.timestamp ?? Date.now();
       recordedPointsRef.current = points;
+      rawRecordedPointsRef.current = rawPoints;
       setRecordedPoints(points);
       setRecordingPreviewReady(points.length > 1);
       const last = points[points.length - 1];
@@ -1336,14 +1375,22 @@ export default function MapPage() {
     const cleanedPoints = postProcessTrack(points.map(toTrackPoint), 1.2).map(fromTrackPoint);
     recordedPointsRef.current = cleanedPoints;
     setRecordedPoints(cleanedPoints);
-    const path = cleanedPoints.map((p) => ({ lat: p.lat, lng: p.lon }));
+    const rawPoints = rawRecordedPointsRef.current.length > 0 ? rawRecordedPointsRef.current : points;
+    const rawRecordingJson = rawPoints.map((p) => serializeRoutePoint(p, 'gps'));
+    const cleanedRecordingJson = cleanedPoints.map((p) => serializeRoutePoint(p));
+    const qualitySummary = buildRecordingQuality(rawPoints.map(toTrackPoint), cleanedPoints.map(toTrackPoint));
+    const path = cleanedRecordingJson;
     const baseRoute = {
       location_id: locationId,
       name: `${currentTrail.name} recorded ${new Date().toLocaleDateString('en-PH')}`,
-      description: `GPS draft recorded by ${role ?? 'staff'} for admin review. Distance ${formatDistance(recordDistanceMeters)}.`,
+      description: `GPS draft recorded by ${role ?? 'staff'} for admin review. Cleaned distance ${formatDistance(qualitySummary.distanceM)} from ${qualitySummary.rawPointCount} raw fixes.`,
       difficulty: currentTrail.difficulty,
       elevation_meters: Number.parseInt(currentTrail.elevation, 10) || 0,
       coordinates_json: path,
+      raw_recording_json: rawRecordingJson,
+      cleaned_recording_json: cleanedRecordingJson,
+      recording_metadata: qualitySummary,
+      recording_count: 1,
       status: 'draft',
       max_capacity: 50,
     };
@@ -1355,13 +1402,26 @@ export default function MapPage() {
       is_official: false,
     }).select('id').single();
     if (error && isSchemaCacheError(error)) {
-      const fallback = await supabase.from('trail_zones' as any).insert(baseRoute).select('id').single();
+      const { raw_recording_json, cleaned_recording_json, recording_metadata, recording_count, ...legacyRoute } = baseRoute;
+      const fallback = await supabase.from('trail_zones' as any).insert(legacyRoute).select('id').single();
       error = fallback.error;
       savedDraft = fallback.data;
     }
     if (error) {
       toast.error(`Failed to save route draft: ${error.message}`);
       return;
+    }
+    if (savedDraft?.id) {
+      await supabase.from('trail_recordings' as any).insert({
+        trail_zone_id: savedDraft.id,
+        location_id: locationId,
+        recorded_by: user.id,
+        source: 'gps_recording',
+        status: 'draft',
+        raw_points_json: rawRecordingJson,
+        cleaned_points_json: cleanedRecordingJson,
+        quality_summary: qualitySummary,
+      });
     }
     toast.success('Route draft saved. Open the route editor to publish or test it.', {
       action: {
@@ -1371,6 +1431,7 @@ export default function MapPage() {
     });
     localStorage.removeItem(recordingStorageKey);
     recordedPointsRef.current = [];
+    rawRecordedPointsRef.current = [];
     recordPredictedCountRef.current = 0;
     recordingFilterRef.current?.reset();
     recordingFilterRef.current = null;

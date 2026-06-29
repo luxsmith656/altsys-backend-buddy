@@ -1581,6 +1581,9 @@ export default function AdminDashboard() {
                   elevation_meters: z.elevation_meters,
                   review_status: z.review_status,
                   source: z.source,
+                  raw_recording_json: z.raw_recording_json,
+                  cleaned_recording_json: z.cleaned_recording_json,
+                  recording_metadata: z.recording_metadata,
                 }))}
                 onSaved={loadData}
               />
