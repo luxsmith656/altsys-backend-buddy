@@ -809,7 +809,6 @@ export type Database = {
       }
       trail_zones: {
         Row: {
-          cleaned_recording_json: Json
           coordinates_json: Json
           created_at: string
           description: string
@@ -821,16 +820,12 @@ export type Database = {
           max_capacity: number
           name: string
           official_at: string | null
-          raw_recording_json: Json
           recorded_by: string | null
-          recording_count: number
-          recording_metadata: Json
           review_status: string
           source: string
           status: string
         }
         Insert: {
-          cleaned_recording_json?: Json
           coordinates_json?: Json
           created_at?: string
           description?: string
@@ -842,16 +837,12 @@ export type Database = {
           max_capacity?: number
           name: string
           official_at?: string | null
-          raw_recording_json?: Json
           recorded_by?: string | null
-          recording_count?: number
-          recording_metadata?: Json
           review_status?: string
           source?: string
           status?: string
         }
         Update: {
-          cleaned_recording_json?: Json
           coordinates_json?: Json
           created_at?: string
           description?: string
@@ -863,10 +854,7 @@ export type Database = {
           max_capacity?: number
           name?: string
           official_at?: string | null
-          raw_recording_json?: Json
           recorded_by?: string | null
-          recording_count?: number
-          recording_metadata?: Json
           review_status?: string
           source?: string
           status?: string
@@ -877,63 +865,6 @@ export type Database = {
             columns: ["location_id"]
             isOneToOne: false
             referencedRelation: "locations"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      trail_recordings: {
-        Row: {
-          cleaned_points_json: Json
-          created_at: string
-          id: string
-          location_id: string | null
-          notes: string | null
-          quality_summary: Json
-          raw_points_json: Json
-          recorded_by: string | null
-          source: string
-          status: string
-          trail_zone_id: string | null
-        }
-        Insert: {
-          cleaned_points_json?: Json
-          created_at?: string
-          id?: string
-          location_id?: string | null
-          notes?: string | null
-          quality_summary?: Json
-          raw_points_json?: Json
-          recorded_by?: string | null
-          source?: string
-          status?: string
-          trail_zone_id?: string | null
-        }
-        Update: {
-          cleaned_points_json?: Json
-          created_at?: string
-          id?: string
-          location_id?: string | null
-          notes?: string | null
-          quality_summary?: Json
-          raw_points_json?: Json
-          recorded_by?: string | null
-          source?: string
-          status?: string
-          trail_zone_id?: string | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "trail_recordings_location_id_fkey"
-            columns: ["location_id"]
-            isOneToOne: false
-            referencedRelation: "locations"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "trail_recordings_trail_zone_id_fkey"
-            columns: ["trail_zone_id"]
-            isOneToOne: false
-            referencedRelation: "trail_zones"
             referencedColumns: ["id"]
           },
         ]
