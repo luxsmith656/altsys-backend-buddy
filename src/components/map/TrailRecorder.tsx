@@ -30,6 +30,24 @@ function ClickDrawHandler({ active, onAddPoint }: { active: boolean; onAddPoint:
   return null;
 }
 
+function distanceMeters(a: LatLngTuple, b: LatLngTuple) {
+  return L.latLng(a[0], a[1]).distanceTo(L.latLng(b[0], b[1]));
+}
+
+function RecordingMapFollower({ path, active }: { path: LatLngTuple[]; active: boolean }) {
+  const map = useMap();
+  useEffect(() => {
+    if (path.length === 0) return;
+    const last = path[path.length - 1];
+    if (active) {
+      map.setView(last, Math.max(map.getZoom(), 17));
+    } else if (path.length > 1) {
+      map.fitBounds(L.latLngBounds(path), { padding: [24, 24] });
+    }
+  }, [active, map, path]);
+  return null;
+}
+
 interface TrailRecorderProps {
   existingTrails?: {
     id: string;
@@ -54,6 +72,13 @@ export default function TrailRecorder({ existingTrails, onSaved }: TrailRecorder
   const [saving, setSaving] = useState(false);
   const [editingTrailId, setEditingTrailId] = useState<string | null>(null);
   const watchRef = useRef<number | null>(null);
+  const [recordingStartedAt, setRecordingStartedAt] = useState<number | null>(null);
+  const [recordingNow, setRecordingNow] = useState(Date.now());
+  const pathRef = useRef<LatLngTuple[]>([]);
+
+  useEffect(() => {
+    pathRef.current = path;
+  }, [path]);
 
   // GPS recording
   const startRecording = useCallback(() => {
@@ -63,15 +88,37 @@ export default function TrailRecorder({ existingTrails, onSaved }: TrailRecorder
     }
     setMode('recording');
     setPath([]);
+    pathRef.current = [];
+    setRecordingStartedAt(Date.now());
     toast.info('GPS recording started. Walk the trail path.');
 
-    watchRef.current = navigator.geolocation.watchPosition(
-      (pos) => {
-        const point: LatLngTuple = [pos.coords.latitude, pos.coords.longitude];
-        setPath((prev) => [...prev, point]);
-      },
+    const acceptPosition = (pos: GeolocationPosition) => {
+      if ((pos.coords.accuracy ?? 999) > 100) {
+        toast.warning(`GPS accuracy is weak (${Math.round(pos.coords.accuracy)}m). Waiting for a cleaner fix.`, { id: 'trail-recorder-accuracy' });
+        return;
+      }
+      const point: LatLngTuple = [pos.coords.latitude, pos.coords.longitude];
+      setPath((prev) => {
+        if (prev.length === 0) {
+          toast.success('First GPS point saved.');
+          return [point];
+        }
+        const last = prev[prev.length - 1];
+        if (distanceMeters(last, point) < 1.5) return prev;
+        return [...prev, point];
+      });
+    };
+
+    const options = { enableHighAccuracy: true, maximumAge: 0, timeout: 30000 };
+    navigator.geolocation.getCurrentPosition(
+      acceptPosition,
       (err) => toast.error(`GPS Error: ${err.message}`),
-      { enableHighAccuracy: true, maximumAge: 3000, timeout: 15000 }
+      options
+    );
+    watchRef.current = navigator.geolocation.watchPosition(
+      acceptPosition,
+      (err) => toast.error(`GPS Error: ${err.message}`),
+      options
     );
   }, []);
 
@@ -81,7 +128,8 @@ export default function TrailRecorder({ existingTrails, onSaved }: TrailRecorder
       watchRef.current = null;
     }
     setMode('idle');
-    toast.success(`Recorded ${path.length} points`);
+    setRecordingStartedAt(null);
+    toast.success(`Recorded ${pathRef.current.length} points. Review the trail on the map before saving.`);
   }, [path.length]);
 
   const startDrawing = () => {
@@ -104,6 +152,7 @@ export default function TrailRecorder({ existingTrails, onSaved }: TrailRecorder
 
   const clearPath = () => {
     setPath([]);
+    pathRef.current = [];
     setEditingTrailId(null);
   };
 
@@ -164,6 +213,7 @@ export default function TrailRecorder({ existingTrails, onSaved }: TrailRecorder
       setElevation('');
       setStatus('active');
       setEditingTrailId(null);
+      pathRef.current = [];
       onSaved?.();
     } catch (err: any) {
       toast.error(`Failed to save: ${err.message}`);
@@ -171,6 +221,18 @@ export default function TrailRecorder({ existingTrails, onSaved }: TrailRecorder
       setSaving(false);
     }
   };
+
+  useEffect(() => {
+    if (mode !== 'recording') return;
+    const id = setInterval(() => setRecordingNow(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, [mode]);
+
+  const recordedDistanceM = path.reduce((total, point, index) => {
+    if (index === 0) return total;
+    return total + distanceMeters(path[index - 1], point);
+  }, 0);
+  const recordedDurationSec = recordingStartedAt ? Math.round((recordingNow - recordingStartedAt) / 1000) : 0;
 
   useEffect(() => {
     return () => {
@@ -266,7 +328,7 @@ export default function TrailRecorder({ existingTrails, onSaved }: TrailRecorder
 
         <div className="text-xs text-muted-foreground">
           {mode === 'drawing' && 'Click on the map below to add trail points.'}
-          {mode === 'recording' && `Recording... ${path.length} points captured`}
+          {mode === 'recording' && `Recording... ${path.length} points, ${(recordedDistanceM / 1000).toFixed(2)} km, ${Math.floor(recordedDurationSec / 60)}:${String(recordedDurationSec % 60).padStart(2, '0')}`}
           {mode === 'idle' && path.length > 0 && `${path.length} points ready. Enter details and save.`}
         </div>
 
@@ -278,6 +340,7 @@ export default function TrailRecorder({ existingTrails, onSaved }: TrailRecorder
               url="https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png"
             />
             <ClickDrawHandler active={mode === 'drawing'} onAddPoint={addPoint} />
+            <RecordingMapFollower path={path} active={mode === 'recording'} />
 
             {/* Show all existing trails as faint reference lines */}
             {existingTrails?.map((t) => {

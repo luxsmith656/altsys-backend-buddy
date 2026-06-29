@@ -4,12 +4,18 @@ import { motion } from 'framer-motion';
 
 interface MapCompassProps {
   userPos: [number, number] | null;
+  headingOverride?: number | null;
 }
 
-export default function MapCompass({ userPos }: MapCompassProps) {
+export default function MapCompass({ userPos, headingOverride }: MapCompassProps) {
   const [heading, setHeading] = useState<number | null>(null);
   const [supported, setSupported] = useState(true);
   const [permission, setPermission] = useState<'prompt' | 'granted' | 'denied'>('prompt');
+  const displayHeading = headingOverride ?? heading;
+
+  useEffect(() => {
+    if (headingOverride != null) setHeading(Math.round(headingOverride));
+  }, [headingOverride]);
 
   const requestPermission = useCallback(async () => {
     // iOS 13+ requires permission request
@@ -89,7 +95,7 @@ export default function MapCompass({ userPos }: MapCompassProps) {
         {/* Needle */}
         <motion.div
           className="absolute inset-0 flex items-center justify-center"
-          animate={{ rotate: heading != null ? -heading : 0 }}
+          animate={{ rotate: displayHeading != null ? -displayHeading : 0 }}
           transition={{ type: 'spring', stiffness: 100, damping: 15 }}
         >
           <svg width="40" height="40" viewBox="0 0 40 40">
@@ -115,7 +121,7 @@ export default function MapCompass({ userPos }: MapCompassProps) {
       <div className="text-center">
         {!supported ? (
           <div className="text-xs text-muted-foreground">Compass not available</div>
-        ) : permission === 'prompt' ? (
+        ) : permission === 'prompt' && displayHeading == null ? (
           <button
             onClick={requestPermission}
             className="text-xs text-primary hover:underline flex items-center gap-1"

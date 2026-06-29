@@ -61,6 +61,35 @@ function angleDelta(a: number, b: number) {
   return Math.abs(((a - b + 540) % 360) - 180);
 }
 
+type RecordedPoint = {
+  timestamp: number;
+  lat: number;
+  lon: number;
+  alt?: number | null;
+  speed?: number | null;
+  accuracy?: number | null;
+  heading?: number | null;
+};
+
+type StoredRecording = {
+  active: boolean;
+  startedAt: number;
+  updatedAt: number;
+  points: RecordedPoint[];
+};
+
+function normalizeHeading(value: number | null | undefined) {
+  if (value == null || !Number.isFinite(value)) return null;
+  return ((value % 360) + 360) % 360;
+}
+
+function deviceOrientationHeading(e: DeviceOrientationEvent) {
+  const iosHeading = (e as any).webkitCompassHeading;
+  if (Number.isFinite(iosHeading)) return normalizeHeading(Number(iosHeading));
+  if (e.alpha == null || !Number.isFinite(e.alpha)) return null;
+  return normalizeHeading(360 - e.alpha);
+}
+
 function trailDistanceKm(path: LatLngTuple[], start: number, end: number) {
   if (path.length < 2 || start === end) return 0;
   const step = start < end ? 1 : -1;
@@ -216,11 +245,19 @@ export default function MapPage() {
   const [recordedPoints, setRecordedPoints] = useState<RecordedPoint[]>([]);
   const [recordingPreviewReady, setRecordingPreviewReady] = useState(false);
   const recordWatchRef = useRef<number | null>(null);
+  const recordPollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const recordedPointsRef = useRef<RecordedPoint[]>([]);
+  const recordingActiveRef = useRef(false);
+  const recordSessionStartedAtRef = useRef<number | null>(null);
   const watchRef = useRef<number | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const currentHeadingRef = useRef<number | null>(null);
+  const compassPermissionRequestedRef = useRef(false);
+  const [recordingNow, setRecordingNow] = useState(Date.now());
   const { role, user } = useAuth();
   const { activeLocationId, locations } = useLocations();
   const isTrailRecorder = role === 'ranger' || role === 'guide' || role === 'admin' || role === 'super_admin';
+  const recordingStorageKey = useMemo(() => `altsys-route-recording:${user?.id ?? 'guest'}`, [user?.id]);
 
 
 
@@ -274,16 +311,6 @@ export default function MapPage() {
     return () => cancelAnimationFrame(frameId);
   }, [userPos]);
 
-  type RecordedPoint = {
-    timestamp: number;
-    lat: number;
-    lon: number;
-    alt?: number | null;
-    speed?: number | null;
-    accuracy?: number | null;
-    heading?: number | null;
-  };
-
   /**
    * Dynamic Kalman Filter for GPS smoothing.
    * Adjusts filtering based on speed and GPS accuracy for more intelligent path tracking.
@@ -334,6 +361,77 @@ export default function MapPage() {
   }, []);
 
   const speedTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    currentHeadingRef.current = currentHeading;
+  }, [currentHeading]);
+
+  useEffect(() => {
+    recordingActiveRef.current = isRecording;
+  }, [isRecording]);
+
+  const persistRecording = useCallback((points: RecordedPoint[], active = recordingActiveRef.current) => {
+    if (typeof window === 'undefined') return;
+    if (points.length === 0 && !active) {
+      localStorage.removeItem(recordingStorageKey);
+      return;
+    }
+    const now = Date.now();
+    const payload: StoredRecording = {
+      active,
+      startedAt: recordSessionStartedAtRef.current ?? points[0]?.timestamp ?? now,
+      updatedAt: now,
+      points,
+    };
+    localStorage.setItem(recordingStorageKey, JSON.stringify(payload));
+  }, [recordingStorageKey]);
+
+  const updateRecordedPoints = useCallback((updater: (prev: RecordedPoint[]) => RecordedPoint[]) => {
+    setRecordedPoints((prev) => {
+      const next = updater(prev);
+      recordedPointsRef.current = next;
+      persistRecording(next);
+      return next;
+    });
+  }, [persistRecording]);
+
+  const ensureCompassEnabled = useCallback(async () => {
+    if (typeof window === 'undefined' || !('DeviceOrientationEvent' in window)) return;
+    const OrientationEvent = (window as any).DeviceOrientationEvent;
+    if (typeof OrientationEvent?.requestPermission !== 'function') return;
+    if (compassPermissionRequestedRef.current) return;
+    compassPermissionRequestedRef.current = true;
+    try {
+      const result = await OrientationEvent.requestPermission();
+      if (result !== 'granted') {
+        toast.warning('Compass permission was not granted. GPS tracking still works, but the arrow may rotate only while moving.');
+      }
+    } catch {
+      compassPermissionRequestedRef.current = false;
+      toast.warning('Compass permission could not be opened. GPS tracking still works.');
+    }
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || !('DeviceOrientationEvent' in window)) return;
+    const handler = (e: DeviceOrientationEvent) => {
+      const heading = deviceOrientationHeading(e);
+      if (heading == null) return;
+      setCurrentHeading(Math.round(heading));
+    };
+    window.addEventListener('deviceorientationabsolute', handler as EventListener, true);
+    window.addEventListener('deviceorientation', handler, true);
+    return () => {
+      window.removeEventListener('deviceorientationabsolute', handler as EventListener, true);
+      window.removeEventListener('deviceorientation', handler, true);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!isRecording) return;
+    const id = setInterval(() => setRecordingNow(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, [isRecording]);
 
   useEffect(() => {
     let active = true;
@@ -400,6 +498,7 @@ export default function MapPage() {
   }, [mapInstance]);
 
   const startTracking = useCallback(async () => {
+    void ensureCompassEnabled();
     setTracking(true);
     if (user && !trackerRef.current) {
       let { data: activeSession, error: activeSessionError } = await supabase
@@ -492,7 +591,7 @@ export default function MapPage() {
       });
       void tr.start().catch((e) => console.warn('HikeTracker start failed', e));
     }
-  }, [activeLocationId, locations, role, user]);
+  }, [activeLocationId, ensureCompassEnabled, locations, role, user]);
 
   // Weather-aware routing: if 'avoid', recommend an easier trail.
   const lastAdviceRef = useRef<string | null>(null);
@@ -549,14 +648,14 @@ export default function MapPage() {
         lon: pos.coords.longitude,
         accuracy: pos.coords.accuracy,
         speed: pos.coords.speed,
-        heading: pos.coords.heading,
+        heading: normalizeHeading(pos.coords.heading ?? currentHeadingRef.current),
         alt: pos.coords.altitude,
       };
       setRawGpsPoints(prev => [...prev, raw]);
 
       const rawSpeed = pos.coords.speed != null && pos.coords.speed > 0.3 ? pos.coords.speed * 3.6 : 0;
-      const heading = pos.coords.heading;
-      if (heading != null && Number.isFinite(heading)) setCurrentHeading(heading);
+      const heading = normalizeHeading(pos.coords.heading ?? currentHeadingRef.current);
+      if (heading != null) setCurrentHeading(heading);
       
       const filtered = applyKalmanFilter(raw, rawSpeed);
       const newPos: [number, number] = [filtered.lat, filtered.lon];
@@ -729,25 +828,43 @@ export default function MapPage() {
     setMobileControlsOpen(false);
   }, [selectedTrail]);
 
-  const startRecording = useCallback(() => {
+  const startRecording = useCallback((opts?: { resumeExisting?: boolean; recovered?: boolean }) => {
     if (!navigator.geolocation) {
       toast.error('Geolocation not supported');
       return;
     }
-    setRecordedPoints([]);
+    void ensureCompassEnabled();
+    const existingPoints = recordedPointsRef.current;
+    const resumeExisting = opts?.resumeExisting || (existingPoints.length > 1 && window.confirm('Continue the previous recording and connect new points from the last saved position? Press Cancel to start a new trail.'));
+    if (!opts?.recovered) {
+      const ok = window.confirm(resumeExisting
+        ? 'Continue recording this trail? It will keep saving offline until you tap Stop Recording.'
+        : 'Start recording this trail now? It will keep saving offline until you tap Stop Recording.');
+      if (!ok) return;
+    }
+    if (!resumeExisting) {
+      recordedPointsRef.current = [];
+      setRecordedPoints([]);
+    }
     setRecordingPreviewReady(false);
-    kalmanStateRef.current = null; // Reset Kalman filter
+    recordSessionStartedAtRef.current = resumeExisting
+      ? recordSessionStartedAtRef.current ?? existingPoints[0]?.timestamp ?? Date.now()
+      : Date.now();
+    recordingActiveRef.current = true;
     setIsRecording(true);
-    toast.info('Locating you. Keep the phone outside or near open sky for best trail accuracy.');
+    setRecordingNow(Date.now());
+    persistRecording(resumeExisting ? recordedPointsRef.current : [], true);
+    toast.info(opts?.recovered
+      ? 'Recovered recording. GPS is reconnecting and will continue the trail.'
+      : 'Locating you. Keep the phone outside or near open sky for best trail accuracy.');
 
     const handleNewRecordPoint = (pos: GeolocationPosition) => {
-      // Step 1: GPS Signal Quality Filter
       const accuracy = pos.coords.accuracy;
       const signal: typeof gpsSignal = accuracy <= 12 ? 'Strong' : accuracy <= 50 ? 'Medium' : 'Weak';
       setGpsSignal(signal);
 
       const rawSpeed = pos.coords.speed != null && pos.coords.speed > 0.3 ? pos.coords.speed * 3.6 : 0;
-      const isPoorAccuracy = accuracy > 75;
+      const isPoorAccuracy = accuracy > 100;
       
       const raw: RecordedPoint = {
         timestamp: Date.now(),
@@ -756,36 +873,51 @@ export default function MapPage() {
         alt: pos.coords.altitude,
         speed: pos.coords.speed,
         accuracy: pos.coords.accuracy,
-        heading: pos.coords.heading,
+        heading: normalizeHeading(pos.coords.heading ?? currentHeadingRef.current),
       };
+      if (raw.heading != null) setCurrentHeading(raw.heading);
 
       setUserPos([raw.lat, raw.lon]);
       setDisplayPos([raw.lat, raw.lon]);
       if (isPoorAccuracy) {
-        setRecordedPoints((prev) => (prev.length === 0 ? [raw] : prev));
+        if (recordedPointsRef.current.length === 0) {
+          updateRecordedPoints(() => [raw]);
+        }
+        toast.warning(`GPS accuracy is weak (${Math.round(accuracy)}m). Recording is waiting for a cleaner fix.`, { id: 'recording-accuracy' });
         return;
       }
 
-      const filtered = applyKalmanFilter(raw, rawSpeed);
-      setUserPos([filtered.lat, filtered.lon]);
-      setDisplayPos([filtered.lat, filtered.lon]);
-      if (mapInstance) mapInstance.setView([filtered.lat, filtered.lon], Math.max(mapInstance.getZoom(), 17));
+      const accepted = raw;
+      setUserPos([accepted.lat, accepted.lon]);
+      setDisplayPos([accepted.lat, accepted.lon]);
+      if (mapInstance) mapInstance.setView([accepted.lat, accepted.lon], Math.max(mapInstance.getZoom(), 17));
 
-      setRecordedPoints((prev) => {
-        if (prev.length === 0) return [filtered];
+      updateRecordedPoints((prev) => {
+        if (prev.length === 0) {
+          toast.success('Trail recording started. First GPS point saved offline.', { id: 'recording-started' });
+          return [accepted];
+        }
 
         const last = prev[prev.length - 1];
-        const dist = haversineDistance(last.lat, last.lon, filtered.lat, filtered.lon) * 1000;
-        const dt = filtered.timestamp - last.timestamp;
+        const dist = haversineDistance(last.lat, last.lon, accepted.lat, accepted.lon) * 1000;
+        const dt = accepted.timestamp - last.timestamp;
+        const dtSeconds = Math.max(1, dt / 1000);
+        const impliedSpeed = dist / dtSeconds;
+        const obviousJump = dist > 120 && dt < 120_000 && impliedSpeed > 8 && accuracy > 35;
 
-        if (dist >= 2.5 || (dist >= 1 && dt >= 10_000) || dt >= 30_000) {
-          return [...prev, filtered];
+        if (!obviousJump && (dist >= 1.5 || (dist >= 0.5 && dt >= 10_000) || dt >= 60_000)) {
+          return [...prev, accepted];
         }
 
         // Update speed for real-time display even if stationary
-        if (filtered.speed != null) {
+        if (accepted.speed != null || accepted.heading != null) {
           const updated = [...prev];
-          updated[updated.length - 1] = { ...updated[updated.length - 1], speed: rawSpeed < 0.5 ? 0 : filtered.speed };
+          updated[updated.length - 1] = {
+            ...updated[updated.length - 1],
+            speed: rawSpeed > 0.5 ? accepted.speed : 0,
+            heading: accepted.heading ?? updated[updated.length - 1].heading,
+            accuracy: accepted.accuracy,
+          };
           return updated;
         }
 
@@ -806,33 +938,36 @@ export default function MapPage() {
     navigator.geolocation.getCurrentPosition(handleNewRecordPoint, handleRecordError, options);
     recordWatchRef.current = navigator.geolocation.watchPosition(handleNewRecordPoint, handleRecordError, options);
 
-    // High-frequency polling heartbeat for recording (every 1s)
-    const pollingInterval = setInterval(() => {
+    if (recordPollingRef.current) clearInterval(recordPollingRef.current);
+    recordPollingRef.current = setInterval(() => {
       navigator.geolocation.getCurrentPosition(handleNewRecordPoint, () => {}, options);
-    }, 1000);
-
-    // Store polling interval in a ref
-    (recordWatchRef as any).polling = pollingInterval;
-  }, [applyKalmanFilter, mapInstance]);
+    }, 3000);
+  }, [ensureCompassEnabled, mapInstance, persistRecording, updateRecordedPoints]);
 
   const stopRecording = useCallback(() => {
+    const points = recordedPointsRef.current;
+    recordingActiveRef.current = false;
     setIsRecording(false);
     setGpsSignal('None');
     if (recordWatchRef.current != null) {
       navigator.geolocation.clearWatch(recordWatchRef.current);
-      if ((recordWatchRef as any).polling) clearInterval((recordWatchRef as any).polling);
       recordWatchRef.current = null;
     }
-    setRecordingPreviewReady(recordedPoints.length > 1);
-    if (mapInstance && recordedPoints.length > 1) {
-      mapInstance.fitBounds(L.latLngBounds(recordedPoints.map((p) => [p.lat, p.lon] as [number, number])), { padding: [40, 40] });
+    if (recordPollingRef.current) {
+      clearInterval(recordPollingRef.current);
+      recordPollingRef.current = null;
     }
-    if (recordedPoints.length > 1) {
+    persistRecording(points, false);
+    setRecordingPreviewReady(points.length > 1);
+    if (mapInstance && points.length > 1) {
+      mapInstance.fitBounds(L.latLngBounds(points.map((p) => [p.lat, p.lon] as [number, number])), { padding: [40, 40] });
+    }
+    if (points.length > 1) {
       let previewMeters = 0;
-      for (let i = 1; i < recordedPoints.length; i++) {
-        previewMeters += haversineDistance(recordedPoints[i - 1].lat, recordedPoints[i - 1].lon, recordedPoints[i].lat, recordedPoints[i].lon) * 1000;
+      for (let i = 1; i < points.length; i++) {
+        previewMeters += haversineDistance(points[i - 1].lat, points[i - 1].lon, points[i].lat, points[i].lon) * 1000;
       }
-      const previewDurationSec = Math.round((recordedPoints[recordedPoints.length - 1].timestamp - recordedPoints[0].timestamp) / 1000);
+      const previewDurationSec = Math.round(((points[points.length - 1]?.timestamp ?? Date.now()) - points[0].timestamp) / 1000);
       const distanceLabel = previewMeters < 1000 ? `${previewMeters.toFixed(0)} m` : `${(previewMeters / 1000).toFixed(2)} km`;
       const minutes = Math.floor(previewDurationSec / 60);
       const seconds = previewDurationSec % 60;
@@ -840,7 +975,7 @@ export default function MapPage() {
     } else {
       toast.warning('No walking trail recorded yet. Move outdoors and try again.');
     }
-  }, [mapInstance, recordedPoints]);
+  }, [mapInstance, persistRecording]);
 
   useEffect(() => {
     return () => {
@@ -848,6 +983,10 @@ export default function MapPage() {
       trackerUnsubRef.current = null;
       if (recordWatchRef.current != null) {
         navigator.geolocation.clearWatch(recordWatchRef.current);
+      }
+      if (recordPollingRef.current) {
+        clearInterval(recordPollingRef.current);
+        recordPollingRef.current = null;
       }
     };
   }, []);
@@ -873,8 +1012,40 @@ export default function MapPage() {
     }
   };
 
+  useEffect(() => {
+    if (!isTrailRecorder || typeof window === 'undefined') return;
+    const raw = localStorage.getItem(recordingStorageKey);
+    if (!raw) return;
+    try {
+      const stored = JSON.parse(raw) as StoredRecording;
+      const points = Array.isArray(stored.points)
+        ? stored.points.filter((p) => Number.isFinite(p.lat) && Number.isFinite(p.lon) && Number.isFinite(p.timestamp))
+        : [];
+      if (points.length === 0) return;
+      recordSessionStartedAtRef.current = stored.startedAt ?? points[0].timestamp;
+      recordedPointsRef.current = points;
+      setRecordedPoints(points);
+      setRecordingPreviewReady(points.length > 1);
+      const last = points[points.length - 1];
+      setUserPos([last.lat, last.lon]);
+      setDisplayPos([last.lat, last.lon]);
+      setCurrentHeading(normalizeHeading(last.heading ?? currentHeadingRef.current));
+      if (mapInstance && points.length > 1) {
+        mapInstance.fitBounds(L.latLngBounds(points.map((p) => [p.lat, p.lon] as [number, number])), { padding: [40, 40] });
+      }
+      if (stored.active && !recordingActiveRef.current) {
+        window.setTimeout(() => startRecording({ resumeExisting: true, recovered: true }), 250);
+      } else {
+        toast.info('Recovered a stopped trail preview. Review it on the map or save it as a route draft.', { id: 'recording-recovered' });
+      }
+    } catch {
+      localStorage.removeItem(recordingStorageKey);
+    }
+  }, [isTrailRecorder, mapInstance, recordingStorageKey, startRecording]);
+
   const saveRecordedRouteDraft = async () => {
-    if (!user || recordedPoints.length < 2) {
+    const points = recordedPointsRef.current;
+    if (!user || points.length < 2) {
       toast.error('Record at least two GPS points before saving a route.');
       return;
     }
@@ -883,7 +1054,7 @@ export default function MapPage() {
       toast.error('No trail location is available for this route.');
       return;
     }
-    const path = recordedPoints.map((p) => ({ lat: p.lat, lng: p.lon }));
+    const path = points.map((p) => ({ lat: p.lat, lng: p.lon }));
     const baseRoute = {
       location_id: locationId,
       name: `${currentTrail.name} recorded ${new Date().toLocaleDateString('en-PH')}`,
@@ -910,6 +1081,7 @@ export default function MapPage() {
       return;
     }
     toast.success('Route draft saved for admin review.');
+    localStorage.removeItem(recordingStorageKey);
   };
 
   const recordDistanceMeters = useMemo(() => {
@@ -927,11 +1099,11 @@ export default function MapPage() {
   }, [recordedPoints]);
 
   const recordDurationSec = useMemo(() => {
-    if (recordedPoints.length < 2) return 0;
+    if (recordedPoints.length === 0) return 0;
     const start = recordedPoints[0].timestamp;
-    const end = recordedPoints[recordedPoints.length - 1].timestamp;
+    const end = isRecording ? recordingNow : recordedPoints[recordedPoints.length - 1].timestamp;
     return Math.round((end - start) / 1000);
-  }, [recordedPoints]);
+  }, [isRecording, recordedPoints, recordingNow]);
 
   const recordSpeedKmh = useMemo(() => {
     if (recordedPoints.length === 0) return 0;
@@ -1173,7 +1345,7 @@ export default function MapPage() {
 
         {/* Compass */}
         <div className="absolute top-24 right-4 md:top-4 md:right-16 z-[1000] w-24">
-          <MapCompass userPos={userPos} />
+          <MapCompass userPos={userPos} headingOverride={currentHeading} />
         </div>
 
         {/* SOS compact button — bottom-left above mobile controls */}
