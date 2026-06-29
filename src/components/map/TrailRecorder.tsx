@@ -392,7 +392,7 @@ export default function TrailRecorder({ existingTrails, onSaved }: TrailRecorder
           error = fallback.error;
         }
         if (error) throw error;
-        savedTrailId = data?.id ?? null;
+        savedTrailId = (data as { id?: string } | null)?.id ?? null;
         toast.success('Trail saved successfully!');
       }
 
