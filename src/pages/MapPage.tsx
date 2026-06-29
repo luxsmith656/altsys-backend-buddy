@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { MapContainer, TileLayer, Polyline, Polygon, Marker, Popup, Circle, useMap } from 'react-leaflet';
-import { useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import L from 'leaflet';
 import { MT_KALISUNGAN_CENTER, DEFAULT_ZOOM, TRAILS, POI, ZONES, haversineDistance, distanceToTrail } from '@/lib/map-data';
 import { Button } from '@/components/ui/button';
@@ -74,6 +74,7 @@ type RecordedPoint = {
   speed?: number | null;
   accuracy?: number | null;
   heading?: number | null;
+  inferred?: boolean;
 };
 
 type StoredRecording = {
@@ -106,7 +107,67 @@ function gpsSignalFromAccuracy(accuracy: number | null | undefined): 'Strong' | 
   return 'Weak';
 }
 
-function cleanRecordingPoint(prev: RecordedPoint[], raw: RecordedPoint): {
+function destinationPoint(start: RecordedPoint, bearing: number, meters: number): RecordedPoint {
+  const radius = 6371000;
+  const angularDistance = meters / radius;
+  const bearingRad = bearing * Math.PI / 180;
+  const lat1 = start.lat * Math.PI / 180;
+  const lon1 = start.lon * Math.PI / 180;
+  const lat2 = Math.asin(
+    Math.sin(lat1) * Math.cos(angularDistance) +
+    Math.cos(lat1) * Math.sin(angularDistance) * Math.cos(bearingRad)
+  );
+  const lon2 = lon1 + Math.atan2(
+    Math.sin(bearingRad) * Math.sin(angularDistance) * Math.cos(lat1),
+    Math.cos(angularDistance) - Math.sin(lat1) * Math.sin(lat2)
+  );
+  return {
+    ...start,
+    lat: lat2 * 180 / Math.PI,
+    lon: ((lon2 * 180 / Math.PI + 540) % 360) - 180,
+  };
+}
+
+function recentWalkingSpeedMps(points: RecordedPoint[]) {
+  if (points.length < 2) return 0.95;
+  const recent = points.slice(-4);
+  const first = recent[0];
+  const last = recent[recent.length - 1];
+  const seconds = Math.max(1, (last.timestamp - first.timestamp) / 1000);
+  const meters = pointDistanceMeters(first, last);
+  const speed = meters / seconds;
+  if (!Number.isFinite(speed) || speed <= 0) return 0.95;
+  return Math.max(0.55, Math.min(1.45, speed));
+}
+
+function predictedRecordingPoint(prev: RecordedPoint[], raw: RecordedPoint, opts: {
+  heading: number | null;
+  moving: boolean;
+  consecutivePredicted: number;
+}) {
+  const last = prev[prev.length - 1];
+  if (!last || opts.heading == null || !opts.moving || opts.consecutivePredicted >= 3) return null;
+  const dtSec = Math.max(0, (raw.timestamp - last.timestamp) / 1000);
+  if (dtSec < 2.5 || dtSec > 18) return null;
+  const rawSpeed = raw.speed != null && raw.speed > 0 ? raw.speed : recentWalkingSpeedMps(prev);
+  const walkSpeed = Math.max(0.45, Math.min(1.55, rawSpeed));
+  const meters = Math.min(18, walkSpeed * dtSec);
+  if (meters < 1.4) return null;
+  return {
+    ...destinationPoint(last, opts.heading, meters),
+    timestamp: raw.timestamp,
+    speed: walkSpeed,
+    accuracy: Math.max(25, Math.min(raw.accuracy ?? 50, 65)),
+    heading: opts.heading,
+    inferred: true,
+  };
+}
+
+function cleanRecordingPoint(prev: RecordedPoint[], raw: RecordedPoint, opts: {
+  heading: number | null;
+  moving: boolean;
+  consecutivePredicted: number;
+}): {
   points: RecordedPoint[];
   displayPoint?: RecordedPoint;
   appended: boolean;
@@ -127,10 +188,18 @@ function cleanRecordingPoint(prev: RecordedPoint[], raw: RecordedPoint): {
   const impliedSpeedMps = distanceM / dtSec;
   const reportedSpeedMps = raw.speed ?? 0;
 
-  if (accuracy > 85) return { points: prev, reason: 'weak', appended: false };
+  if (accuracy > 85) {
+    const predicted = predictedRecordingPoint(prev, raw, opts);
+    return predicted
+      ? { points: [...prev, predicted], displayPoint: predicted, appended: true, reason: 'weak' }
+      : { points: prev, reason: 'weak', appended: false };
+  }
   if (dtMs < 800) return { points: prev, reason: 'noise', appended: false };
   if (dtMs < 120_000 && accuracy > 25 && (distanceM > 90 || impliedSpeedMps > Math.max(4.5, reportedSpeedMps + 2.5))) {
-    return { points: prev, reason: 'jump', appended: false };
+    const predicted = predictedRecordingPoint(prev, raw, opts);
+    return predicted
+      ? { points: [...prev, predicted], displayPoint: predicted, appended: true, reason: 'jump' }
+      : { points: prev, reason: 'jump', appended: false };
   }
 
   if (distanceM < noiseRadiusM && dtMs < 45_000) {
@@ -306,6 +375,7 @@ export default function MapPage() {
   const [userTrailProgress, setUserTrailProgress] = useState<number | undefined>(undefined);
   const [mobileControlsOpen, setMobileControlsOpen] = useState(false);
   const [mobileViewportBottomInset, setMobileViewportBottomInset] = useState(0);
+  const [mobileViewportHeight, setMobileViewportHeight] = useState<number | null>(null);
   const [legendOpen, setLegendOpen] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
   const [isGpsTestMode, setIsGpsTestMode] = useState(false);
@@ -320,13 +390,17 @@ export default function MapPage() {
   const recordedPointsRef = useRef<RecordedPoint[]>([]);
   const recordingActiveRef = useRef(false);
   const recordSessionStartedAtRef = useRef<number | null>(null);
+  const recordPredictedCountRef = useRef(0);
   const watchRef = useRef<number | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const currentHeadingRef = useRef<number | null>(null);
   const compassPermissionRequestedRef = useRef(false);
+  const motionPermissionRequestedRef = useRef(false);
+  const motionStateRef = useRef({ moving: false, score: 0, lastMotionAt: 0 });
   const [recordingNow, setRecordingNow] = useState(Date.now());
   const { role, user } = useAuth();
   const { activeLocationId, locations } = useLocations();
+  const navigate = useNavigate();
   const isTrailRecorder = role === 'ranger' || role === 'guide' || role === 'admin' || role === 'super_admin';
   const recordingStorageKey = useMemo(() => `altsys-route-recording:${user?.id ?? 'guest'}`, [user?.id]);
 
@@ -439,10 +513,12 @@ export default function MapPage() {
     const updateInset = () => {
       if (!viewport) {
         setMobileViewportBottomInset(0);
+        setMobileViewportHeight(window.innerHeight);
         return;
       }
       const bottomInset = Math.max(0, window.innerHeight - viewport.height - viewport.offsetTop);
       setMobileViewportBottomInset(Math.round(bottomInset));
+      setMobileViewportHeight(Math.round(viewport.height));
     };
     updateInset();
     viewport?.addEventListener('resize', updateInset);
@@ -505,6 +581,19 @@ export default function MapPage() {
     }
   }, []);
 
+  const ensureMotionEnabled = useCallback(async () => {
+    if (typeof window === 'undefined' || !('DeviceMotionEvent' in window)) return;
+    const MotionEvent = (window as any).DeviceMotionEvent;
+    if (typeof MotionEvent?.requestPermission !== 'function') return;
+    if (motionPermissionRequestedRef.current) return;
+    motionPermissionRequestedRef.current = true;
+    try {
+      await MotionEvent.requestPermission();
+    } catch {
+      motionPermissionRequestedRef.current = false;
+    }
+  }, []);
+
   useEffect(() => {
     if (typeof window === 'undefined' || !('DeviceOrientationEvent' in window)) return;
     const handler = (e: DeviceOrientationEvent) => {
@@ -521,6 +610,25 @@ export default function MapPage() {
   }, []);
 
   useEffect(() => {
+    if (typeof window === 'undefined' || !('DeviceMotionEvent' in window)) return;
+    const handler = (e: DeviceMotionEvent) => {
+      const a = e.acceleration;
+      const values = [a?.x, a?.y, a?.z].filter((v): v is number => typeof v === 'number' && Number.isFinite(v));
+      if (values.length === 0) return;
+      const magnitude = Math.sqrt(values.reduce((sum, v) => sum + v * v, 0));
+      const previous = motionStateRef.current.score;
+      const score = previous * 0.82 + Math.min(3, magnitude) * 0.18;
+      motionStateRef.current = {
+        score,
+        moving: score > 0.18,
+        lastMotionAt: Date.now(),
+      };
+    };
+    window.addEventListener('devicemotion', handler);
+    return () => window.removeEventListener('devicemotion', handler);
+  }, []);
+
+  useEffect(() => {
     if (!isRecording) return;
     const id = setInterval(() => setRecordingNow(Date.now()), 1000);
     return () => clearInterval(id);
@@ -531,11 +639,22 @@ export default function MapPage() {
     void (async () => {
       let q: any = supabase
         .from('trail_zones' as any)
-        .select('id,location_id,name,difficulty,elevation_meters,coordinates_json,status')
+        .select('id,location_id,name,difficulty,elevation_meters,coordinates_json,status,is_official,review_status')
         .eq('status', 'active')
+        .eq('is_official', true)
         .order('created_at', { ascending: true });
       if (activeLocationId) q = q.eq('location_id', activeLocationId);
-      const { data } = await q;
+      let { data, error } = await q;
+      if (error && isSchemaCacheError(error)) {
+        let fallback: any = supabase
+          .from('trail_zones' as any)
+          .select('id,location_id,name,difficulty,elevation_meters,coordinates_json,status')
+          .eq('status', 'active')
+          .order('created_at', { ascending: true });
+        if (activeLocationId) fallback = fallback.eq('location_id', activeLocationId);
+        const res = await fallback;
+        data = res.data;
+      }
       if (!active) return;
       const loaded = ((data as any[]) ?? [])
         .map((trail, index) => {
@@ -941,6 +1060,7 @@ export default function MapPage() {
       return;
     }
     void ensureCompassEnabled();
+    void ensureMotionEnabled();
     const existingPoints = recordedPointsRef.current;
     const resumeExisting = opts?.resumeExisting || (existingPoints.length > 1 && window.confirm('Continue the previous recording and connect new points from the last saved position? Press Cancel to start a new trail.'));
     if (!opts?.recovered) {
@@ -952,6 +1072,7 @@ export default function MapPage() {
     if (!resumeExisting) {
       recordedPointsRef.current = [];
       setRecordedPoints([]);
+      recordPredictedCountRef.current = 0;
     }
     setRecordingPreviewReady(false);
     recordSessionStartedAtRef.current = resumeExisting
@@ -981,21 +1102,31 @@ export default function MapPage() {
       };
       if (raw.heading != null) setCurrentHeading(raw.heading);
 
-      const cleaned = cleanRecordingPoint(recordedPointsRef.current, raw);
+      const motionState = motionStateRef.current;
+      const motionFresh = Date.now() - motionState.lastMotionAt < 2500;
+      const hasRecentPace = recordedPointsRef.current.length > 1 && recentWalkingSpeedMps(recordedPointsRef.current) > 0.45;
+      const inferredMoving = motionFresh ? motionState.moving : (raw.speed ?? 0) > 0.35 || hasRecentPace;
+      const cleaned = cleanRecordingPoint(recordedPointsRef.current, raw, {
+        heading: normalizeHeading(raw.heading ?? currentHeadingRef.current),
+        moving: inferredMoving,
+        consecutivePredicted: recordPredictedCountRef.current,
+      });
       if (cleaned.reason === 'waiting') {
         toast.warning(`Waiting for a cleaner GPS lock (${Math.round(accuracy)}m accuracy). Step into open sky if possible.`, { id: 'recording-accuracy' });
         return;
       }
-      if (cleaned.reason === 'weak') {
+      if (cleaned.reason === 'weak' && !cleaned.appended) {
         toast.warning(`Weak GPS ignored (${Math.round(accuracy)}m). Trail recording is still running offline.`, { id: 'recording-accuracy' });
         return;
       }
-      if (cleaned.reason === 'jump') {
+      if (cleaned.reason === 'jump' && !cleaned.appended) {
         console.warn(`GPS jump rejected while recording: ${Math.round(accuracy)}m accuracy`);
         return;
       }
 
       updateRecordedPoints(() => cleaned.points);
+      const lastClean = cleaned.points[cleaned.points.length - 1];
+      recordPredictedCountRef.current = lastClean?.inferred ? recordPredictedCountRef.current + 1 : 0;
       if (cleaned.appended && cleaned.points.length === 1) {
         toast.success('Trail recording started. First clean GPS point saved offline.', { id: 'recording-started' });
       }
@@ -1024,7 +1155,7 @@ export default function MapPage() {
     recordPollingRef.current = setInterval(() => {
       navigator.geolocation.getCurrentPosition(handleNewRecordPoint, () => {}, options);
     }, 3000);
-  }, [ensureCompassEnabled, mapInstance, persistRecording, updateRecordedPoints]);
+  }, [ensureCompassEnabled, ensureMotionEnabled, mapInstance, persistRecording, updateRecordedPoints]);
 
   const stopRecording = useCallback(() => {
     const points = recordedPointsRef.current;
@@ -1160,22 +1291,28 @@ export default function MapPage() {
       status: 'draft',
       max_capacity: 50,
     };
-    let { error } = await supabase.from('trail_zones' as any).insert({
+    let { data: savedDraft, error } = await supabase.from('trail_zones' as any).insert({
       ...baseRoute,
       recorded_by: user.id,
       source: 'gps_recording',
       review_status: 'pending',
       is_official: false,
-    });
+    }).select('id').single();
     if (error && isSchemaCacheError(error)) {
-      const fallback = await supabase.from('trail_zones' as any).insert(baseRoute);
+      const fallback = await supabase.from('trail_zones' as any).insert(baseRoute).select('id').single();
       error = fallback.error;
+      savedDraft = fallback.data;
     }
     if (error) {
       toast.error(`Failed to save route draft: ${error.message}`);
       return;
     }
-    toast.success('Route draft saved. Publish it from Admin Dashboard > Trail Route Editor > Official Active.');
+    toast.success('Route draft saved. Open the route editor to publish or test it.', {
+      action: {
+        label: 'Open editor',
+        onClick: () => navigate(`/admin?tab=overview&routeDraft=${savedDraft?.id ?? 'latest'}#trail-recorder`),
+      },
+    });
     localStorage.removeItem(recordingStorageKey);
     recordedPointsRef.current = [];
     setRecordedPoints([]);
@@ -1240,7 +1377,10 @@ export default function MapPage() {
   const mobileControlsBottom = `calc(env(safe-area-inset-bottom) + ${mobileViewportBottomInset}px + 0.75rem)`;
 
   return (
-    <div className={`h-[100dvh] pt-16 flex flex-col ${mobileControlsOpen ? 'map-mobile-controls-open' : ''}`}>
+    <div
+      className={`h-[100dvh] pt-16 flex flex-col ${mobileControlsOpen ? 'map-mobile-controls-open' : ''}`}
+      style={mobileViewportHeight ? { height: `${mobileViewportHeight}px` } : undefined}
+    >
       {/* Desktop/tablet top bar */}
       <div className="hidden md:block">
         <TrailStats

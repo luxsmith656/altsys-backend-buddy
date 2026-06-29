@@ -1,4 +1,5 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useLocations } from '@/hooks/useLocations';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -126,6 +127,9 @@ const ANNOUNCEMENT_TYPE_STYLES: Record<string, string> = {
 };
 
 export default function AdminDashboard() {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const routeEditorRef = useRef<HTMLDivElement | null>(null);
+  const [activeTab, setActiveTab] = useState(searchParams.get('tab') || 'requests');
   /* ── Overview state ── */
   const [stats, setStats] = useState({ totalBookings: 0, activeHikers: 0, totalZones: 5, todayVisitors: 0 });
   const [bookings, setBookings] = useState<any[]>([]);
@@ -149,6 +153,19 @@ export default function AdminDashboard() {
   const [guides, setGuides] = useState<UIGuide[]>([]);
   const [chatBooking, setChatBooking] = useState<{ id: string; date: string } | null>(null);
   const [reassignFor, setReassignFor] = useState<{ bookingId: string; guideName: string | null; guideId: string | null; locationId: string | null } | null>(null);
+
+  useEffect(() => {
+    const tab = searchParams.get('tab');
+    if (tab && tab !== activeTab) setActiveTab(tab);
+  }, [activeTab, searchParams]);
+
+  useEffect(() => {
+    if (activeTab !== 'overview' || !searchParams.get('routeDraft')) return;
+    const id = window.setTimeout(() => {
+      routeEditorRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 250);
+    return () => window.clearTimeout(id);
+  }, [activeTab, searchParams]);
 
   /* ── All bookings (used by Bookings tab + Payments tab) ── */
   const [allTabBookings, setAllTabBookings] = useState<any[]>([]);
@@ -1078,7 +1095,17 @@ export default function AdminDashboard() {
           </p>
         </motion.div>
 
-        <Tabs defaultValue="requests" className="space-y-6">
+        <Tabs
+          value={activeTab}
+          onValueChange={(value) => {
+            setActiveTab(value);
+            const next = new URLSearchParams(searchParams);
+            next.set('tab', value);
+            if (value !== 'overview') next.delete('routeDraft');
+            setSearchParams(next, { replace: true });
+          }}
+          className="space-y-6"
+        >
           <TabsList className="glass-card gap-1 h-auto flex-wrap p-1">
             <TabsTrigger value="requests" className="gap-1.5 data-[state=active]:bg-primary/20 data-[state=active]:text-primary relative">
               <ClipboardList className="h-3.5 w-3.5" /> Bookings
@@ -1543,19 +1570,21 @@ export default function AdminDashboard() {
               </Card>
             </div>
 
-            <TrailRecorder
-              existingTrails={zones.map((z: any) => ({
-                id: z.id,
-                name: z.name,
-                coordinates_json: z.coordinates_json,
-                status: z.status,
-                difficulty: z.difficulty,
-                elevation_meters: z.elevation_meters,
-                review_status: z.review_status,
-                source: z.source,
-              }))}
-              onSaved={loadData}
-            />
+            <div id="trail-recorder" ref={routeEditorRef} className="scroll-mt-24">
+              <TrailRecorder
+                existingTrails={zones.map((z: any) => ({
+                  id: z.id,
+                  name: z.name,
+                  coordinates_json: z.coordinates_json,
+                  status: z.status,
+                  difficulty: z.difficulty,
+                  elevation_meters: z.elevation_meters,
+                  review_status: z.review_status,
+                  source: z.source,
+                }))}
+                onSaved={loadData}
+              />
+            </div>
 
             <Card className="glass-card">
               <CardHeader><CardTitle className="text-lg flex items-center gap-2"><MapPin className="h-5 w-5 text-primary" /> Zone Management</CardTitle></CardHeader>
