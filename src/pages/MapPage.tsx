@@ -523,6 +523,11 @@ export default function MapPage() {
   const startTracking = useCallback(async () => {
     void ensureCompassEnabled();
     setTracking(true);
+    if (trackerRef.current) {
+      void trackerRef.current.resume().catch((e) => console.warn('HikeTracker resume failed', e));
+      toast.success('Route tracking resumed from your last saved position.');
+      return;
+    }
     if (user && !trackerRef.current) {
       let { data: activeSession, error: activeSessionError } = await supabase
         .from('hiker_sessions' as any)
@@ -771,10 +776,9 @@ export default function MapPage() {
     setGpsSignal('None');
     const tr = trackerRef.current;
     if (tr) {
-      trackerUnsubRef.current?.();
-      trackerUnsubRef.current = null;
-      trackerRef.current = null;
-      void tr.stop().then((sess) => setSummarySession(sess)).catch((e) => console.warn('HikeTracker stop failed', e));
+      void tr.pause()
+        .then(() => toast.info('Route paused. Tap Start to continue from here.'))
+        .catch((e) => console.warn('HikeTracker pause failed', e));
     }
   };
 
@@ -837,6 +841,16 @@ export default function MapPage() {
 
   const currentTrail = availableTrails[selectedTrail] ?? availableTrails[0];
   const currentProgressIndex = userTrailProgress ?? 0;
+  const visibleTrailPath = useMemo(() => {
+    if (!tracking || userTrailProgress === undefined) return currentTrail.path;
+    const idx = Math.max(0, Math.min(currentTrail.path.length - 1, userTrailProgress));
+    const remaining = trackingPhase === 'descent'
+      ? currentTrail.path.slice(0, idx + 1).reverse()
+      : currentTrail.path.slice(idx);
+    const livePos = displayPos || userPos;
+    if (!livePos || remaining.length === 0) return remaining.length > 1 ? remaining : currentTrail.path;
+    return [livePos, ...remaining] as LatLngTuple[];
+  }, [currentTrail.path, displayPos, tracking, trackingPhase, userPos, userTrailProgress]);
   const remainingDistanceKm = trackingPhase === 'descent'
     ? trailDistanceKm(currentTrail.path, currentProgressIndex, 0)
     : trailDistanceKm(currentTrail.path, currentProgressIndex, currentTrail.path.length - 1);
@@ -1035,6 +1049,19 @@ export default function MapPage() {
     }
   };
 
+  const discardRecordedRoute = useCallback(() => {
+    if (isRecording || isGpsTestMode) {
+      stopRecording();
+    }
+    recordedPointsRef.current = [];
+    recordSessionStartedAtRef.current = null;
+    setRecordedPoints([]);
+    setRecordingPreviewReady(false);
+    setIsGpsTestMode(false);
+    localStorage.removeItem(recordingStorageKey);
+    toast.info('Recorded trail discarded.');
+  }, [isGpsTestMode, isRecording, recordingStorageKey, stopRecording]);
+
   useEffect(() => {
     if (!isTrailRecorder || typeof window === 'undefined') return;
     const raw = localStorage.getItem(recordingStorageKey);
@@ -1103,8 +1130,11 @@ export default function MapPage() {
       toast.error(`Failed to save route draft: ${error.message}`);
       return;
     }
-    toast.success('Route draft saved for admin review.');
+    toast.success('Route draft saved. Publish it from Admin Dashboard > Trail Route Editor > Official Active.');
     localStorage.removeItem(recordingStorageKey);
+    recordedPointsRef.current = [];
+    setRecordedPoints([]);
+    setRecordingPreviewReady(false);
   };
 
   const recordDistanceMeters = useMemo(() => {
@@ -1210,14 +1240,24 @@ export default function MapPage() {
             Test GPS Accuracy
           </Button>
           {recordedPoints.length > 1 && !isRecording && !isGpsTestMode && (
-            <Button
-              size="sm"
-              variant="secondary"
-              className="gap-1"
-              onClick={saveRecordedRouteDraft}
-            >
-              Save Route Draft
-            </Button>
+            <>
+              <Button
+                size="sm"
+                variant="secondary"
+                className="gap-1"
+                onClick={saveRecordedRouteDraft}
+              >
+                Save Route Draft
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                className="gap-1"
+                onClick={discardRecordedRoute}
+              >
+                Discard
+              </Button>
+            </>
           )}
         </div>
       )}
@@ -1258,11 +1298,11 @@ export default function MapPage() {
             {availableTrails.map((t, i) => (
               <Polyline
                 key={t.name}
-                positions={t.path}
+                positions={i === selectedTrail ? visibleTrailPath : t.path}
                 pathOptions={{
                   color: t.color,
                   weight: i === selectedTrail ? 6 : 3,
-                  opacity: i === selectedTrail ? 1 : 0.4,
+                  opacity: i === selectedTrail ? 1 : 0.25,
                 }}
               />
             ))}
@@ -1360,9 +1400,14 @@ export default function MapPage() {
               </span></span>
             </div>
             {recordingPreviewReady && !isRecording && (
-              <Button size="sm" className="h-7 text-xs md:h-8" onClick={saveRecordedRouteDraft}>
-                Save Route Draft
-              </Button>
+              <div className="grid grid-cols-2 gap-2">
+                <Button size="sm" className="h-7 text-xs md:h-8" onClick={saveRecordedRouteDraft}>
+                  Save Draft
+                </Button>
+                <Button size="sm" variant="outline" className="h-7 text-xs md:h-8" onClick={discardRecordedRoute}>
+                  Discard
+                </Button>
+              </div>
             )}
           </div>
         )}
@@ -1445,23 +1490,19 @@ export default function MapPage() {
           className="md:hidden absolute left-3 right-3 z-[1000]"
           style={{ bottom: mobileControlsBottom }}
         >
-          <button
-            type="button"
-            onClick={() => setMobileControlsOpen((v) => !v)}
-            className="absolute -top-11 left-1/2 z-10 flex h-11 min-w-36 -translate-x-1/2 items-center justify-center gap-2 rounded-t-xl border border-border/40 border-b-0 bg-background/95 px-4 text-xs font-semibold shadow-lg backdrop-blur"
-            aria-expanded={mobileControlsOpen}
-            aria-label={mobileControlsOpen ? 'Hide map controls' : 'Show map controls'}
-          >
-            <span>{mobileControlsOpen ? 'Hide Controls' : 'Map Controls'}</span>
-            {mobileControlsOpen ? <ChevronDown className="h-4 w-4" /> : <ChevronUp className="h-4 w-4" />}
-          </button>
           <div className="glass-card-strong rounded-lg overflow-hidden max-h-[min(58dvh,calc(100dvh-10rem))] overflow-y-auto overscroll-contain">
             <div
               className="w-full px-3 py-2 flex items-center gap-2 hover:bg-white/5 transition-colors"
               aria-expanded={mobileControlsOpen}
               aria-label={mobileControlsOpen ? 'Collapse controls' : 'Expand controls'}
             >
-              <div className="flex-1 min-w-0 text-left">
+              <button
+                type="button"
+                onClick={() => setMobileControlsOpen((v) => !v)}
+                className="flex-1 min-w-0 rounded-md text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                aria-expanded={mobileControlsOpen}
+                aria-label={mobileControlsOpen ? 'Collapse controls' : 'Expand controls'}
+              >
                 <div className="flex items-center gap-2">
                   <div className="text-sm font-semibold truncate" style={{ color: currentTrail.color }}>
                     {currentTrail.name}
@@ -1472,6 +1513,9 @@ export default function MapPage() {
                       <span>Off</span>
                     </div>
                   )}
+                  <div className="ml-auto text-muted-foreground">
+                    {mobileControlsOpen ? <ChevronDown className="h-4 w-4" /> : <ChevronUp className="h-4 w-4" />}
+                  </div>
                 </div>
                 <div className="text-[11px] text-muted-foreground grid grid-cols-4 gap-2">
                   <span>
@@ -1498,7 +1542,7 @@ export default function MapPage() {
                     GPS Signal: <span className={gpsSignal === 'Strong' ? 'text-success' : gpsSignal === 'Medium' ? 'text-warning' : 'text-destructive'}>{gpsSignal}</span>
                   </div>
                 )}
-              </div>
+              </button>
 
               <div className="flex items-center gap-1 shrink-0">
                 <div onClick={(e) => { e.preventDefault(); e.stopPropagation(); }}>
@@ -1607,14 +1651,24 @@ export default function MapPage() {
                       </Button>
                     </div>
                     {recordedPoints.length > 1 && !isRecording && !isGpsTestMode && (
-                      <Button
-                        size="sm"
-                        variant="secondary"
-                        className="gap-1 w-full"
-                        onClick={saveRecordedRouteDraft}
-                      >
-                        Save Route Draft
-                      </Button>
+                      <div className="grid grid-cols-2 gap-2">
+                        <Button
+                          size="sm"
+                          variant="secondary"
+                          className="gap-1"
+                          onClick={saveRecordedRouteDraft}
+                        >
+                          Save Draft
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="gap-1"
+                          onClick={discardRecordedRoute}
+                        >
+                          Discard
+                        </Button>
+                      </div>
                     )}
                   </div>
                 )}

@@ -105,6 +105,8 @@ export class HikeTracker {
   async start() {
     await saveSession(this.session);
     if (!navigator.geolocation) throw new Error('Geolocation not supported');
+    if (this.watchId !== null) navigator.geolocation.clearWatch(this.watchId);
+    if (this.tickHandle) clearInterval(this.tickHandle);
     navigator.geolocation.getCurrentPosition(
       (p) => this.onFix(p),
       (e) => console.warn('Initial GPS error', e),
@@ -119,8 +121,12 @@ export class HikeTracker {
   }
 
   async pause() {
+    if (this.watchId !== null) navigator.geolocation.clearWatch(this.watchId);
+    if (this.tickHandle) clearInterval(this.tickHandle);
+    this.watchId = null; this.tickHandle = null;
     this.session.status = 'paused';
     await saveSession(this.session);
+    await enqueue({ kind: 'session', payload: { ...this.session } });
     this.emit();
   }
 
@@ -128,6 +134,7 @@ export class HikeTracker {
     this.session.status = 'active';
     await saveSession(this.session);
     this.emit();
+    await this.start();
   }
 
   async stop(): Promise<OfflineSession> {
