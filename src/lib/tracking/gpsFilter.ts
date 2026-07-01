@@ -14,6 +14,27 @@ export type GpsTrackPoint = {
   quality?: 'high' | 'medium' | 'low' | 'estimated';
 };
 
+export type RecordingQualitySummary = ReturnType<typeof buildRecordingQuality>;
+
+export type RecordingReviewDecision = {
+  level: 'good' | 'review' | 'poor';
+  label: string;
+  score: number;
+  reasons: string[];
+  weakPointCount: number;
+  weakPointRate: number;
+  estimatedRate: number;
+  rejectedRate: number;
+  lowQualityRate: number;
+};
+
+export type TrackComparison = {
+  sampleCount: number;
+  averageDeviationM: number | null;
+  maxDeviationM: number | null;
+  consistency: 'aligned' | 'review' | 'different' | 'unknown';
+};
+
 export type MotionFilterResult = {
   point?: GpsTrackPoint;
   displayPoint?: GpsTrackPoint;
@@ -315,6 +336,116 @@ export function buildRecordingQuality(rawPoints: GpsTrackPoint[], cleanedPoints:
     endedAt: endedAt ? new Date(endedAt).toISOString() : null,
     filterVersion: 'motion-kalman-v2',
   };
+}
+
+export function reviewRecordingQuality(summary: {
+  rawPointCount?: number | null;
+  cleanedPointCount?: number | null;
+  rejectedPointCount?: number | null;
+  estimatedPointCount?: number | null;
+  lowQualityPointCount?: number | null;
+  averageAccuracyM?: number | null;
+  distanceM?: number | null;
+}): RecordingReviewDecision {
+  const rawCount = Math.max(0, Number(summary.rawPointCount ?? 0));
+  const cleanCount = Math.max(0, Number(summary.cleanedPointCount ?? 0));
+  const rejectedCount = Math.max(0, Number(summary.rejectedPointCount ?? 0));
+  const estimatedCount = Math.max(0, Number(summary.estimatedPointCount ?? 0));
+  const lowQualityCount = Math.max(0, Number(summary.lowQualityPointCount ?? 0));
+  const averageAccuracyM = summary.averageAccuracyM == null ? null : Number(summary.averageAccuracyM);
+  const distanceM = summary.distanceM == null ? 0 : Number(summary.distanceM);
+  const weakPointCount = rejectedCount + lowQualityCount;
+  const estimatedRate = cleanCount > 0 ? estimatedCount / cleanCount : 0;
+  const rejectedRate = rawCount > 0 ? rejectedCount / rawCount : 0;
+  const lowQualityRate = cleanCount > 0 ? lowQualityCount / cleanCount : 0;
+  const weakPointRate = rawCount > 0 ? weakPointCount / rawCount : 0;
+  const reasons: string[] = [];
+  let score = 100;
+
+  if (cleanCount < 8) {
+    reasons.push('Too few cleaned GPS points for an official trail.');
+    score -= 35;
+  }
+  if (distanceM < 30) {
+    reasons.push('Recorded distance is very short.');
+    score -= 25;
+  }
+  if (averageAccuracyM != null && averageAccuracyM > 35) {
+    reasons.push(`Average GPS accuracy is weak (${averageAccuracyM.toFixed(1)}m).`);
+    score -= 30;
+  } else if (averageAccuracyM != null && averageAccuracyM > 20) {
+    reasons.push(`Average GPS accuracy needs review (${averageAccuracyM.toFixed(1)}m).`);
+    score -= 15;
+  }
+  if (estimatedRate > 0.25) {
+    reasons.push('Too many cleaned points were estimated instead of directly received from GPS.');
+    score -= 25;
+  } else if (estimatedRate > 0.1) {
+    reasons.push('Some points were estimated; compare with another recording.');
+    score -= 10;
+  }
+  if (rejectedRate > 0.45) {
+    reasons.push('Too many raw points were rejected by filtering.');
+    score -= 25;
+  } else if (rejectedRate > 0.25) {
+    reasons.push('A noticeable amount of raw GPS data was rejected.');
+    score -= 10;
+  }
+  if (lowQualityRate > 0.35) {
+    reasons.push('Too many cleaned points still have low GPS quality.');
+    score -= 20;
+  } else if (lowQualityRate > 0.15) {
+    reasons.push('Low-quality points should be checked on the map.');
+    score -= 8;
+  }
+
+  score = Math.max(0, Math.min(100, Math.round(score)));
+  const level = score < 60 ? 'poor' : score < 82 || reasons.length > 0 ? 'review' : 'good';
+  return {
+    level,
+    label: level === 'good' ? 'Good recording' : level === 'review' ? 'Needs review' : 'Record again',
+    score,
+    reasons: reasons.length ? reasons : ['GPS quality is acceptable for review.'],
+    weakPointCount,
+    weakPointRate,
+    estimatedRate,
+    rejectedRate,
+    lowQualityRate,
+  };
+}
+
+function nearestDistanceM(point: GpsTrackPoint, path: GpsTrackPoint[]) {
+  if (path.length === 0) return null;
+  let nearest = Infinity;
+  for (const candidate of path) {
+    nearest = Math.min(nearest, haversineM(point, candidate));
+  }
+  return nearest;
+}
+
+export function compareCleanedTracks(candidate: GpsTrackPoint[], reference: GpsTrackPoint[]): TrackComparison {
+  const cleanCandidate = candidate.map(normalizeTrackPoint).filter((p) => Number.isFinite(p.lat) && Number.isFinite(p.lng));
+  const cleanReference = reference.map(normalizeTrackPoint).filter((p) => Number.isFinite(p.lat) && Number.isFinite(p.lng));
+  if (cleanCandidate.length < 2 || cleanReference.length < 2) {
+    return { sampleCount: 0, averageDeviationM: null, maxDeviationM: null, consistency: 'unknown' };
+  }
+  const step = Math.max(1, Math.floor(cleanCandidate.length / 40));
+  const distances: number[] = [];
+  for (let i = 0; i < cleanCandidate.length; i += step) {
+    const d = nearestDistanceM(cleanCandidate[i], cleanReference);
+    if (d != null && Number.isFinite(d)) distances.push(d);
+  }
+  if (distances.length === 0) {
+    return { sampleCount: 0, averageDeviationM: null, maxDeviationM: null, consistency: 'unknown' };
+  }
+  const averageDeviationM = Math.round((distances.reduce((sum, d) => sum + d, 0) / distances.length) * 10) / 10;
+  const maxDeviationM = Math.round(Math.max(...distances) * 10) / 10;
+  const consistency = averageDeviationM <= 8 && maxDeviationM <= 25
+    ? 'aligned'
+    : averageDeviationM <= 18 && maxDeviationM <= 45
+      ? 'review'
+      : 'different';
+  return { sampleCount: distances.length, averageDeviationM, maxDeviationM, consistency };
 }
 
 function angleAt(a: GpsTrackPoint, b: GpsTrackPoint, c: GpsTrackPoint) {

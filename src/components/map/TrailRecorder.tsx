@@ -6,10 +6,19 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { supabase } from '@/integrations/supabase/client';
-import { Play, Square, MousePointer, Navigation, Trash2, Save, Undo2 } from 'lucide-react';
+import { Activity, AlertTriangle, CheckCircle2, GitCompare, Play, Square, MousePointer, Navigation, Trash2, Save, Undo2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { MT_KALISUNGAN_CENTER, DEFAULT_ZOOM } from '@/lib/map-data';
-import { buildRecordingQuality, MotionGpsFilter, normalizeTrackPoint, postProcessTrack, type GpsTrackPoint } from '@/lib/tracking/gpsFilter';
+import {
+  buildRecordingQuality,
+  compareCleanedTracks,
+  MotionGpsFilter,
+  normalizeTrackPoint,
+  postProcessTrack,
+  reviewRecordingQuality,
+  type GpsTrackPoint,
+  type TrackComparison,
+} from '@/lib/tracking/gpsFilter';
 import { useAuth } from '@/hooks/useAuth';
 import type { LatLngTuple } from 'leaflet';
 
@@ -94,6 +103,23 @@ function trackPointFromJson(c: any, index: number): GpsTrackPoint {
   };
 }
 
+function pointsFromJson(value: any): GpsTrackPoint[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .filter((c: any) => Number.isFinite(Number(c.lat)) && Number.isFinite(Number(c.lng)))
+    .map(trackPointFromJson);
+}
+
+function formatMeters(value: number | null | undefined) {
+  if (value == null || !Number.isFinite(value)) return '--';
+  return value < 1000 ? `${Math.round(value)} m` : `${(value / 1000).toFixed(2)} km`;
+}
+
+function formatPercent(value: number | null | undefined) {
+  if (value == null || !Number.isFinite(value)) return '--';
+  return `${Math.round(value * 100)}%`;
+}
+
 function RecordingMapFollower({ path, active }: { path: LatLngTuple[]; active: boolean }) {
   const map = useMap();
   useEffect(() => {
@@ -111,6 +137,7 @@ function RecordingMapFollower({ path, active }: { path: LatLngTuple[]; active: b
 interface TrailRecorderProps {
   existingTrails?: {
     id: string;
+    location_id?: string | null;
     name: string;
     coordinates_json: any;
     status?: string;
@@ -121,9 +148,21 @@ interface TrailRecorderProps {
     raw_recording_json?: any;
     cleaned_recording_json?: any;
     recording_metadata?: any;
+    recording_count?: number;
   }[];
   onSaved?: () => void;
 }
+
+type TrailRecordingRow = {
+  id: string;
+  created_at: string;
+  status?: string | null;
+  source?: string | null;
+  quality_summary?: any;
+  cleaned_points_json?: any;
+  review_decision?: string | null;
+  comparison_summary?: any;
+};
 
 export default function TrailRecorder({ existingTrails, onSaved }: TrailRecorderProps) {
   const { user } = useAuth();
@@ -145,10 +184,33 @@ export default function TrailRecorder({ existingTrails, onSaved }: TrailRecorder
   const [recordingNow, setRecordingNow] = useState(Date.now());
   const pathRef = useRef<LatLngTuple[]>([]);
   const offlineDraftKey = 'altsys-admin-trail-recorder-draft';
+  const [trailRecordings, setTrailRecordings] = useState<TrailRecordingRow[]>([]);
+  const [recordingsLoading, setRecordingsLoading] = useState(false);
+  const [selectedTrailLocationId, setSelectedTrailLocationId] = useState<string | null>(null);
+  const [selectedTrailRecordingCount, setSelectedTrailRecordingCount] = useState(0);
 
   useEffect(() => {
     pathRef.current = path;
   }, [path]);
+
+  const currentCleanTrack = cleanedGpsPointsRef.current.length > 0 ? cleanedGpsPointsRef.current : pathToTrack(path);
+  const currentRawTrack = rawGpsPointsRef.current.length > 0 ? rawGpsPointsRef.current : currentCleanTrack;
+  const currentQuality = path.length > 1 ? buildRecordingQuality(currentRawTrack, currentCleanTrack) : null;
+  const currentReview = currentQuality ? reviewRecordingQuality(currentQuality) : null;
+  const currentComparisons = currentCleanTrack.length > 1
+    ? trailRecordings
+        .map((recording) => ({
+          recording,
+          comparison: compareCleanedTracks(currentCleanTrack, pointsFromJson(recording.cleaned_points_json)),
+        }))
+        .filter((item) => item.comparison.consistency !== 'unknown')
+    : [];
+  const bestComparison = currentComparisons.reduce<{ recording: TrailRecordingRow; comparison: TrackComparison } | null>((best, item) => {
+    if (!best) return item;
+    const bestAvg = best.comparison.averageDeviationM ?? Infinity;
+    const itemAvg = item.comparison.averageDeviationM ?? Infinity;
+    return itemAvg < bestAvg ? item : best;
+  }, null);
 
   // GPS recording
   const startRecording = useCallback(() => {
@@ -305,6 +367,9 @@ export default function TrailRecorder({ existingTrails, onSaved }: TrailRecorder
     setPath([]);
     pathRef.current = [];
     setEditingTrailId(null);
+    setSelectedTrailLocationId(null);
+    setSelectedTrailRecordingCount(0);
+    setTrailRecordings([]);
     gpsFilterRef.current?.reset();
     gpsFilterRef.current = null;
     predictedCountRef.current = 0;
@@ -315,10 +380,31 @@ export default function TrailRecorder({ existingTrails, onSaved }: TrailRecorder
 
   const [originalPath, setOriginalPath] = useState<LatLngTuple[]>([]);
 
+  const loadTrailRecordings = useCallback(async (trailId: string) => {
+    setRecordingsLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from('trail_recordings' as any)
+        .select('id,created_at,status,source,quality_summary,cleaned_points_json,review_decision,comparison_summary')
+        .eq('trail_zone_id', trailId)
+        .order('created_at', { ascending: false })
+        .limit(8);
+      if (error) throw error;
+      setTrailRecordings(((data as TrailRecordingRow[] | null) ?? []));
+    } catch {
+      setTrailRecordings([]);
+      toast.warning('Could not load previous trail recordings for comparison.');
+    } finally {
+      setRecordingsLoading(false);
+    }
+  }, []);
+
   const loadExistingTrail = (trailId: string) => {
     const trail = existingTrails?.find((t) => t.id === trailId);
     if (trail) {
       setEditingTrailId(trailId);
+      setSelectedTrailLocationId(trail.location_id ?? null);
+      setSelectedTrailRecordingCount(trail.recording_count ?? 0);
       setName(trail.name);
       setDifficulty(trail.difficulty || 'moderate');
       setElevation(trail.elevation_meters ? String(trail.elevation_meters) : '');
@@ -331,11 +417,10 @@ export default function TrailRecorder({ existingTrails, onSaved }: TrailRecorder
         .filter((c: any) => Number.isFinite(Number(c.lat)) && Number.isFinite(Number(c.lng)))
         .map(trackPointFromJson);
       rawGpsPointsRef.current = Array.isArray(trail.raw_recording_json)
-        ? trail.raw_recording_json
-            .filter((c: any) => Number.isFinite(Number(c.lat)) && Number.isFinite(Number(c.lng)))
-            .map(trackPointFromJson)
+        ? pointsFromJson(trail.raw_recording_json)
         : [];
       setOriginalPath(parsed);
+      void loadTrailRecordings(trailId);
       toast.info(`Loaded trail "${trail.name}" for editing`);
     }
   };
@@ -357,6 +442,18 @@ export default function TrailRecorder({ existingTrails, onSaved }: TrailRecorder
       const coordsJson = finalTrack.map((p) => serializeTrackPoint(p));
       const rawRecordingJson = rawTrack.map((p) => serializeTrackPoint(p, 'accepted'));
       const qualitySummary = buildRecordingQuality(rawTrack, finalTrack);
+      const review = reviewRecordingQuality(qualitySummary);
+      const isGpsRecording = rawGpsPointsRef.current.length > 0;
+      const comparisonSummary = {
+        comparedRecordingCount: trailRecordings.length,
+        bestComparison: bestComparison?.comparison ?? null,
+        requiresSecondPass: isGpsRecording && trailRecordings.length === 0,
+        generatedAt: new Date().toISOString(),
+      };
+      const forceDraftReview = isGpsRecording && review.level !== 'good';
+      const finalStatus = forceDraftReview ? 'draft' : status;
+      const finalReviewStatus = finalStatus === 'active' ? 'approved' : 'pending';
+      const finalIsOfficial = finalStatus === 'active';
       const payload = {
         name: name.trim(),
         difficulty,
@@ -364,12 +461,16 @@ export default function TrailRecorder({ existingTrails, onSaved }: TrailRecorder
         coordinates_json: coordsJson,
         cleaned_recording_json: coordsJson,
         raw_recording_json: rawRecordingJson,
-        recording_metadata: qualitySummary,
-        recording_count: 1,
-        status,
-        review_status: status === 'active' ? 'approved' : 'pending',
-        is_official: status === 'active',
-        official_at: status === 'active' ? new Date().toISOString() : null,
+        recording_metadata: {
+          ...qualitySummary,
+          review,
+          comparison: comparisonSummary,
+        },
+        recording_count: Math.max(selectedTrailRecordingCount, trailRecordings.length) + 1,
+        status: finalStatus,
+        review_status: finalReviewStatus,
+        is_official: finalIsOfficial,
+        official_at: finalIsOfficial ? new Date().toISOString() : null,
         max_capacity: 50,
       };
       let savedTrailId = editingTrailId;
@@ -399,13 +500,21 @@ export default function TrailRecorder({ existingTrails, onSaved }: TrailRecorder
       if (savedTrailId && user?.id) {
         await supabase.from('trail_recordings' as any).insert({
           trail_zone_id: savedTrailId,
+          location_id: selectedTrailLocationId,
           recorded_by: user.id,
           source: rawGpsPointsRef.current.length > 0 ? 'gps_recording' : 'manual_editor',
-          status,
+          status: finalStatus,
+          review_decision: finalIsOfficial ? 'approved' : review.level === 'poor' ? 'record_again' : 'pending_review',
+          reviewed_by: finalIsOfficial ? user.id : null,
+          reviewed_at: finalIsOfficial ? new Date().toISOString() : null,
           raw_points_json: rawRecordingJson,
           cleaned_points_json: coordsJson,
           quality_summary: qualitySummary,
+          comparison_summary: comparisonSummary,
         });
+      }
+      if (forceDraftReview) {
+        toast.warning('GPS quality needs review, so the trail was saved as a draft instead of official.');
       }
 
       setPath([]);
@@ -416,6 +525,9 @@ export default function TrailRecorder({ existingTrails, onSaved }: TrailRecorder
       pathRef.current = [];
       rawGpsPointsRef.current = [];
       cleanedGpsPointsRef.current = [];
+      setTrailRecordings([]);
+      setSelectedTrailRecordingCount(0);
+      setSelectedTrailLocationId(null);
       localStorage.removeItem(offlineDraftKey);
       onSaved?.();
     } catch (err: any) {
@@ -561,6 +673,96 @@ export default function TrailRecorder({ existingTrails, onSaved }: TrailRecorder
           {mode === 'recording' && `Recording... ${path.length} points, ${(recordedDistanceM / 1000).toFixed(2)} km, ${Math.floor(recordedDurationSec / 60)}:${String(recordedDurationSec % 60).padStart(2, '0')}`}
           {mode === 'idle' && path.length > 0 && `${path.length} points ready. Enter details and save.`}
         </div>
+
+        {currentQuality && currentReview && (
+          <div className="rounded-lg border border-border/40 bg-background/55 p-3 space-y-3">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+              <div className="flex items-start gap-2">
+                {currentReview.level === 'good' ? (
+                  <CheckCircle2 className="mt-0.5 h-4 w-4 text-success" />
+                ) : currentReview.level === 'poor' ? (
+                  <AlertTriangle className="mt-0.5 h-4 w-4 text-destructive" />
+                ) : (
+                  <Activity className="mt-0.5 h-4 w-4 text-warning" />
+                )}
+                <div>
+                  <div className="text-sm font-semibold text-foreground">Recording quality: {currentReview.label}</div>
+                  <div className="text-xs text-muted-foreground">
+                    Score {currentReview.score}/100
+                    {rawGpsPointsRef.current.length > 0 && currentReview.level !== 'good' && status === 'active'
+                      ? ' - will save as draft review until approved'
+                      : ''}
+                  </div>
+                </div>
+              </div>
+              <div className="text-xs text-muted-foreground">
+                {trailRecordings.length > 0 ? `${trailRecordings.length} previous recording${trailRecordings.length === 1 ? '' : 's'}` : 'No previous recordings yet'}
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-2 md:grid-cols-6">
+              {[
+                ['Raw', currentQuality.rawPointCount],
+                ['Clean', currentQuality.cleanedPointCount],
+                ['Rejected', currentQuality.rejectedPointCount],
+                ['Estimated', currentQuality.estimatedPointCount],
+                ['Avg acc.', currentQuality.averageAccuracyM == null ? '--' : `${currentQuality.averageAccuracyM.toFixed(1)} m`],
+                ['Distance', formatMeters(currentQuality.distanceM)],
+              ].map(([label, value]) => (
+                <div key={label} className="rounded-md border border-border/30 bg-muted/20 px-2 py-2">
+                  <div className="text-[10px] uppercase text-muted-foreground">{label}</div>
+                  <div className="text-sm font-semibold text-foreground">{value}</div>
+                </div>
+              ))}
+            </div>
+
+            <div className="grid gap-2 md:grid-cols-2">
+              <div className="space-y-1">
+                {currentReview.reasons.slice(0, 3).map((reason) => (
+                  <div key={reason} className="text-xs text-muted-foreground">{reason}</div>
+                ))}
+                {rawGpsPointsRef.current.length > 0 && trailRecordings.length === 0 && (
+                  <div className="text-xs text-warning">Record this trail again on another pass before making it the final official route.</div>
+                )}
+              </div>
+              <div className="rounded-md border border-border/30 bg-muted/20 px-2 py-2">
+                <div className="mb-1 flex items-center gap-1 text-xs font-semibold text-foreground">
+                  <GitCompare className="h-3.5 w-3.5" />
+                  Repeat recording comparison
+                </div>
+                {bestComparison ? (
+                  <div className="text-xs text-muted-foreground">
+                    Best match: {bestComparison.comparison.consistency}, avg {formatMeters(bestComparison.comparison.averageDeviationM)}, max {formatMeters(bestComparison.comparison.maxDeviationM)}
+                  </div>
+                ) : recordingsLoading ? (
+                  <div className="text-xs text-muted-foreground">Loading previous recordings...</div>
+                ) : (
+                  <div className="text-xs text-muted-foreground">No comparison available yet.</div>
+                )}
+              </div>
+            </div>
+
+            {trailRecordings.length > 0 && (
+              <div className="space-y-1">
+                {trailRecordings.slice(0, 3).map((recording) => {
+                  const review = reviewRecordingQuality(recording.quality_summary ?? {});
+                  const comparison = currentComparisons.find((item) => item.recording.id === recording.id)?.comparison;
+                  return (
+                    <div key={recording.id} className="flex flex-col gap-1 rounded-md border border-border/25 bg-background/45 px-2 py-2 text-xs sm:flex-row sm:items-center sm:justify-between">
+                      <span className="font-medium text-foreground">
+                        {new Date(recording.created_at).toLocaleDateString()} - {review.label}
+                      </span>
+                      <span className="text-muted-foreground">
+                        {formatMeters((recording.quality_summary ?? {}).distanceM)} / avg acc. {(recording.quality_summary ?? {}).averageAccuracyM ?? '--'}m
+                        {comparison ? ` / dev ${formatMeters(comparison.averageDeviationM)}` : ''}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Mini map for drawing */}
         <div className="h-[300px] rounded-lg overflow-hidden border border-border/30">

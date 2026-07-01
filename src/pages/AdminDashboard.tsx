@@ -1574,6 +1574,7 @@ export default function AdminDashboard() {
               <TrailRecorder
                 existingTrails={zones.map((z: any) => ({
                   id: z.id,
+                  location_id: z.location_id,
                   name: z.name,
                   coordinates_json: z.coordinates_json,
                   status: z.status,
@@ -1584,6 +1585,7 @@ export default function AdminDashboard() {
                   raw_recording_json: z.raw_recording_json,
                   cleaned_recording_json: z.cleaned_recording_json,
                   recording_metadata: z.recording_metadata,
+                  recording_count: z.recording_count,
                 }))}
                 onSaved={loadData}
               />

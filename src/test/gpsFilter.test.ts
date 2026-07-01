@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { buildRecordingQuality, MotionGpsFilter, postProcessTrack, type GpsTrackPoint } from '@/lib/tracking/gpsFilter';
+import {
+  buildRecordingQuality,
+  compareCleanedTracks,
+  MotionGpsFilter,
+  postProcessTrack,
+  reviewRecordingQuality,
+  type GpsTrackPoint,
+} from '@/lib/tracking/gpsFilter';
 import { haversineM } from '@/lib/tracking/geo';
 
 function offsetPoint(lat: number, lng: number, northM: number, eastM: number) {
@@ -65,5 +72,39 @@ describe('MotionGpsFilter', () => {
     expect(summary.rejectedPointCount).toBe(1);
     expect(summary.averageAccuracyM).toBe(26);
     expect(summary.filterVersion).toBe('motion-kalman-v2');
+  });
+
+  it('flags poor recordings for review instead of approval', () => {
+    const review = reviewRecordingQuality({
+      rawPointCount: 20,
+      cleanedPointCount: 8,
+      rejectedPointCount: 10,
+      estimatedPointCount: 4,
+      lowQualityPointCount: 4,
+      averageAccuracyM: 48,
+      distanceM: 20,
+    });
+
+    expect(review.level).toBe('poor');
+    expect(review.score).toBeLessThan(60);
+    expect(review.reasons.join(' ')).toContain('Average GPS accuracy');
+  });
+
+  it('compares repeated recordings for route consistency', () => {
+    const first = Array.from({ length: 12 }, (_, i) => {
+      const p = offsetPoint(14.1766, 121.2193, i * 5, 0);
+      return { ...p, ts: 1_000 + i * 1000, accuracy: 8 };
+    });
+    const aligned = Array.from({ length: 12 }, (_, i) => {
+      const p = offsetPoint(14.1766, 121.2193, i * 5, 2);
+      return { ...p, ts: 2_000 + i * 1000, accuracy: 8 };
+    });
+    const different = Array.from({ length: 12 }, (_, i) => {
+      const p = offsetPoint(14.1766, 121.2193, i * 5, 80);
+      return { ...p, ts: 3_000 + i * 1000, accuracy: 8 };
+    });
+
+    expect(compareCleanedTracks(aligned, first).consistency).toBe('aligned');
+    expect(compareCleanedTracks(different, first).consistency).toBe('different');
   });
 });
