@@ -393,6 +393,18 @@ html.light .glow-accent {
 
 /* (Map uses custom in-app layer selector on mobile) */
 
+/* Heading-up map mode for active recording/tracking. */
+.leaflet-bearing-map .leaflet-tile-pane,
+.leaflet-bearing-map .leaflet-overlay-pane,
+.leaflet-bearing-map .leaflet-shadow-pane,
+.leaflet-bearing-map .leaflet-marker-pane,
+.leaflet-bearing-map .leaflet-tooltip-pane,
+.leaflet-bearing-map .leaflet-popup-pane {
+  transform: rotate(calc(var(--map-bearing, 0deg) * -1));
+  transform-origin: center center;
+  transition: transform 180ms linear;
+}
+
 /* Aesthetic scrollbars (Chrome/Edge/Safari + Firefox) */
 html {
   scrollbar-width: thin;

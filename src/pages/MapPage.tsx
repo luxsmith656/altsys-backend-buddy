@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import type { CSSProperties } from 'react';
 import { MapContainer, TileLayer, Polyline, Polygon, Marker, Popup, Circle, useMap } from 'react-leaflet';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import L from 'leaflet';
@@ -313,10 +314,12 @@ const poiIcons: Record<string, L.DivIcon> = {
 
 function LocateControl({
   map,
+  onLocate,
   className,
   bottomClassName,
 }: {
   map: L.Map | null;
+  onLocate?: () => void;
   className?: string;
   bottomClassName?: string;
 }) {
@@ -325,7 +328,10 @@ function LocateControl({
       size="icon"
       variant="outline"
       className={className ?? `absolute right-4 z-[1000] glass-card ${bottomClassName ?? 'bottom-[7.5rem]'} md:bottom-4`}
-      onClick={() => map?.locate({ setView: true, maxZoom: 17, timeout: 30000, enableHighAccuracy: true, maximumAge: 0 })}
+      onClick={() => {
+        onLocate?.();
+        map?.locate({ setView: true, maxZoom: 17, timeout: 30000, enableHighAccuracy: true, maximumAge: 0 });
+      }}
       disabled={!map}
       aria-label="Locate me"
     >
@@ -341,6 +347,27 @@ function MapInstanceBridge({ onReady }: { onReady: (map: L.Map) => void }) {
   useEffect(() => {
     onReady(map);
   }, [map, onReady]);
+  return null;
+}
+
+function MapInteractionUnlock({
+  active,
+  onUnlock,
+}: {
+  active: boolean;
+  onUnlock: () => void;
+}) {
+  const map = useMap();
+  useEffect(() => {
+    if (!active) return;
+    const unlock = () => onUnlock();
+    map.on('dragstart', unlock);
+    map.on('zoomstart', unlock);
+    return () => {
+      map.off('dragstart', unlock);
+      map.off('zoomstart', unlock);
+    };
+  }, [active, map, onUnlock]);
   return null;
 }
 
@@ -416,6 +443,8 @@ export default function MapPage() {
   const [tracking, setTracking] = useState(false);
   const [mapInstance, setMapInstance] = useState<L.Map | null>(null);
   const mapRef = useRef<L.Map | null>(null);
+  const [followUser, setFollowUser] = useState(true);
+  const suppressFollowUnlockRef = useRef(false);
   // Street map only (other layers removed by design)
   const [userPos, setUserPos] = useState<[number, number] | null>(null);
   const [displayPos, setDisplayPos] = useState<[number, number] | null>(null);
@@ -433,6 +462,13 @@ export default function MapPage() {
   const [mobileViewportBottomInset, setMobileViewportBottomInset] = useState(0);
   const [mobileViewportHeight, setMobileViewportHeight] = useState<number | null>(null);
   const [legendOpen, setLegendOpen] = useState(false);
+  const relockUserMap = useCallback(() => {
+    suppressFollowUnlockRef.current = true;
+    relockUserMap();
+    window.setTimeout(() => {
+      suppressFollowUnlockRef.current = false;
+    }, 1200);
+  }, []);
   const [isRecording, setIsRecording] = useState(false);
   const [isGpsTestMode, setIsGpsTestMode] = useState(false);
   type FilteredPoint = { lat: number; lon: number; };
@@ -596,6 +632,13 @@ export default function MapPage() {
   useEffect(() => {
     recordingActiveRef.current = isRecording;
   }, [isRecording]);
+
+  useEffect(() => {
+    if (!mapInstance || !followUser || (!tracking && !isRecording)) return;
+    const pos = displayPos || userPos;
+    if (!pos) return;
+    mapInstance.setView(pos, mapInstance.getZoom(), { animate: true, duration: 0.25 });
+  }, [displayPos, followUser, isRecording, mapInstance, tracking, userPos]);
 
   const persistRecording = useCallback((points: RecordedPoint[], active = recordingActiveRef.current, rawPoints = rawRecordedPointsRef.current) => {
     if (typeof window === 'undefined') return;
@@ -770,6 +813,7 @@ export default function MapPage() {
 
   const startTracking = useCallback(async () => {
     void ensureCompassEnabled();
+    setFollowUser(true);
     setTracking(true);
     if (trackerRef.current) {
       void trackerRef.current.resume().catch((e) => console.warn('HikeTracker resume failed', e));
@@ -867,7 +911,7 @@ export default function MapPage() {
       });
       void tr.start().catch((e) => console.warn('HikeTracker start failed', e));
     }
-  }, [activeLocationId, ensureCompassEnabled, locations, role, user]);
+  }, [activeLocationId, ensureCompassEnabled, locations, relockUserMap, role, user]);
 
   // Weather-aware routing: if 'avoid', recommend an easier trail.
   const lastAdviceRef = useRef<string | null>(null);
@@ -1106,7 +1150,11 @@ export default function MapPage() {
   const realTimePace = currentSpeed && currentSpeed > 0 ? 60 / currentSpeed : 0;
   const displayPace = realTimePace > 0 ? realTimePace : avgPace;
   const etaMinutes = remainingDistanceKm > 0 && displayPace > 0 ? Math.round(remainingDistanceKm * displayPace) : null;
-  const userOrientationIcon = useMemo(() => makeUserIcon(currentHeading, wrongDirection || offTrail), [currentHeading, wrongDirection, offTrail]);
+  const mapBearing = (tracking || isRecording || isGpsTestMode) && currentHeading != null ? currentHeading : null;
+  const markerHeading = mapBearing != null && currentHeading != null
+    ? normalizeHeading(currentHeading - mapBearing)
+    : currentHeading;
+  const userOrientationIcon = useMemo(() => makeUserIcon(markerHeading, wrongDirection || offTrail), [markerHeading, wrongDirection, offTrail]);
 
   useEffect(() => {
     // keep the map clean by default on mobile when switching trails
@@ -1120,6 +1168,7 @@ export default function MapPage() {
     }
     void ensureCompassEnabled();
     void ensureMotionEnabled();
+    relockUserMap();
     const existingPoints = recordedPointsRef.current;
     const resumeExisting = opts?.resumeExisting || (existingPoints.length > 1 && window.confirm('Continue the previous recording and connect new points from the last saved position? Press Cancel to start a new trail.'));
     if (!opts?.recovered) {
@@ -1213,7 +1262,6 @@ export default function MapPage() {
       if (displayPoint) {
         setUserPos([displayPoint.lat, displayPoint.lon]);
         setDisplayPos([displayPoint.lat, displayPoint.lon]);
-        if (mapInstance) mapInstance.setView([displayPoint.lat, displayPoint.lon], Math.max(mapInstance.getZoom(), 17));
       }
     };
 
@@ -1234,7 +1282,7 @@ export default function MapPage() {
     recordPollingRef.current = setInterval(() => {
       navigator.geolocation.getCurrentPosition(handleNewRecordPoint, () => {}, options);
     }, 3000);
-  }, [ensureCompassEnabled, ensureMotionEnabled, mapInstance, persistRecording, updateRecordedPoints]);
+  }, [ensureCompassEnabled, ensureMotionEnabled, persistRecording, relockUserMap, updateRecordedPoints]);
 
   const stopRecording = useCallback(() => {
     let points = recordedPointsRef.current;
@@ -1591,13 +1639,20 @@ export default function MapPage() {
             center={MT_KALISUNGAN_CENTER}
             zoom={DEFAULT_ZOOM}
             maxZoom={20}
-            className="h-full w-full"
+            className={`h-full w-full ${mapBearing != null ? 'leaflet-bearing-map' : ''}`}
+            style={mapBearing != null ? { '--map-bearing': `${mapBearing}deg` } as CSSProperties : undefined}
             zoomControl={false}
             attributionControl={false}
             ref={mapRef as any}
             whenReady={() => {}}
           >
             <MapInstanceBridge onReady={setMapInstance} />
+            <MapInteractionUnlock
+              active={followUser && (tracking || isRecording || isGpsTestMode)}
+              onUnlock={() => {
+                if (!suppressFollowUnlockRef.current) setFollowUser(false);
+              }}
+            />
             <OfflineLayer url="https://tile.openstreetmap.org/{z}/{x}/{y}.png" maxZoom={20} attribution="© OpenStreetMap" />
 
 
@@ -1740,7 +1795,7 @@ export default function MapPage() {
             trailColor={currentTrail.color}
             userProgress={userTrailProgress}
           />
-          <LocateControl map={mapInstance} className="glass-card" />
+          <LocateControl map={mapInstance} onLocate={relockUserMap} className="glass-card" />
         </div>
 
         {/* Desktop legend */}
@@ -1788,7 +1843,7 @@ export default function MapPage() {
             trailColor={currentTrail.color}
             userProgress={userTrailProgress}
           />
-          <LocateControl map={mapInstance} className="glass-card" />
+          <LocateControl map={mapInstance} onLocate={relockUserMap} className="glass-card" />
         </div>
 
         {/* Mobile bottom controls (collapsible) */}

@@ -6,7 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { supabase } from '@/integrations/supabase/client';
-import { Activity, AlertTriangle, CheckCircle2, GitCompare, Play, Square, MousePointer, Navigation, Trash2, Save, Undo2 } from 'lucide-react';
+import { Activity, AlertTriangle, CheckCircle2, GitCompare, Locate, Play, Square, MousePointer, Navigation, Trash2, Save, Undo2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { MT_KALISUNGAN_CENTER, DEFAULT_ZOOM } from '@/lib/map-data';
 import {
@@ -120,17 +120,44 @@ function formatPercent(value: number | null | undefined) {
   return `${Math.round(value * 100)}%`;
 }
 
-function RecordingMapFollower({ path, active }: { path: LatLngTuple[]; active: boolean }) {
+function RecordingMapFollower({
+  path,
+  active,
+  following,
+  onManualMove,
+}: {
+  path: LatLngTuple[];
+  active: boolean;
+  following: boolean;
+  onManualMove: () => void;
+}) {
   const map = useMap();
   useEffect(() => {
     if (path.length === 0) return;
     const last = path[path.length - 1];
-    if (active) {
+    if (active && following) {
       map.setView(last, Math.max(map.getZoom(), 17));
-    } else if (path.length > 1) {
+    } else if (!active && path.length > 1) {
       map.fitBounds(L.latLngBounds(path), { padding: [24, 24] });
     }
-  }, [active, map, path]);
+  }, [active, following, map, path]);
+  useEffect(() => {
+    if (!active || !following) return;
+    map.on('dragstart', onManualMove);
+    map.on('zoomstart', onManualMove);
+    return () => {
+      map.off('dragstart', onManualMove);
+      map.off('zoomstart', onManualMove);
+    };
+  }, [active, following, map, onManualMove]);
+  return null;
+}
+
+function RecorderMapBridge({ onReady }: { onReady: (map: L.Map) => void }) {
+  const map = useMap();
+  useEffect(() => {
+    onReady(map);
+  }, [map, onReady]);
   return null;
 }
 
@@ -183,6 +210,9 @@ export default function TrailRecorder({ existingTrails, onSaved }: TrailRecorder
   const [recordingStartedAt, setRecordingStartedAt] = useState<number | null>(null);
   const [recordingNow, setRecordingNow] = useState(Date.now());
   const pathRef = useRef<LatLngTuple[]>([]);
+  const [recorderMap, setRecorderMap] = useState<L.Map | null>(null);
+  const [followRecordingMap, setFollowRecordingMap] = useState(true);
+  const suppressRecorderUnlockRef = useRef(false);
   const offlineDraftKey = 'altsys-admin-trail-recorder-draft';
   const [trailRecordings, setTrailRecordings] = useState<TrailRecordingRow[]>([]);
   const [recordingsLoading, setRecordingsLoading] = useState(false);
@@ -231,6 +261,7 @@ export default function TrailRecorder({ existingTrails, onSaved }: TrailRecorder
     setMode('recording');
     setPath([]);
     pathRef.current = [];
+    setFollowRecordingMap(true);
     setRecordingStartedAt(Date.now());
     toast.info('GPS recording started. Walk the trail path.');
 
@@ -370,6 +401,7 @@ export default function TrailRecorder({ existingTrails, onSaved }: TrailRecorder
     setSelectedTrailLocationId(null);
     setSelectedTrailRecordingCount(0);
     setTrailRecordings([]);
+    setFollowRecordingMap(true);
     gpsFilterRef.current?.reset();
     gpsFilterRef.current = null;
     predictedCountRef.current = 0;
@@ -420,6 +452,7 @@ export default function TrailRecorder({ existingTrails, onSaved }: TrailRecorder
         ? pointsFromJson(trail.raw_recording_json)
         : [];
       setOriginalPath(parsed);
+      setFollowRecordingMap(false);
       void loadTrailRecordings(trailId);
       toast.info(`Loaded trail "${trail.name}" for editing`);
     }
@@ -765,14 +798,22 @@ export default function TrailRecorder({ existingTrails, onSaved }: TrailRecorder
         )}
 
         {/* Mini map for drawing */}
-        <div className="h-[300px] rounded-lg overflow-hidden border border-border/30">
+        <div className="relative h-[300px] rounded-lg overflow-hidden border border-border/30">
           <MapContainer center={MT_KALISUNGAN_CENTER} zoom={DEFAULT_ZOOM} className="h-full w-full" zoomControl={true}>
+            <RecorderMapBridge onReady={setRecorderMap} />
             <TileLayer
               attribution='&copy; <a href="https://opentopomap.org">OpenTopoMap</a>'
               url="https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png"
             />
             <ClickDrawHandler active={mode === 'drawing'} onAddPoint={addPoint} />
-            <RecordingMapFollower path={path} active={mode === 'recording'} />
+            <RecordingMapFollower
+              path={path}
+              active={mode === 'recording'}
+              following={followRecordingMap}
+              onManualMove={() => {
+                if (!suppressRecorderUnlockRef.current) setFollowRecordingMap(false);
+              }}
+            />
 
             {/* Show all existing trails as faint reference lines */}
             {existingTrails?.map((t) => {
@@ -807,6 +848,26 @@ export default function TrailRecorder({ existingTrails, onSaved }: TrailRecorder
               <Marker key={i} position={p} icon={pointIcon} />
             ))}
           </MapContainer>
+          {mode === 'recording' && path.length > 0 && (
+            <Button
+              type="button"
+              size="icon"
+              variant="outline"
+              className="absolute right-3 bottom-3 z-[1000] glass-card"
+              aria-label="Follow current recording location"
+              onClick={() => {
+                const last = pathRef.current[pathRef.current.length - 1];
+                suppressRecorderUnlockRef.current = true;
+                setFollowRecordingMap(true);
+                if (recorderMap && last) recorderMap.setView(last, Math.max(recorderMap.getZoom(), 17));
+                window.setTimeout(() => {
+                  suppressRecorderUnlockRef.current = false;
+                }, 900);
+              }}
+            >
+              <Locate className="h-4 w-4" />
+            </Button>
+          )}
         </div>
       </CardContent>
     </Card>
