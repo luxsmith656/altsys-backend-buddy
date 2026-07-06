@@ -775,7 +775,6 @@ export type Database = {
       trail_recordings: {
         Row: {
           cleaned_points_json: Json
-          comparison_summary: Json
           created_at: string
           id: string
           location_id: string | null
@@ -783,16 +782,12 @@ export type Database = {
           quality_summary: Json
           raw_points_json: Json
           recorded_by: string | null
-          review_decision: string
-          reviewed_at: string | null
-          reviewed_by: string | null
           source: string
           status: string
           trail_zone_id: string | null
         }
         Insert: {
           cleaned_points_json?: Json
-          comparison_summary?: Json
           created_at?: string
           id?: string
           location_id?: string | null
@@ -800,16 +795,12 @@ export type Database = {
           quality_summary?: Json
           raw_points_json?: Json
           recorded_by?: string | null
-          review_decision?: string
-          reviewed_at?: string | null
-          reviewed_by?: string | null
           source?: string
           status?: string
           trail_zone_id?: string | null
         }
         Update: {
           cleaned_points_json?: Json
-          comparison_summary?: Json
           created_at?: string
           id?: string
           location_id?: string | null
@@ -817,9 +808,6 @@ export type Database = {
           quality_summary?: Json
           raw_points_json?: Json
           recorded_by?: string | null
-          review_decision?: string
-          reviewed_at?: string | null
-          reviewed_by?: string | null
           source?: string
           status?: string
           trail_zone_id?: string | null
