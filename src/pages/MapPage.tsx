@@ -464,11 +464,15 @@ export default function MapPage() {
   const [legendOpen, setLegendOpen] = useState(false);
   const relockUserMap = useCallback(() => {
     suppressFollowUnlockRef.current = true;
-    relockUserMap();
+    setFollowUser(true);
+    const current = displayPos ?? userPos;
+    if (mapRef.current && current) {
+      mapRef.current.setView(current, Math.max(mapRef.current.getZoom(), 17));
+    }
     window.setTimeout(() => {
       suppressFollowUnlockRef.current = false;
     }, 1200);
-  }, []);
+  }, [displayPos, userPos]);
   const [isRecording, setIsRecording] = useState(false);
   const [isGpsTestMode, setIsGpsTestMode] = useState(false);
   type FilteredPoint = { lat: number; lon: number; };
@@ -497,6 +501,7 @@ export default function MapPage() {
   const navigate = useNavigate();
   const isTrailRecorder = role === 'ranger' || role === 'guide' || role === 'admin' || role === 'super_admin';
   const recordingStorageKey = useMemo(() => `altsys-route-recording:${user?.id ?? 'guest'}`, [user?.id]);
+  const [assignedTrailZoneId, setAssignedTrailZoneId] = useState<string | null>(null);
 
 
 
@@ -738,22 +743,51 @@ export default function MapPage() {
 
   useEffect(() => {
     let active = true;
+    if (!user || role !== 'hiker') {
+      setAssignedTrailZoneId(null);
+      return () => { active = false; };
+    }
     void (async () => {
+      const { data, error } = await supabase
+        .from('hiker_sessions' as any)
+        .select('trail_zone_id,start_time,status')
+        .eq('user_id', user.id)
+        .eq('status', 'active')
+        .order('start_time', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (!active) return;
+      if (error && !isSchemaCacheError(error)) {
+        console.warn('Unable to load assigned trail for hiker map', error);
+        return;
+      }
+      setAssignedTrailZoneId((data as any)?.trail_zone_id ?? null);
+    })();
+    return () => { active = false; };
+  }, [role, user]);
+
+  useEffect(() => {
+    let active = true;
+    void (async () => {
+      const restrictToAssignedTrail = role === 'hiker' && !!assignedTrailZoneId;
       let q: any = supabase
         .from('trail_zones' as any)
         .select('id,location_id,name,difficulty,elevation_meters,coordinates_json,status,is_official,review_status')
         .eq('status', 'active')
         .eq('is_official', true)
         .order('created_at', { ascending: true });
-      if (activeLocationId) q = q.eq('location_id', activeLocationId);
-      let { data, error } = await q;
+      if (restrictToAssignedTrail) q = q.eq('id', assignedTrailZoneId);
+      else if (activeLocationId) q = q.eq('location_id', activeLocationId);
+      const { data: primaryData, error } = await q;
+      let data = primaryData;
       if (error && isSchemaCacheError(error)) {
         let fallback: any = supabase
           .from('trail_zones' as any)
           .select('id,location_id,name,difficulty,elevation_meters,coordinates_json,status')
           .eq('status', 'active')
           .order('created_at', { ascending: true });
-        if (activeLocationId) fallback = fallback.eq('location_id', activeLocationId);
+        if (restrictToAssignedTrail) fallback = fallback.eq('id', assignedTrailZoneId);
+        else if (activeLocationId) fallback = fallback.eq('location_id', activeLocationId);
         const res = await fallback;
         data = res.data;
       }
@@ -783,7 +817,7 @@ export default function MapPage() {
       setDbTrails(loaded);
     })();
     return () => { active = false; };
-  }, [activeLocationId]);
+  }, [activeLocationId, assignedTrailZoneId, role]);
 
   const availableTrails = dbTrails.length > 0 ? dbTrails : TRAILS;
 
@@ -852,6 +886,31 @@ export default function MapPage() {
           ? role === 'super_admin' ? 'admin' : role
           : 'hiker';
       const sessionLocationId = activeSession?.location_id ?? activeLocationId ?? locations[0]?.id ?? null;
+      let sessionTrailZoneId: string | null = activeSession?.trail_zone_id ?? null;
+      if (!sessionTrailZoneId && participantRole === 'hiker') {
+        let routeQuery: any = supabase
+          .from('trail_zones' as any)
+          .select('id,name')
+          .eq('status', 'active')
+          .eq('is_official', true)
+          .limit(2);
+        if (sessionLocationId) routeQuery = routeQuery.eq('location_id', sessionLocationId);
+        let { data: routeRows, error: routeError } = await routeQuery;
+        if (routeError && isSchemaCacheError(routeError)) {
+          let fallback: any = supabase
+            .from('trail_zones' as any)
+            .select('id,name')
+            .eq('status', 'active')
+            .limit(2);
+          if (sessionLocationId) fallback = fallback.eq('location_id', sessionLocationId);
+          const res = await fallback;
+          routeRows = res.data;
+          routeError = res.error;
+        }
+        if (!routeError && Array.isArray(routeRows) && routeRows.length === 1) {
+          sessionTrailZoneId = routeRows[0].id;
+        }
+      }
 
       if (!activeSession) {
         let { data: created, error } = await supabase
@@ -859,6 +918,7 @@ export default function MapPage() {
           .insert({
             user_id: user.id,
             location_id: sessionLocationId,
+            trail_zone_id: sessionTrailZoneId,
             participant_role: participantRole,
             tracking_phase: 'ascent',
             start_time: new Date().toISOString(),
@@ -888,12 +948,20 @@ export default function MapPage() {
         }
         activeSession = created;
       }
+      if (sessionTrailZoneId && activeSession?.trail_zone_id !== sessionTrailZoneId) {
+        void supabase
+          .from('hiker_sessions' as any)
+          .update({ trail_zone_id: sessionTrailZoneId })
+          .eq('id', activeSession.id);
+        activeSession = { ...activeSession, trail_zone_id: sessionTrailZoneId };
+      }
+      setAssignedTrailZoneId(sessionTrailZoneId);
 
       const tr = await HikeTracker.createOrResume({
         userId: user.id,
         serverSessionId: activeSession?.id ?? null,
         bookingId: activeSession?.booking_id ?? null,
-        trailZoneId: activeSession?.trail_zone_id ?? null,
+        trailZoneId: activeSession?.trail_zone_id ?? sessionTrailZoneId,
         locationId: activeSession?.location_id ?? sessionLocationId,
         participantRole,
       });
@@ -911,7 +979,7 @@ export default function MapPage() {
       });
       void tr.start().catch((e) => console.warn('HikeTracker start failed', e));
     }
-  }, [activeLocationId, ensureCompassEnabled, locations, relockUserMap, role, user]);
+  }, [activeLocationId, ensureCompassEnabled, locations, role, user]);
 
   // Weather-aware routing: if 'avoid', recommend an easier trail.
   const lastAdviceRef = useRef<string | null>(null);

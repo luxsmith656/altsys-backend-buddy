@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useRef } from 'react';
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useLocations } from '@/hooks/useLocations';
@@ -260,6 +260,7 @@ export default function AdminDashboard() {
   // Accept flow
   const [acceptDialogId, setAcceptDialogId] = useState<string | null>(null);
   const [selectedGuide, setSelectedGuide] = useState('');
+  const [selectedTrailZoneId, setSelectedTrailZoneId] = useState('');
   const [acceptSaving, setAcceptSaving] = useState(false);
 
   // Adjust flow
@@ -453,12 +454,24 @@ export default function AdminDashboard() {
   const handleStartHike = async () => {
     if (!scannedBooking) return;
     setStartingHike(true);
+    const routeInfo = resolveAssignedTrail(scannedBooking);
+    if (routeInfo.routes.length > 1 && !routeInfo.route) {
+      toast.error('Assign one official route to this booking before starting the hike.');
+      setStartingHike(false);
+      return;
+    }
+    if (!routeInfo.route) {
+      toast.error('No official route is available for this booking location. Publish a route first.');
+      setStartingHike(false);
+      return;
+    }
     let { data: session, error: sessionErr } = await supabase
       .from('hiker_sessions')
       .insert({
         user_id: scannedBooking.user_id,
         booking_id: scannedBooking.id,
         location_id: scannedBooking.location_id ?? activeLocationId,
+        trail_zone_id: routeInfo.route.id,
         participant_role: 'hiker',
         tracking_phase: 'ascent',
         start_time: new Date().toISOString(),
@@ -497,6 +510,9 @@ export default function AdminDashboard() {
         onsiteStartConfirmed: true,
         onsiteStartTime: startTime,
         hikerSessionId: session?.id,
+        assignedTrailZoneId: routeInfo.route.id,
+        assignedTrailName: routeInfo.route.name,
+        assignedTrailAuto: routeInfo.auto || meta.assignedTrailAuto,
       });
       await supabase.from('bookings').update({ notes: updatedNotes }).eq('id', scannedBooking.id);
       toast.success(`✅ Hike started for ${meta.fullName || 'hiker'}! Session is now active.`);
@@ -530,7 +546,11 @@ export default function AdminDashboard() {
         action: 'hike_started',
         entity_type: 'booking',
         entity_id: scannedBooking.id,
-        after_state: { onsiteStartConfirmed: true, startTime },
+        after_state: {
+          onsiteStartConfirmed: true,
+          startTime,
+          assignedTrail: routeInfo.route.name,
+        },
       });
       loadAllTabBookings();
     }
@@ -673,7 +693,19 @@ export default function AdminDashboard() {
     // selectedGuide now stores guide.id; resolve display name
     const guideRow = guides.find((g) => g.id === selectedGuide);
     const guideName = guideRow?.name ?? selectedGuide;
-    const updatedMeta = encodeMeta({ ...meta, assignedGuide: guideName });
+    const routeInfo = resolveAssignedTrail(booking, selectedTrailZoneId || undefined);
+    if (routeInfo.routes.length > 1 && !routeInfo.route) {
+      toast.error('Select the official route for this hiker before confirming.');
+      setAcceptSaving(false);
+      return;
+    }
+    const updatedMeta = encodeMeta({
+      ...meta,
+      assignedGuide: guideName,
+      assignedTrailZoneId: routeInfo.route?.id,
+      assignedTrailName: routeInfo.route?.name,
+      assignedTrailAuto: routeInfo.auto,
+    });
     const { error } = await supabase
       .from('bookings')
       .update({ status: 'confirmed', notes: updatedMeta })
@@ -715,11 +747,12 @@ export default function AdminDashboard() {
         action: 'booking_confirmed',
         entity_type: 'booking',
         entity_id: acceptDialogId,
-        after_state: { status: 'confirmed', assignedGuide: guideName },
+        after_state: { status: 'confirmed', assignedGuide: guideName, assignedTrail: routeInfo.route?.name ?? null },
       });
       setPendingBookings((prev) => prev.filter((b) => b.id !== acceptDialogId));
       setAcceptDialogId(null);
       setSelectedGuide('');
+      setSelectedTrailZoneId('');
       loadAllTabBookings();
       loadUpcomingCapacities();
     }
@@ -1017,6 +1050,40 @@ export default function AdminDashboard() {
     return b.status as string;
   };
 
+  const officialRoutesForLocation = useCallback((locationId?: string | null) => {
+    return (zones ?? []).filter((z: any) => {
+      const active = z.status === 'active' && z.is_official !== false;
+      return active && (!locationId || !z.location_id || z.location_id === locationId);
+    });
+  }, [zones]);
+
+  const resolveAssignedTrail = useCallback((booking: any, requestedId?: string) => {
+    const meta = parseMeta(booking?.notes);
+    const routes = officialRoutesForLocation(booking?.location_id ?? activeLocationId);
+    const route = requestedId
+      ? routes.find((r: any) => r.id === requestedId)
+      : meta.assignedTrailZoneId
+        ? routes.find((r: any) => r.id === meta.assignedTrailZoneId)
+        : routes.length === 1
+          ? routes[0]
+          : null;
+    return {
+      route: route ?? null,
+      routes,
+      auto: !requestedId && !meta.assignedTrailZoneId && routes.length === 1,
+    };
+  }, [activeLocationId, officialRoutesForLocation]);
+
+  const acceptBooking = useMemo(
+    () => pendingBookings.find((b: any) => b.id === acceptDialogId) ?? null,
+    [acceptDialogId, pendingBookings],
+  );
+  const acceptRouteOptions = useMemo(
+    () => acceptBooking ? officialRoutesForLocation(acceptBooking.location_id ?? activeLocationId) : [],
+    [acceptBooking, activeLocationId, officialRoutesForLocation],
+  );
+  const acceptNeedsRouteSelection = acceptRouteOptions.length > 1;
+
   const BOOKING_STATUS_STYLE: Record<string, string> = {
     pending: 'bg-warning/20 text-warning',
     adjustment_pending: 'bg-sky-500/20 text-sky-600 dark:text-sky-400',
@@ -1272,7 +1339,7 @@ export default function AdminDashboard() {
                             {(displayStatus === 'pending' || displayStatus === 'adjustment_pending') && !isAdjusted && (
                               <>
                                 <Button size="sm" className="gap-1.5 bg-primary hover:bg-primary/90 text-primary-foreground"
-                                  onClick={() => { setAcceptDialogId(b.id); setSelectedGuide(''); }}>
+                                  onClick={() => { setAcceptDialogId(b.id); setSelectedGuide(''); setSelectedTrailZoneId(''); }}>
                                   <UserCheck className="h-3.5 w-3.5" /> Accept & Assign Guide
                                 </Button>
                                 <Button size="sm" variant="outline" className="gap-1.5 border-sky-500/40 text-sky-600 dark:text-sky-400 hover:bg-sky-500/10"
@@ -1381,9 +1448,32 @@ export default function AdminDashboard() {
                         </SelectContent>
                       </Select>
                     </div>
+                    <div className="space-y-2">
+                      <Label>Official Route</Label>
+                      {acceptRouteOptions.length === 0 ? (
+                        <div className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+                          Publish an official route before confirming this booking.
+                        </div>
+                      ) : acceptRouteOptions.length === 1 ? (
+                        <div className="rounded-md border border-primary/25 bg-primary/10 px-3 py-2 text-sm">
+                          Auto-assigned: <span className="font-semibold">{acceptRouteOptions[0].name}</span>
+                        </div>
+                      ) : (
+                        <Select value={selectedTrailZoneId} onValueChange={setSelectedTrailZoneId}>
+                          <SelectTrigger><SelectValue placeholder="Select route for this hiker..." /></SelectTrigger>
+                          <SelectContent>
+                            {acceptRouteOptions.map((route: any) => (
+                              <SelectItem key={route.id} value={route.id}>
+                                {route.name} {route.difficulty ? `- ${route.difficulty}` : ''}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      )}
+                    </div>
                     <div className="flex gap-2 pt-2">
-                      <Button variant="outline" className="flex-1" onClick={() => setAcceptDialogId(null)} disabled={acceptSaving}>Cancel</Button>
-                      <Button className="flex-1 gap-2" onClick={handleAcceptBooking} disabled={!selectedGuide || acceptSaving}>
+                      <Button variant="outline" className="flex-1" onClick={() => { setAcceptDialogId(null); setSelectedTrailZoneId(''); }} disabled={acceptSaving}>Cancel</Button>
+                      <Button className="flex-1 gap-2" onClick={handleAcceptBooking} disabled={!selectedGuide || acceptRouteOptions.length === 0 || (acceptNeedsRouteSelection && !selectedTrailZoneId) || acceptSaving}>
                         {acceptSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
                         Confirm & Notify Guide
                       </Button>

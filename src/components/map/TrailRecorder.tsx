@@ -1,10 +1,11 @@
-import { useState, useCallback, useRef, useEffect } from 'react';
+import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import { MapContainer, TileLayer, Polyline, useMapEvents, Marker, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { supabase } from '@/integrations/supabase/client';
 import { Activity, AlertTriangle, CheckCircle2, GitCompare, Locate, Play, Square, MousePointer, Navigation, Trash2, Save, Undo2 } from 'lucide-react';
 import { toast } from 'sonner';
@@ -182,10 +183,12 @@ interface TrailRecorderProps {
 
 type TrailRecordingRow = {
   id: string;
+  trail_zone_id?: string | null;
   created_at: string;
   status?: string | null;
   source?: string | null;
   quality_summary?: any;
+  raw_points_json?: any;
   cleaned_points_json?: any;
   review_decision?: string | null;
   comparison_summary?: any;
@@ -218,6 +221,9 @@ export default function TrailRecorder({ existingTrails, onSaved }: TrailRecorder
   const [recordingsLoading, setRecordingsLoading] = useState(false);
   const [selectedTrailLocationId, setSelectedTrailLocationId] = useState<string | null>(null);
   const [selectedTrailRecordingCount, setSelectedTrailRecordingCount] = useState(0);
+  const [recordingsModalOpen, setRecordingsModalOpen] = useState(false);
+  const [recordingSort, setRecordingSort] = useState<'newest' | 'quality' | 'distance'>('newest');
+  const [recordingActionId, setRecordingActionId] = useState<string | null>(null);
 
   useEffect(() => {
     pathRef.current = path;
@@ -241,6 +247,20 @@ export default function TrailRecorder({ existingTrails, onSaved }: TrailRecorder
     const itemAvg = item.comparison.averageDeviationM ?? Infinity;
     return itemAvg < bestAvg ? item : best;
   }, null);
+  const sortedTrailRecordings = useMemo(() => {
+    const rows = [...trailRecordings];
+    if (recordingSort === 'quality') {
+      return rows.sort((a, b) => {
+        const scoreA = reviewRecordingQuality(a.quality_summary ?? {}).score ?? 0;
+        const scoreB = reviewRecordingQuality(b.quality_summary ?? {}).score ?? 0;
+        return scoreB - scoreA;
+      });
+    }
+    if (recordingSort === 'distance') {
+      return rows.sort((a, b) => Number((b.quality_summary ?? {}).distanceM ?? 0) - Number((a.quality_summary ?? {}).distanceM ?? 0));
+    }
+    return rows.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+  }, [recordingSort, trailRecordings]);
 
   // GPS recording
   const startRecording = useCallback(() => {
@@ -417,10 +437,10 @@ export default function TrailRecorder({ existingTrails, onSaved }: TrailRecorder
     try {
       const { data, error } = await supabase
         .from('trail_recordings' as any)
-        .select('id,created_at,status,source,quality_summary,cleaned_points_json,review_decision,comparison_summary')
+        .select('id,trail_zone_id,created_at,status,source,quality_summary,raw_points_json,cleaned_points_json,review_decision,comparison_summary')
         .eq('trail_zone_id', trailId)
         .order('created_at', { ascending: false })
-        .limit(8);
+        .limit(20);
       if (error) throw error;
       setTrailRecordings(((data as TrailRecordingRow[] | null) ?? []));
     } catch {
@@ -455,6 +475,115 @@ export default function TrailRecorder({ existingTrails, onSaved }: TrailRecorder
       setFollowRecordingMap(false);
       void loadTrailRecordings(trailId);
       toast.info(`Loaded trail "${trail.name}" for editing`);
+    }
+  };
+
+  const loadRecordingForReview = (recording: TrailRecordingRow) => {
+    const cleanTrack = pointsFromJson(recording.cleaned_points_json);
+    const cleanPath = cleanTrack.map(toLatLng);
+    if (cleanPath.length < 2) {
+      toast.error('This recording has no cleaned path to review.');
+      return;
+    }
+    const trail = existingTrails?.find((t) => t.id === recording.trail_zone_id);
+    if (trail) {
+      setEditingTrailId(trail.id);
+      setSelectedTrailLocationId(trail.location_id ?? null);
+      setSelectedTrailRecordingCount(trail.recording_count ?? trailRecordings.length);
+      setName(trail.name);
+      setDifficulty(trail.difficulty || 'moderate');
+      setElevation(trail.elevation_meters ? String(trail.elevation_meters) : '');
+    }
+    cleanedGpsPointsRef.current = cleanTrack;
+    rawGpsPointsRef.current = pointsFromJson(recording.raw_points_json);
+    setPath(cleanPath);
+    pathRef.current = cleanPath;
+    setOriginalPath([]);
+    setMode('idle');
+    setFollowRecordingMap(false);
+    setRecordingsModalOpen(false);
+    toast.success('Recording loaded on the map for review.');
+  };
+
+  const publishRecordingAsOfficial = async (recording: TrailRecordingRow) => {
+    if (!recording.trail_zone_id) {
+      toast.error('This recording is not linked to a trail draft.');
+      return;
+    }
+    const cleanTrack = pointsFromJson(recording.cleaned_points_json);
+    if (cleanTrack.length < 2) {
+      toast.error('This recording has no cleaned path to publish.');
+      return;
+    }
+    setRecordingActionId(recording.id);
+    try {
+      const rawTrack = pointsFromJson(recording.raw_points_json);
+      const coordsJson = cleanTrack.map((p) => serializeTrackPoint(p));
+      const rawRecordingJson = (rawTrack.length > 0 ? rawTrack : cleanTrack).map((p) => serializeTrackPoint(p, 'accepted'));
+      const qualitySummary = recording.quality_summary ?? buildRecordingQuality(rawTrack.length > 0 ? rawTrack : cleanTrack, cleanTrack);
+      const payload = {
+        coordinates_json: coordsJson,
+        cleaned_recording_json: coordsJson,
+        raw_recording_json: rawRecordingJson,
+        recording_metadata: {
+          ...qualitySummary,
+          review: reviewRecordingQuality(qualitySummary),
+          comparison: recording.comparison_summary ?? null,
+          source_recording_id: recording.id,
+          published_at: new Date().toISOString(),
+        },
+        status: 'active',
+        review_status: 'approved',
+        is_official: true,
+        official_at: new Date().toISOString(),
+      };
+      let { error } = await supabase
+        .from('trail_zones' as any)
+        .update(payload)
+        .eq('id', recording.trail_zone_id);
+      if (error && String(error.message ?? '').toLowerCase().includes('column')) {
+        const { cleaned_recording_json, raw_recording_json, recording_metadata, review_status, is_official, official_at, ...legacyPayload } = payload;
+        const fallback = await supabase
+          .from('trail_zones' as any)
+          .update(legacyPayload)
+          .eq('id', recording.trail_zone_id);
+        error = fallback.error;
+      }
+      if (error) throw error;
+      await supabase
+        .from('trail_recordings' as any)
+        .update({
+          status: 'active',
+          review_decision: 'approved',
+          reviewed_by: user?.id ?? null,
+          reviewed_at: new Date().toISOString(),
+        })
+        .eq('id', recording.id);
+      toast.success('Recording published as the official route.');
+      await loadTrailRecordings(recording.trail_zone_id);
+      onSaved?.();
+    } catch (err: any) {
+      toast.error(`Failed to publish recording: ${err.message}`);
+    } finally {
+      setRecordingActionId(null);
+    }
+  };
+
+  const deleteTrailRecording = async (recording: TrailRecordingRow) => {
+    if (!window.confirm('Delete this saved recording? The official route will not be removed.')) return;
+    setRecordingActionId(recording.id);
+    try {
+      const { error } = await supabase
+        .from('trail_recordings' as any)
+        .delete()
+        .eq('id', recording.id);
+      if (error) throw error;
+      setTrailRecordings((prev) => prev.filter((item) => item.id !== recording.id));
+      toast.success('Recording deleted.');
+    } catch (err: any) {
+      toast.error(`Failed to delete recording: ${err.message}`);
+    } finally {
+      setRecordingActionId(null);
     }
   };
 
@@ -692,12 +821,90 @@ export default function TrailRecorder({ existingTrails, onSaved }: TrailRecorder
                 <Undo2 className="h-3 w-3" /> Undo
               </Button>
               <Button size="sm" variant="outline" onClick={clearPath} className="gap-1">
-                <Trash2 className="h-3 w-3" /> Clear
+                <Trash2 className="h-3 w-3" /> Discard Draft
               </Button>
               <Button size="sm" onClick={saveTrail} disabled={saving} className="gap-1">
                 <Save className="h-3 w-3" /> {editingTrailId ? 'Update' : 'Save'} Trail
               </Button>
             </>
+          )}
+          {editingTrailId && (
+            <Dialog open={recordingsModalOpen} onOpenChange={setRecordingsModalOpen}>
+              <DialogTrigger asChild>
+                <Button size="sm" variant="secondary" className="gap-1" onClick={() => loadTrailRecordings(editingTrailId)}>
+                  <GitCompare className="h-3 w-3" /> Review Recordings
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="max-h-[85vh] max-w-3xl overflow-y-auto">
+                <DialogHeader>
+                  <DialogTitle>Recorded Trail Review</DialogTitle>
+                </DialogHeader>
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                  <p className="text-sm text-muted-foreground">
+                    Sort saved GPS recordings, load one for review, publish the cleaned path, or delete bad captures.
+                  </p>
+                  <Select value={recordingSort} onValueChange={(v) => setRecordingSort(v as typeof recordingSort)}>
+                    <SelectTrigger className="w-full sm:w-44"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="newest">Newest first</SelectItem>
+                      <SelectItem value="quality">Best quality</SelectItem>
+                      <SelectItem value="distance">Longest distance</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-3">
+                  {recordingsLoading ? (
+                    <div className="rounded-md border border-border/30 bg-muted/20 p-4 text-sm text-muted-foreground">
+                      Loading recordings...
+                    </div>
+                  ) : sortedTrailRecordings.length === 0 ? (
+                    <div className="rounded-md border border-border/30 bg-muted/20 p-4 text-sm text-muted-foreground">
+                      No saved recordings yet for this trail.
+                    </div>
+                  ) : (
+                    sortedTrailRecordings.map((recording) => {
+                      const quality = recording.quality_summary ?? {};
+                      const review = reviewRecordingQuality(quality);
+                      const busy = recordingActionId === recording.id;
+                      return (
+                        <div key={recording.id} className="rounded-lg border border-border/30 bg-background/60 p-3">
+                          <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                            <div className="space-y-2">
+                              <div className="flex flex-wrap items-center gap-2">
+                                <span className="font-semibold text-foreground">{new Date(recording.created_at).toLocaleString()}</span>
+                                <span className="rounded-full bg-muted px-2 py-0.5 text-xs capitalize text-muted-foreground">{review.label}</span>
+                                <span className="rounded-full bg-muted px-2 py-0.5 text-xs capitalize text-muted-foreground">{recording.review_decision ?? 'pending'}</span>
+                              </div>
+                              <div className="grid grid-cols-2 gap-2 text-xs text-muted-foreground sm:grid-cols-5">
+                                <span>Raw: <b className="text-foreground">{quality.rawPointCount ?? '--'}</b></span>
+                                <span>Clean: <b className="text-foreground">{quality.cleanedPointCount ?? '--'}</b></span>
+                                <span>Rejected: <b className="text-foreground">{quality.rejectedPointCount ?? '--'}</b></span>
+                                <span>Estimated: <b className="text-foreground">{quality.estimatedPointCount ?? '--'}</b></span>
+                                <span>Avg acc: <b className="text-foreground">{quality.averageAccuracyM == null ? '--' : `${Number(quality.averageAccuracyM).toFixed(1)} m`}</b></span>
+                              </div>
+                              <div className="text-xs text-muted-foreground">
+                                Distance {formatMeters(quality.distanceM)} / Score {review.score}/100
+                              </div>
+                            </div>
+                            <div className="grid grid-cols-3 gap-2 lg:w-[290px]">
+                              <Button size="sm" variant="outline" onClick={() => loadRecordingForReview(recording)} disabled={busy}>
+                                Load
+                              </Button>
+                              <Button size="sm" onClick={() => publishRecordingAsOfficial(recording)} disabled={busy}>
+                                Publish
+                              </Button>
+                              <Button size="sm" variant="destructive" onClick={() => deleteTrailRecording(recording)} disabled={busy}>
+                                Delete
+                              </Button>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+              </DialogContent>
+            </Dialog>
           )}
         </div>
 

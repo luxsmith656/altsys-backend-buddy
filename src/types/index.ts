@@ -14,6 +14,9 @@ export interface CompanionDetail {
 export interface BookingMeta {
   userNotes?: string;
   assignedGuide?: string;       // Guide name assigned by admin
+  assignedTrailZoneId?: string; // Official route assigned by admin or auto-assigned
+  assignedTrailName?: string;
+  assignedTrailAuto?: boolean;
   adjustedDate?: string;        // Proposed new date (yyyy-MM-dd) from admin
   adjustedTime?: string;        // e.g. "07:00 AM"
   guidePhone?: string;
