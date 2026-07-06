@@ -13,6 +13,12 @@ interface AuthContextType {
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
+const ROLE_PRIORITY: AppRole[] = ['super_admin', 'admin', 'ranger', 'guide', 'hiker'];
+
+function pickPrimaryRole(rows: { role: string | null }[] | null): AppRole {
+  const roles = new Set((rows ?? []).map((row) => row.role).filter(Boolean));
+  return ROLE_PRIORITY.find((candidate) => roles.has(candidate)) ?? 'hiker';
+}
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
@@ -23,16 +29,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const { data, error } = await supabase
       .from('user_roles')
       .select('role')
-      .eq('user_id', userId)
-      .single();
+      .eq('user_id', userId);
 
     if (error) {
       console.warn('Role fetch warning:', error.message);
-      setRole('hiker');
+      setRole(null);
       return;
     }
 
-    setRole((data?.role as AppRole) ?? 'hiker');
+    setRole(pickPrimaryRole(data));
   }, []);
 
   const syncSession = useCallback(async (session: { user: User } | null) => {
@@ -49,7 +54,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       await fetchRole(session.user.id);
     } catch (err) {
       console.error('Session sync error:', err);
-      setRole('hiker');
+      setRole(null);
     } finally {
       setLoading(false);
     }
