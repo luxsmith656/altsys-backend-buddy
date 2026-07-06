@@ -826,7 +826,7 @@ export default function TrailRecorder({ existingTrails, onSaved }: TrailRecorder
         {visibleExistingTrails.length > 0 && (
           <div>
             <label className="text-xs text-muted-foreground mb-1 block">Edit Existing Trail</label>
-            <Select onValueChange={loadExistingTrail}>
+            <Select value={editingTrailId ?? undefined} onValueChange={loadExistingTrail}>
               <SelectTrigger><SelectValue placeholder="Select trail to edit..." /></SelectTrigger>
               <SelectContent>
                 {visibleExistingTrails.map((t) => (
@@ -836,6 +836,25 @@ export default function TrailRecorder({ existingTrails, onSaved }: TrailRecorder
                 ))}
               </SelectContent>
             </Select>
+            <div className="mt-2 max-h-40 overflow-y-auto rounded-md border border-border/50 divide-y divide-border/40">
+              {visibleExistingTrails.map((t) => (
+                <div key={t.id} className="flex items-center justify-between gap-2 px-2 py-1.5 text-xs">
+                  <span className="truncate flex-1">
+                    {t.name} <span className="text-muted-foreground">{t.status === 'draft' ? '(draft)' : '(official)'}</span>
+                  </span>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="h-7 px-2 text-destructive hover:text-destructive hover:bg-destructive/10"
+                    disabled={deletingTrailId === t.id}
+                    onClick={() => deleteTrailPermanently(t.id, t.name)}
+                    title="Delete permanently"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </Button>
+                </div>
+              ))}
+            </div>
           </div>
         )}
 
