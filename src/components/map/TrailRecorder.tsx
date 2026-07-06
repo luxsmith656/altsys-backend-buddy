@@ -442,7 +442,7 @@ export default function TrailRecorder({ existingTrails, onSaved }: TrailRecorder
         .order('created_at', { ascending: false })
         .limit(20);
       if (error) throw error;
-      setTrailRecordings(((data as TrailRecordingRow[] | null) ?? []));
+      setTrailRecordings(((data as unknown as TrailRecordingRow[] | null) ?? []));
     } catch {
       setTrailRecordings([]);
       toast.warning('Could not load previous trail recordings for comparison.');
