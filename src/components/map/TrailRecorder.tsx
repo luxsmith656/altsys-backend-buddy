@@ -570,18 +570,42 @@ export default function TrailRecorder({ existingTrails, onSaved }: TrailRecorder
   };
 
   const deleteTrailRecording = async (recording: TrailRecordingRow) => {
-    if (!window.confirm('Delete this saved recording? The official route will not be removed.')) return;
+    const linkedTrail = existingTrails?.find((trail) => trail.id === recording.trail_zone_id);
+    const deleteWholeRoute = !!recording.trail_zone_id;
+    const confirmMessage = deleteWholeRoute
+      ? `Permanently delete "${linkedTrail?.name ?? 'this route'}" and all of its saved recordings? This removes the route draft/official route from the map too.`
+      : 'Permanently delete this saved recording?';
+    if (!window.confirm(confirmMessage)) return;
     setRecordingActionId(recording.id);
     try {
-      const { error } = await supabase
-        .from('trail_recordings' as any)
-        .delete()
-        .eq('id', recording.id);
-      if (error) throw error;
-      setTrailRecordings((prev) => prev.filter((item) => item.id !== recording.id));
-      toast.success('Recording deleted.');
+      if (deleteWholeRoute && recording.trail_zone_id) {
+        const recordingsDelete = await supabase
+          .from('trail_recordings' as any)
+          .delete()
+          .eq('trail_zone_id', recording.trail_zone_id);
+        if (recordingsDelete.error) throw recordingsDelete.error;
+
+        const trailDelete = await supabase
+          .from('trail_zones' as any)
+          .delete()
+          .eq('id', recording.trail_zone_id);
+        if (trailDelete.error) throw trailDelete.error;
+
+        setTrailRecordings((prev) => prev.filter((item) => item.trail_zone_id !== recording.trail_zone_id));
+        if (editingTrailId === recording.trail_zone_id) clearPath();
+        toast.success('Route and all linked recordings were permanently deleted.');
+        onSaved?.();
+      } else {
+        const { error } = await supabase
+          .from('trail_recordings' as any)
+          .delete()
+          .eq('id', recording.id);
+        if (error) throw error;
+        setTrailRecordings((prev) => prev.filter((item) => item.id !== recording.id));
+        toast.success('Recording permanently deleted.');
+      }
     } catch (err: any) {
-      toast.error(`Failed to delete recording: ${err.message}`);
+      toast.error(`Failed to delete: ${err.message}`);
     } finally {
       setRecordingActionId(null);
     }
@@ -894,7 +918,7 @@ export default function TrailRecorder({ existingTrails, onSaved }: TrailRecorder
                                 Publish
                               </Button>
                               <Button size="sm" variant="destructive" onClick={() => deleteTrailRecording(recording)} disabled={busy}>
-                                Delete
+                                Delete Route
                               </Button>
                             </div>
                           </div>
@@ -1005,7 +1029,7 @@ export default function TrailRecorder({ existingTrails, onSaved }: TrailRecorder
         )}
 
         {/* Mini map for drawing */}
-        <div className="relative h-[300px] rounded-lg overflow-hidden border border-border/30">
+        <div className="relative h-[min(58vh,560px)] min-h-[360px] md:min-h-[480px] rounded-lg overflow-hidden border border-border/30">
           <MapContainer center={MT_KALISUNGAN_CENTER} zoom={DEFAULT_ZOOM} className="h-full w-full" zoomControl={true}>
             <RecorderMapBridge onReady={setRecorderMap} />
             <TileLayer

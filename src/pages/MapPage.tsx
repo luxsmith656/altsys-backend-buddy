@@ -5,7 +5,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import L from 'leaflet';
 import { MT_KALISUNGAN_CENTER, DEFAULT_ZOOM, TRAILS, POI, ZONES, haversineDistance, distanceToTrail } from '@/lib/map-data';
 import { Button } from '@/components/ui/button';
-import { ChevronDown, ChevronUp, Locate, Pause, Play, AlertTriangle, ChevronLeft, ChevronRight, Layers, Download, CheckCircle2 } from 'lucide-react';
+import { ChevronDown, ChevronUp, Locate, Pause, Play, AlertTriangle, ChevronLeft, ChevronRight, Layers, Download, CheckCircle2, MapPinned } from 'lucide-react';
 import { toast } from 'sonner';
 import ElevationProfile from '@/components/map/ElevationProfile';
 import MapLegend from '@/components/map/MapLegend';
@@ -1611,6 +1611,9 @@ export default function MapPage() {
     if (h > 0) return `${h}:${String(m).padStart(2, '0')}:${String(sec).padStart(2, '0')}`;
     return `${String(m).padStart(2, '0')}:${String(sec).padStart(2, '0')}`;
   };
+  const openRouteEditor = useCallback(() => {
+    navigate('/admin?tab=overview#trail-recorder');
+  }, [navigate]);
   const mobileControlsBottom = `calc(env(safe-area-inset-bottom) + ${mobileViewportBottomInset}px + 0.75rem)`;
 
   return (
@@ -1645,6 +1648,15 @@ export default function MapPage() {
 
       {isTrailRecorder && (
         <div className="hidden md:flex justify-end items-center gap-2 px-4 py-2">
+          <Button
+            size="sm"
+            variant="secondary"
+            className="gap-1"
+            onClick={openRouteEditor}
+          >
+            <MapPinned className="h-3.5 w-3.5" />
+            Route Editor
+          </Button>
           <Button
             size="sm"
             variant={isRecording ? 'destructive' : 'outline'}
@@ -1904,6 +1916,17 @@ export default function MapPage() {
         <div
           className="md:hidden absolute right-3 top-[5.25rem] z-[1100] flex flex-col items-end gap-2"
         >
+          {isTrailRecorder && (
+            <Button
+              size="icon"
+              variant="secondary"
+              className="glass-card"
+              onClick={openRouteEditor}
+              aria-label="Open route editor"
+            >
+              <MapPinned className="h-4 w-4" />
+            </Button>
+          )}
           <WeatherPanel lat={MT_KALISUNGAN_CENTER[0]} lng={MT_KALISUNGAN_CENTER[1]} onAdvice={handleWeatherAdvice} />
           <ElevationProfile
             trailPath={currentTrail.path}
