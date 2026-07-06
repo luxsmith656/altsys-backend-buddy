@@ -1447,8 +1447,23 @@ export default function MapPage() {
           .from('trail_zones' as any)
           .delete()
           .eq('id', savedRecordedRouteDraftId);
-        if (routeDelete.error) throw routeDelete.error;
-        toast.success('Saved route draft deleted from recorded trails.');
+        if (routeDelete.error) {
+          const archive = await supabase
+            .from('trail_zones' as any)
+            .update({
+              status: 'deleted',
+              review_status: 'deleted',
+              is_official: false,
+              coordinates_json: [],
+              raw_recording_json: [],
+              cleaned_recording_json: [],
+              recording_metadata: { deleted_at: new Date().toISOString(), delete_error: routeDelete.error.message },
+              recording_count: 0,
+            })
+            .eq('id', savedRecordedRouteDraftId);
+          if (archive.error) throw routeDelete.error;
+        }
+        toast.success('Saved route draft removed from recorded trails.');
       } catch (err: any) {
         toast.error(`Failed to delete saved route draft: ${err.message}`);
         setDiscardingRecordedRoute(false);

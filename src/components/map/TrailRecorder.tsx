@@ -196,6 +196,7 @@ type TrailRecordingRow = {
 
 export default function TrailRecorder({ existingTrails, onSaved }: TrailRecorderProps) {
   const { user } = useAuth();
+  const visibleExistingTrails = existingTrails?.filter((trail) => trail.status !== 'deleted' && trail.review_status !== 'deleted') ?? [];
   const [mode, setMode] = useState<'idle' | 'drawing' | 'recording'>('idle');
   const [path, setPath] = useState<LatLngTuple[]>([]);
   const [name, setName] = useState('');
@@ -452,7 +453,7 @@ export default function TrailRecorder({ existingTrails, onSaved }: TrailRecorder
   }, []);
 
   const loadExistingTrail = (trailId: string) => {
-    const trail = existingTrails?.find((t) => t.id === trailId);
+    const trail = visibleExistingTrails.find((t) => t.id === trailId);
     if (trail) {
       setEditingTrailId(trailId);
       setSelectedTrailLocationId(trail.location_id ?? null);
@@ -485,7 +486,7 @@ export default function TrailRecorder({ existingTrails, onSaved }: TrailRecorder
       toast.error('This recording has no cleaned path to review.');
       return;
     }
-    const trail = existingTrails?.find((t) => t.id === recording.trail_zone_id);
+    const trail = visibleExistingTrails.find((t) => t.id === recording.trail_zone_id);
     if (trail) {
       setEditingTrailId(trail.id);
       setSelectedTrailLocationId(trail.location_id ?? null);
@@ -570,7 +571,7 @@ export default function TrailRecorder({ existingTrails, onSaved }: TrailRecorder
   };
 
   const deleteTrailRecording = async (recording: TrailRecordingRow) => {
-    const linkedTrail = existingTrails?.find((trail) => trail.id === recording.trail_zone_id);
+    const linkedTrail = visibleExistingTrails.find((trail) => trail.id === recording.trail_zone_id);
     const deleteWholeRoute = !!recording.trail_zone_id;
     const confirmMessage = deleteWholeRoute
       ? `Permanently delete "${linkedTrail?.name ?? 'this route'}" and all of its saved recordings? This removes the route draft/official route from the map too.`
@@ -589,11 +590,26 @@ export default function TrailRecorder({ existingTrails, onSaved }: TrailRecorder
           .from('trail_zones' as any)
           .delete()
           .eq('id', recording.trail_zone_id);
-        if (trailDelete.error) throw trailDelete.error;
+        if (trailDelete.error) {
+          const archive = await supabase
+            .from('trail_zones' as any)
+            .update({
+              status: 'deleted',
+              review_status: 'deleted',
+              is_official: false,
+              coordinates_json: [],
+              raw_recording_json: [],
+              cleaned_recording_json: [],
+              recording_metadata: { deleted_at: new Date().toISOString(), delete_error: trailDelete.error.message },
+              recording_count: 0,
+            })
+            .eq('id', recording.trail_zone_id);
+          if (archive.error) throw trailDelete.error;
+        }
 
         setTrailRecordings((prev) => prev.filter((item) => item.trail_zone_id !== recording.trail_zone_id));
         if (editingTrailId === recording.trail_zone_id) clearPath();
-        toast.success('Route and all linked recordings were permanently deleted.');
+        toast.success('Route removed from recorded trails.');
         onSaved?.();
       } else {
         const { error } = await supabase
@@ -780,13 +796,13 @@ export default function TrailRecorder({ existingTrails, onSaved }: TrailRecorder
       </CardHeader>
       <CardContent className="space-y-4">
         {/* Load existing trail */}
-        {existingTrails && existingTrails.length > 0 && (
+        {visibleExistingTrails.length > 0 && (
           <div>
             <label className="text-xs text-muted-foreground mb-1 block">Edit Existing Trail</label>
             <Select onValueChange={loadExistingTrail}>
               <SelectTrigger><SelectValue placeholder="Select trail to edit..." /></SelectTrigger>
               <SelectContent>
-                {existingTrails.map((t) => (
+                {visibleExistingTrails.map((t) => (
                   <SelectItem key={t.id} value={t.id}>
                     {t.name} {t.status === 'draft' ? '(draft)' : '(official)'}
                   </SelectItem>
@@ -1047,7 +1063,7 @@ export default function TrailRecorder({ existingTrails, onSaved }: TrailRecorder
             />
 
             {/* Show all existing trails as faint reference lines */}
-            {existingTrails?.map((t) => {
+            {visibleExistingTrails.map((t) => {
               const coords = Array.isArray(t.coordinates_json) ? t.coordinates_json : [];
               if (coords.length < 2) return null;
               const positions = coords.map((c: any) => [c.lat, c.lng] as LatLngTuple);

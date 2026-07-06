@@ -853,7 +853,7 @@ export default function AdminDashboard() {
         ).length || 0,
     });
     setBookings(bookingsData || []);
-    setZones(zonesData || []);
+    setZones((zonesData || []).filter((zone: any) => zone.status !== 'deleted' && zone.review_status !== 'deleted'));
   };
 
   /* ── Load real guides from DB (scoped to active location for admins) ── */
