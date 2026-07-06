@@ -481,6 +481,8 @@ export default function MapPage() {
 
   const [recordedPoints, setRecordedPoints] = useState<RecordedPoint[]>([]);
   const [recordingPreviewReady, setRecordingPreviewReady] = useState(false);
+  const [savedRecordedRouteDraftId, setSavedRecordedRouteDraftId] = useState<string | null>(null);
+  const [discardingRecordedRoute, setDiscardingRecordedRoute] = useState(false);
   const recordWatchRef = useRef<number | null>(null);
   const recordPollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const recordedPointsRef = useRef<RecordedPoint[]>([]);
@@ -1246,6 +1248,7 @@ export default function MapPage() {
       if (!ok) return;
     }
     if (!resumeExisting) {
+      setSavedRecordedRouteDraftId(null);
       recordedPointsRef.current = [];
       rawRecordedPointsRef.current = [];
       setRecordedPoints([]);
@@ -1425,9 +1428,35 @@ export default function MapPage() {
     }
   };
 
-  const discardRecordedRoute = useCallback(() => {
+  const discardRecordedRoute = useCallback(async () => {
     if (isRecording || isGpsTestMode) {
       stopRecording();
+    }
+    if (savedRecordedRouteDraftId) {
+      const shouldDelete = window.confirm('Delete this saved route draft and remove it from recorded trails?');
+      if (!shouldDelete) return;
+      setDiscardingRecordedRoute(true);
+      try {
+        const recordingsDelete = await supabase
+          .from('trail_recordings' as any)
+          .delete()
+          .eq('trail_zone_id', savedRecordedRouteDraftId);
+        if (recordingsDelete.error) throw recordingsDelete.error;
+
+        const routeDelete = await supabase
+          .from('trail_zones' as any)
+          .delete()
+          .eq('id', savedRecordedRouteDraftId);
+        if (routeDelete.error) throw routeDelete.error;
+        toast.success('Saved route draft deleted from recorded trails.');
+      } catch (err: any) {
+        toast.error(`Failed to delete saved route draft: ${err.message}`);
+        setDiscardingRecordedRoute(false);
+        return;
+      }
+      setDiscardingRecordedRoute(false);
+    } else {
+      toast.info('Recorded trail discarded.');
     }
     recordedPointsRef.current = [];
     rawRecordedPointsRef.current = [];
@@ -1437,10 +1466,10 @@ export default function MapPage() {
     recordingFilterRef.current = null;
     setRecordedPoints([]);
     setRecordingPreviewReady(false);
+    setSavedRecordedRouteDraftId(null);
     setIsGpsTestMode(false);
     localStorage.removeItem(recordingStorageKey);
-    toast.info('Recorded trail discarded.');
-  }, [isGpsTestMode, isRecording, recordingStorageKey, stopRecording]);
+  }, [isGpsTestMode, isRecording, recordingStorageKey, savedRecordedRouteDraftId, stopRecording]);
 
   useEffect(() => {
     if (!isTrailRecorder || typeof window === 'undefined') return;
@@ -1458,6 +1487,7 @@ export default function MapPage() {
       recordSessionStartedAtRef.current = stored.startedAt ?? points[0]?.timestamp ?? rawPoints[0]?.timestamp ?? Date.now();
       recordedPointsRef.current = points;
       rawRecordedPointsRef.current = rawPoints;
+      setSavedRecordedRouteDraftId(null);
       setRecordedPoints(points);
       setRecordingPreviewReady(points.length > 1);
       const last = points[points.length - 1];
@@ -1479,6 +1509,10 @@ export default function MapPage() {
 
   const saveRecordedRouteDraft = async () => {
     const points = recordedPointsRef.current;
+    if (savedRecordedRouteDraftId) {
+      navigate(`/admin?tab=overview&routeDraft=${savedRecordedRouteDraftId}#trail-recorder`);
+      return;
+    }
     if (!user || points.length < 2) {
       toast.error('Record at least two GPS points before saving a route.');
       return;
@@ -1547,13 +1581,10 @@ export default function MapPage() {
       },
     });
     localStorage.removeItem(recordingStorageKey);
-    recordedPointsRef.current = [];
-    rawRecordedPointsRef.current = [];
+    setSavedRecordedRouteDraftId(savedDraftId);
     recordPredictedCountRef.current = 0;
     recordingFilterRef.current?.reset();
     recordingFilterRef.current = null;
-    setRecordedPoints([]);
-    setRecordingPreviewReady(false);
   };
 
   const recordDistanceMeters = useMemo(() => {
@@ -1842,11 +1873,11 @@ export default function MapPage() {
             </div>
             {recordingPreviewReady && !isRecording && (
               <div className="grid grid-cols-2 gap-2">
-                <Button size="sm" className="h-7 text-xs md:h-8" onClick={saveRecordedRouteDraft}>
-                  Save Draft
+                <Button size="sm" className="h-7 text-xs md:h-8" onClick={saveRecordedRouteDraft} disabled={discardingRecordedRoute}>
+                  {savedRecordedRouteDraftId ? 'Open Draft' : 'Save Draft'}
                 </Button>
-                <Button size="sm" variant="outline" className="h-7 text-xs md:h-8" onClick={discardRecordedRoute}>
-                  Discard
+                <Button size="sm" variant={savedRecordedRouteDraftId ? 'destructive' : 'outline'} className="h-7 text-xs md:h-8" onClick={discardRecordedRoute} disabled={discardingRecordedRoute}>
+                  {savedRecordedRouteDraftId ? 'Delete Draft' : 'Discard'}
                 </Button>
               </div>
             )}
@@ -2109,16 +2140,18 @@ export default function MapPage() {
                           variant="secondary"
                           className="gap-1"
                           onClick={saveRecordedRouteDraft}
+                          disabled={discardingRecordedRoute}
                         >
-                          Save Draft
+                          {savedRecordedRouteDraftId ? 'Open Draft' : 'Save Draft'}
                         </Button>
                         <Button
                           size="sm"
-                          variant="outline"
+                          variant={savedRecordedRouteDraftId ? 'destructive' : 'outline'}
                           className="gap-1"
                           onClick={discardRecordedRoute}
+                          disabled={discardingRecordedRoute}
                         >
-                          Discard
+                          {savedRecordedRouteDraftId ? 'Delete Draft' : 'Discard'}
                         </Button>
                       </div>
                     )}
