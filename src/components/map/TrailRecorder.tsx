@@ -479,6 +479,33 @@ export default function TrailRecorder({ existingTrails, onSaved }: TrailRecorder
     }
   };
 
+  const [deletingTrailId, setDeletingTrailId] = useState<string | null>(null);
+  const deleteTrailPermanently = async (trailId: string, trailName: string) => {
+    if (!window.confirm(`Permanently delete "${trailName}"? This cannot be undone.`)) return;
+    setDeletingTrailId(trailId);
+    try {
+      await supabase.from('trail_recordings').delete().eq('trail_zone_id', trailId);
+      const { error } = await supabase.from('trail_zones').delete().eq('id', trailId);
+      if (error) throw error;
+      toast.success(`Deleted "${trailName}"`);
+      if (editingTrailId === trailId) {
+        setEditingTrailId(null);
+        setPath([]);
+        setName('');
+        setElevation('');
+        pathRef.current = [];
+        rawGpsPointsRef.current = [];
+        cleanedGpsPointsRef.current = [];
+        setTrailRecordings([]);
+      }
+      onSaved?.();
+    } catch (err: any) {
+      toast.error(`Failed to delete: ${err.message}`);
+    } finally {
+      setDeletingTrailId(null);
+    }
+  };
+
   const loadRecordingForReview = (recording: TrailRecordingRow) => {
     const cleanTrack = pointsFromJson(recording.cleaned_points_json);
     const cleanPath = cleanTrack.map(toLatLng);
