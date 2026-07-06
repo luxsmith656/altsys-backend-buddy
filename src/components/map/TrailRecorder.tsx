@@ -197,7 +197,6 @@ type TrailRecordingRow = {
 export default function TrailRecorder({ existingTrails, onSaved }: TrailRecorderProps) {
   const { user } = useAuth();
   const visibleExistingTrails = existingTrails?.filter((trail) => trail.status !== 'deleted' && trail.review_status !== 'deleted') ?? [];
-  const selectedTrailForDelete = visibleExistingTrails.find((trail) => trail.id === editingTrailId);
   const [mode, setMode] = useState<'idle' | 'drawing' | 'recording'>('idle');
   const [path, setPath] = useState<LatLngTuple[]>([]);
   const [name, setName] = useState('');
@@ -226,6 +225,7 @@ export default function TrailRecorder({ existingTrails, onSaved }: TrailRecorder
   const [recordingsModalOpen, setRecordingsModalOpen] = useState(false);
   const [recordingSort, setRecordingSort] = useState<'newest' | 'quality' | 'distance'>('newest');
   const [recordingActionId, setRecordingActionId] = useState<string | null>(null);
+  const selectedTrailForDelete = visibleExistingTrails.find((trail) => trail.id === editingTrailId);
 
   useEffect(() => {
     pathRef.current = path;
