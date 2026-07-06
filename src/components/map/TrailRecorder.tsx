@@ -197,6 +197,7 @@ type TrailRecordingRow = {
 export default function TrailRecorder({ existingTrails, onSaved }: TrailRecorderProps) {
   const { user } = useAuth();
   const visibleExistingTrails = existingTrails?.filter((trail) => trail.status !== 'deleted' && trail.review_status !== 'deleted') ?? [];
+  const selectedTrailForDelete = visibleExistingTrails.find((trail) => trail.id === editingTrailId);
   const [mode, setMode] = useState<'idle' | 'drawing' | 'recording'>('idle');
   const [path, setPath] = useState<LatLngTuple[]>([]);
   const [name, setName] = useState('');
@@ -486,8 +487,23 @@ export default function TrailRecorder({ existingTrails, onSaved }: TrailRecorder
     try {
       await supabase.from('trail_recordings').delete().eq('trail_zone_id', trailId);
       const { error } = await supabase.from('trail_zones').delete().eq('id', trailId);
-      if (error) throw error;
-      toast.success(`Deleted "${trailName}"`);
+      if (error) {
+        const archive = await supabase
+          .from('trail_zones' as any)
+          .update({
+            status: 'deleted',
+            review_status: 'deleted',
+            is_official: false,
+            coordinates_json: [],
+            raw_recording_json: [],
+            cleaned_recording_json: [],
+            recording_metadata: { deleted_at: new Date().toISOString(), delete_error: error.message },
+            recording_count: 0,
+          })
+          .eq('id', trailId);
+        if (archive.error) throw error;
+      }
+      toast.success(`Removed "${trailName}"`);
       if (editingTrailId === trailId) {
         setEditingTrailId(null);
         setPath([]);
@@ -836,6 +852,18 @@ export default function TrailRecorder({ existingTrails, onSaved }: TrailRecorder
                 ))}
               </SelectContent>
             </Select>
+            {selectedTrailForDelete && (
+              <Button
+                type="button"
+                variant="destructive"
+                className="mt-2 h-11 w-full gap-2 text-sm"
+                disabled={deletingTrailId === selectedTrailForDelete.id}
+                onClick={() => deleteTrailPermanently(selectedTrailForDelete.id, selectedTrailForDelete.name)}
+              >
+                <Trash2 className="h-4 w-4" />
+                Permanently Delete Selected Route
+              </Button>
+            )}
             <div className="mt-2 max-h-40 overflow-y-auto rounded-md border border-border/50 divide-y divide-border/40">
               {visibleExistingTrails.map((t) => (
                 <div key={t.id} className="flex flex-col gap-2 px-2 py-2 text-xs sm:flex-row sm:items-center sm:justify-between">
