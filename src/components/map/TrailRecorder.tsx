@@ -838,19 +838,20 @@ export default function TrailRecorder({ existingTrails, onSaved }: TrailRecorder
             </Select>
             <div className="mt-2 max-h-40 overflow-y-auto rounded-md border border-border/50 divide-y divide-border/40">
               {visibleExistingTrails.map((t) => (
-                <div key={t.id} className="flex items-center justify-between gap-2 px-2 py-1.5 text-xs">
-                  <span className="truncate flex-1">
+                <div key={t.id} className="flex flex-col gap-2 px-2 py-2 text-xs sm:flex-row sm:items-center sm:justify-between">
+                  <span className="min-w-0 flex-1 truncate">
                     {t.name} <span className="text-muted-foreground">{t.status === 'draft' ? '(draft)' : '(official)'}</span>
                   </span>
                   <Button
                     size="sm"
-                    variant="ghost"
-                    className="h-7 px-2 text-destructive hover:text-destructive hover:bg-destructive/10"
+                    variant="destructive"
+                    className="h-9 w-full gap-1 sm:h-7 sm:w-auto sm:px-2"
                     disabled={deletingTrailId === t.id}
                     onClick={() => deleteTrailPermanently(t.id, t.name)}
                     title="Delete permanently"
                   >
                     <Trash2 className="h-3.5 w-3.5" />
+                    <span className="sm:hidden">Delete Route</span>
                   </Button>
                 </div>
               ))}
@@ -972,14 +973,14 @@ export default function TrailRecorder({ existingTrails, onSaved }: TrailRecorder
                                 Distance {formatMeters(quality.distanceM)} / Score {review.score}/100
                               </div>
                             </div>
-                            <div className="grid grid-cols-3 gap-2 lg:w-[290px]">
-                              <Button size="sm" variant="outline" onClick={() => loadRecordingForReview(recording)} disabled={busy}>
+                            <div className="grid grid-cols-1 gap-2 sm:grid-cols-3 lg:w-[290px]">
+                              <Button size="sm" variant="outline" className="h-10" onClick={() => loadRecordingForReview(recording)} disabled={busy}>
                                 Load
                               </Button>
-                              <Button size="sm" onClick={() => publishRecordingAsOfficial(recording)} disabled={busy}>
+                              <Button size="sm" className="h-10" onClick={() => publishRecordingAsOfficial(recording)} disabled={busy}>
                                 Publish
                               </Button>
-                              <Button size="sm" variant="destructive" onClick={() => deleteTrailRecording(recording)} disabled={busy}>
+                              <Button size="sm" variant="destructive" className="h-10" onClick={() => deleteTrailRecording(recording)} disabled={busy}>
                                 Delete Route
                               </Button>
                             </div>

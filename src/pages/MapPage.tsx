@@ -1887,11 +1887,11 @@ export default function MapPage() {
               </span></span>
             </div>
             {recordingPreviewReady && !isRecording && (
-              <div className="grid grid-cols-2 gap-2">
-                <Button size="sm" className="h-7 text-xs md:h-8" onClick={saveRecordedRouteDraft} disabled={discardingRecordedRoute}>
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                <Button size="sm" className="h-10 text-sm md:h-8 md:text-xs" onClick={saveRecordedRouteDraft} disabled={discardingRecordedRoute}>
                   {savedRecordedRouteDraftId ? 'Open Draft' : 'Save Draft'}
                 </Button>
-                <Button size="sm" variant={savedRecordedRouteDraftId ? 'destructive' : 'outline'} className="h-7 text-xs md:h-8" onClick={discardRecordedRoute} disabled={discardingRecordedRoute}>
+                <Button size="sm" variant={savedRecordedRouteDraftId ? 'destructive' : 'outline'} className="h-10 text-sm md:h-8 md:text-xs" onClick={discardRecordedRoute} disabled={discardingRecordedRoute}>
                   {savedRecordedRouteDraftId ? 'Delete Draft' : 'Discard'}
                 </Button>
               </div>
@@ -2149,11 +2149,11 @@ export default function MapPage() {
                       </Button>
                     </div>
                     {recordedPoints.length > 1 && !isRecording && !isGpsTestMode && (
-                      <div className="grid grid-cols-2 gap-2">
+                      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                         <Button
                           size="sm"
                           variant="secondary"
-                          className="gap-1"
+                          className="h-11 gap-1 text-sm"
                           onClick={saveRecordedRouteDraft}
                           disabled={discardingRecordedRoute}
                         >
@@ -2162,7 +2162,7 @@ export default function MapPage() {
                         <Button
                           size="sm"
                           variant={savedRecordedRouteDraftId ? 'destructive' : 'outline'}
-                          className="gap-1"
+                          className="h-11 gap-1 text-sm"
                           onClick={discardRecordedRoute}
                           disabled={discardingRecordedRoute}
                         >
