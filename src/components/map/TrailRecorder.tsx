@@ -215,7 +215,7 @@ export default function TrailRecorder({ existingTrails, onSaved }: TrailRecorder
   const [recordingNow, setRecordingNow] = useState(Date.now());
   const pathRef = useRef<LatLngTuple[]>([]);
   const [recorderMap, setRecorderMap] = useState<L.Map | null>(null);
-  const [followRecordingMap, setFollowRecordingMap] = useState(true);
+  const [followRecordingMap, setFollowRecordingMap] = useState(false);
   const suppressRecorderUnlockRef = useRef(false);
   const offlineDraftKey = 'altsys-admin-trail-recorder-draft';
   const [trailRecordings, setTrailRecordings] = useState<TrailRecordingRow[]>([]);
@@ -283,7 +283,7 @@ export default function TrailRecorder({ existingTrails, onSaved }: TrailRecorder
     setMode('recording');
     setPath([]);
     pathRef.current = [];
-    setFollowRecordingMap(true);
+    setFollowRecordingMap(false);
     setRecordingStartedAt(Date.now());
     toast.info('GPS recording started. Walk the trail path.');
 
@@ -423,7 +423,7 @@ export default function TrailRecorder({ existingTrails, onSaved }: TrailRecorder
     setSelectedTrailLocationId(null);
     setSelectedTrailRecordingCount(0);
     setTrailRecordings([]);
-    setFollowRecordingMap(true);
+    setFollowRecordingMap(false);
     gpsFilterRef.current?.reset();
     gpsFilterRef.current = null;
     predictedCountRef.current = 0;

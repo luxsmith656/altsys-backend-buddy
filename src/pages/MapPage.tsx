@@ -443,7 +443,7 @@ export default function MapPage() {
   const [tracking, setTracking] = useState(false);
   const [mapInstance, setMapInstance] = useState<L.Map | null>(null);
   const mapRef = useRef<L.Map | null>(null);
-  const [followUser, setFollowUser] = useState(true);
+  const [followUser, setFollowUser] = useState(false);
   const suppressFollowUnlockRef = useRef(false);
   // Street map only (other layers removed by design)
   const [userPos, setUserPos] = useState<[number, number] | null>(null);
@@ -849,7 +849,7 @@ export default function MapPage() {
 
   const startTracking = useCallback(async () => {
     void ensureCompassEnabled();
-    setFollowUser(true);
+    setFollowUser(false);
     setTracking(true);
     if (trackerRef.current) {
       void trackerRef.current.resume().catch((e) => console.warn('HikeTracker resume failed', e));
@@ -1238,7 +1238,7 @@ export default function MapPage() {
     }
     void ensureCompassEnabled();
     void ensureMotionEnabled();
-    relockUserMap();
+    setFollowUser(false);
     const existingPoints = recordedPointsRef.current;
     const resumeExisting = opts?.resumeExisting || (existingPoints.length > 1 && window.confirm('Continue the previous recording and connect new points from the last saved position? Press Cancel to start a new trail.'));
     if (!opts?.recovered) {
@@ -1353,7 +1353,7 @@ export default function MapPage() {
     recordPollingRef.current = setInterval(() => {
       navigator.geolocation.getCurrentPosition(handleNewRecordPoint, () => {}, options);
     }, 3000);
-  }, [ensureCompassEnabled, ensureMotionEnabled, persistRecording, relockUserMap, updateRecordedPoints]);
+  }, [ensureCompassEnabled, ensureMotionEnabled, persistRecording, updateRecordedPoints]);
 
   const stopRecording = useCallback(() => {
     let points = recordedPointsRef.current;
