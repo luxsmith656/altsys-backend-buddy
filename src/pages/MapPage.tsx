@@ -21,6 +21,12 @@ import HikeSummary from '@/components/map/HikeSummary';
 import { HikeTracker } from '@/lib/tracking/HikeTracker';
 import { downloadArea } from '@/lib/tracking/tileCache';
 import { buildRecordingQuality, MotionGpsFilter, normalizeTrackPoint, postProcessTrack, type GpsTrackPoint } from '@/lib/tracking/gpsFilter';
+import {
+  clearNativeTrailPoints,
+  getNativeTrailPoints,
+  startNativeTrailRecording,
+  stopNativeTrailRecording,
+} from '@/lib/tracking/nativeBackgroundRecorder';
 import type { OfflineSession } from '@/lib/offlineDb';
 import type { RouteAdvice } from '@/lib/weather';
 import { supabase } from '@/integrations/supabase/client';
@@ -491,6 +497,7 @@ export default function MapPage() {
   const recordSessionStartedAtRef = useRef<number | null>(null);
   const recordPredictedCountRef = useRef(0);
   const recordingFilterRef = useRef<MotionGpsFilter | null>(null);
+  const nativeRouteRecordingStartedRef = useRef(false);
   const watchRef = useRef<number | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const currentHeadingRef = useRef<number | null>(null);
@@ -1249,11 +1256,15 @@ export default function MapPage() {
     }
     if (!resumeExisting) {
       setSavedRecordedRouteDraftId(null);
+      void clearNativeTrailPoints(recordingStorageKey).catch(() => {});
       recordedPointsRef.current = [];
       rawRecordedPointsRef.current = [];
       setRecordedPoints([]);
       recordPredictedCountRef.current = 0;
     }
+    void startNativeTrailRecording(recordingStorageKey, 'route')
+      .then((started) => { nativeRouteRecordingStartedRef.current = started; })
+      .catch((e) => console.warn('Native background route recorder unavailable', e));
     recordingFilterRef.current = new MotionGpsFilter({
       minAccuracyForStartM: 50,
       maxAccuracyM: 85,
@@ -1353,9 +1364,41 @@ export default function MapPage() {
     recordPollingRef.current = setInterval(() => {
       navigator.geolocation.getCurrentPosition(handleNewRecordPoint, () => {}, options);
     }, 3000);
-  }, [ensureCompassEnabled, ensureMotionEnabled, persistRecording, updateRecordedPoints]);
+  }, [ensureCompassEnabled, ensureMotionEnabled, persistRecording, recordingStorageKey, updateRecordedPoints]);
 
-  const stopRecording = useCallback(() => {
+  const stopRecording = useCallback(async () => {
+    if (nativeRouteRecordingStartedRef.current) {
+      await stopNativeTrailRecording().catch((e) => console.warn('Native route recorder stop failed', e));
+      nativeRouteRecordingStartedRef.current = false;
+    }
+    const nativePoints = await getNativeTrailPoints(recordingStorageKey).catch(() => []);
+    if (nativePoints.length > 0) {
+      const existingKeys = new Set(rawRecordedPointsRef.current.map((p) => Math.round(p.timestamp / 1000)));
+      const imported = nativePoints
+        .filter((p) => Number.isFinite(p.lat) && Number.isFinite(p.lng) && Number.isFinite(p.ts))
+        .filter((p) => {
+          const key = Math.round(p.ts / 1000);
+          if (existingKeys.has(key)) return false;
+          existingKeys.add(key);
+          return true;
+        })
+        .map((p) => ({
+          timestamp: p.ts,
+          lat: p.lat,
+          lon: p.lng,
+          accuracy: p.accuracy ?? 999,
+          speed: p.speed ?? 0,
+          heading: normalizeHeading(p.heading ?? null),
+          alt: p.alt ?? null,
+        } as RecordedPoint));
+      if (imported.length > 0) {
+        const mergedRaw = [...rawRecordedPointsRef.current, ...imported].sort((a, b) => a.timestamp - b.timestamp);
+        rawRecordedPointsRef.current = mergedRaw;
+        const processed = postProcessTrack(mergedRaw.map(toTrackPoint), 1.4).map(fromTrackPoint);
+        recordedPointsRef.current = processed;
+        setRecordedPoints(processed);
+      }
+    }
     let points = recordedPointsRef.current;
     recordingActiveRef.current = false;
     setIsRecording(false);
@@ -1391,7 +1434,7 @@ export default function MapPage() {
     } else {
       toast.warning('No walking trail recorded yet. Move outdoors and try again.');
     }
-  }, [mapInstance, persistRecording]);
+  }, [mapInstance, persistRecording, recordingStorageKey]);
 
   useEffect(() => {
     return () => {
@@ -1406,6 +1449,51 @@ export default function MapPage() {
       }
     };
   }, []);
+
+  useEffect(() => {
+    const pullNativeOnResume = () => {
+      if (document.visibilityState === 'hidden') return;
+      void trackerRef.current?.pullNativePoints().catch((e) => console.warn('Native hike point import failed', e));
+      if (isRecording || recordingPreviewReady) {
+        void getNativeTrailPoints(recordingStorageKey)
+          .then((nativePoints) => {
+            if (nativePoints.length === 0) return;
+            const existingKeys = new Set(rawRecordedPointsRef.current.map((p) => Math.round(p.timestamp / 1000)));
+            const imported = nativePoints
+              .filter((p) => Number.isFinite(p.lat) && Number.isFinite(p.lng) && Number.isFinite(p.ts))
+              .filter((p) => {
+                const key = Math.round(p.ts / 1000);
+                if (existingKeys.has(key)) return false;
+                existingKeys.add(key);
+                return true;
+              })
+              .map((p) => ({
+                timestamp: p.ts,
+                lat: p.lat,
+                lon: p.lng,
+                accuracy: p.accuracy ?? 999,
+                speed: p.speed ?? 0,
+                heading: normalizeHeading(p.heading ?? null),
+                alt: p.alt ?? null,
+              } as RecordedPoint));
+            if (imported.length === 0) return;
+            const mergedRaw = [...rawRecordedPointsRef.current, ...imported].sort((a, b) => a.timestamp - b.timestamp);
+            rawRecordedPointsRef.current = mergedRaw;
+            const processed = postProcessTrack(mergedRaw.map(toTrackPoint), 1.4).map(fromTrackPoint);
+            recordedPointsRef.current = processed;
+            setRecordedPoints(processed);
+            persistRecording(processed, recordingActiveRef.current, mergedRaw);
+          })
+          .catch((e) => console.warn('Native route point import failed', e));
+      }
+    };
+    document.addEventListener('visibilitychange', pullNativeOnResume);
+    window.addEventListener('focus', pullNativeOnResume);
+    return () => {
+      document.removeEventListener('visibilitychange', pullNativeOnResume);
+      window.removeEventListener('focus', pullNativeOnResume);
+    };
+  }, [isRecording, persistRecording, recordingPreviewReady, recordingStorageKey]);
 
   const toggleRecording = () => {
     if (isRecording) {
@@ -1430,7 +1518,7 @@ export default function MapPage() {
 
   const discardRecordedRoute = useCallback(async () => {
     if (isRecording || isGpsTestMode) {
-      stopRecording();
+      await stopRecording();
     }
     if (savedRecordedRouteDraftId) {
       const shouldDelete = window.confirm('Delete this saved route draft and remove it from recorded trails?');
@@ -1484,6 +1572,7 @@ export default function MapPage() {
     setSavedRecordedRouteDraftId(null);
     setIsGpsTestMode(false);
     localStorage.removeItem(recordingStorageKey);
+    void clearNativeTrailPoints(recordingStorageKey).catch(() => {});
   }, [isGpsTestMode, isRecording, recordingStorageKey, savedRecordedRouteDraftId, stopRecording]);
 
   useEffect(() => {
@@ -1596,6 +1685,7 @@ export default function MapPage() {
       },
     });
     localStorage.removeItem(recordingStorageKey);
+    void clearNativeTrailPoints(recordingStorageKey).catch(() => {});
     setSavedRecordedRouteDraftId(savedDraftId);
     recordPredictedCountRef.current = 0;
     recordingFilterRef.current?.reset();

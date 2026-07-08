@@ -20,6 +20,12 @@ import {
   type GpsTrackPoint,
   type TrackComparison,
 } from '@/lib/tracking/gpsFilter';
+import {
+  clearNativeTrailPoints,
+  getNativeTrailPoints,
+  startNativeTrailRecording,
+  stopNativeTrailRecording,
+} from '@/lib/tracking/nativeBackgroundRecorder';
 import { useAuth } from '@/hooks/useAuth';
 import type { LatLngTuple } from 'leaflet';
 
@@ -208,6 +214,7 @@ export default function TrailRecorder({ existingTrails, onSaved }: TrailRecorder
   const watchRef = useRef<number | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const gpsFilterRef = useRef<MotionGpsFilter | null>(null);
+  const nativeRecordingStartedRef = useRef(false);
   const predictedCountRef = useRef(0);
   const rawGpsPointsRef = useRef<GpsTrackPoint[]>([]);
   const cleanedGpsPointsRef = useRef<GpsTrackPoint[]>([]);
@@ -280,6 +287,10 @@ export default function TrailRecorder({ existingTrails, onSaved }: TrailRecorder
     predictedCountRef.current = 0;
     rawGpsPointsRef.current = [];
     cleanedGpsPointsRef.current = [];
+    void clearNativeTrailPoints(offlineDraftKey).catch(() => {});
+    void startNativeTrailRecording(offlineDraftKey, 'route')
+      .then((started) => { nativeRecordingStartedRef.current = started; })
+      .catch((e) => console.warn('Native route editor recorder unavailable', e));
     setMode('recording');
     setPath([]);
     pathRef.current = [];
@@ -371,7 +382,42 @@ export default function TrailRecorder({ existingTrails, onSaved }: TrailRecorder
     }, 3500);
   }, []);
 
-  const stopRecording = useCallback(() => {
+  const stopRecording = useCallback(async () => {
+    if (nativeRecordingStartedRef.current) {
+      await stopNativeTrailRecording().catch((e) => console.warn('Native route editor recorder stop failed', e));
+      nativeRecordingStartedRef.current = false;
+    }
+    const nativePoints = await getNativeTrailPoints(offlineDraftKey).catch(() => []);
+    if (nativePoints.length > 0) {
+      const existingKeys = new Set(rawGpsPointsRef.current.map((p) => Math.round(p.ts / 1000)));
+      const imported = nativePoints
+        .filter((p) => Number.isFinite(p.lat) && Number.isFinite(p.lng) && Number.isFinite(p.ts))
+        .filter((p) => {
+          const key = Math.round(p.ts / 1000);
+          if (existingKeys.has(key)) return false;
+          existingKeys.add(key);
+          return true;
+        })
+        .map((p) => ({
+          lat: p.lat,
+          lng: p.lng,
+          alt: p.alt ?? null,
+          accuracy: p.accuracy ?? 999,
+          speed: p.speed ?? null,
+          heading: p.heading ?? null,
+          ts: p.ts,
+          source: 'gps' as const,
+          filterReason: 'accepted' as const,
+        }));
+      if (imported.length > 0) {
+        rawGpsPointsRef.current = [...rawGpsPointsRef.current, ...imported].sort((a, b) => a.ts - b.ts);
+        const processed = postProcessTrack(rawGpsPointsRef.current, 1.4);
+        cleanedGpsPointsRef.current = processed;
+        const cleaned = processed.map(toLatLng);
+        pathRef.current = cleaned;
+        setPath(cleaned);
+      }
+    }
     if (watchRef.current !== null) {
       navigator.geolocation.clearWatch(watchRef.current);
       watchRef.current = null;
@@ -396,7 +442,7 @@ export default function TrailRecorder({ existingTrails, onSaved }: TrailRecorder
     setMode('idle');
     setRecordingStartedAt(null);
     toast.success(`Recorded ${pathRef.current.length} points. Review the trail on the map before saving.`);
-  }, [path.length]);
+  }, [offlineDraftKey, path.length]);
 
   const startDrawing = () => {
     setMode('drawing');
@@ -430,6 +476,7 @@ export default function TrailRecorder({ existingTrails, onSaved }: TrailRecorder
     rawGpsPointsRef.current = [];
     cleanedGpsPointsRef.current = [];
     localStorage.removeItem(offlineDraftKey);
+    void clearNativeTrailPoints(offlineDraftKey).catch(() => {});
   };
 
   const [originalPath, setOriginalPath] = useState<LatLngTuple[]>([]);
@@ -774,6 +821,7 @@ export default function TrailRecorder({ existingTrails, onSaved }: TrailRecorder
       setSelectedTrailRecordingCount(0);
       setSelectedTrailLocationId(null);
       localStorage.removeItem(offlineDraftKey);
+      void clearNativeTrailPoints(offlineDraftKey).catch(() => {});
       onSaved?.();
     } catch (err: any) {
       toast.error(`Failed to save: ${err.message}`);

@@ -13,6 +13,12 @@ import {
 import { supabase } from '@/integrations/supabase/client';
 import { haversineM, simplify } from './geo';
 import { MotionGpsFilter } from './gpsFilter';
+import {
+  clearNativeTrailPoints,
+  getNativeTrailPoints,
+  startNativeTrailRecording,
+  stopNativeTrailRecording,
+} from './nativeBackgroundRecorder';
 
 type Listener = (snap: TrackerSnapshot) => void;
 
@@ -48,6 +54,7 @@ export class HikeTracker {
   private altEMA: number | null = null;
   private startTs: number;
   private tickHandle: ReturnType<typeof setInterval> | null = null;
+  private nativeStarted = false;
   private gpsFilter = new MotionGpsFilter({
     minAccuracyForStartM: 55,
     maxAccuracyM: 90,
@@ -119,6 +126,9 @@ export class HikeTracker {
 
   async start() {
     await saveSession(this.session);
+    void startNativeTrailRecording(this.session.id, 'hike')
+      .then((started) => { this.nativeStarted = started; })
+      .catch((e) => console.warn('Native background hike recorder unavailable', e));
     if (!navigator.geolocation) throw new Error('Geolocation not supported');
     if (this.watchId !== null) navigator.geolocation.clearWatch(this.watchId);
     if (this.tickHandle) clearInterval(this.tickHandle);
@@ -139,6 +149,11 @@ export class HikeTracker {
     if (this.watchId !== null) navigator.geolocation.clearWatch(this.watchId);
     if (this.tickHandle) clearInterval(this.tickHandle);
     this.watchId = null; this.tickHandle = null;
+    await this.pullNativePoints();
+    if (this.nativeStarted) {
+      await stopNativeTrailRecording().catch((e) => console.warn('Native recorder stop failed', e));
+      this.nativeStarted = false;
+    }
     this.session.status = 'paused';
     await saveSession(this.session);
     await enqueue({ kind: 'session', payload: { ...this.session } });
@@ -156,6 +171,11 @@ export class HikeTracker {
     if (this.watchId !== null) navigator.geolocation.clearWatch(this.watchId);
     if (this.tickHandle) clearInterval(this.tickHandle);
     this.watchId = null; this.tickHandle = null;
+    await this.pullNativePoints();
+    if (this.nativeStarted) {
+      await stopNativeTrailRecording().catch((e) => console.warn('Native recorder stop failed', e));
+      this.nativeStarted = false;
+    }
     this.session.status = 'completed';
     this.session.phase = 'completed';
     this.session.endedAt = Date.now();
@@ -174,6 +194,7 @@ export class HikeTracker {
       kind: 'points',
       payload: { sessionId: this.session.id, serverSessionId: this.session.serverSessionId ?? null, points: all },
     });
+    void clearNativeTrailPoints(this.session.id).catch(() => {});
     return this.session;
   }
 
@@ -191,6 +212,49 @@ export class HikeTracker {
   async startDescent() {
     this.session.phase = 'descent';
     this.session.descentStartedAt = Date.now();
+    await saveSession(this.session);
+    await enqueue({ kind: 'session', payload: { ...this.session } });
+    this.emit();
+  }
+
+  async pullNativePoints() {
+    const nativePoints = await getNativeTrailPoints(this.session.id).catch(() => []);
+    if (nativePoints.length === 0) return;
+    const existingKeys = new Set(this.points.map((p) => Math.round(p.ts / 1000)));
+    const sorted = nativePoints
+      .filter((p) => Number.isFinite(p.lat) && Number.isFinite(p.lng) && Number.isFinite(p.ts))
+      .sort((a, b) => a.ts - b.ts);
+    for (const p of sorted) {
+      const key = Math.round(p.ts / 1000);
+      if (existingKeys.has(key)) continue;
+      existingKeys.add(key);
+      const last = this.lastFix;
+      const alt = Number.isFinite(p.alt) ? Number(p.alt) : this.altEMA ?? last?.alt ?? 0;
+      const accuracy = Number.isFinite(p.accuracy) ? Number(p.accuracy) : 999;
+      const point: OfflinePoint = {
+        sessionId: this.session.id,
+        lat: p.lat,
+        lng: p.lng,
+        alt,
+        accuracy,
+        speed: Number.isFinite(p.speed) ? Number(p.speed) : 0,
+        heading: Number.isFinite(p.heading as number) ? Number(p.heading) : null,
+        ts: p.ts,
+        segment: this.session.phase === 'descent' ? 'descent' : this.session.phase === 'peak' ? 'peak' : 'ascent',
+      };
+      if (last) {
+        const d = haversineM(last, point);
+        const dt = Math.max(0, (point.ts - last.ts) / 1000);
+        if (d > 1.5 && dt < 180) {
+          this.session.distanceM += d;
+          this.session.movingSec += Math.min(dt, 30);
+        }
+      }
+      this.lastFix = { lat: point.lat, lng: point.lng, alt: point.alt, ts: point.ts, accuracy: point.accuracy };
+      this.altEMA = point.alt;
+      this.points.push(point);
+      await appendPoint(point);
+    }
     await saveSession(this.session);
     await enqueue({ kind: 'session', payload: { ...this.session } });
     this.emit();
