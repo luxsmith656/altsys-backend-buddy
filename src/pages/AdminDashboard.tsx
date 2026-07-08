@@ -92,6 +92,7 @@ import TrailRecorder from '@/components/map/TrailRecorder';
 import QRCameraScanner from '@/components/admin/QRCameraScanner';
 import DemographicsTab from '@/components/admin/DemographicsTab';
 import PaymentSummaryTab from '@/components/admin/PaymentSummaryTab';
+import AppDownloadButton from '@/components/AppDownloadButton';
 import { Calendar } from '@/components/ui/calendar';
 import { format } from 'date-fns';
 
@@ -1152,14 +1153,22 @@ export default function AdminDashboard() {
 
   return (
     <div className="min-h-screen pt-20 pb-12 px-4">
+      <AppDownloadButton floating />
       <div className="container max-w-7xl mx-auto">
-        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
-          <h1 className="text-3xl font-bold mb-2">
-            Admin <span className="text-gradient">Dashboard</span>
-          </h1>
-          <p className="text-muted-foreground mb-8">
-            Monitor real-time hiker activity, manage zones, announcements, and guides.
-          </p>
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between"
+        >
+          <div>
+            <h1 className="text-3xl font-bold mb-2">
+              Admin <span className="text-gradient">Dashboard</span>
+            </h1>
+            <p className="text-muted-foreground">
+              Monitor real-time hiker activity, manage zones, announcements, and guides.
+            </p>
+          </div>
+          <AppDownloadButton />
         </motion.div>
 
         <Tabs

@@ -44,6 +44,7 @@ import SOSPanel from '@/components/core/SOSPanel';
 import { parseMeta } from '@/lib/bookingMeta';
 import { loadAnnouncements, type AdminAnnouncement } from '@/lib/announcements';
 import { addGuideRating } from '@/lib/guideRatings';
+import AppDownloadButton from '@/components/AppDownloadButton';
 import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -224,14 +225,22 @@ export default function HikerDashboard() {
 
   return (
     <div className="min-h-screen pt-20 pb-12 px-4">
+      <AppDownloadButton floating />
       <div className="container max-w-6xl mx-auto">
 
         {/* Header */}
-        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
-          <h1 className="text-3xl font-bold mb-2">
-            Hiker <span className="text-gradient">Dashboard</span>
-          </h1>
-          <p className="text-muted-foreground mb-6">Your hiking journey on Mount Kalisungan.</p>
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between"
+        >
+          <div>
+            <h1 className="text-3xl font-bold mb-2">
+              Hiker <span className="text-gradient">Dashboard</span>
+            </h1>
+            <p className="text-muted-foreground">Your hiking journey on Mount Kalisungan.</p>
+          </div>
+          <AppDownloadButton />
         </motion.div>
 
         {/* ── ACTION REQUIRED: Adjustment notifications ── */}

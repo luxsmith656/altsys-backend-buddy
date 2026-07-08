@@ -8,6 +8,7 @@
     "build": "vite build",
     "build:dev": "vite build --mode development",
     "android": "vite build && npx cap sync android && npx cap open android",
+    "android:apk": "node scripts/build-android-apk.mjs",
     "lint": "eslint .",
     "preview": "vite preview",
     "test": "vitest run",
