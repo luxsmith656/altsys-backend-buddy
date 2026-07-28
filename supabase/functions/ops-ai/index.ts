@@ -18,9 +18,6 @@ const PAYMENT_REFUSAL = 'Payment information is not available through the operat
 const PAYMENT_RE =
   /\b(payment|payments|paid|pay|refund|refunds|transaction|transactions|receipt|receipts|invoice|invoices|gcash|maya|paypal|stripe|price|prices|fee|fees|revenue|earnings|income|sales|amount due|billing|balance|proof of payment)\b/i;
 
-const PII_RE =
-  /\b(name|names|email|emails|phone|phones|contact|contacts|address|addresses|emergency contact|medical|passport|id number|photo|avatar|notes?|password|api key|secret key|service role|raw rows?|select \*|sql)\b/i;
-
 // ---------------- date helpers (Asia/Manila) ----------------
 function manilaToday(): string {
   return new Intl.DateTimeFormat('en-CA', { timeZone: TZ }).format(new Date());
