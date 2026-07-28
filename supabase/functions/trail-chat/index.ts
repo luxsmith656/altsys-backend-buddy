@@ -60,6 +60,9 @@ async function runTool(db: any, name: string, args: any) {
     console.error("[trail-chat] rpc error", fn, error.message);
     return { error: "Unable to retrieve that data right now." };
   }
+  if (data && typeof data === 'object' && data.capacity === 0) {
+    data.capacity_note = 'No daily capacity is configured for this date range — treat capacity/remaining slots as unknown, not as a closure.';
+  }
   if (name === "get_capacity_summary") {
     return {
       start_date: data.start_date, end_date: data.end_date,

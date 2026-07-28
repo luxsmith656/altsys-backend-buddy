@@ -271,6 +271,9 @@ async function runTool(userClient: any, admin: any, userId: string, name: string
   const out = await callRpc(userClient, isAttendance ? 'ai_attendance_summary' : 'ai_booking_summary', r.start, r.end);
   if (out?.error) return out;
 
+  if (data && typeof data === 'object' && data.capacity === 0) {
+    data.capacity_note = 'No daily capacity is configured for this date range — treat capacity/remaining slots as unknown, not as a closure.';
+  }
   if (name === 'get_capacity_summary') {
     return {
       start_date: out.start_date, end_date: out.end_date,
