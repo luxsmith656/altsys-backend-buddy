@@ -180,6 +180,29 @@ serve(async (req) => {
     const AI_GATEWAY_URL = Deno.env.get("AI_GATEWAY_URL") ?? "https://ai.gateway.lovable.dev";
     const AI_MODEL = Deno.env.get("AI_MODEL") ?? "google/gemini-3-flash-preview";
 
+    const lastUser = [...(messages ?? [])].reverse().find((m: any) => m?.role === "user")?.content ?? "";
+    if (typeof lastUser === "string" && PAYMENT_RE.test(lastUser)) {
+      const text = "Payment information is not available through the Trail Assistant.";
+      const sse = `data: ${JSON.stringify({ choices: [{ delta: { content: text } }] })}\n\ndata: [DONE]\n\n`;
+      return new Response(sse, { headers: { ...corsHeaders, "Content-Type": "text/event-stream" } });
+    }
+
+    const liveData = await gatherLiveData(messages ?? []).catch((e) => {
+      console.error("[trail-chat] live data error", e);
+      return null;
+    });
+
+    const systemMessages: any[] = [
+      { role: "system", content: SYSTEM_PROMPT },
+      { role: "system", content: `Current date in ${TZ}: ${manilaToday()} (now: ${manilaNowLabel()}).` },
+    ];
+    if (liveData) {
+      systemMessages.push({
+        role: "system",
+        content: `LIVE DATA (real registration system figures, aggregate only — use these exact numbers):\n${liveData}`,
+      });
+    }
+
     const response = await fetch(`${AI_GATEWAY_URL}/v1/chat/completions`, {
       method: "POST",
       headers: {
@@ -189,9 +212,10 @@ serve(async (req) => {
       body: JSON.stringify({
         model: AI_MODEL,
         messages: [
-          { role: "system", content: SYSTEM_PROMPT },
+          ...systemMessages,
           ...messages,
         ],
+
         stream: true,
       }),
     });
