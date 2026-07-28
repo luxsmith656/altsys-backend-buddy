@@ -103,6 +103,30 @@ export type Database = {
           },
         ]
       }
+      ai_tool_logs: {
+        Row: {
+          created_at: string
+          id: string
+          params: Json
+          tool_name: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          params?: Json
+          tool_name: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          params?: Json
+          tool_name?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       booking_assignments: {
         Row: {
           booking_id: string
@@ -999,6 +1023,22 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      ai_attendance_summary: {
+        Args: {
+          p_end_date: string
+          p_location_id?: string
+          p_start_date: string
+        }
+        Returns: Json
+      }
+      ai_booking_summary: {
+        Args: {
+          p_end_date: string
+          p_location_id?: string
+          p_start_date: string
+        }
+        Returns: Json
+      }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
