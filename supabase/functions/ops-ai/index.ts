@@ -14,9 +14,13 @@ const LOVABLE_API_KEY = (Deno.env.get('LOVABLE_API_KEY') ?? '').trim();
 const AI_MODEL = 'google/gemini-3-flash-preview';
 const TZ = 'Asia/Manila';
 
-const PAYMENT_REFUSAL = 'Payment information is not available through the operations assistant.';
+const PAYMENT_REFUSAL = "I can only quote the standard published fees. Individual payment records, receipts and collection totals aren't available through the operations assistant.";
+// Private financial records — always refused.
 const PAYMENT_RE =
-  /\b(payment|payments|paid|pay|refund|refunds|transaction|transactions|receipt|receipts|invoice|invoices|gcash|maya|paypal|stripe|price|prices|fee|fees|revenue|earnings|income|sales|amount due|billing|balance|proof of payment)\b/i;
+  /\b(revenue|earnings|income|sales|profit|collections?|payout|payouts|billing|invoice|invoices|receipt|receipts|transaction|transactions|refunds?|who paid|paid users?|payment (?:history|records?|list|logs?|status)|proof of payment|reference number|account number|balance)\b/i;
+// Public price questions — answered from the published fee schedule.
+const QUOTE_RE = /\b(how much|cost|costs|price|prices|pricing|fee|fees|rate|rates|magkano)\b/i;
+const FEE_SCHEDULE = `PUBLISHED FEE SCHEDULE (Philippine Peso): registration/entry ₱50 per person, environmental fee ₱20 per person, guide fee ₱300 flat per group (mandatory). Example: group of 4 = ₱580. Fees are identical for every trail and jump-off point; transport is arranged by the hiker. Accepted methods: onsite, GCash, bank transfer. You may compute these standard costs, but never reveal any individual's payment, receipt, refund or total collections.`;
 
 // ---------------- date helpers (Asia/Manila) ----------------
 function manilaToday(): string {
