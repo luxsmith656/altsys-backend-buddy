@@ -10,8 +10,23 @@ const TZ = "Asia/Manila";
 const SUPABASE_URL = (Deno.env.get("SUPABASE_URL") ?? "").trim();
 const SERVICE_ROLE = (Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "").trim();
 
-const PAYMENT_RE =
-  /\b(payment|payments|paid|refund|refunds|transaction|transactions|receipt|receipts|invoice|invoices|gcash|maya|paypal|stripe|revenue|earnings|income|sales|billing)\b/i;
+// Private/financial records that must never be exposed (other people's money, totals collected, etc.)
+const PRIVATE_PAYMENT_RE =
+  /\b(revenue|earnings|income|sales|profit|collections?|payout|payouts|billing|invoice|invoices|receipt|receipts|transaction|transactions|refunds?|who paid|paid users?|other (?:user|hiker|guest)s?['’]? (?:payment|paid)|payment (?:history|records?|list|logs?|status of)|reference number|account number)\b/i;
+
+// Public price/quote questions the assistant may answer from the published fee schedule.
+const QUOTE_RE =
+  /\b(how much|cost|costs|price|prices|pricing|fee|fees|rate|rates|budget|pay|payable|magkano)\b/i;
+
+// Published fee schedule (must match src/lib/payments.ts)
+const FEE_SCHEDULE = `PUBLISHED FEE SCHEDULE (Mount Kalisungan, Philippine Peso):
+- Registration/entry fee: ₱50 per person
+- Environmental fee: ₱20 per person
+- Guide fee: ₱300 flat per group (mandatory)
+- Example: a group of 4 = (₱50 × 4) + (₱20 × 4) + ₱300 = ₱580 total
+- Fees are the same regardless of which trail or jump-off point is used; transport to/from the jump-off is arranged by the hiker and is not collected by the tourism office.
+- Accepted payment methods: onsite (at the registration desk), GCash, or bank transfer.
+You MAY compute and explain these costs for the person asking (e.g. cost for their own group size or route). You MUST NEVER reveal what any other hiker paid, payment records, receipts, reference numbers, refunds, collections or total revenue — for those reply: "I can only help with what your own hike would cost. Other people's payment details aren't available here."`;
 
 // Questions that need live, aggregate-only operational data.
 const DATA_INTENT_RE =
@@ -169,7 +184,7 @@ LIVE OPERATIONAL DATA:
 - When a "LIVE DATA" system message is present, it contains real, up-to-date numbers from the registration system. USE THEM. Never say you lack access to registration or booking numbers when that data is provided.
 - Report bookings and hikers separately: one booking can cover several hikers (group size). Always state the date, timezone (Asia/Manila), and the statuses used. Cancelled bookings are never counted as confirmed.
 - If a live figure is not in the LIVE DATA block, say the data isn't available for that yet — never invent a number.
-- Only aggregate totals are available: counts, capacity, remaining slots, attendance. Never reveal names, contacts, notes, or any other hiker details, and never discuss payments, fees, refunds or revenue — for those reply: "Payment information is not available through the Trail Assistant."
+- Only aggregate totals are available: counts, capacity, remaining slots, attendance. Never reveal names, contacts, notes, or any other hiker details. You may quote the published fee schedule and compute what the person's own hike would cost, but never reveal other people's payments, receipts, refunds, collections or revenue.
 
 Keep responses helpful, concise, and safety-focused. If asked about emergencies, emphasize calling local authorities immediately.`;
 
@@ -184,8 +199,9 @@ serve(async (req) => {
     const AI_MODEL = Deno.env.get("AI_MODEL") ?? "google/gemini-3-flash-preview";
 
     const lastUser = [...(messages ?? [])].reverse().find((m: any) => m?.role === "user")?.content ?? "";
-    if (typeof lastUser === "string" && PAYMENT_RE.test(lastUser)) {
-      const text = "Payment information is not available through the Trail Assistant.";
+    const askedQuote = typeof lastUser === "string" && QUOTE_RE.test(lastUser);
+    if (typeof lastUser === "string" && PRIVATE_PAYMENT_RE.test(lastUser)) {
+      const text = "I can only help with what your own hike would cost. Other people's payment details aren't available here.";
       const sse = `data: ${JSON.stringify({ choices: [{ delta: { content: text } }] })}\n\ndata: [DONE]\n\n`;
       return new Response(sse, { headers: { ...corsHeaders, "Content-Type": "text/event-stream" } });
     }
@@ -199,6 +215,9 @@ serve(async (req) => {
       { role: "system", content: SYSTEM_PROMPT },
       { role: "system", content: `Current date in ${TZ}: ${manilaToday()} (now: ${manilaNowLabel()}).` },
     ];
+    if (askedQuote) {
+      systemMessages.push({ role: "system", content: FEE_SCHEDULE });
+    }
     if (liveData) {
       systemMessages.push({
         role: "system",
