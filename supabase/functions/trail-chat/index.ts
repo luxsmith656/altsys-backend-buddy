@@ -199,8 +199,9 @@ serve(async (req) => {
     const AI_MODEL = Deno.env.get("AI_MODEL") ?? "google/gemini-3-flash-preview";
 
     const lastUser = [...(messages ?? [])].reverse().find((m: any) => m?.role === "user")?.content ?? "";
-    if (typeof lastUser === "string" && PAYMENT_RE.test(lastUser)) {
-      const text = "Payment information is not available through the Trail Assistant.";
+    const askedQuote = typeof lastUser === "string" && QUOTE_RE.test(lastUser);
+    if (typeof lastUser === "string" && PRIVATE_PAYMENT_RE.test(lastUser)) {
+      const text = "I can only help with what your own hike would cost. Other people's payment details aren't available here.";
       const sse = `data: ${JSON.stringify({ choices: [{ delta: { content: text } }] })}\n\ndata: [DONE]\n\n`;
       return new Response(sse, { headers: { ...corsHeaders, "Content-Type": "text/event-stream" } });
     }
@@ -214,6 +215,9 @@ serve(async (req) => {
       { role: "system", content: SYSTEM_PROMPT },
       { role: "system", content: `Current date in ${TZ}: ${manilaToday()} (now: ${manilaNowLabel()}).` },
     ];
+    if (askedQuote) {
+      systemMessages.push({ role: "system", content: FEE_SCHEDULE });
+    }
     if (liveData) {
       systemMessages.push({
         role: "system",
