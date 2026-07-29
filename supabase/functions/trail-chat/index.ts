@@ -10,8 +10,23 @@ const TZ = "Asia/Manila";
 const SUPABASE_URL = (Deno.env.get("SUPABASE_URL") ?? "").trim();
 const SERVICE_ROLE = (Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "").trim();
 
-const PAYMENT_RE =
-  /\b(payment|payments|paid|refund|refunds|transaction|transactions|receipt|receipts|invoice|invoices|gcash|maya|paypal|stripe|revenue|earnings|income|sales|billing)\b/i;
+// Private/financial records that must never be exposed (other people's money, totals collected, etc.)
+const PRIVATE_PAYMENT_RE =
+  /\b(revenue|earnings|income|sales|profit|collections?|payout|payouts|billing|invoice|invoices|receipt|receipts|transaction|transactions|refunds?|who paid|paid users?|other (?:user|hiker|guest)s?['’]? (?:payment|paid)|payment (?:history|records?|list|logs?|status of)|reference number|account number)\b/i;
+
+// Public price/quote questions the assistant may answer from the published fee schedule.
+const QUOTE_RE =
+  /\b(how much|cost|costs|price|prices|pricing|fee|fees|rate|rates|budget|pay|payable|magkano)\b/i;
+
+// Published fee schedule (must match src/lib/payments.ts)
+const FEE_SCHEDULE = `PUBLISHED FEE SCHEDULE (Mount Kalisungan, Philippine Peso):
+- Registration/entry fee: ₱50 per person
+- Environmental fee: ₱20 per person
+- Guide fee: ₱300 flat per group (mandatory)
+- Example: a group of 4 = (₱50 × 4) + (₱20 × 4) + ₱300 = ₱580 total
+- Fees are the same regardless of which trail or jump-off point is used; transport to/from the jump-off is arranged by the hiker and is not collected by the tourism office.
+- Accepted payment methods: onsite (at the registration desk), GCash, or bank transfer.
+You MAY compute and explain these costs for the person asking (e.g. cost for their own group size or route). You MUST NEVER reveal what any other hiker paid, payment records, receipts, reference numbers, refunds, collections or total revenue — for those reply: "I can only help with what your own hike would cost. Other people's payment details aren't available here."`;
 
 // Questions that need live, aggregate-only operational data.
 const DATA_INTENT_RE =
