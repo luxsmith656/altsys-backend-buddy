@@ -43,7 +43,15 @@ export default function OpsAIPage() {
       setConversationId(j.conversation_id);
       setMessages((m) => [...m, { role: 'assistant', content: j.reply }]);
     } catch (e: any) {
-      toast.error(e.message);
+      toast.error("Assistant unavailable — we're fixing it, please try again later.");
+      setMessages((m) => [
+        ...m,
+        {
+          role: 'assistant',
+          content:
+            "I couldn't reach the assistant service just now. We're fixing it — please try again in a few minutes.",
+        },
+      ]);
     } finally {
       setLoading(false);
     }
