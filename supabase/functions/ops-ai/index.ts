@@ -183,6 +183,7 @@ Deno.serve(async (req) => {
           `Resolve "today", "tomorrow", "this week", "this month" against that date, never UTC.\n` +
           `You have NO database access. Use the provided tools for every live number, and never guess.`,
       },
+      ...(QUOTE_RE.test(message) ? [{ role: 'system', content: FEE_SCHEDULE }] : []),
       ...history.map((m: any) => ({ role: m.role, content: m.content })),
     ];
 
