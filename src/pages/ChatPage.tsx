@@ -117,7 +117,11 @@ export default function ChatPage() {
           return [...prev, { role: 'assistant', content: answer }];
         });
       } else {
-        upsert(`\n\n*Error: ${e.message}*`);
+        const friendly =
+          assistantSoFar.trim().length > 0
+            ? "\n\n*Sorry — I got cut off. We're fixing it, please try again in a little while.*"
+            : "Sorry, I'm having trouble answering right now. We're working on a fix — please try again in a few minutes. For urgent help, contact the barangay tourism office at the trailhead.";
+        upsert(friendly);
       }
     }
     setLoading(false);
