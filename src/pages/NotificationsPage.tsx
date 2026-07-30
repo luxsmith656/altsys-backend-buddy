@@ -106,12 +106,12 @@ export default function NotificationsPage() {
   return (
     <div className="min-h-screen pt-20 pb-12 px-4">
       <div className="container max-w-4xl mx-auto space-y-6">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-3xl font-bold">All Notifications</h1>
+        <div className="flex flex-col items-start gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="min-w-0">
+            <h1 className="text-2xl font-bold sm:text-3xl">All Notifications</h1>
             <p className="text-muted-foreground text-sm mt-1">Announcements, booking updates, and important alerts.</p>
           </div>
-          <Button variant="outline" onClick={markAllSeen} className="gap-2">
+          <Button variant="outline" onClick={markAllSeen} className="w-full gap-2 sm:w-auto">
             <CheckCheck className="h-4 w-4" />
             Mark all as seen
           </Button>
@@ -136,15 +136,15 @@ export default function NotificationsPage() {
                       key={n.id}
                       className={`rounded-xl border p-4 ${isUnread ? 'border-primary/40 bg-primary/5' : 'border-border/20 bg-secondary/20'}`}
                     >
-                      <div className="flex items-center gap-2 mb-1">
+                      <div className="flex items-start gap-2 mb-1">
                         {n.category === 'announcement' ? (
-                          <Megaphone className="h-4 w-4 text-primary" />
+                          <Megaphone className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
                         ) : (
-                          <CalendarCheck className="h-4 w-4 text-sky-500" />
+                          <CalendarCheck className="mt-0.5 h-4 w-4 shrink-0 text-sky-500" />
                         )}
-                        <p className="font-semibold text-sm">{n.title}</p>
+                        <p className="min-w-0 break-words font-semibold text-sm">{n.title}</p>
                         {isUnread && (
-                          <span className="ml-auto text-[10px] px-2 py-0.5 rounded-full bg-destructive/15 text-destructive border border-destructive/30">
+                          <span className="ml-auto shrink-0 text-[10px] px-2 py-0.5 rounded-full bg-destructive/15 text-destructive border border-destructive/30">
                             New
                           </span>
                         )}
@@ -196,8 +196,8 @@ export default function NotificationsPage() {
           </CardContent>
         </Card>
 
-        <div className="text-xs text-muted-foreground flex items-center gap-2">
-          <AlertTriangle className="h-3.5 w-3.5" />
+        <div className="text-xs text-muted-foreground flex items-start gap-2">
+          <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
           Important weather or closure announcements are highlighted and also surfaced on dashboards.
         </div>
       </div>

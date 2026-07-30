@@ -128,7 +128,7 @@ export default function ChatPage() {
   };
 
   return (
-    <div className="h-screen pt-16 flex flex-col">
+    <div className="h-[100dvh] pt-16 flex flex-col">
       <div className="glass-card-strong border-b border-border/30 px-4 py-3">
         <div className="container mx-auto flex items-center gap-3">
           <div className="w-10 h-10 rounded-xl bg-primary/20 flex items-center justify-center">
@@ -161,7 +161,7 @@ export default function ChatPage() {
               <p className="text-muted-foreground text-sm mb-8">Get trail info, safety tips, weather updates, and more.</p>
               <div className="flex flex-wrap gap-2 justify-center">
                 {QUICK_QUESTIONS.map((q) => (
-                  <Button key={q} variant="outline" size="sm" className="text-xs" onClick={() => send(q)}>
+                  <Button key={q} variant="outline" size="sm" className="h-auto min-h-9 whitespace-normal py-2 text-xs" onClick={() => send(q)}>
                     <Sparkles className="h-3 w-3 mr-1" /> {q}
                   </Button>
                 ))}
@@ -177,7 +177,7 @@ export default function ChatPage() {
               className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}
             >
               <div
-                className={`max-w-[80%] rounded-2xl px-4 py-3 text-sm ${
+                className={`max-w-[88%] break-words rounded-2xl px-4 py-3 text-sm sm:max-w-[80%] ${
                   m.role === 'user'
                     ? 'bg-primary text-primary-foreground rounded-br-sm'
                     : 'glass-card rounded-bl-sm'

@@ -167,11 +167,11 @@ export default function ProfilePage() {
             <div className="w-16 h-16 rounded-full bg-primary/20 flex items-center justify-center flex-shrink-0">
               <User className="h-8 w-8 text-primary" />
             </div>
-            <div>
+            <div className="min-w-0">
               <h1 className="text-3xl font-bold">
                 My <span className="text-gradient">Profile</span>
               </h1>
-              <p className="text-muted-foreground text-sm">
+              <p className="break-all text-sm text-muted-foreground">
                 {user.email} &bull; <span className="capitalize">{role ?? 'hiker'}</span>
               </p>
             </div>

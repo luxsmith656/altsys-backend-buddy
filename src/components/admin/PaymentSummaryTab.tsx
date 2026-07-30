@@ -294,20 +294,22 @@ export default function PaymentSummaryTab() {
       </div>
 
       <Tabs defaultValue="monthly" className="space-y-4">
-        <TabsList className="glass-card gap-1 p-1">
-          <TabsTrigger value="monthly" className="gap-1.5 data-[state=active]:bg-primary/20 data-[state=active]:text-primary">
-            <Calendar className="h-3.5 w-3.5" /> Monthly
-          </TabsTrigger>
-          <TabsTrigger value="yearly" className="gap-1.5 data-[state=active]:bg-primary/20 data-[state=active]:text-primary">
-            <TrendingUp className="h-3.5 w-3.5" /> Yearly
-          </TabsTrigger>
-          <TabsTrigger value="details" className="gap-1.5 data-[state=active]:bg-primary/20 data-[state=active]:text-primary">
-            <CreditCard className="h-3.5 w-3.5" /> All Records
-          </TabsTrigger>
-          <TabsTrigger value="logs" className="gap-1.5 data-[state=active]:bg-primary/20 data-[state=active]:text-primary">
-            <History className="h-3.5 w-3.5" /> Activity Log
-          </TabsTrigger>
-        </TabsList>
+        <div className="-mx-1 overflow-x-auto px-1 pb-2 custom-scrollbar">
+          <TabsList className="glass-card min-w-max gap-1 p-1">
+            <TabsTrigger value="monthly" className="gap-1.5 data-[state=active]:bg-primary/20 data-[state=active]:text-primary">
+              <Calendar className="h-3.5 w-3.5" /> Monthly
+            </TabsTrigger>
+            <TabsTrigger value="yearly" className="gap-1.5 data-[state=active]:bg-primary/20 data-[state=active]:text-primary">
+              <TrendingUp className="h-3.5 w-3.5" /> Yearly
+            </TabsTrigger>
+            <TabsTrigger value="details" className="gap-1.5 data-[state=active]:bg-primary/20 data-[state=active]:text-primary">
+              <CreditCard className="h-3.5 w-3.5" /> All Records
+            </TabsTrigger>
+            <TabsTrigger value="logs" className="gap-1.5 data-[state=active]:bg-primary/20 data-[state=active]:text-primary">
+              <History className="h-3.5 w-3.5" /> Activity Log
+            </TabsTrigger>
+          </TabsList>
+        </div>
 
         {/* Monthly */}
         <TabsContent value="monthly" className="space-y-4">

@@ -153,7 +153,10 @@ export default function MapPage() {
   const [terrain3dOpen, setTerrain3dOpen] = useState(false);
 
   // Redesign state: Collapsible sidebar, card expansions, search
-  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(
+    () => window.matchMedia('(max-width: 639px)').matches,
+  );
+  const [simulationControlsOpen, setSimulationControlsOpen] = useState(false);
   const [expandedHikerId, setExpandedHikerId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const availableTrails: MapTrail[] = dbTrails.length > 0 ? dbTrails : TRAILS;
@@ -475,6 +478,11 @@ export default function MapPage() {
                   routePath={currentTrail.path}
                   routeStations={currentTrail.stations}
                   routeDistanceKm={currentRouteDistanceKm}
+                  simulationControlsOpen={simulationControlsOpen}
+                  onSimulationControlsOpenChange={(open) => {
+                    setSimulationControlsOpen(open);
+                    if (open) setIsSidebarCollapsed(true);
+                  }}
                 />
 
                 {/* Show Summit Trail lines */}
@@ -524,8 +532,12 @@ export default function MapPage() {
           isSidebarCollapsed ? (
             /* Collapsed Minimap Control Button */
             <button
-              onClick={() => setIsSidebarCollapsed(false)}
-              className="absolute top-4 left-4 z-[1000] p-3 rounded-2xl bg-white/95 dark:bg-slate-900/95 backdrop-blur-md shadow-xl border border-slate-200/60 dark:border-slate-800/60 hover:bg-slate-50 dark:hover:bg-slate-800 transition-all flex items-center gap-2 group pointer-events-auto"
+              onClick={() => {
+                setSimulationControlsOpen(false);
+                setIsSidebarCollapsed(false);
+              }}
+              className="absolute top-4 left-4 z-[1000] flex min-h-11 items-center gap-2 rounded-xl border border-slate-200/60 bg-white/95 p-3 shadow-xl backdrop-blur-md transition-all hover:bg-slate-50 pointer-events-auto group dark:border-slate-800/60 dark:bg-slate-900/95 dark:hover:bg-slate-800 sm:rounded-2xl"
+              aria-label="Show tracking console"
               title="Expand Tracking Console"
             >
               <Users className="h-5 w-5 text-emerald-600 dark:text-emerald-400 group-hover:scale-105 transition-transform" />
@@ -535,7 +547,7 @@ export default function MapPage() {
           ) : (
             /* Expanded Glassmorphic Dashboard Panel */
             <div 
-              className="absolute top-4 left-4 z-[1000] w-[calc(100%-2rem)] sm:w-[360px] max-h-[calc(100dvh-14rem)] sm:max-h-[78vh] flex flex-col bg-white/95 dark:bg-slate-900/95 backdrop-blur-md rounded-2xl border border-slate-200/50 dark:border-slate-800/50 shadow-2xl pointer-events-auto overflow-hidden"
+              className="absolute top-4 left-4 z-[1000] flex max-h-[46dvh] w-[calc(100%-2rem)] flex-col overflow-hidden rounded-xl border border-slate-200/50 bg-white/95 shadow-2xl backdrop-blur-md pointer-events-auto dark:border-slate-800/50 dark:bg-slate-900/95 sm:max-h-[78vh] sm:w-[360px] sm:rounded-2xl"
             >
               {/* Floating Header */}
               <div className="p-4 border-b border-slate-100 dark:border-slate-800/50 flex items-center justify-between shrink-0">
@@ -556,8 +568,9 @@ export default function MapPage() {
                 <Button
                   size="icon"
                   variant="ghost"
-                  className="h-7 w-7 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+                  className="h-10 w-10 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 sm:h-7 sm:w-7"
                   onClick={() => setIsSidebarCollapsed(true)}
+                  aria-label="Collapse tracking console"
                   title="Collapse Panel"
                 >
                   <ChevronLeft className="h-4 w-4" />

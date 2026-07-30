@@ -128,14 +128,14 @@ export default function Navbar() {
   return (
     <nav className="fixed top-0 left-0 right-0 z-[2000] glass-card-strong border-b border-border/30">
       <div className="container mx-auto flex items-center justify-between h-16 px-4">
-        <Link to="/" className="flex items-center gap-2 group">
+        <Link to="/" className="flex min-w-0 items-center gap-2 group">
           <img
             src={logo}
             alt="Mt. Kalisungan logo"
             className="h-8 w-8 rounded-full object-cover bg-white/5 group-hover:scale-110 transition-transform"
             loading="eager"
           />
-          <span className="text-lg font-bold text-gradient">Mt. Kalisungan</span>
+          <span className="truncate text-base font-bold text-gradient sm:text-lg">Mt. Kalisungan</span>
         </Link>
 
         {/* Desktop nav */}
@@ -229,15 +229,20 @@ export default function Navbar() {
         </div>
 
         {/* Mobile toggle + theme */}
-        <div className="md:hidden flex items-center gap-2">
+        <div className="ml-2 flex shrink-0 items-center gap-1 md:hidden">
           <button
-            className="text-foreground"
+            className="inline-flex h-10 w-10 items-center justify-center rounded-md text-foreground transition-colors hover:bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
             aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
             onClick={toggleTheme}
           >
             {theme === 'dark' ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
           </button>
-          <button className="text-foreground" onClick={() => setMobileOpen(!mobileOpen)}>
+          <button
+            className="inline-flex h-10 w-10 items-center justify-center rounded-md text-foreground transition-colors hover:bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+            aria-label={mobileOpen ? 'Close navigation menu' : 'Open navigation menu'}
+            aria-expanded={mobileOpen}
+            onClick={() => setMobileOpen(!mobileOpen)}
+          >
             {mobileOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
           </button>
         </div>
@@ -256,7 +261,7 @@ export default function Navbar() {
                 <Link
                   key={l.to}
                   to={l.to}
-                  className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm ${
+                  className={`flex min-h-11 items-center gap-2 px-3 py-2 rounded-lg text-sm ${
                     isActive(l.to) ? 'bg-primary/20 text-primary' : 'text-muted-foreground'
                   }`}
                   onClick={() => setMobileOpen(false)}
@@ -268,20 +273,20 @@ export default function Navbar() {
               <div className="border-t border-border/30 my-2" />
               {user ? (
                 <>
-                  <Button variant="ghost" size="sm" className="justify-start" onClick={() => { navigate('/profile'); setMobileOpen(false); }}>
+                  <Button variant="ghost" size="sm" className="min-h-11 justify-start" onClick={() => { navigate('/profile'); setMobileOpen(false); }}>
                     <User className="h-4 w-4 mr-2" /> Profile
                   </Button>
-                  <Button variant="ghost" size="sm" className="justify-start" onClick={() => { navigate('/notifications'); setMobileOpen(false); }}>
+                  <Button variant="ghost" size="sm" className="min-h-11 justify-start" onClick={() => { navigate('/notifications'); setMobileOpen(false); }}>
                     <Bell className="h-4 w-4 mr-2" /> Notifications {notifCount > 0 ? `(${notifCount})` : ''}
                   </Button>
-                  <Button variant="ghost" size="sm" className="justify-start" onClick={handleLogout}>
+                  <Button variant="ghost" size="sm" className="min-h-11 justify-start" onClick={handleLogout}>
                     <LogOut className="h-4 w-4 mr-2" /> Logout ({role})
                   </Button>
                 </>
               ) : (
                 <>
-                  <Button variant="ghost" size="sm" className="justify-start" onClick={() => { navigate('/login'); setMobileOpen(false); }}>Login</Button>
-                  <Button size="sm" className="justify-start" onClick={() => { navigate('/register'); setMobileOpen(false); }}>Sign Up</Button>
+                  <Button variant="ghost" size="sm" className="min-h-11 justify-start" onClick={() => { navigate('/login'); setMobileOpen(false); }}>Login</Button>
+                  <Button size="sm" className="min-h-11 justify-start" onClick={() => { navigate('/register'); setMobileOpen(false); }}>Sign Up</Button>
                 </>
               )}
             </div>

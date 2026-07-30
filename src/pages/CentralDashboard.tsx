@@ -107,9 +107,9 @@ export default function CentralDashboard() {
               <Card className="glass-card">
                 <CardContent className="p-4 flex items-center gap-3">
                   <s.icon className={`h-7 w-7 ${s.color} opacity-60`} />
-                  <div>
+                  <div className="min-w-0">
                     <p className="text-xs text-muted-foreground">{s.label}</p>
-                    <p className="text-xl font-bold">{s.value}</p>
+                    <p className="break-words text-lg font-bold sm:text-xl">{s.value}</p>
                   </div>
                 </CardContent>
               </Card>
@@ -118,10 +118,12 @@ export default function CentralDashboard() {
         </div>
 
         <Tabs defaultValue="overview">
-          <TabsList className="glass-card">
-            <TabsTrigger value="overview">Overview by location</TabsTrigger>
-            <TabsTrigger value="monitor">Live monitor</TabsTrigger>
-          </TabsList>
+          <div className="-mx-1 overflow-x-auto px-1 pb-2 custom-scrollbar">
+            <TabsList className="glass-card min-w-max">
+              <TabsTrigger value="overview">Overview by location</TabsTrigger>
+              <TabsTrigger value="monitor">Live monitor</TabsTrigger>
+            </TabsList>
+          </div>
 
           <TabsContent value="overview" className="mt-4 space-y-4">
             <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">

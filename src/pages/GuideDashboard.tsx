@@ -233,11 +233,13 @@ export default function GuideDashboard() {
         </div>
 
         <Tabs defaultValue="my">
-          <TabsList className="glass-card">
-            <TabsTrigger value="my">My Assignments</TabsTrigger>
-            <TabsTrigger value="peers">Peer Guides ({peerGuides.length})</TabsTrigger>
-            <TabsTrigger value="off">Off-Duty</TabsTrigger>
-          </TabsList>
+          <div className="-mx-1 overflow-x-auto px-1 pb-2 custom-scrollbar">
+            <TabsList className="glass-card min-w-max">
+              <TabsTrigger value="my">My Assignments</TabsTrigger>
+              <TabsTrigger value="peers">Peer Guides ({peerGuides.length})</TabsTrigger>
+              <TabsTrigger value="off">Off-Duty</TabsTrigger>
+            </TabsList>
+          </div>
 
           <TabsContent value="off" className="mt-4">
             {guideRow ? <GuideOffDutyForm guideId={guideRow.id} onChange={load} /> : <p className="text-sm text-muted-foreground">Loading guide profile…</p>}
@@ -321,9 +323,9 @@ export default function GuideDashboard() {
                   const c = peerCounts[g.id] ?? { active: 0, total: 0 };
                   const isMe = g.id === guideRow.id;
                   return (
-                    <div key={g.id} className={`flex items-center justify-between p-3 rounded-lg border text-sm ${isMe ? 'border-primary/40 bg-primary/5' : 'border-border/20 bg-secondary/20'}`}>
-                      <div className="flex items-center gap-2">
-                        <span className="font-medium">{g.full_name}</span>
+                    <div key={g.id} className={`flex flex-col items-start gap-2 rounded-lg border p-3 text-sm sm:flex-row sm:items-center sm:justify-between ${isMe ? 'border-primary/40 bg-primary/5' : 'border-border/20 bg-secondary/20'}`}>
+                      <div className="flex min-w-0 items-center gap-2">
+                        <span className="break-words font-medium">{g.full_name}</span>
                         {isMe && <Badge variant="outline" className="text-[10px]">You</Badge>}
                         {g.specialty && <span className="text-xs text-muted-foreground">• {g.specialty}</span>}
                       </div>

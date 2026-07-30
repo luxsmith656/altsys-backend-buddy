@@ -200,14 +200,16 @@ export default function RangerDashboard() {
         </div>
 
         <Tabs defaultValue="checkin" className="space-y-6">
-          <TabsList className="glass-card gap-1 p-1">
-            <TabsTrigger value="checkin" className="gap-1.5 data-[state=active]:bg-primary/20 data-[state=active]:text-primary">
-              <QrCode className="h-3.5 w-3.5" /> Check-In / Out
-            </TabsTrigger>
-            <TabsTrigger value="report" className="gap-1.5 data-[state=active]:bg-primary/20 data-[state=active]:text-primary">
-              <ClipboardList className="h-3.5 w-3.5" /> Trail Reports
-            </TabsTrigger>
-          </TabsList>
+          <div className="-mx-1 overflow-x-auto px-1 pb-2 custom-scrollbar">
+            <TabsList className="glass-card min-w-max gap-1 p-1">
+              <TabsTrigger value="checkin" className="gap-1.5 data-[state=active]:bg-primary/20 data-[state=active]:text-primary">
+                <QrCode className="h-3.5 w-3.5" /> Check-In / Out
+              </TabsTrigger>
+              <TabsTrigger value="report" className="gap-1.5 data-[state=active]:bg-primary/20 data-[state=active]:text-primary">
+                <ClipboardList className="h-3.5 w-3.5" /> Trail Reports
+              </TabsTrigger>
+            </TabsList>
+          </div>
 
           {/* ─────────────────────────────── CHECK-IN TAB ── */}
           <TabsContent value="checkin" className="space-y-6">

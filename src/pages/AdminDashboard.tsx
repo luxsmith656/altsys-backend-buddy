@@ -1798,7 +1798,7 @@ export default function AdminDashboard() {
               </CardContent>
             </Card>
           </TabsContent>
-              <TabsContent value="live-map" className="mt-0 h-[calc(100vh-180px)] min-h-[600px] border border-border/30 rounded-lg overflow-hidden relative">
+              <TabsContent value="live-map" className="relative mt-0 h-[calc(100dvh-9rem)] min-h-[28rem] overflow-hidden rounded-lg border border-border/30 sm:min-h-[600px]">
             <RealtimeMonitorMap locationId={null} canAddCheckpoints={false} />
           </TabsContent>
             </Tabs>

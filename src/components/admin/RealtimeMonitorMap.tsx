@@ -549,7 +549,7 @@ export default function RealtimeMonitorMap({ locationId, canAddCheckpoints = fal
         )}
       </CardHeader>
       <CardContent className="space-y-3">
-        <div ref={containerRef} className="w-full h-[420px] rounded-lg overflow-hidden border border-border/30" style={{ zIndex: 0 }} />
+        <div ref={containerRef} className="h-[min(55dvh,420px)] min-h-[320px] w-full overflow-hidden rounded-lg border border-border/30" style={{ zIndex: 0 }} />
 
         {sessions.length > 0 && (
           <div className="space-y-2 max-h-[200px] overflow-y-auto">
@@ -559,13 +559,13 @@ export default function RealtimeMonitorMap({ locationId, canAddCheckpoints = fal
               const ageMin = s.lastTs ? Math.round((Date.now() - new Date(s.lastTs).getTime()) / 60000) : null;
               const stale = ageMin != null && ageMin > 10;
               return (
-                <div key={s.id} className="flex items-center justify-between gap-3 p-2 rounded-lg bg-secondary/30 text-xs">
+                <div key={s.id} className="flex flex-col items-start gap-2 rounded-lg bg-secondary/30 p-2 text-xs sm:flex-row sm:items-center sm:justify-between sm:gap-3">
                   <div className="flex items-center gap-2 min-w-0">
                     <div className={`w-2 h-2 rounded-full ${stale ? 'bg-orange-500' : 'bg-emerald-500 animate-pulse'}`} />
                     <span className="font-medium truncate">{s.hiker_name}</span>
                     <span className="text-[10px] uppercase text-muted-foreground">{s.participant_role ?? 'hiker'}</span>
                   </div>
-                  <div className="flex items-center gap-3 text-muted-foreground">
+                  <div className="flex w-full flex-wrap items-center gap-x-3 gap-y-1 text-muted-foreground sm:w-auto sm:justify-end">
                     <span>📍 {reached}/{checkpoints.length}</span>
                     <span className="capitalize">{s.tracking_phase ?? 'ascent'}</span>
                     <span className={stale ? 'text-orange-500' : ''}>{ageMin == null ? 'no ping' : `${ageMin}m ago`}</span>

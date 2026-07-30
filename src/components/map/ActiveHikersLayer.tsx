@@ -184,6 +184,8 @@ interface ActiveHikersLayerProps {
   routePath?: [number, number][];
   routeStations?: RouteStation[];
   routeDistanceKm?: number;
+  simulationControlsOpen?: boolean;
+  onSimulationControlsOpenChange?: (open: boolean) => void;
 }
 
 export default function ActiveHikersLayer({
@@ -191,6 +193,8 @@ export default function ActiveHikersLayer({
   routePath,
   routeStations,
   routeDistanceKm = 6,
+  simulationControlsOpen,
+  onSimulationControlsOpenChange,
 }: ActiveHikersLayerProps) {
   const simulationPath = routePath && routePath.length >= 2 ? routePath : SUMMIT_TRAIL_PATH;
   const simulationStations = useMemo<SimulationStation[]>(() => {
@@ -217,7 +221,12 @@ export default function ActiveHikersLayer({
 
   const [isSimPlaying, setIsSimPlaying] = useState(true);
   const [simSpeed, setSimSpeed] = useState<1 | 5 | 10 | 30>(5);
-  const [showDashboard, setShowDashboard] = useState(() => window.innerWidth >= 768);
+  const [internalShowDashboard, setInternalShowDashboard] = useState(false);
+  const showDashboard = simulationControlsOpen ?? internalShowDashboard;
+  const setShowDashboard = (open: boolean) => {
+    setInternalShowDashboard(open);
+    onSimulationControlsOpenChange?.(open);
+  };
 
   // Save state to localStorage on update
   useEffect(() => {
@@ -616,7 +625,7 @@ export default function ActiveHikersLayer({
 
       {/* 3. Floating Simulation Controller Portal (Renders nicely on top of Map Page) */}
       {showDashboard && createPortal(
-        <div className="fixed top-[10.5rem] bottom-3 right-3 z-[1200] w-[calc(100%-1.5rem)] bg-background/95 backdrop-blur-md shadow-2xl rounded-xl border border-border p-4 font-sans text-xs flex flex-col gap-3 sm:top-[9.25rem] sm:bottom-auto sm:right-4 sm:max-h-[calc(100dvh-10.25rem)] sm:max-w-[340px]">
+        <div className="fixed bottom-3 right-3 z-[1200] flex max-h-[58dvh] w-[calc(100%-1.5rem)] flex-col gap-3 rounded-xl border border-border bg-background/95 p-4 font-sans text-xs shadow-2xl backdrop-blur-md sm:top-[9.25rem] sm:bottom-auto sm:right-4 sm:max-h-[calc(100dvh-10.25rem)] sm:max-w-[340px]">
           {/* Dashboard Header */}
           <div className="flex items-center justify-between border-b pb-2">
             <div className="flex items-center gap-1.5">
@@ -628,7 +637,8 @@ export default function ActiveHikersLayer({
             </div>
             <button
               onClick={() => setShowDashboard(false)}
-              className="text-muted-foreground hover:text-foreground text-xs font-semibold px-1.5 py-0.5 rounded hover:bg-muted"
+              className="inline-flex min-h-10 items-center rounded px-3 text-xs font-semibold text-muted-foreground hover:bg-muted hover:text-foreground"
+              aria-label="Hide simulation controls"
             >
               Hide
             </button>
@@ -765,10 +775,12 @@ export default function ActiveHikersLayer({
       {!showDashboard && createPortal(
         <button
           onClick={() => setShowDashboard(true)}
-          className="fixed top-[10.5rem] right-3 z-[1200] bg-primary text-primary-foreground hover:bg-primary/90 px-3 py-2 rounded-xl shadow-xl font-bold flex items-center gap-1.5 border border-border sm:top-[9.25rem] sm:right-4"
+          className="fixed top-[10.5rem] right-3 z-[1200] inline-flex h-11 w-11 items-center justify-center rounded-xl border border-border bg-primary text-primary-foreground shadow-xl hover:bg-primary/90 sm:top-[9.25rem] sm:right-4 sm:w-auto sm:gap-1.5 sm:px-3 sm:font-bold"
+          aria-label="Show simulation controls"
+          title="Show simulation controls"
         >
           <Activity className="h-4 w-4 animate-pulse" />
-          Show Simulation Controls
+          <span className="hidden sm:inline">Show Simulation Controls</span>
         </button>,
         document.body
       )}
