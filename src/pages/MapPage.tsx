@@ -3,7 +3,18 @@ import type { CSSProperties } from 'react';
 import { MapContainer, TileLayer, Polyline, Polygon, Marker, Popup, Circle, useMap } from 'react-leaflet';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import L from 'leaflet';
-import { MT_KALISUNGAN_CENTER, DEFAULT_ZOOM, TRAILS, POI, ZONES, haversineDistance, distanceToTrail } from '@/lib/map-data';
+import {
+  MT_KALISUNGAN_CENTER,
+  DEFAULT_ZOOM,
+  TRAILS,
+  POI,
+  ZONES,
+  haversineDistance,
+  distanceToTrail,
+  buildRouteStations,
+  routeStationsFromMetadata,
+  type RouteStation,
+} from '@/lib/map-data';
 import { Button } from '@/components/ui/button';
 import { ChevronDown, ChevronUp, Locate, Pause, Play, AlertTriangle, ChevronLeft, ChevronRight, Layers, Download, CheckCircle2, MapPinned } from 'lucide-react';
 import { toast } from 'sonner';
@@ -12,6 +23,7 @@ import MapLegend from '@/components/map/MapLegend';
 import TrailStats from '@/components/map/TrailStats';
 import TrailNavigation from '@/components/map/TrailNavigation';
 import MapCompass from '@/components/map/MapCompass';
+import RouteSimulationLayer from '@/components/map/RouteSimulationLayer';
 import WeatherPanel from '@/components/map/WeatherPanel';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { useAuth } from '@/hooks/useAuth';
@@ -61,6 +73,17 @@ function makeUserIcon(heading: number | null, alert: boolean) {
   });
 }
 
+function makeRouteStationIcon(station: RouteStation) {
+  const isPeak = station.kind === 'peak';
+  const label = station.kind === 'jump_off' ? 'J' : isPeak ? 'P' : String(station.index - 1);
+  return new L.DivIcon({
+    className: '',
+    iconSize: [26, 26],
+    iconAnchor: [13, 13],
+    html: `<div style="width:26px;height:26px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:${isPeak ? '#dc2626' : '#16a34a'};color:#fff;border:3px solid #fff;box-shadow:0 2px 8px rgba(0,0,0,.4);font-size:10px;font-weight:800">${label}</div>`,
+  });
+}
+
 function bearingDeg(from: [number, number], to: [number, number]) {
   const lat1 = from[0] * Math.PI / 180;
   const lat2 = to[0] * Math.PI / 180;
@@ -91,6 +114,11 @@ type StoredRecording = {
   updatedAt: number;
   points: RecordedPoint[];
   rawPoints?: RecordedPoint[];
+};
+
+type MapTrail = (typeof TRAILS)[number] & {
+  id?: string;
+  stations: RouteStation[];
 };
 
 function normalizeHeading(value: number | null | undefined) {
@@ -528,7 +556,7 @@ export default function MapPage() {
   const [summarySession, setSummarySession] = useState<OfflineSession | null>(null);
   const [trackingPhase, setTrackingPhase] = useState<'ascent' | 'peak' | 'descent' | 'completed'>('ascent');
   const [tileDownloadProgress, setTileDownloadProgress] = useState<{ done: number; total: number } | null>(null);
-  const [dbTrails, setDbTrails] = useState<typeof TRAILS>([]);
+  const [dbTrails, setDbTrails] = useState<MapTrail[]>([]);
   
 
   // Smooth interpolation for the hiker marker
@@ -781,7 +809,7 @@ export default function MapPage() {
       const restrictToAssignedTrail = role === 'hiker' && !!assignedTrailZoneId;
       let q: any = supabase
         .from('trail_zones' as any)
-        .select('id,location_id,name,difficulty,elevation_meters,coordinates_json,status,is_official,review_status')
+        .select('id,location_id,name,difficulty,elevation_meters,coordinates_json,recording_metadata,status,is_official,review_status')
         .eq('status', 'active')
         .eq('is_official', true)
         .order('created_at', { ascending: true });
@@ -814,21 +842,28 @@ export default function MapPage() {
           }
           const colors = ['#16a34a', '#2563eb', '#dc2626', '#9333ea', '#ea580c'];
           return {
+            id: trail.id,
             name: trail.name || `Official Trail ${index + 1}`,
             difficulty: (trail.difficulty || 'moderate') as 'easy' | 'moderate' | 'hard',
             color: colors[index % colors.length],
             elevation: `${Number(trail.elevation_meters || 0)}m`,
             distance: `${distanceKm.toFixed(1)} km`,
             path,
+            stations: routeStationsFromMetadata(trail.recording_metadata, path),
           };
         })
-        .filter(Boolean) as typeof TRAILS;
+        .filter(Boolean) as MapTrail[];
       setDbTrails(loaded);
     })();
     return () => { active = false; };
   }, [activeLocationId, assignedTrailZoneId, role]);
 
-  const availableTrails = dbTrails.length > 0 ? dbTrails : TRAILS;
+  const availableTrails = useMemo<MapTrail[]>(
+    () => dbTrails.length > 0
+      ? dbTrails
+      : TRAILS.map((trail) => ({ ...trail, stations: buildRouteStations(trail.path) })),
+    [dbTrails],
+  );
 
   useEffect(() => {
     if (selectedTrail >= availableTrails.length) setSelectedTrail(0);
@@ -1633,6 +1668,7 @@ export default function MapPage() {
     const rawRecordingJson = rawPoints.map((p) => serializeRoutePoint(p, 'gps'));
     const cleanedRecordingJson = cleanedPoints.map((p) => serializeRoutePoint(p));
     const qualitySummary = buildRecordingQuality(rawPoints.map(toTrackPoint), cleanedPoints.map(toTrackPoint));
+    const routeStations = buildRouteStations(cleanedPoints.map((point) => [point.lat, point.lon] as LatLngTuple));
     const path = cleanedRecordingJson;
     const baseRoute = {
       location_id: locationId,
@@ -1643,7 +1679,10 @@ export default function MapPage() {
       coordinates_json: path,
       raw_recording_json: rawRecordingJson,
       cleaned_recording_json: cleanedRecordingJson,
-      recording_metadata: qualitySummary,
+      recording_metadata: {
+        ...qualitySummary,
+        stations: routeStations,
+      },
       recording_count: 1,
       status: 'draft',
       max_capacity: 50,
@@ -1883,6 +1922,24 @@ export default function MapPage() {
                 }}
               />
             ))}
+
+            {currentTrail.stations.map((station) => (
+              <Marker
+                key={`${currentTrail.id ?? currentTrail.name}-${station.id}`}
+                position={[station.lat, station.lng]}
+                icon={makeRouteStationIcon(station)}
+              >
+                <Popup>
+                  <strong>{station.name}</strong>
+                  <br />
+                  <span>{station.description}</span>
+                </Popup>
+              </Marker>
+            ))}
+
+            {(role === 'admin' || role === 'super_admin') && (
+              <RouteSimulationLayer routeName={currentTrail.name} routePath={currentTrail.path} />
+            )}
 
             {recordedPoints.length > 1 && (
               <Polyline

@@ -1671,6 +1671,7 @@ export default function AdminDashboard() {
 
             <div id="trail-recorder" ref={routeEditorRef} className="scroll-mt-24">
               <TrailRecorder
+                locationId={activeLocationId}
                 existingTrails={zones.map((z: any) => ({
                   id: z.id,
                   location_id: z.location_id,

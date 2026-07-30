@@ -12,6 +12,7 @@ import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { useLocations } from '@/hooks/useLocations';
 import { parseMeta } from '@/lib/bookingMeta';
+import { routeStationsFromMetadata } from '@/lib/map-data';
 import type { CompanionDetail } from '@/types';
 
 interface Props {
@@ -56,6 +57,8 @@ interface TrailZoneRef {
   id: string;
   location_id: string | null;
   name: string;
+  coordinates_json?: unknown;
+  recording_metadata?: unknown;
 }
 
 interface Checkpoint {
@@ -85,9 +88,11 @@ export default function RealtimeMonitorMap({ locationId, canAddCheckpoints = fal
   const mapRef = useRef<L.Map | null>(null);
   const hikerLayer = useRef<L.LayerGroup | null>(null);
   const checkpointLayer = useRef<L.LayerGroup | null>(null);
+  const routeLayer = useRef<L.LayerGroup | null>(null);
 
   const [sessions, setSessions] = useState<ActiveSession[]>([]);
   const [checkpoints, setCheckpoints] = useState<Checkpoint[]>([]);
+  const [trailZones, setTrailZones] = useState<TrailZoneRef[]>([]);
   const [progress, setProgress] = useState<Record<string, { checkpoint_id: string; created_at: string }[]>>({});
   const [loading, setLoading] = useState(true);
 
@@ -120,6 +125,7 @@ export default function RealtimeMonitorMap({ locationId, canAddCheckpoints = fal
 
     hikerLayer.current = L.layerGroup().addTo(mapRef.current);
     checkpointLayer.current = L.layerGroup().addTo(mapRef.current);
+    routeLayer.current = L.layerGroup().addTo(mapRef.current);
 
     if (canAddCheckpoints) {
       mapRef.current.on('click', (e) => {
@@ -160,16 +166,27 @@ export default function RealtimeMonitorMap({ locationId, canAddCheckpoints = fal
     const trailZoneIds = Array.from(new Set(sessList.map((s) => s.trail_zone_id).filter(Boolean))) as string[];
     const trailZoneMap: Record<string, TrailZoneRef> = {};
     if (trailZoneIds.length > 0) {
-      const { data: zoneData } = await supabase
+      const zoneResult = await supabase
         .from('trail_zones' as any)
-        .select('id,location_id,name')
+        .select('id,location_id,name,coordinates_json,recording_metadata')
         .in('id', trailZoneIds);
+      let zoneData = zoneResult.data;
+      if (zoneResult.error) {
+        const fallback = await supabase
+          .from('trail_zones' as any)
+          .select('id,location_id,name,coordinates_json')
+          .in('id', trailZoneIds);
+        zoneData = fallback.data;
+      }
+      setTrailZones((zoneData as unknown as TrailZoneRef[] | null) ?? []);
       ((zoneData as unknown as TrailZoneRef[] | null) ?? []).forEach((z) => { trailZoneMap[z.id] = z; });
       sessList.forEach((s) => {
         if (s.trail_zone_id && trailZoneMap[s.trail_zone_id]) {
           (s as any).trail_zone_name = trailZoneMap[s.trail_zone_id].name;
         }
       });
+    } else {
+      setTrailZones([]);
     }
 
     const bookingIds = Array.from(new Set(sessList.map((s) => s.booking_id).filter(Boolean))) as string[];
@@ -304,9 +321,39 @@ export default function RealtimeMonitorMap({ locationId, canAddCheckpoints = fal
 
   /* ── render markers ── */
   useEffect(() => {
-    if (!mapRef.current || !hikerLayer.current || !checkpointLayer.current) return;
+    if (!mapRef.current || !hikerLayer.current || !checkpointLayer.current || !routeLayer.current) return;
     hikerLayer.current.clearLayers();
     checkpointLayer.current.clearLayers();
+    routeLayer.current.clearLayers();
+
+    trailZones.forEach((route, routeIndex) => {
+      const path = Array.isArray(route.coordinates_json)
+        ? route.coordinates_json
+          .map((point) => {
+            if (!point || typeof point !== 'object') return null;
+            const item = point as { lat?: unknown; lng?: unknown };
+            const lat = Number(item.lat);
+            const lng = Number(item.lng);
+            return Number.isFinite(lat) && Number.isFinite(lng) ? [lat, lng] as [number, number] : null;
+          })
+          .filter((point): point is [number, number] => point !== null)
+        : [];
+      if (path.length < 2) return;
+      const color = ['#16a34a', '#2563eb', '#dc2626'][routeIndex % 3];
+      L.polyline(path, { color, weight: 5, opacity: 0.8 }).bindPopup(`<strong>${esc(route.name)}</strong><br/><small>Official assigned route</small>`).addTo(routeLayer.current!);
+      routeStationsFromMetadata(route.recording_metadata, path).forEach((station) => {
+        const isPeak = station.kind === 'peak';
+        const label = station.kind === 'jump_off' ? 'J' : isPeak ? 'P' : String(station.index - 1);
+        L.marker([station.lat, station.lng], {
+          icon: L.divIcon({
+            className: '',
+            iconSize: [24, 24],
+            iconAnchor: [12, 12],
+            html: `<div style="width:24px;height:24px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:${isPeak ? '#dc2626' : color};color:white;border:2px solid white;box-shadow:0 2px 6px rgba(0,0,0,.35);font-size:10px;font-weight:800">${label}</div>`,
+          }),
+        }).bindPopup(`<strong>${esc(station.name)}</strong><br/><small>${esc(station.description)}</small>`).addTo(routeLayer.current!);
+      });
+    });
 
     // checkpoints
     checkpoints.forEach((cp, idx) => {
@@ -384,7 +431,7 @@ export default function RealtimeMonitorMap({ locationId, canAddCheckpoints = fal
       }).bindPopup(popupHtml);
       hikerLayer.current!.addLayer(m);
     });
-  }, [sessions, checkpoints, progress]);
+  }, [sessions, checkpoints, progress, trailZones]);
 
   /* ── Inactivity alert: warn admin when a hiker hasn't pinged in 20+ min ── */
   const alertedRef = useRef<Set<string>>(new Set());

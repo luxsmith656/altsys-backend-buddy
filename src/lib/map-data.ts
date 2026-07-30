@@ -107,6 +107,128 @@ export function haversineDistance(lat1: number, lon1: number, lat2: number, lon2
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
+export interface RouteStation {
+  id: string;
+  index: number;
+  kind: 'jump_off' | 'station' | 'peak';
+  name: string;
+  description: string;
+  lat: number;
+  lng: number;
+  distanceKm: number;
+}
+
+function pointAtDistance(path: LatLngTuple[], targetMeters: number): LatLngTuple {
+  if (path.length === 0) return MT_KALISUNGAN_CENTER;
+  if (targetMeters <= 0) return path[0];
+
+  let coveredMeters = 0;
+  for (let index = 1; index < path.length; index++) {
+    const previous = path[index - 1];
+    const current = path[index];
+    const segmentMeters = haversineDistance(previous[0], previous[1], current[0], current[1]) * 1000;
+    if (coveredMeters + segmentMeters >= targetMeters && segmentMeters > 0) {
+      const ratio = (targetMeters - coveredMeters) / segmentMeters;
+      return [
+        previous[0] + (current[0] - previous[0]) * ratio,
+        previous[1] + (current[1] - previous[1]) * ratio,
+      ];
+    }
+    coveredMeters += segmentMeters;
+  }
+
+  return path[path.length - 1];
+}
+
+export function buildRouteStations(path: LatLngTuple[]): RouteStation[] {
+  const validPath = path.filter(([lat, lng]) => Number.isFinite(lat) && Number.isFinite(lng));
+  if (validPath.length < 2) return [];
+
+  const totalMeters = validPath.reduce((total, point, index) => {
+    if (index === 0) return total;
+    const previous = validPath[index - 1];
+    return total + haversineDistance(previous[0], previous[1], point[0], point[1]) * 1000;
+  }, 0);
+  if (totalMeters <= 0) return [];
+
+  const hasFiveFullKilometers = totalMeters >= 5000;
+  const stationTargets = Array.from({ length: 5 }, (_, index) => {
+    const stationNumber = index + 1;
+    return hasFiveFullKilometers ? stationNumber * 1000 : totalMeters * (stationNumber / 6);
+  });
+
+  const stations: RouteStation[] = [{
+    id: 'jump-off',
+    index: 1,
+    kind: 'jump_off',
+    name: 'Jump-off: Start of Trail (0 km)',
+    description: 'Official route start, registration, and safety briefing point.',
+    lat: validPath[0][0],
+    lng: validPath[0][1],
+    distanceKm: 0,
+  }];
+
+  stationTargets.forEach((targetMeters, index) => {
+    const position = pointAtDistance(validPath, targetMeters);
+    const distanceKm = targetMeters / 1000;
+    stations.push({
+      id: `station-${index + 1}`,
+      index: index + 2,
+      kind: 'station',
+      name: `Station ${index + 1} (${distanceKm.toFixed(hasFiveFullKilometers ? 0 : 2)} km)`,
+      description: `Official progress station ${index + 1} along the published trail.`,
+      lat: position[0],
+      lng: position[1],
+      distanceKm,
+    });
+  });
+
+  const end = validPath[validPath.length - 1];
+  stations.push({
+    id: 'peak',
+    index: 7,
+    kind: 'peak',
+    name: `Peak / End of Path (${(totalMeters / 1000).toFixed(2)} km)`,
+    description: 'Official summit or trail endpoint.',
+    lat: end[0],
+    lng: end[1],
+    distanceKm: totalMeters / 1000,
+  });
+
+  return stations;
+}
+
+export function routeStationsFromMetadata(metadata: unknown, path: LatLngTuple[]): RouteStation[] {
+  const stored = metadata && typeof metadata === 'object'
+    ? (metadata as { stations?: unknown }).stations
+    : null;
+
+  if (Array.isArray(stored)) {
+    const parsed = stored
+      .map((station, index) => {
+        if (!station || typeof station !== 'object') return null;
+        const item = station as Partial<RouteStation>;
+        const lat = Number(item.lat);
+        const lng = Number(item.lng);
+        if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+        return {
+          id: String(item.id ?? `station-${index}`),
+          index: Number(item.index ?? index + 1),
+          kind: item.kind === 'jump_off' || item.kind === 'peak' ? item.kind : 'station',
+          name: String(item.name ?? `Station ${index}`),
+          description: String(item.description ?? ''),
+          lat,
+          lng,
+          distanceKm: Number(item.distanceKm ?? 0),
+        } satisfies RouteStation;
+      })
+      .filter((station): station is RouteStation => station !== null);
+    if (parsed.length >= 2) return parsed;
+  }
+
+  return buildRouteStations(path);
+}
+
 // Distance from point to nearest point on polyline
 export function distanceToTrail(lat: number, lng: number, trail: LatLngTuple[]): number {
   let minDist = Infinity;

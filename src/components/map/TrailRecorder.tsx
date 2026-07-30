@@ -9,7 +9,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { supabase } from '@/integrations/supabase/client';
 import { Activity, AlertTriangle, CheckCircle2, GitCompare, Locate, Play, Square, MousePointer, Navigation, Trash2, Save, Undo2 } from 'lucide-react';
 import { toast } from 'sonner';
-import { MT_KALISUNGAN_CENTER, DEFAULT_ZOOM } from '@/lib/map-data';
+import { buildRouteStations, MT_KALISUNGAN_CENTER, DEFAULT_ZOOM } from '@/lib/map-data';
 import {
   buildRecordingQuality,
   compareCleanedTracks,
@@ -169,6 +169,7 @@ function RecorderMapBridge({ onReady }: { onReady: (map: L.Map) => void }) {
 }
 
 interface TrailRecorderProps {
+  locationId?: string | null;
   existingTrails?: {
     id: string;
     location_id?: string | null;
@@ -200,7 +201,7 @@ type TrailRecordingRow = {
   comparison_summary?: any;
 };
 
-export default function TrailRecorder({ existingTrails, onSaved }: TrailRecorderProps) {
+export default function TrailRecorder({ locationId, existingTrails, onSaved }: TrailRecorderProps) {
   const { user } = useAuth();
   const visibleExistingTrails = existingTrails?.filter((trail) => trail.status !== 'deleted' && trail.review_status !== 'deleted') ?? [];
   const [mode, setMode] = useState<'idle' | 'drawing' | 'recording'>('idle');
@@ -466,7 +467,7 @@ export default function TrailRecorder({ existingTrails, onSaved }: TrailRecorder
     setPath([]);
     pathRef.current = [];
     setEditingTrailId(null);
-    setSelectedTrailLocationId(null);
+    setSelectedTrailLocationId(locationId ?? null);
     setSelectedTrailRecordingCount(0);
     setTrailRecordings([]);
     setFollowRecordingMap(false);
@@ -612,6 +613,7 @@ export default function TrailRecorder({ existingTrails, onSaved }: TrailRecorder
       const coordsJson = cleanTrack.map((p) => serializeTrackPoint(p));
       const rawRecordingJson = (rawTrack.length > 0 ? rawTrack : cleanTrack).map((p) => serializeTrackPoint(p, 'accepted'));
       const qualitySummary = recording.quality_summary ?? buildRecordingQuality(rawTrack.length > 0 ? rawTrack : cleanTrack, cleanTrack);
+      const routeStations = buildRouteStations(cleanTrack.map((point) => [point.lat, point.lng] as LatLngTuple));
       const payload = {
         coordinates_json: coordsJson,
         cleaned_recording_json: coordsJson,
@@ -622,6 +624,7 @@ export default function TrailRecorder({ existingTrails, onSaved }: TrailRecorder
           comparison: recording.comparison_summary ?? null,
           source_recording_id: recording.id,
           published_at: new Date().toISOString(),
+          stations: routeStations,
         },
         status: 'active',
         review_status: 'approved',
@@ -742,11 +745,14 @@ export default function TrailRecorder({ existingTrails, onSaved }: TrailRecorder
         requiresSecondPass: isGpsRecording && trailRecordings.length === 0,
         generatedAt: new Date().toISOString(),
       };
+      const routeStations = buildRouteStations(finalTrack.map((point) => [point.lat, point.lng] as LatLngTuple));
       const forceDraftReview = isGpsRecording && review.level !== 'good';
       const finalStatus = forceDraftReview ? 'draft' : status;
       const finalReviewStatus = finalStatus === 'active' ? 'approved' : 'pending';
       const finalIsOfficial = finalStatus === 'active';
+      const routeLocationId = selectedTrailLocationId ?? locationId ?? null;
       const payload = {
+        location_id: routeLocationId,
         name: name.trim(),
         difficulty,
         elevation_meters: elevation ? parseInt(elevation) : 0,
@@ -757,6 +763,7 @@ export default function TrailRecorder({ existingTrails, onSaved }: TrailRecorder
           ...qualitySummary,
           review,
           comparison: comparisonSummary,
+          stations: routeStations,
         },
         recording_count: Math.max(selectedTrailRecordingCount, trailRecordings.length) + 1,
         status: finalStatus,
@@ -792,7 +799,7 @@ export default function TrailRecorder({ existingTrails, onSaved }: TrailRecorder
       if (savedTrailId && user?.id) {
         await supabase.from('trail_recordings' as any).insert({
           trail_zone_id: savedTrailId,
-          location_id: selectedTrailLocationId,
+          location_id: routeLocationId,
           recorded_by: user.id,
           source: rawGpsPointsRef.current.length > 0 ? 'gps_recording' : 'manual_editor',
           status: finalStatus,
@@ -819,7 +826,7 @@ export default function TrailRecorder({ existingTrails, onSaved }: TrailRecorder
       cleanedGpsPointsRef.current = [];
       setTrailRecordings([]);
       setSelectedTrailRecordingCount(0);
-      setSelectedTrailLocationId(null);
+      setSelectedTrailLocationId(locationId ?? null);
       localStorage.removeItem(offlineDraftKey);
       void clearNativeTrailPoints(offlineDraftKey).catch(() => {});
       onSaved?.();
@@ -892,7 +899,7 @@ export default function TrailRecorder({ existingTrails, onSaved }: TrailRecorder
             <label className="text-xs text-muted-foreground mb-1 block">Edit Existing Trail</label>
             <Select value={editingTrailId ?? undefined} onValueChange={loadExistingTrail}>
               <SelectTrigger><SelectValue placeholder="Select trail to edit..." /></SelectTrigger>
-              <SelectContent>
+              <SelectContent className="z-[3200]">
                 {visibleExistingTrails.map((t) => (
                   <SelectItem key={t.id} value={t.id}>
                     {t.name} {t.status === 'draft' ? '(draft)' : '(official)'}
@@ -929,7 +936,7 @@ export default function TrailRecorder({ existingTrails, onSaved }: TrailRecorder
           <Input placeholder="Trail name" value={name} onChange={(e) => setName(e.target.value)} className="col-span-1" />
           <Select value={difficulty} onValueChange={setDifficulty}>
             <SelectTrigger><SelectValue /></SelectTrigger>
-            <SelectContent>
+            <SelectContent className="z-[3200]">
               <SelectItem value="easy">Easy</SelectItem>
               <SelectItem value="moderate">Moderate</SelectItem>
               <SelectItem value="hard">Hard</SelectItem>
@@ -938,7 +945,7 @@ export default function TrailRecorder({ existingTrails, onSaved }: TrailRecorder
           <Input placeholder="Elevation (m)" type="number" value={elevation} onChange={(e) => setElevation(e.target.value)} />
           <Select value={status} onValueChange={(v) => setStatus(v as 'draft' | 'active')}>
             <SelectTrigger><SelectValue /></SelectTrigger>
-            <SelectContent>
+            <SelectContent className="z-[3200]">
               <SelectItem value="active">Official Active</SelectItem>
               <SelectItem value="draft">Draft Review</SelectItem>
             </SelectContent>
@@ -987,7 +994,7 @@ export default function TrailRecorder({ existingTrails, onSaved }: TrailRecorder
                   <GitCompare className="h-3 w-3" /> Review Recordings
                 </Button>
               </DialogTrigger>
-              <DialogContent className="max-h-[85vh] max-w-3xl overflow-y-auto">
+              <DialogContent className="z-[3100] max-h-[85vh] max-w-3xl overflow-y-auto">
                 <DialogHeader>
                   <DialogTitle>Recorded Trail Review</DialogTitle>
                 </DialogHeader>
@@ -997,7 +1004,7 @@ export default function TrailRecorder({ existingTrails, onSaved }: TrailRecorder
                   </p>
                   <Select value={recordingSort} onValueChange={(v) => setRecordingSort(v as typeof recordingSort)}>
                     <SelectTrigger className="w-full sm:w-44"><SelectValue /></SelectTrigger>
-                    <SelectContent>
+                    <SelectContent className="z-[3200]">
                       <SelectItem value="newest">Newest first</SelectItem>
                       <SelectItem value="quality">Best quality</SelectItem>
                       <SelectItem value="distance">Longest distance</SelectItem>
