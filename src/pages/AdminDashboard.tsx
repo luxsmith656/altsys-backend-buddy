@@ -463,6 +463,7 @@ export default function AdminDashboard() {
     if (!scannedBooking) return;
     setStartingHike(true);
     const routeInfo = resolveAssignedTrail(scannedBooking);
+    const meta = parseMeta(scannedBooking.notes);
     if (routeInfo.routes.length > 1 && !routeInfo.route) {
       toast.error('Assign one official route to this booking before starting the hike.');
       setStartingHike(false);
@@ -473,46 +474,106 @@ export default function AdminDashboard() {
       setStartingHike(false);
       return;
     }
-    let { data: session, error: sessionErr } = await supabase
+    const { data: assignmentRows } = await supabase
+      .from('booking_assignments' as any)
+      .select('guide_id,status,created_at')
+      .eq('booking_id', scannedBooking.id)
+      .in('status', ['accepted', 'pending'])
+      .order('created_at', { ascending: false })
+      .limit(1);
+    const assignedGuideId = (assignmentRows as Array<{ guide_id?: string }> | null)?.[0]?.guide_id;
+    let assignedGuide = assignedGuideId ? guides.find((guide) => guide.id === assignedGuideId) : null;
+    if (!assignedGuide && assignedGuideId) {
+      const { data: guideRows } = await supabase
+        .from('guides' as any)
+        .select('id,user_id,full_name')
+        .eq('id', assignedGuideId)
+        .limit(1);
+      const guideRow = (guideRows as Array<{ id: string; user_id: string | null; full_name: string }> | null)?.[0];
+      if (guideRow) {
+        assignedGuide = {
+          id: guideRow.id,
+          name: guideRow.full_name,
+          phone: '',
+          status: 'on-duty',
+          trail: routeInfo.route.name,
+          totalHikes: 0,
+          user_id: guideRow.user_id,
+          per_trip_fee: 0,
+          location_id: scannedBooking.location_id ?? activeLocationId,
+        };
+      }
+    }
+    if (!assignedGuide?.user_id) {
+      toast.error('The assigned guide needs a linked guide account before this group can start.');
+      setStartingHike(false);
+      return;
+    }
+
+    const startTime = new Date().toISOString();
+    const { data: existingRows } = await supabase
       .from('hiker_sessions')
-      .insert({
-        user_id: scannedBooking.user_id,
-        booking_id: scannedBooking.id,
-        location_id: scannedBooking.location_id ?? activeLocationId,
-        trail_zone_id: routeInfo.route.id,
-        participant_role: 'hiker',
-        tracking_phase: 'ascent',
-        start_time: new Date().toISOString(),
-        status: 'active',
-        total_distance_km: 0,
-      })
-      .select()
-      .single();
-    if (sessionErr && (
-      String(sessionErr.message).toLowerCase().includes('schema cache') ||
-      String(sessionErr.message).toLowerCase().includes('could not find') ||
-      String(sessionErr.message).toLowerCase().includes('column')
-    )) {
-      const fallback = await supabase
+      .select('id,user_id,participant_role,status')
+      .eq('booking_id', scannedBooking.id)
+      .eq('status', 'active');
+    const existingSessions = (existingRows as Array<{ id: string; user_id: string; participant_role?: string }> | null) ?? [];
+
+    const createGroupSession = async (userId: string, participantRole: 'hiker' | 'guide') => {
+      const existing = existingSessions.find((row) => row.user_id === userId);
+      if (existing) return { data: existing, error: null, created: false };
+      let result = await supabase
         .from('hiker_sessions')
         .insert({
-          user_id: scannedBooking.user_id,
+          user_id: userId,
           booking_id: scannedBooking.id,
-          start_time: new Date().toISOString(),
+          location_id: scannedBooking.location_id ?? activeLocationId,
+          trail_zone_id: routeInfo.route.id,
+          participant_role: participantRole,
+          tracking_phase: 'ascent',
+          start_time: startTime,
           status: 'active',
           total_distance_km: 0,
         })
         .select()
         .single();
-      session = fallback.data;
-      sessionErr = fallback.error;
+      if (result.error && (
+        String(result.error.message).toLowerCase().includes('schema cache') ||
+        String(result.error.message).toLowerCase().includes('could not find') ||
+        String(result.error.message).toLowerCase().includes('column')
+      )) {
+        result = await supabase
+          .from('hiker_sessions')
+          .insert({
+            user_id: userId,
+            booking_id: scannedBooking.id,
+            trail_zone_id: routeInfo.route.id,
+            start_time: startTime,
+            status: 'active',
+            total_distance_km: 0,
+          })
+          .select()
+          .single();
+      }
+      return { ...result, created: !result.error };
+    };
+
+    const hikerResult = await createGroupSession(scannedBooking.user_id, 'hiker');
+    let session = hikerResult.data;
+    let sessionErr = hikerResult.error;
+    if (!sessionErr) {
+      const guideResult = await createGroupSession(assignedGuide.user_id, 'guide');
+      if (guideResult.error) {
+        if (hikerResult.created && session?.id) {
+          await supabase.from('hiker_sessions').delete().eq('id', session.id);
+        }
+        session = null;
+        sessionErr = guideResult.error;
+      }
     }
 
     if (sessionErr) {
-      toast.error('Failed to start hike: ' + sessionErr.message);
+      toast.error('Failed to start the hiker and guide group: ' + sessionErr.message);
     } else {
-      const meta = parseMeta(scannedBooking.notes);
-      const startTime = new Date().toISOString();
       const updatedNotes = encodeMeta({
         ...meta,
         onsiteStartConfirmed: true,
@@ -1159,8 +1220,7 @@ export default function AdminDashboard() {
   );
 
   return (
-    <div className="min-h-screen pt-20 pb-12 px-4">
-      <AppDownloadButton floating />
+    <div className="min-h-screen px-3 pb-12 pt-20 sm:px-4">
       <div className="container max-w-7xl mx-auto">
         <motion.div
           initial={{ opacity: 0, y: 20 }}
@@ -1168,7 +1228,7 @@ export default function AdminDashboard() {
           className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between"
         >
           <div>
-            <h1 className="text-3xl font-bold mb-2">
+            <h1 className="mb-2 text-2xl font-bold sm:text-3xl">
               Admin <span className="text-gradient">Dashboard</span>
             </h1>
             <p className="text-muted-foreground">
@@ -1205,7 +1265,7 @@ export default function AdminDashboard() {
             if (value !== 'overview') next.delete('routeDraft');
             setSearchParams(next, { replace: true });
           }}
-          className="flex flex-col md:flex-row gap-6"
+          className="flex w-full flex-col gap-6 md:flex-row"
         >
           <div className="w-full md:w-64 shrink-0 md:sticky md:top-24 h-max">
             <TabsList className="glass-card flex flex-row md:flex-col p-2 gap-1 h-auto w-full items-stretch justify-start overflow-x-auto overflow-y-hidden md:overflow-visible custom-scrollbar">
@@ -1476,8 +1536,8 @@ export default function AdminDashboard() {
 
             {/* Accept + Assign Guide Dialog */}
             {acceptDialogId && (
-              <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/60 backdrop-blur-sm p-4">
-                <Card className="glass-card w-full max-w-md">
+              <div className="fixed inset-0 z-[3100] flex items-center justify-center bg-background/60 p-2 backdrop-blur-sm sm:p-4">
+                <Card className="glass-card max-h-[calc(100dvh-1rem)] w-full max-w-md overflow-y-auto">
                   <CardHeader>
                     <CardTitle className="flex items-center gap-2">
                       <UserCheck className="h-5 w-5 text-primary" /> Accept & Assign Guide
@@ -1521,7 +1581,7 @@ export default function AdminDashboard() {
                         </Select>
                       )}
                     </div>
-                    <div className="flex gap-2 pt-2">
+                    <div className="flex flex-col gap-2 pt-2 min-[380px]:flex-row">
                       <Button variant="outline" className="flex-1" onClick={() => { setAcceptDialogId(null); setSelectedTrailZoneId(''); }} disabled={acceptSaving}>Cancel</Button>
                       <Button className="flex-1 gap-2" onClick={handleAcceptBooking} disabled={!selectedGuide || acceptRouteOptions.length === 0 || (acceptNeedsRouteSelection && !selectedTrailZoneId) || acceptSaving}>
                         {acceptSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
@@ -1535,8 +1595,8 @@ export default function AdminDashboard() {
 
             {/* Adjust Date Dialog */}
             {adjustDialogId && (
-              <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/60 backdrop-blur-sm p-4">
-                <Card className="glass-card w-full max-w-md">
+              <div className="fixed inset-0 z-[3100] flex items-center justify-center bg-background/60 p-2 backdrop-blur-sm sm:p-4">
+                <Card className="glass-card max-h-[calc(100dvh-1rem)] w-full max-w-md overflow-y-auto">
                   <CardHeader>
                     <CardTitle className="flex items-center gap-2">
                       <CalendarClock className="h-5 w-5 text-sky-500" /> Adjust Booking Date/Time
@@ -1799,7 +1859,7 @@ export default function AdminDashboard() {
             </Card>
           </TabsContent>
               <TabsContent value="live-map" className="relative mt-0 h-[calc(100dvh-9rem)] min-h-[28rem] overflow-hidden rounded-lg border border-border/30 sm:min-h-[600px]">
-            <RealtimeMonitorMap locationId={null} canAddCheckpoints={false} />
+            <RealtimeMonitorMap locationId={activeLocationId} canAddCheckpoints={false} />
           </TabsContent>
             </Tabs>
           </TabsContent>
@@ -1856,18 +1916,18 @@ export default function AdminDashboard() {
               <Input placeholder="Search guides by name or trail…" value={guideSearch} onChange={(e) => setGuideSearch(e.target.value)} className="pl-9" />
             </div>
 
-            <div className="grid sm:grid-cols-2 gap-4">
+            <div className="grid min-w-0 sm:grid-cols-2 gap-4">
               {filteredGuides.map((guide) => (
-                <Card key={guide.id} className={`glass-card cursor-pointer transition-all ${selectedGuideId === guide.id ? 'border-primary/50 ring-1 ring-primary/30' : ''}`}>
-                  <CardContent className="p-5">
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="flex items-center gap-3">
+                <Card key={guide.id} className={`min-w-0 glass-card cursor-pointer transition-all ${selectedGuideId === guide.id ? 'border-primary/50 ring-1 ring-primary/30' : ''}`}>
+                  <CardContent className="p-4 sm:p-5">
+                    <div className="flex min-w-0 flex-wrap items-start justify-between gap-3">
+                      <div className="flex min-w-0 items-center gap-3">
                         <div className="w-11 h-11 rounded-full bg-primary/20 flex items-center justify-center flex-shrink-0 text-primary font-bold text-lg">
                           {guide.name.charAt(0)}
                         </div>
-                        <div>
-                          <p className="font-semibold">{guide.name}</p>
-                          <p className="text-xs text-muted-foreground">{guide.phone}</p>
+                        <div className="min-w-0">
+                          <p className="break-words font-semibold">{guide.name}</p>
+                          <p className="break-all text-xs text-muted-foreground">{guide.phone}</p>
                         </div>
                       </div>
                       <span className={`px-2.5 py-1 rounded-full text-xs font-medium ${GUIDE_STATUS_STYLES[guide.status]}`}>
@@ -1886,18 +1946,18 @@ export default function AdminDashboard() {
                       </div>
                     </div>
 
-                    <div className="mt-3 flex gap-2">
-                      <Button variant="outline" size="sm" className="flex-1 text-xs" onClick={() => cycleGuideStatus(guide.id)}>
+                    <div className="mt-3 grid grid-cols-2 gap-2">
+                      <Button variant="outline" size="sm" className="min-w-0 px-2 text-xs" onClick={() => cycleGuideStatus(guide.id)}>
                         <UserCog className="h-3.5 w-3.5 mr-1.5" /> Change Status
                       </Button>
-                      <Button variant="outline" size="sm" className="flex-1 text-xs" onClick={() => handleSelectGuide(guide)}>
+                      <Button variant="outline" size="sm" className="min-w-0 px-2 text-xs" onClick={() => handleSelectGuide(guide)}>
                         <FileText className="h-3.5 w-3.5 mr-1.5" />
                         {selectedGuideId === guide.id ? 'Hide History' : 'View History'}
                       </Button>
                       <Button
                         variant="outline"
                         size="sm"
-                        className="text-xs text-destructive border-destructive/30 hover:bg-destructive/10"
+                        className="col-span-2 text-xs text-destructive border-destructive/30 hover:bg-destructive/10"
                         onClick={() => setRemoveGuideId(guide.id)}
                       >
                         Remove
@@ -1910,7 +1970,7 @@ export default function AdminDashboard() {
 
             {/* Floating guide history panel */}
             {selectedGuideId && (
-              <div className="fixed right-4 top-24 z-40 w-[360px] max-w-[90vw]">
+              <div className="fixed inset-x-3 bottom-3 top-20 z-40 overflow-y-auto sm:inset-x-auto sm:bottom-auto sm:right-4 sm:top-24 sm:w-[360px] sm:max-w-[90vw]">
                 <Card className="glass-card border-primary/20 shadow-xl">
                   <CardHeader>
                     <CardTitle className="text-base flex items-center gap-2">
@@ -2187,7 +2247,7 @@ export default function AdminDashboard() {
       </div>
 
       {/* Floating collapsible booking calendar */}
-      <div className="fixed right-4 bottom-4 z-50 w-[360px] max-w-[92vw]">
+      <div className="fixed bottom-[calc(env(safe-area-inset-bottom)+0.75rem)] left-3 right-3 z-40 sm:left-auto sm:right-4 sm:w-[360px] sm:max-w-[92vw]">
         <Card className="glass-card border-primary/30 shadow-xl overflow-hidden">
           <button
             onClick={() => setCalendarFloatingOpen((v) => !v)}
@@ -2202,7 +2262,7 @@ export default function AdminDashboard() {
           </button>
 
           {calendarFloatingOpen && (
-            <CardContent className="p-3 space-y-3 max-h-[70vh] overflow-y-auto">
+            <CardContent className="max-h-[min(70dvh,36rem)] space-y-3 overflow-y-auto p-3">
               <Calendar
                 mode="single"
                 selected={calendarDate}

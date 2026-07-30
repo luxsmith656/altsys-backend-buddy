@@ -123,6 +123,9 @@ export default function HikerDashboard() {
     setBookings(b || []);
     setSessions(s || []);
     setImportantAnnouncements(loadAnnouncements().filter((a) => a.isImportant));
+    if ((s || []).some((session) => session.status === 'active')) {
+      navigate('/map?auto=1', { replace: true });
+    }
   };
 
   const totalDistance = sessions.reduce((sum, s) => sum + Number(s.total_distance_km || 0), 0);
@@ -224,7 +227,7 @@ export default function HikerDashboard() {
   const activeSession = sessions.find((s) => s.status === 'active');
 
   return (
-    <div className="min-h-screen pt-20 pb-12 px-4">
+    <div className="min-h-screen px-3 pb-12 pt-20 sm:px-4">
       <AppDownloadButton floating />
       <div className="container max-w-6xl mx-auto">
 
@@ -235,7 +238,7 @@ export default function HikerDashboard() {
           className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between"
         >
           <div>
-            <h1 className="text-3xl font-bold mb-2">
+            <h1 className="mb-2 text-2xl font-bold sm:text-3xl">
               Hiker <span className="text-gradient">Dashboard</span>
             </h1>
             <p className="text-muted-foreground">Your hiking journey on Mount Kalisungan.</p>
@@ -400,7 +403,7 @@ export default function HikerDashboard() {
         </motion.div>
 
         {/* Stats */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+        <div className="mb-6 grid grid-cols-1 gap-3 min-[360px]:grid-cols-2 lg:grid-cols-4 lg:gap-4">
           {[
             { label: 'My Bookings', value: bookings.length, icon: CalendarCheck },
             { label: 'Hikes Completed', value: sessions.filter((s) => s.status === 'completed').length, icon: Mountain },
@@ -420,7 +423,7 @@ export default function HikerDashboard() {
         </div>
 
         {/* Quick actions */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mb-6">
+        <div className="mb-6 grid grid-cols-1 gap-3 min-[360px]:grid-cols-2 sm:grid-cols-3">
           {[
             { to: '/map', icon: Map, label: 'Trail Map' },
             { to: '/chat', icon: Bot, label: 'AI Assistant' },

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -33,6 +34,7 @@ interface AssignmentRow {
 
 export default function GuideDashboard() {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const [guideRow, setGuideRow] = useState<any>(null);
   const [assignments, setAssignments] = useState<AssignmentRow[]>([]);
   const [peerGuides, setPeerGuides] = useState<any[]>([]);
@@ -47,6 +49,17 @@ export default function GuideDashboard() {
     const ch = supabase
       .channel('guide-assignments')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'booking_assignments' }, () => void load())
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'hiker_sessions', filter: `user_id=eq.${user.id}` },
+        (payload) => {
+          const session = payload.new as { status?: string };
+          if (session.status === 'active') {
+            toast.success('Group check-in confirmed. Opening your live tracker...');
+            navigate('/map?auto=1');
+          }
+        },
+      )
       .subscribe();
     return () => { supabase.removeChannel(ch); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -65,6 +78,19 @@ export default function GuideDashboard() {
 
     if (!me) {
       setLoading(false);
+      return;
+    }
+
+    const { data: activeSession } = await supabase
+      .from('hiker_sessions')
+      .select('id')
+      .eq('user_id', user!.id)
+      .eq('status', 'active')
+      .order('start_time', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (activeSession) {
+      navigate('/map?auto=1', { replace: true });
       return;
     }
 
@@ -200,10 +226,10 @@ export default function GuideDashboard() {
   }
 
   return (
-    <div className="min-h-screen pt-20 pb-12 px-4">
+    <div className="min-h-screen px-3 pb-12 pt-20 sm:px-4">
       <div className="container max-w-6xl mx-auto">
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="mb-6">
-          <h1 className="text-3xl font-bold">
+          <h1 className="text-2xl font-bold sm:text-3xl">
             Guide <span className="text-gradient">Dashboard</span>
           </h1>
           <p className="text-muted-foreground text-sm mt-1">
@@ -212,7 +238,7 @@ export default function GuideDashboard() {
         </motion.div>
 
         {/* Stats */}
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-6">
+        <div className="mb-6 grid grid-cols-1 gap-3 min-[360px]:grid-cols-2 md:grid-cols-5">
           {[
             { label: 'Pending', value: counts.pending, icon: Inbox, color: 'text-amber-500' },
             { label: 'Accepted', value: counts.accepted, icon: CheckCircle2, color: 'text-primary' },

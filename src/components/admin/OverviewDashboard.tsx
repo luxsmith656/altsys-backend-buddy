@@ -121,7 +121,7 @@ export default function OverviewDashboard({ locationId }: { locationId: string |
       {/* Header Area */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight flex items-center gap-2">
+          <h1 className="flex items-center gap-2 text-2xl font-bold tracking-tight sm:text-3xl">
             Admin <span className="text-primary">Dashboard</span>
           </h1>
           <p className="text-sm text-muted-foreground mt-1">
@@ -141,7 +141,7 @@ export default function OverviewDashboard({ locationId }: { locationId: string |
       </div>
 
       {/* KPI Cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 gap-3 min-[360px]:grid-cols-2 lg:grid-cols-4 lg:gap-4">
         <Card className="glass-card">
           <CardContent className="p-5 flex flex-col justify-between h-full space-y-4">
             <div className="flex items-start justify-between">
@@ -216,12 +216,12 @@ export default function OverviewDashboard({ locationId }: { locationId: string |
         {/* Visitor Demographics Chart */}
         <Card className="lg:col-span-2 glass-card">
           <CardHeader className="pb-2">
-            <div className="flex items-center justify-between">
-              <div>
+            <div className="flex flex-col items-start gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div className="min-w-0">
                 <CardTitle className="text-lg font-semibold text-foreground">Visitor Demographics</CardTitle>
                 <p className="text-xs text-muted-foreground mt-1">Age groups and origin breakdown (Confirmed visitors)</p>
               </div>
-              <div className="flex items-center gap-3">
+              <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto sm:gap-3">
                 <Dialog>
                   <DialogTrigger asChild>
                     <button className="text-xs text-primary hover:underline font-medium">

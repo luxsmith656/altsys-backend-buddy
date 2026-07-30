@@ -29,6 +29,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import ActiveHikersLayer from '@/components/map/ActiveHikersLayer';
+import LiveSessionsLayer from '@/components/map/LiveSessionsLayer';
 import TrailRecorder from '@/components/map/TrailRecorder';
 import Terrain3DDialog from '@/components/map/Terrain3DDialog';
 import { useAuth } from '@/hooks/useAuth';
@@ -140,6 +141,8 @@ export default function MapPage() {
   const navigate = useNavigate();
   
   const isTrailRecorder = role === 'ranger' || role === 'guide' || role === 'admin' || role === 'super_admin';
+  const canMonitorAll = role === 'ranger' || role === 'admin' || role === 'super_admin';
+  const isSelfTrackingRole = role === 'hiker' || role === 'guide';
   const [activeMapTab, setActiveMapTab] = useState<'tracker' | 'editor'>('tracker');
   
   const [dbTrails, setDbTrails] = useState<MapTrail[]>([]);
@@ -157,6 +160,8 @@ export default function MapPage() {
     () => window.matchMedia('(max-width: 639px)').matches,
   );
   const [simulationControlsOpen, setSimulationControlsOpen] = useState(false);
+  const [simulationMode, setSimulationMode] = useState(false);
+  const [selfLocation, setSelfLocation] = useState<{ lat: number; lng: number } | null>(null);
   const [expandedHikerId, setExpandedHikerId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const availableTrails: MapTrail[] = dbTrails.length > 0 ? dbTrails : TRAILS;
@@ -169,7 +174,7 @@ export default function MapPage() {
 
   // Tracker routes and editor routes intentionally use different visibility rules.
   const fetchTrails = useCallback(async () => {
-    const restrictToAssignedTrail = role === 'hiker' && !!assignedTrailZoneId;
+    const restrictToAssignedTrail = (role === 'hiker' || role === 'guide') && !!assignedTrailZoneId;
     let trackerQuery = supabase
       .from('trail_zones')
       .select('id,location_id,name,difficulty,elevation_meters,coordinates_json,status,is_official,review_status,recording_metadata')
@@ -261,7 +266,7 @@ export default function MapPage() {
 
   useEffect(() => {
     let active = true;
-    if (!user || role !== 'hiker') {
+    if (!user || (role !== 'hiker' && role !== 'guide')) {
       setAssignedTrailZoneId(null);
       return () => {
         active = false;
@@ -323,10 +328,14 @@ export default function MapPage() {
   }, []);
 
   useEffect(() => {
+    if (!canMonitorAll) {
+      setSimulationHikers([]);
+      return;
+    }
     loadSimulatedHikers();
     const interval = setInterval(loadSimulatedHikers, 1000);
     return () => clearInterval(interval);
-  }, [loadSimulatedHikers]);
+  }, [canMonitorAll, loadSimulatedHikers]);
 
   // Center/zoom map onto a selected simulated hiker's interpolated position
   const handleLocateHiker = (hiker: SimulatedHiker) => {
@@ -393,6 +402,15 @@ export default function MapPage() {
       }))
     : OFFICIAL_STATIONS;
 
+  const handleSelfLocationChange = useCallback((location: { lat: number; lng: number } | null) => {
+    setSelfLocation(location);
+  }, []);
+
+  const locateSelf = () => {
+    if (!mapInstance || !selfLocation) return;
+    mapInstance.setView([selfLocation.lat, selfLocation.lng], Math.max(mapInstance.getZoom(), 17), { animate: true });
+  };
+
   return (
     <div className="h-[100dvh] pt-16 flex flex-col bg-slate-50 dark:bg-slate-950 font-sans overflow-hidden">
       
@@ -401,18 +419,20 @@ export default function MapPage() {
         <div>
           <h1 className="text-base sm:text-xl font-bold text-slate-900 dark:text-slate-50 flex items-center gap-2">
             <MapPinned className="h-5 w-5 text-emerald-600 dark:text-emerald-500" />
-            Mt. Kalisungan Tracking Console
+            {isSelfTrackingRole ? 'My Mt. Kalisungan Hike' : 'Mt. Kalisungan Tracking Console'}
           </h1>
           <p className="hidden sm:block text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-            Real-time hiker monitoring, emergency safety pings, and official trail line editor.
+            {isSelfTrackingRole
+              ? 'Your assigned route, live position, and recorded trail progress.'
+              : 'Real-time hiker monitoring, emergency safety pings, and official trail line editor.'}
           </p>
         </div>
         
-        <div className="flex w-full sm:w-auto items-center gap-1.5 bg-slate-100 dark:bg-slate-800 p-1 rounded-lg border border-slate-200/50 dark:border-slate-700/50 self-start sm:self-auto">
+        <div className="flex w-full items-center gap-1.5 overflow-x-auto rounded-lg border border-slate-200/50 bg-slate-100 p-1 dark:border-slate-700/50 dark:bg-slate-800 sm:w-auto sm:self-auto">
           <Button
             size="sm"
             variant={activeMapTab === 'tracker' ? 'secondary' : 'ghost'}
-            className={`h-8 flex-1 sm:flex-none text-xs gap-1.5 px-3 rounded-md transition-all ${
+            className={`h-8 min-w-0 flex-1 gap-1.5 rounded-md px-3 text-xs transition-all sm:flex-none ${
               activeMapTab === 'tracker' 
                 ? 'bg-white dark:bg-slate-900 shadow-sm text-slate-900 dark:text-slate-50' 
                 : 'text-slate-600 dark:text-slate-400'
@@ -423,13 +443,14 @@ export default function MapPage() {
             }}
           >
             <Activity className="h-3.5 w-3.5 text-emerald-500" />
-            Hiker Tracker
+            <span className="min-[380px]:hidden">Tracker</span>
+            <span className="hidden min-[380px]:inline">{isSelfTrackingRole ? 'My Tracker' : 'Live Tracker'}</span>
           </Button>
           {isTrailRecorder && (
             <Button
               size="sm"
               variant={activeMapTab === 'editor' ? 'secondary' : 'ghost'}
-              className={`h-8 flex-1 sm:flex-none text-xs gap-1.5 px-3 rounded-md transition-all ${
+              className={`h-8 min-w-0 flex-1 gap-1.5 rounded-md px-3 text-xs transition-all sm:flex-none ${
                 activeMapTab === 'editor' 
                   ? 'bg-white dark:bg-slate-900 shadow-sm text-slate-900 dark:text-slate-50' 
                   : 'text-slate-600 dark:text-slate-400'
@@ -437,7 +458,29 @@ export default function MapPage() {
               onClick={() => setActiveMapTab('editor')}
             >
               <Layers className="h-3.5 w-3.5 text-blue-500" />
-              Trail Route Editor
+              <span className="min-[380px]:hidden">Editor</span>
+              <span className="hidden min-[380px]:inline">Trail Route Editor</span>
+            </Button>
+          )}
+          {canMonitorAll && activeMapTab === 'tracker' && (
+            <Button
+              type="button"
+              size="icon"
+              variant={simulationMode ? 'secondary' : 'ghost'}
+              className="h-8 w-8 shrink-0 rounded-md text-amber-600 hover:bg-white dark:text-amber-400 dark:hover:bg-slate-900"
+              onClick={() => {
+                setSimulationMode((enabled) => {
+                  if (enabled) {
+                    setSimulationControlsOpen(false);
+                    setIsSidebarCollapsed(true);
+                  }
+                  return !enabled;
+                });
+              }}
+              aria-label={simulationMode ? 'Disable simulation mode' : 'Enable simulation mode'}
+              title={simulationMode ? 'Disable simulation mode' : 'Enable simulation mode'}
+            >
+              <Activity className="h-4 w-4" />
             </Button>
           )}
           <Button
@@ -472,18 +515,29 @@ export default function MapPage() {
             
             {activeMapTab === 'tracker' ? (
               <>
-                {/* Active Simulated Hikers & Pings Layer */}
-                <ActiveHikersLayer
-                  showStations={dbTrails.length === 0}
-                  routePath={currentTrail.path}
-                  routeStations={currentTrail.stations}
-                  routeDistanceKm={currentRouteDistanceKm}
-                  simulationControlsOpen={simulationControlsOpen}
-                  onSimulationControlsOpenChange={(open) => {
-                    setSimulationControlsOpen(open);
-                    if (open) setIsSidebarCollapsed(true);
-                  }}
-                />
+                {user && (
+                  <LiveSessionsLayer
+                    mode={canMonitorAll ? 'monitor' : 'self'}
+                    userId={user.id}
+                    userRole={role}
+                    locationId={canMonitorAll ? activeLocationId : null}
+                    onSelfLocationChange={isSelfTrackingRole ? handleSelfLocationChange : undefined}
+                  />
+                )}
+
+                {canMonitorAll && simulationMode && (
+                  <ActiveHikersLayer
+                    showStations={false}
+                    routePath={currentTrail.path}
+                    routeStations={currentTrail.stations}
+                    routeDistanceKm={currentRouteDistanceKm}
+                    simulationControlsOpen={simulationControlsOpen}
+                    onSimulationControlsOpenChange={(open) => {
+                      setSimulationControlsOpen(open);
+                      if (open) setIsSidebarCollapsed(true);
+                    }}
+                  />
+                )}
 
                 {/* Show Summit Trail lines */}
                 {availableTrails.map((t, i) => (
@@ -528,7 +582,7 @@ export default function MapPage() {
         </div>
 
         {/* Floating Controls Overlay for Tracker */}
-        {activeMapTab === 'tracker' && (
+        {canMonitorAll && simulationMode && activeMapTab === 'tracker' && (
           isSidebarCollapsed ? (
             /* Collapsed Minimap Control Button */
             <button
@@ -835,6 +889,19 @@ export default function MapPage() {
               </div>
             </div>
           )
+        )}
+
+        {isSelfTrackingRole && activeMapTab === 'tracker' && selfLocation && (
+          <Button
+            type="button"
+            size="icon"
+            onClick={locateSelf}
+            className="absolute bottom-4 right-4 z-[1000] h-11 w-11 rounded-xl shadow-xl"
+            aria-label="Locate my live position"
+            title="Locate my live position"
+          >
+            <Navigation className="h-5 w-5" />
+          </Button>
         )}
 
       </div>

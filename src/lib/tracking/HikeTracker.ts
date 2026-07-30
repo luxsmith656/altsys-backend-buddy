@@ -39,7 +39,7 @@ export interface TrackerSnapshot {
   phase: 'ascent' | 'peak' | 'descent' | 'completed';
   peakReachedAt: number | null;
   descentStartedAt: number | null;
-  lastFix: { lat: number; lng: number; alt: number; ts: number; accuracy: number } | null;
+  lastFix: { lat: number; lng: number; alt: number; ts: number; accuracy: number; heading: number | null } | null;
   path: { lat: number; lng: number }[];   // simplified for display
 }
 
@@ -48,7 +48,7 @@ export class HikeTracker {
   private session: OfflineSession;
   private listeners = new Set<Listener>();
   private points: OfflinePoint[] = [];
-  private lastFix: { lat: number; lng: number; alt: number; ts: number; accuracy: number } | null = null;
+  private lastFix: { lat: number; lng: number; alt: number; ts: number; accuracy: number; heading: number | null } | null = null;
   private lastMoveTs: number | null = null;
   private idleSince: number | null = null;
   private altEMA: number | null = null;
@@ -92,7 +92,7 @@ export class HikeTracker {
     this.points = opts.existingPoints ?? [];
     const last = this.points[this.points.length - 1];
     if (last) {
-      this.lastFix = { lat: last.lat, lng: last.lng, alt: last.alt, ts: last.ts, accuracy: last.accuracy };
+      this.lastFix = { lat: last.lat, lng: last.lng, alt: last.alt, ts: last.ts, accuracy: last.accuracy, heading: last.heading };
       this.altEMA = last.alt;
       this.gpsFilter.seed(this.points.map((p) => ({
         lat: p.lat,
@@ -165,6 +165,18 @@ export class HikeTracker {
     await saveSession(this.session);
     this.emit();
     await this.start();
+  }
+
+  async suspend() {
+    if (this.watchId !== null) navigator.geolocation.clearWatch(this.watchId);
+    if (this.tickHandle) clearInterval(this.tickHandle);
+    this.watchId = null;
+    this.tickHandle = null;
+    await this.pullNativePoints();
+    if (this.nativeStarted) {
+      await stopNativeTrailRecording().catch((e) => console.warn('Native recorder stop failed', e));
+      this.nativeStarted = false;
+    }
   }
 
   async stop(): Promise<OfflineSession> {
@@ -250,7 +262,7 @@ export class HikeTracker {
           this.session.movingSec += Math.min(dt, 30);
         }
       }
-      this.lastFix = { lat: point.lat, lng: point.lng, alt: point.alt, ts: point.ts, accuracy: point.accuracy };
+      this.lastFix = { lat: point.lat, lng: point.lng, alt: point.alt, ts: point.ts, accuracy: point.accuracy, heading: point.heading };
       this.altEMA = point.alt;
       this.points.push(point);
       await appendPoint(point);
@@ -318,7 +330,7 @@ export class HikeTracker {
       }
     }
 
-    this.lastFix = { lat, lng, alt, ts, accuracy };
+    this.lastFix = { lat, lng, alt, ts, accuracy, heading };
     const point: OfflinePoint = {
       sessionId: this.session.id, lat, lng, alt,
       accuracy, speed, heading, ts, segment: this.session.phase === 'descent' ? 'descent' : this.session.phase === 'peak' ? 'peak' : 'ascent',

@@ -155,10 +155,10 @@ export default function RangerDashboard() {
   const completed = checkins.filter((c) => c.status === 'completed');
 
   return (
-    <div className="min-h-screen pt-20 pb-12 px-4">
+    <div className="min-h-screen px-3 pb-12 pt-20 sm:px-4">
       <div className="container max-w-6xl mx-auto">
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
-          <h1 className="text-3xl font-bold mb-2">
+          <h1 className="mb-2 text-2xl font-bold sm:text-3xl">
             Ranger <span className="text-gradient">Dashboard</span>
           </h1>
           <p className="text-muted-foreground mb-8">
@@ -266,7 +266,7 @@ export default function RangerDashboard() {
                     {onTrail.map((c) => (
                       <div
                         key={c.id}
-                        className="flex items-center justify-between gap-3 p-4 rounded-xl bg-secondary/30 border border-border/20"
+                        className="flex flex-col items-stretch gap-3 rounded-xl border border-border/20 bg-secondary/30 p-4 min-[420px]:flex-row min-[420px]:items-center min-[420px]:justify-between"
                       >
                         <div className="min-w-0">
                           <div className="flex items-center gap-2">
@@ -286,7 +286,7 @@ export default function RangerDashboard() {
                         <Button
                           size="sm"
                           variant="outline"
-                          className="shrink-0 gap-1.5 border-primary/30 text-primary hover:bg-primary/10"
+                          className="w-full gap-1.5 border-primary/30 text-primary hover:bg-primary/10 min-[420px]:w-auto min-[420px]:shrink-0"
                           disabled={checkoutId === c.id}
                           onClick={() => handleCheckOut(c.id)}
                         >
@@ -317,7 +317,7 @@ export default function RangerDashboard() {
                     {completed.map((c) => (
                       <div
                         key={c.id}
-                        className="flex items-center justify-between gap-3 p-3 rounded-lg bg-secondary/20 border border-border/10 text-sm"
+                        className="flex flex-col items-start gap-2 rounded-lg border border-border/10 bg-secondary/20 p-3 text-sm min-[420px]:flex-row min-[420px]:items-center min-[420px]:justify-between"
                       >
                         <div>
                           <span className="font-medium">{c.name}</span>

@@ -74,12 +74,12 @@ export default function CentralDashboard() {
   );
 
   return (
-    <div className="min-h-screen pt-20 pb-12 px-4">
+    <div className="min-h-screen px-3 pb-12 pt-20 sm:px-4">
       <div className="container max-w-7xl mx-auto">
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="mb-6">
           <div className="flex items-center justify-between flex-wrap gap-4">
             <div>
-              <h1 className="text-3xl font-bold">
+              <h1 className="text-2xl font-bold sm:text-3xl">
                 Central <span className="text-gradient">LGU Dashboard</span>
               </h1>
               <p className="text-muted-foreground text-sm mt-1">
@@ -96,7 +96,7 @@ export default function CentralDashboard() {
         </motion.div>
 
         {/* KPIs */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+        <div className="mb-6 grid grid-cols-1 gap-3 min-[360px]:grid-cols-2 md:grid-cols-4 md:gap-4">
           {[
             { label: 'Total Bookings', value: totals.bookings, icon: Users, color: 'text-primary' },
             { label: 'Bookings This Month', value: totals.monthBookings, icon: TrendingUp, color: 'text-sky-500' },

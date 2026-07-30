@@ -270,7 +270,7 @@ export default function PaymentSummaryTab() {
       </div>
 
       {/* Summary cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 gap-3 min-[360px]:grid-cols-2 lg:grid-cols-3 lg:gap-4">
         {[
           { label: 'Total Collected', value: formatPeso(summary.totalCollected), icon: CreditCard, color: 'text-primary' },
           { label: 'Total Outstanding', value: formatPeso(summary.outstanding), icon: AlertTriangle, color: 'text-warning' },
