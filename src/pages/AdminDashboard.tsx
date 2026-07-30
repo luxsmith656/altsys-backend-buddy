@@ -129,10 +129,17 @@ const ANNOUNCEMENT_TYPE_STYLES: Record<string, string> = {
   closure: 'bg-destructive/10 text-destructive border-destructive/30',
 };
 
+const getMappedTab = (tab: string) => {
+  if (['overview', 'demographics'].includes(tab)) return 'overview';
+  if (['operations', 'requests', 'scan', 'live-map'].includes(tab)) return 'operations';
+  if (['management', 'guides', 'announcements', 'capacity'].includes(tab)) return 'management';
+  if (['finance', 'payment-summary'].includes(tab)) return 'finance';
+  return 'overview';
+};
+
 export default function AdminDashboard() {
   const [searchParams, setSearchParams] = useSearchParams();
   const routeEditorRef = useRef<HTMLDivElement | null>(null);
-  const getMappedTab = (t: string) => { if (['overview', 'demographics'].includes(t)) return 'overview'; if (['requests', 'scan', 'live-map'].includes(t)) return 'operations'; if (['guides', 'announcements', 'capacity'].includes(t)) return 'management'; if (['payment-summary'].includes(t)) return 'finance'; return t; };
   const [activeTab, setActiveTab] = useState(getMappedTab(searchParams.get('tab') || 'overview'));
   const [operationsTab, setOperationsTab] = useState<'requests' | 'scan' | 'live-map'>(() => {
     const initialTab = searchParams.get('tab');
@@ -164,8 +171,12 @@ export default function AdminDashboard() {
 
   useEffect(() => {
     const tab = searchParams.get('tab');
-    if (tab && tab !== activeTab) setActiveTab(tab);
-  }, [activeTab, searchParams]);
+    const mappedTab = getMappedTab(tab || 'overview');
+    if (mappedTab !== activeTab) setActiveTab(mappedTab);
+    if (tab === 'requests' || tab === 'scan' || tab === 'live-map') {
+      if (tab !== operationsTab) setOperationsTab(tab);
+    }
+  }, [activeTab, operationsTab, searchParams]);
 
   useEffect(() => {
     if (activeTab !== 'overview' || !searchParams.get('routeDraft')) return;
@@ -1261,7 +1272,12 @@ export default function AdminDashboard() {
           onValueChange={(value) => {
             setActiveTab(value);
             const next = new URLSearchParams(searchParams);
-            next.set('tab', value);
+            if (value === 'operations') {
+              setOperationsTab('requests');
+              next.set('tab', 'requests');
+            } else {
+              next.set('tab', value);
+            }
             if (value !== 'overview') next.delete('routeDraft');
             setSearchParams(next, { replace: true });
           }}
