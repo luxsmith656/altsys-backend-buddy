@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
+import { ADMIN_CHECKIN_TOKEN_PREFIX } from '@/lib/tracking/sessionAuthorization';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -65,7 +66,11 @@ export default function RangerDashboard() {
     const [{ data: z }, { data: r }, { data: s }] = await Promise.all([
       supabase.from('trail_zones').select('*'),
       supabase.from('trail_reports').select('*').order('created_at', { ascending: false }).limit(10),
-      supabase.from('hiker_sessions').select('*').eq('status', 'active'),
+      supabase
+        .from('hiker_sessions')
+        .select('*')
+        .eq('status', 'active')
+        .like('client_session_id', `${ADMIN_CHECKIN_TOKEN_PREFIX}%`),
     ]);
     setZones(z || []);
     setReports(r || []);

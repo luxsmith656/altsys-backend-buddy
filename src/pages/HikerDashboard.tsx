@@ -1,6 +1,10 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
+import {
+  ADMIN_CHECKIN_TOKEN_PREFIX,
+  isAdminAuthorizedSession,
+} from '@/lib/tracking/sessionAuthorization';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -96,8 +100,8 @@ export default function HikerDashboard() {
         'postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'hiker_sessions', filter: `user_id=eq.${user.id}` },
         (payload) => {
-          const row = payload.new as { status?: string };
-          if (row?.status === 'active') {
+          const row = payload.new as { status?: string; client_session_id?: string | null };
+          if (row?.status === 'active' && isAdminAuthorizedSession(row.client_session_id)) {
             toast.success('Check-in confirmed! Opening tracker…');
             navigate('/map?auto=1');
           }
@@ -123,7 +127,10 @@ export default function HikerDashboard() {
     setBookings(b || []);
     setSessions(s || []);
     setImportantAnnouncements(loadAnnouncements().filter((a) => a.isImportant));
-    if ((s || []).some((session) => session.status === 'active')) {
+    if ((s || []).some(
+      (session) => session.status === 'active' &&
+        String(session.client_session_id ?? '').startsWith(ADMIN_CHECKIN_TOKEN_PREFIX),
+    )) {
       navigate('/map?auto=1', { replace: true });
     }
   };
@@ -224,7 +231,11 @@ export default function HikerDashboard() {
   const adjustmentPending = bookings.filter((b) => b.status === 'adjustment_pending');
   const hasNotifications = adjustmentPending.length > 0;
   const completedSessions = sessions.filter((s) => s.status === 'completed');
-  const activeSession = sessions.find((s) => s.status === 'active');
+  const activeSession = sessions.find(
+    (session) =>
+      session.status === 'active' &&
+      isAdminAuthorizedSession(session.client_session_id),
+  );
 
   return (
     <div className="min-h-screen px-3 pb-12 pt-20 sm:px-4">
@@ -408,7 +419,7 @@ export default function HikerDashboard() {
             { label: 'My Bookings', value: bookings.length, icon: CalendarCheck },
             { label: 'Hikes Completed', value: sessions.filter((s) => s.status === 'completed').length, icon: Mountain },
             { label: 'Total Distance', value: `${totalDistance.toFixed(1)} km`, icon: Map },
-            { label: 'Active Hike', value: sessions.some((s) => s.status === 'active') ? 'Yes' : 'No', icon: Clock },
+            { label: 'Active Hike', value: activeSession ? 'Yes' : 'No', icon: Clock },
           ].map((s, i) => (
             <motion.div key={s.label} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 + i * 0.05 }}>
               <Card className="glass-card">

@@ -35,6 +35,7 @@ import Terrain3DDialog from '@/components/map/Terrain3DDialog';
 import { useAuth } from '@/hooks/useAuth';
 import { useLocations } from '@/hooks/useLocations';
 import { supabase } from '@/integrations/supabase/client';
+import { ADMIN_CHECKIN_TOKEN_PREFIX } from '@/lib/tracking/sessionAuthorization';
 
 import 'leaflet/dist/leaflet.css';
 
@@ -279,6 +280,7 @@ export default function MapPage() {
         .select('trail_zone_id,start_time,status')
         .eq('user_id', user.id)
         .eq('status', 'active')
+        .like('client_session_id', `${ADMIN_CHECKIN_TOKEN_PREFIX}%`)
         .order('start_time', { ascending: false })
         .limit(1)
         .maybeSingle();

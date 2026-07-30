@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useLocations } from '@/hooks/useLocations';
 import { supabase } from '@/integrations/supabase/client';
+import { ADMIN_CHECKIN_TOKEN_PREFIX } from '@/lib/tracking/sessionAuthorization';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -37,7 +38,8 @@ export default function CentralDashboard() {
     const { data: sessions } = await supabase
       .from('hiker_sessions' as any)
       .select('id,location_id,status')
-      .eq('status', 'active');
+      .eq('status', 'active')
+      .like('client_session_id', `${ADMIN_CHECKIN_TOKEN_PREFIX}%`);
 
     const grouped: LocStats[] = locations.map((loc) => {
       const locBookings = (bookings ?? []).filter((b: any) => b.location_id === loc.id);

@@ -39,8 +39,10 @@ async function pushOne(item: any) {
       last_track_at: new Date().toISOString(),
     } as any;
 
+    const serverUpdateRow = { ...row };
+    delete serverUpdateRow.client_session_id;
     let { error } = s.serverSessionId
-      ? await supabase.from('hiker_sessions').update(row).eq('id', s.serverSessionId)
+      ? await supabase.from('hiker_sessions').update(serverUpdateRow).eq('id', s.serverSessionId)
       : await supabase.from('hiker_sessions').upsert(row, { onConflict: 'client_session_id' });
     if (error && isSchemaCacheError(error)) {
       const legacyRow = {
@@ -62,8 +64,10 @@ async function pushOne(item: any) {
         encoded_path: s.encodedPath,
         last_synced_at: new Date().toISOString(),
       } as any;
+      const serverLegacyRow = { ...legacyRow };
+      delete serverLegacyRow.client_session_id;
       const fallback = s.serverSessionId
-        ? await supabase.from('hiker_sessions').update(legacyRow).eq('id', s.serverSessionId)
+        ? await supabase.from('hiker_sessions').update(serverLegacyRow).eq('id', s.serverSessionId)
         : await supabase.from('hiker_sessions').upsert(legacyRow, { onConflict: 'client_session_id' });
       error = fallback.error;
     }

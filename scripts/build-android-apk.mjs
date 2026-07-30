@@ -1,4 +1,4 @@
-import { copyFileSync, mkdirSync, statSync, writeFileSync } from 'node:fs';
+import { copyFileSync, mkdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
@@ -41,7 +41,17 @@ function run(command, args, cwd = root) {
 }
 
 run(npmCmd, ['run', 'build']);
+
+// The downloadable APK lives in public/, so Vite copies it into dist/. Remove
+// it before Capacitor sync or every build embeds the previous APK recursively.
+rmSync(join(root, 'dist', 'downloads'), { recursive: true, force: true });
+rmSync(join(root, 'android', 'app', 'src', 'main', 'assets', 'public', 'downloads'), {
+  recursive: true,
+  force: true,
+});
+
 run(npxCmd, ['cap', 'sync', 'android']);
+rmSync(apkSource, { force: true });
 run(gradleCmd, ['assembleDebug'], join(root, 'android'));
 
 mkdirSync(publicDir, { recursive: true });

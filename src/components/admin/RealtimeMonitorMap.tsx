@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { supabase } from '@/integrations/supabase/client';
+import { ADMIN_CHECKIN_TOKEN_PREFIX } from '@/lib/tracking/sessionAuthorization';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -168,8 +169,9 @@ export default function RealtimeMonitorMap({ locationId, canAddCheckpoints = fal
 
     const sessQuery = supabase
       .from('hiker_sessions' as any)
-      .select('id,user_id,booking_id,trail_zone_id,location_id,participant_role,tracking_phase,total_distance_km,moving_time_sec,resting_time_sec,peak_reached_at,descent_started_at,start_time')
-      .eq('status', 'active');
+      .select('id,user_id,booking_id,trail_zone_id,location_id,participant_role,tracking_phase,total_distance_km,moving_time_sec,resting_time_sec,peak_reached_at,descent_started_at,start_time,client_session_id')
+      .eq('status', 'active')
+      .like('client_session_id', `${ADMIN_CHECKIN_TOKEN_PREFIX}%`);
     const { data: sessData } = await sessQuery;
     let sessList = ((sessData as any[]) ?? []) as ActiveSession[];
 

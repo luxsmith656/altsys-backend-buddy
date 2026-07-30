@@ -1,6 +1,11 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
+import {
+  ADMIN_CHECKIN_TOKEN_PREFIX,
+  isAdminAuthorizedSession,
+  makeAdminCheckInToken,
+} from '@/lib/tracking/sessionAuthorization';
 import { useLocations } from '@/hooks/useLocations';
 import RealtimeMonitorMap from '@/components/admin/RealtimeMonitorMap';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -524,17 +529,34 @@ export default function AdminDashboard() {
     const startTime = new Date().toISOString();
     const { data: existingRows } = await supabase
       .from('hiker_sessions')
-      .select('id,user_id,participant_role,status')
+      .select('id,user_id,participant_role,status,client_session_id')
       .eq('booking_id', scannedBooking.id)
       .eq('status', 'active');
-    const existingSessions = (existingRows as Array<{ id: string; user_id: string; participant_role?: string }> | null) ?? [];
+    const existingSessions = (existingRows as Array<{
+      id: string;
+      user_id: string;
+      participant_role?: string;
+      client_session_id?: string | null;
+    }> | null) ?? [];
 
     const createGroupSession = async (userId: string, participantRole: 'hiker' | 'guide') => {
       const existing = existingSessions.find((row) => row.user_id === userId);
-      if (existing) return { data: existing, error: null, created: false };
+      if (existing && isAdminAuthorizedSession(existing.client_session_id)) {
+        return { data: existing, error: null, created: false };
+      }
+      if (existing) {
+        const { error: closeError } = await supabase
+          .from('hiker_sessions')
+          .update({ status: 'cancelled', end_time: startTime })
+          .eq('id', existing.id);
+        if (closeError) return { data: null, error: closeError, created: false };
+      }
+
+      const clientSessionId = makeAdminCheckInToken(scannedBooking.id, userId, participantRole);
       let result = await supabase
         .from('hiker_sessions')
         .insert({
+          client_session_id: clientSessionId,
           user_id: userId,
           booking_id: scannedBooking.id,
           location_id: scannedBooking.location_id ?? activeLocationId,
@@ -555,6 +577,7 @@ export default function AdminDashboard() {
         result = await supabase
           .from('hiker_sessions')
           .insert({
+            client_session_id: clientSessionId,
             user_id: userId,
             booking_id: scannedBooking.id,
             trail_zone_id: routeInfo.route.id,
@@ -911,6 +934,14 @@ export default function AdminDashboard() {
   const loadData = async () => {
     // Scope to current location when the admin has one selected (super_admin sees all).
     const scopeBookings = (q: any) => (activeLocationId ? q.eq('location_id', activeLocationId) : q);
+    let activeHikersQuery = supabase
+      .from('hiker_sessions')
+      .select('*', { count: 'exact', head: true })
+      .eq('status', 'active')
+      .like('client_session_id', `${ADMIN_CHECKIN_TOKEN_PREFIX}%`);
+    if (activeLocationId) {
+      activeHikersQuery = activeHikersQuery.eq('location_id', activeLocationId);
+    }
     const [
       { count: totalBookings },
       { count: activeHikers },
@@ -918,7 +949,7 @@ export default function AdminDashboard() {
       { data: zonesData },
     ] = await Promise.all([
       scopeBookings(supabase.from('bookings').select('*', { count: 'exact', head: true })),
-      supabase.from('hiker_sessions').select('*', { count: 'exact', head: true }).eq('status', 'active'),
+      activeHikersQuery,
       scopeBookings(supabase.from('bookings').select('*').order('created_at', { ascending: false }).limit(20)),
       supabase.from('trail_zones').select('*'),
     ]);

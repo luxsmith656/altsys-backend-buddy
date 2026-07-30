@@ -2,6 +2,10 @@ import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
+import {
+  ADMIN_CHECKIN_TOKEN_PREFIX,
+  isAdminAuthorizedSession,
+} from '@/lib/tracking/sessionAuthorization';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -53,8 +57,8 @@ export default function GuideDashboard() {
         'postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'hiker_sessions', filter: `user_id=eq.${user.id}` },
         (payload) => {
-          const session = payload.new as { status?: string };
-          if (session.status === 'active') {
+          const session = payload.new as { status?: string; client_session_id?: string | null };
+          if (session.status === 'active' && isAdminAuthorizedSession(session.client_session_id)) {
             toast.success('Group check-in confirmed. Opening your live tracker...');
             navigate('/map?auto=1');
           }
@@ -86,6 +90,7 @@ export default function GuideDashboard() {
       .select('id')
       .eq('user_id', user!.id)
       .eq('status', 'active')
+      .like('client_session_id', `${ADMIN_CHECKIN_TOKEN_PREFIX}%`)
       .order('start_time', { ascending: false })
       .limit(1)
       .maybeSingle();

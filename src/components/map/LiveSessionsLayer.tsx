@@ -4,6 +4,7 @@ import L from 'leaflet';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { ensureActiveHikeTracker } from '@/lib/tracking/activeTrackerManager';
+import { ADMIN_CHECKIN_TOKEN_PREFIX } from '@/lib/tracking/sessionAuthorization';
 import type { TrackerSnapshot } from '@/lib/tracking/HikeTracker';
 
 type SessionRole = 'hiker' | 'guide' | 'ranger' | 'admin';
@@ -17,6 +18,7 @@ type ActiveSession = {
   participant_role?: SessionRole;
   tracking_phase?: string;
   start_time: string;
+  client_session_id?: string | null;
 };
 
 type LocationPoint = {
@@ -80,8 +82,9 @@ export default function LiveSessionsLayer({
   const load = useCallback(async () => {
     let sessionQuery = supabase
       .from('hiker_sessions')
-      .select('id,user_id,booking_id,trail_zone_id,location_id,participant_role,tracking_phase,start_time,status')
+      .select('id,user_id,booking_id,trail_zone_id,location_id,participant_role,tracking_phase,start_time,status,client_session_id')
       .eq('status', 'active')
+      .like('client_session_id', `${ADMIN_CHECKIN_TOKEN_PREFIX}%`)
       .order('start_time', { ascending: false });
 
     if (mode === 'self') {
@@ -94,8 +97,9 @@ export default function LiveSessionsLayer({
     if (error) {
       let fallback = supabase
         .from('hiker_sessions')
-        .select('id,user_id,booking_id,trail_zone_id,start_time,status')
+        .select('id,user_id,booking_id,trail_zone_id,start_time,status,client_session_id')
         .eq('status', 'active')
+        .like('client_session_id', `${ADMIN_CHECKIN_TOKEN_PREFIX}%`)
         .order('start_time', { ascending: false });
       if (mode === 'self') fallback = fallback.eq('user_id', userId) as typeof fallback;
       const result = await fallback;
