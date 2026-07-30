@@ -1,4 +1,4 @@
-import { lazy, Suspense } from 'react';
+import { lazy, Suspense, useState } from 'react';
 import type { LatLngTuple } from 'leaflet';
 import { Box, Mountain, Route } from 'lucide-react';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -21,6 +21,8 @@ export default function Terrain3DDialog({
   routePath,
   stations,
 }: Terrain3DDialogProps) {
+  const [relief, setRelief] = useState(3);
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="z-[3500] flex h-[min(92dvh,52rem)] w-[calc(100vw-1rem)] max-w-6xl flex-col gap-0 overflow-hidden rounded-lg p-0">
@@ -32,7 +34,7 @@ export default function Terrain3DDialog({
           <DialogDescription className="sr-only">
             Interactive elevation model with the selected official trail and route stations.
           </DialogDescription>
-          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-muted-foreground">
             <span className="inline-flex items-center gap-1">
               <Route className="h-3.5 w-3.5 text-sky-500" />
               {routeName}
@@ -41,6 +43,28 @@ export default function Terrain3DDialog({
               <Box className="h-3.5 w-3.5 text-emerald-500" />
               Demand-rendered for mobile
             </span>
+            <div className="ml-auto inline-flex items-center gap-1 rounded border border-border bg-secondary/50 p-0.5">
+              <span className="hidden px-1 text-[10px] font-medium uppercase text-muted-foreground sm:inline">
+                Relief
+              </span>
+              {[1, 2, 3].map((value) => (
+                <button
+                  key={value}
+                  type="button"
+                  className={`h-6 min-w-7 rounded px-1.5 text-[10px] font-semibold transition-colors ${
+                    relief === value
+                      ? 'bg-primary text-primary-foreground'
+                      : 'text-muted-foreground hover:bg-background hover:text-foreground'
+                  }`}
+                  onClick={() => setRelief(value)}
+                  autoFocus={relief === value}
+                  aria-label={`${value}x terrain relief`}
+                  aria-pressed={relief === value}
+                >
+                  {value}x
+                </button>
+              ))}
+            </div>
           </div>
         </DialogHeader>
         <div className="relative min-h-0 flex-1 bg-[#dbe6df]">
@@ -56,7 +80,7 @@ export default function Terrain3DDialog({
                 </div>
               )}
             >
-              <Terrain3DScene routePath={routePath} stations={stations} />
+              <Terrain3DScene routePath={routePath} stations={stations} relief={relief} />
             </Suspense>
           )}
           <div className="pointer-events-none absolute bottom-2 left-2 right-2 flex flex-wrap items-end justify-between gap-2 text-[10px] text-slate-700">
