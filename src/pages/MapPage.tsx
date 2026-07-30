@@ -1,382 +1,109 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import type { CSSProperties } from 'react';
-import { MapContainer, TileLayer, Polyline, Polygon, Marker, Popup, Circle, useMap } from 'react-leaflet';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { MapContainer, TileLayer, Polyline, Marker, Popup, useMap } from 'react-leaflet';
+import { useNavigate } from 'react-router-dom';
 import L from 'leaflet';
 import {
+  routeStationsFromMetadata,
   MT_KALISUNGAN_CENTER,
   DEFAULT_ZOOM,
   TRAILS,
-  POI,
-  ZONES,
   haversineDistance,
-  distanceToTrail,
-  buildRouteStations,
-  routeStationsFromMetadata,
   type RouteStation,
 } from '@/lib/map-data';
 import { Button } from '@/components/ui/button';
-import { Box, ChevronDown, ChevronUp, Locate, Pause, Play, AlertTriangle, ChevronLeft, ChevronRight, Layers, Download, CheckCircle2, MapPinned } from 'lucide-react';
+import { 
+  MapPinned, 
+  Layers, 
+  Activity, 
+  Compass, 
+  Users, 
+  RefreshCw, 
+  Navigation,
+  Clock,
+  ChevronLeft,
+  ChevronRight,
+  Search,
+  User,
+  Box
+} from 'lucide-react';
 import { toast } from 'sonner';
-import ElevationProfile from '@/components/map/ElevationProfile';
-import MapLegend from '@/components/map/MapLegend';
-import TrailStats from '@/components/map/TrailStats';
-import TrailNavigation from '@/components/map/TrailNavigation';
-import MapCompass from '@/components/map/MapCompass';
-import RouteSimulationLayer from '@/components/map/RouteSimulationLayer';
+import ActiveHikersLayer from '@/components/map/ActiveHikersLayer';
+import TrailRecorder from '@/components/map/TrailRecorder';
 import Terrain3DDialog from '@/components/map/Terrain3DDialog';
-import WeatherPanel from '@/components/map/WeatherPanel';
-import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { useAuth } from '@/hooks/useAuth';
-import SOSPanel from '@/components/core/SOSPanel';
-import OfflineLayer from '@/components/map/OfflineLayer';
-import HikeSummary from '@/components/map/HikeSummary';
-import { HikeTracker } from '@/lib/tracking/HikeTracker';
-import { downloadArea } from '@/lib/tracking/tileCache';
-import { buildRecordingQuality, MotionGpsFilter, normalizeTrackPoint, postProcessTrack, type GpsTrackPoint } from '@/lib/tracking/gpsFilter';
-import {
-  clearNativeTrailPoints,
-  getNativeTrailPoints,
-  startNativeTrailRecording,
-  stopNativeTrailRecording,
-} from '@/lib/tracking/nativeBackgroundRecorder';
-import type { OfflineSession } from '@/lib/offlineDb';
-import type { RouteAdvice } from '@/lib/weather';
-import { supabase } from '@/integrations/supabase/client';
 import { useLocations } from '@/hooks/useLocations';
-import type { LatLngTuple } from 'leaflet';
+import { supabase } from '@/integrations/supabase/client';
 
 import 'leaflet/dist/leaflet.css';
 
+interface DBTrailZone {
+  id: string;
+  location_id: string | null;
+  name: string;
+  difficulty: string | null;
+  elevation_meters: number | null;
+  coordinates_json: unknown;
+  status: string | null;
+  is_official?: boolean;
+  review_status?: string;
+  source?: string;
+  raw_recording_json?: unknown;
+  cleaned_recording_json?: unknown;
+  recording_metadata?: unknown;
+  recording_count?: number;
+  recorded_by?: string | null;
+}
+
+interface SimulatedHiker {
+  id: string;
+  name: string;
+  guideName: string;
+  guidePhone: string;
+  groupSize: number;
+  startTime: string;
+  emergencyContact: string;
+  medicalNotes: string | null;
+  hasMinors: boolean;
+  minorCount: number;
+  companions: string[];
+  progress: number;
+  phase: 'ascent' | 'peak' | 'descent' | 'completed' | 'sos';
+  speedMultiplier: number;
+  peakReachedAt: string | null;
+  peakTimerLeft: number;
+  totalDistanceKm: number;
+  direction: 1 | -1;
+  hasWarnedAboutTimer?: boolean;
+}
+
+interface OfficialStation {
+  index: number;
+  name: string;
+  pos: [number, number];
+  description: string;
+}
+
+type MapTrail = (typeof TRAILS)[number] & {
+  id?: string;
+  stations?: RouteStation[];
+};
+
 // Fix default marker icons
-delete (L.Icon.Default.prototype as any)._getIconUrl;
+delete (L.Icon.Default.prototype as Record<string, unknown>)._getIconUrl;
 L.Icon.Default.mergeOptions({
   iconRetinaUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-icon-2x.png',
   iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-icon.png',
   shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-shadow.png',
 });
 
-function makeUserIcon(heading: number | null, alert: boolean) {
-  const color = alert ? '#ef4444' : '#22c55e';
-  const outline = alert ? '#fee2e2' : '#dcfce7';
-  const rotation = Number.isFinite(heading ?? NaN) ? heading : 0;
-  return new L.DivIcon({
-    html: `<div style="width:36px;height:36px;display:flex;align-items:center;justify-content:center;transform:rotate(${rotation}deg);filter:drop-shadow(0 2px 6px rgba(0,0,0,.55));">
-      <svg width="34" height="34" viewBox="0 0 34 34" aria-hidden="true">
-        <circle cx="17" cy="17" r="15" fill="rgba(8,18,14,.82)" stroke="${outline}" stroke-width="2" />
-        <path d="M17 3.8 L26 28.5 L17 23.2 L8 28.5 Z" fill="${color}" stroke="${outline}" stroke-width="2" stroke-linejoin="round" />
-        <path d="M17 7.2 L21.3 22 L17 19.5 L12.7 22 Z" fill="rgba(255,255,255,.32)" />
-      </svg>
-    </div>`,
-    className: '',
-    iconSize: [36, 36],
-    iconAnchor: [18, 18],
-  });
-}
-
-function makeRouteStationIcon(station: RouteStation) {
-  const isPeak = station.kind === 'peak';
-  const label = station.kind === 'jump_off' ? 'J' : isPeak ? 'P' : String(station.index - 1);
-  return new L.DivIcon({
-    className: '',
-    iconSize: [26, 26],
-    iconAnchor: [13, 13],
-    html: `<div style="width:26px;height:26px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:${isPeak ? '#dc2626' : '#16a34a'};color:#fff;border:3px solid #fff;box-shadow:0 2px 8px rgba(0,0,0,.4);font-size:10px;font-weight:800">${label}</div>`,
-  });
-}
-
-function bearingDeg(from: [number, number], to: [number, number]) {
-  const lat1 = from[0] * Math.PI / 180;
-  const lat2 = to[0] * Math.PI / 180;
-  const dLon = (to[1] - from[1]) * Math.PI / 180;
-  const y = Math.sin(dLon) * Math.cos(lat2);
-  const x = Math.cos(lat1) * Math.sin(lat2) - Math.sin(lat1) * Math.cos(lat2) * Math.cos(dLon);
-  return (Math.atan2(y, x) * 180 / Math.PI + 360) % 360;
-}
-
-function angleDelta(a: number, b: number) {
-  return Math.abs(((a - b + 540) % 360) - 180);
-}
-
-type RecordedPoint = {
-  timestamp: number;
-  lat: number;
-  lon: number;
-  alt?: number | null;
-  speed?: number | null;
-  accuracy?: number | null;
-  heading?: number | null;
-  inferred?: boolean;
-};
-
-type StoredRecording = {
-  active: boolean;
-  startedAt: number;
-  updatedAt: number;
-  points: RecordedPoint[];
-  rawPoints?: RecordedPoint[];
-};
-
-type MapTrail = (typeof TRAILS)[number] & {
-  id?: string;
-  stations: RouteStation[];
-};
-
-function normalizeHeading(value: number | null | undefined) {
-  if (value == null || !Number.isFinite(value)) return null;
-  return ((value % 360) + 360) % 360;
-}
-
-function deviceOrientationHeading(e: DeviceOrientationEvent) {
-  const iosHeading = (e as any).webkitCompassHeading;
-  if (Number.isFinite(iosHeading)) return normalizeHeading(Number(iosHeading));
-  if (e.alpha == null || !Number.isFinite(e.alpha)) return null;
-  return normalizeHeading(360 - e.alpha);
-}
-
-function pointDistanceMeters(a: RecordedPoint, b: RecordedPoint) {
-  return haversineDistance(a.lat, a.lon, b.lat, b.lon) * 1000;
-}
-
-function toTrackPoint(point: RecordedPoint): GpsTrackPoint {
-  return {
-    lat: point.lat,
-    lng: point.lon,
-    ts: point.timestamp,
-    alt: point.alt,
-    accuracy: point.accuracy,
-    speed: point.speed,
-    heading: point.heading,
-    inferred: point.inferred,
-  };
-}
-
-function fromTrackPoint(point: GpsTrackPoint): RecordedPoint {
-  return {
-    timestamp: point.ts,
-    lat: point.lat,
-    lon: point.lng,
-    alt: point.alt,
-    speed: point.speed,
-    accuracy: point.accuracy,
-    heading: point.heading,
-    inferred: point.inferred,
-  };
-}
-
-function serializeRoutePoint(point: RecordedPoint, source: 'gps' | 'estimated' = point.inferred ? 'estimated' : 'gps') {
-  const normalized = normalizeTrackPoint({
-    lat: point.lat,
-    lng: point.lon,
-    ts: point.timestamp,
-    alt: point.alt,
-    accuracy: point.accuracy,
-    speed: point.speed,
-    heading: point.heading,
-    inferred: point.inferred,
-    source,
-  });
-  return {
-    lat: normalized.lat,
-    lng: normalized.lng,
-    timestamp: new Date(normalized.ts).toISOString(),
-    timestamp_ms: normalized.ts,
-    altitude_m: normalized.alt,
-    accuracy_m: normalized.accuracy,
-    speed_m_s: normalized.speed,
-    heading_deg: normalized.heading,
-    estimated: normalized.inferred || normalized.source === 'estimated',
-    source: normalized.source,
-    filter_reason: normalized.filterReason,
-    quality: normalized.quality,
-  };
-}
-
-function gpsSignalFromAccuracy(accuracy: number | null | undefined): 'Strong' | 'Medium' | 'Weak' {
-  const value = accuracy ?? 999;
-  if (value <= 12) return 'Strong';
-  if (value <= 40) return 'Medium';
-  return 'Weak';
-}
-
-function destinationPoint(start: RecordedPoint, bearing: number, meters: number): RecordedPoint {
-  const radius = 6371000;
-  const angularDistance = meters / radius;
-  const bearingRad = bearing * Math.PI / 180;
-  const lat1 = start.lat * Math.PI / 180;
-  const lon1 = start.lon * Math.PI / 180;
-  const lat2 = Math.asin(
-    Math.sin(lat1) * Math.cos(angularDistance) +
-    Math.cos(lat1) * Math.sin(angularDistance) * Math.cos(bearingRad)
-  );
-  const lon2 = lon1 + Math.atan2(
-    Math.sin(bearingRad) * Math.sin(angularDistance) * Math.cos(lat1),
-    Math.cos(angularDistance) - Math.sin(lat1) * Math.sin(lat2)
-  );
-  return {
-    ...start,
-    lat: lat2 * 180 / Math.PI,
-    lon: ((lon2 * 180 / Math.PI + 540) % 360) - 180,
-  };
-}
-
-function recentWalkingSpeedMps(points: RecordedPoint[]) {
-  if (points.length < 2) return 0.95;
-  const recent = points.slice(-4);
-  const first = recent[0];
-  const last = recent[recent.length - 1];
-  const seconds = Math.max(1, (last.timestamp - first.timestamp) / 1000);
-  const meters = pointDistanceMeters(first, last);
-  const speed = meters / seconds;
-  if (!Number.isFinite(speed) || speed <= 0) return 0.95;
-  return Math.max(0.55, Math.min(1.45, speed));
-}
-
-function predictedRecordingPoint(prev: RecordedPoint[], raw: RecordedPoint, opts: {
-  heading: number | null;
-  moving: boolean;
-  consecutivePredicted: number;
-}) {
-  const last = prev[prev.length - 1];
-  if (!last || opts.heading == null || !opts.moving || opts.consecutivePredicted >= 3) return null;
-  const dtSec = Math.max(0, (raw.timestamp - last.timestamp) / 1000);
-  if (dtSec < 2.5 || dtSec > 18) return null;
-  const rawSpeed = raw.speed != null && raw.speed > 0 ? raw.speed : recentWalkingSpeedMps(prev);
-  const walkSpeed = Math.max(0.45, Math.min(1.55, rawSpeed));
-  const meters = Math.min(18, walkSpeed * dtSec);
-  if (meters < 1.4) return null;
-  return {
-    ...destinationPoint(last, opts.heading, meters),
-    timestamp: raw.timestamp,
-    speed: walkSpeed,
-    accuracy: Math.max(25, Math.min(raw.accuracy ?? 50, 65)),
-    heading: opts.heading,
-    inferred: true,
-  };
-}
-
-function cleanRecordingPoint(prev: RecordedPoint[], raw: RecordedPoint, opts: {
-  heading: number | null;
-  moving: boolean;
-  consecutivePredicted: number;
-}): {
-  points: RecordedPoint[];
-  displayPoint?: RecordedPoint;
-  appended: boolean;
-  reason?: 'waiting' | 'weak' | 'jump' | 'noise';
-} {
-  const accuracy = raw.accuracy ?? 999;
-  if (prev.length === 0) {
-    if (accuracy > 45) return { points: prev, reason: 'waiting', appended: false };
-    return { points: [raw], displayPoint: raw, appended: true };
-  }
-
-  const last = prev[prev.length - 1];
-  const dtMs = Math.max(0, raw.timestamp - last.timestamp);
-  const dtSec = Math.max(1, dtMs / 1000);
-  const distanceM = pointDistanceMeters(last, raw);
-  const lastAccuracy = last.accuracy ?? 25;
-  const noiseRadiusM = Math.max(2, Math.min(12, (accuracy + lastAccuracy) * 0.18));
-  const impliedSpeedMps = distanceM / dtSec;
-  const reportedSpeedMps = raw.speed ?? 0;
-
-  if (accuracy > 85) {
-    const predicted = predictedRecordingPoint(prev, raw, opts);
-    return predicted
-      ? { points: [...prev, predicted], displayPoint: predicted, appended: true, reason: 'weak' }
-      : { points: prev, reason: 'weak', appended: false };
-  }
-  if (dtMs < 800) return { points: prev, reason: 'noise', appended: false };
-  if (dtMs < 120_000 && accuracy > 25 && (distanceM > 90 || impliedSpeedMps > Math.max(4.5, reportedSpeedMps + 2.5))) {
-    const predicted = predictedRecordingPoint(prev, raw, opts);
-    return predicted
-      ? { points: [...prev, predicted], displayPoint: predicted, appended: true, reason: 'jump' }
-      : { points: prev, reason: 'jump', appended: false };
-  }
-
-  if (distanceM < noiseRadiusM && dtMs < 45_000) {
-    const updated = [...prev];
-    updated[updated.length - 1] = {
-      ...last,
-      timestamp: raw.timestamp,
-      speed: 0,
-      heading: raw.heading ?? last.heading,
-      accuracy: Math.min(lastAccuracy, accuracy),
-    };
-    return { points: updated, displayPoint: updated[updated.length - 1], appended: false, reason: 'noise' };
-  }
-
-  const alpha = accuracy <= 10 ? 0.92 : accuracy <= 20 ? 0.76 : accuracy <= 40 ? 0.58 : 0.42;
-  const smoothed = dtMs >= 45_000 || distanceM > 35
-    ? raw
-    : {
-        ...raw,
-        lat: last.lat + (raw.lat - last.lat) * alpha,
-        lon: last.lon + (raw.lon - last.lon) * alpha,
-      };
-  const smoothedDistanceM = pointDistanceMeters(last, smoothed);
-  if (smoothedDistanceM < 1.2 && dtMs < 60_000) {
-    return { points: prev, displayPoint: last, appended: false, reason: 'noise' };
-  }
-  return { points: [...prev, smoothed], displayPoint: smoothed, appended: true };
-}
-
-function trailDistanceKm(path: LatLngTuple[], start: number, end: number) {
-  if (path.length < 2 || start === end) return 0;
-  const step = start < end ? 1 : -1;
-  let d = 0;
-  for (let i = start; i !== end; i += step) {
-    const next = i + step;
-    if (!path[i] || !path[next]) break;
-    d += haversineDistance(path[i][0], path[i][1], path[next][0], path[next][1]);
-  }
-  return d;
-}
-
+// Helper for schema cache errors
 function isSchemaCacheError(error: unknown) {
   const message = String((error as { message?: unknown } | null)?.message ?? error ?? '').toLowerCase();
   return message.includes('schema cache') || message.includes('could not find') || message.includes('column');
 }
 
-const poiIcons: Record<string, L.DivIcon> = {
-  checkpoint: new L.DivIcon({ html: `<div style="width:12px;height:12px;background:#f59e0b;border:2px solid #fff;border-radius:50%;"></div>`, className: '', iconSize: [12, 12], iconAnchor: [6, 6] }),
-  summit: new L.DivIcon({ html: `<div style="width:14px;height:14px;background:#ef4444;border:2px solid #fff;border-radius:3px;transform:rotate(45deg);"></div>`, className: '', iconSize: [14, 14], iconAnchor: [7, 7] }),
-  camp: new L.DivIcon({ html: `<div style="width:12px;height:12px;background:#22c55e;border:2px solid #fff;border-radius:2px;"></div>`, className: '', iconSize: [12, 12], iconAnchor: [6, 6] }),
-  water: new L.DivIcon({ html: `<div style="width:12px;height:12px;background:#3b82f6;border:2px solid #fff;border-radius:50%;"></div>`, className: '', iconSize: [12, 12], iconAnchor: [6, 6] }),
-  viewpoint: new L.DivIcon({ html: `<div style="width:12px;height:12px;background:#a855f7;border:2px solid #fff;border-radius:50%;"></div>`, className: '', iconSize: [12, 12], iconAnchor: [6, 6] }),
-  ranger: new L.DivIcon({ html: `<div style="width:12px;height:12px;background:#f97316;border:2px solid #fff;border-radius:2px;"></div>`, className: '', iconSize: [12, 12], iconAnchor: [6, 6] }),
-};
-
-function LocateControl({
-  map,
-  onLocate,
-  className,
-  bottomClassName,
-}: {
-  map: L.Map | null;
-  onLocate?: () => void;
-  className?: string;
-  bottomClassName?: string;
-}) {
-  return (
-    <Button
-      size="icon"
-      variant="outline"
-      className={className ?? `absolute right-4 z-[1000] glass-card ${bottomClassName ?? 'bottom-[7.5rem]'} md:bottom-4`}
-      onClick={() => {
-        onLocate?.();
-        map?.locate({ setView: true, maxZoom: 17, timeout: 30000, enableHighAccuracy: true, maximumAge: 0 });
-      }}
-      disabled={!map}
-      aria-label="Locate me"
-    >
-      <Locate className="h-4 w-4" />
-    </Button>
-  );
-}
-
-type BaseLayer = 'street' | 'topo' | 'sat';
-
+// Leaflet map instance bridge to expose map instance to parent state
 function MapInstanceBridge({ onReady }: { onReady: (map: L.Map) => void }) {
   const map = useMap();
   useEffect(() => {
@@ -385,481 +112,185 @@ function MapInstanceBridge({ onReady }: { onReady: (map: L.Map) => void }) {
   return null;
 }
 
-function MapInteractionUnlock({
-  active,
-  onUnlock,
-}: {
-  active: boolean;
-  onUnlock: () => void;
-}) {
-  const map = useMap();
-  useEffect(() => {
-    if (!active) return;
-    const unlock = () => onUnlock();
-    map.on('dragstart', unlock);
-    map.on('zoomstart', unlock);
-    return () => {
-      map.off('dragstart', unlock);
-      map.off('zoomstart', unlock);
-    };
-  }, [active, map, onUnlock]);
-  return null;
-}
+// Official Summit Trail stations matching ActiveHikersLayer coordinates
+const OFFICIAL_STATIONS: OfficialStation[] = [
+  { index: 1, name: 'Jump off: Start of Trail (0 km)', pos: [14.1440, 121.3430], description: 'Main trailhead. Registration, safety briefing, and guide assignment.' },
+  { index: 2, name: 'Station 1: Bamboo Grove (1 km)', pos: [14.1455, 121.3440], description: 'Cool rest point shaded by bamboo arches. Emergency kit available.' },
+  { index: 3, name: 'Station 2: Forest Canopy Rest (2 km)', pos: [14.1468, 121.3448], description: 'Midway point rest stop. High-canopy forest shade.' },
+  { index: 4, name: 'Station 3: Mountain Spring (3 km)', pos: [14.1478, 121.3455], description: 'Water source rest point under giant trees.' },
+  { index: 5, name: 'Station 4: Wilderness Ridge (4 km)', pos: [14.1483, 121.3458], description: 'Steep ridge rest area. pre-summit scenic viewing spot.' },
+  { index: 6, name: 'Station 5: Summit Camp (5 km)', pos: [14.1488, 121.3460], description: 'Final staging area camp before the summit assault.' },
+  { index: 7, name: 'Mt. Kalisungan Peak (Summit - 6 km)', pos: [14.1495, 121.3462], description: 'Summit (629m). Breathtaking 360-degree views of Southern Tagalog.' },
+];
 
-function MapLayersControl({
-  value,
-  onChange,
-}: {
-  value: BaseLayer;
-  onChange: (v: BaseLayer) => void;
-}) {
-  const [open, setOpen] = useState(false);
-
-  return (
-    <div className="relative">
-      <Button
-        size="icon"
-        variant="outline"
-        className="glass-card"
-        onClick={() => setOpen((v) => !v)}
-        aria-label="Map layers"
-        aria-expanded={open}
-      >
-        <Layers className="h-4 w-4" />
-      </Button>
-
-      {open && (
-        <div className="absolute bottom-12 right-0 w-40 glass-card-strong rounded-lg p-2 border border-border/40">
-          <div className="text-[10px] uppercase tracking-wide text-muted-foreground px-2 pb-1">
-            Layers
-          </div>
-          {(
-            [
-              { id: 'street', label: 'Street' },
-              { id: 'topo', label: 'Topographic' },
-              { id: 'sat', label: 'Satellite' },
-            ] as const
-          ).map((opt) => (
-            <button
-              key={opt.id}
-              type="button"
-              onClick={() => {
-                onChange(opt.id);
-                setOpen(false);
-              }}
-              className={`w-full text-left px-2 py-1.5 rounded-md text-xs transition-colors ${
-                value === opt.id ? 'bg-primary/15 text-primary' : 'text-muted-foreground hover:text-foreground hover:bg-secondary'
-              }`}
-            >
-              {opt.label}
-            </button>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
-// Snap user position to nearest point on selected trail
-function findNearestTrailIndex(userPos: [number, number], trailPath: L.LatLngTuple[]): number {
-  let minDist = Infinity;
-  let minIdx = 0;
-  for (let i = 0; i < trailPath.length; i++) {
-    const d = haversineDistance(userPos[0], userPos[1], trailPath[i][0], trailPath[i][1]);
-    if (d < minDist) {
-      minDist = d;
-      minIdx = i;
-    }
-  }
-  return minIdx;
+function routeStationIcon(station: RouteStation) {
+  const label = station.kind === 'jump_off' ? 'J' : station.kind === 'peak' ? 'P' : `S${station.index - 1}`;
+  const color = station.kind === 'peak' ? '#dc2626' : station.kind === 'jump_off' ? '#059669' : '#2563eb';
+  return L.divIcon({
+    className: '',
+    html: `<div style="width:28px;height:28px;display:grid;place-items:center;background:${color};color:white;border:3px solid white;border-radius:50%;box-shadow:0 2px 8px rgba(15,23,42,.4);font:700 10px system-ui">${label}</div>`,
+    iconSize: [28, 28],
+    iconAnchor: [14, 14],
+  });
 }
 
 export default function MapPage() {
-  const [tracking, setTracking] = useState(false);
-  const [mapInstance, setMapInstance] = useState<L.Map | null>(null);
-  const mapRef = useRef<L.Map | null>(null);
-  const [followUser, setFollowUser] = useState(false);
-  const suppressFollowUnlockRef = useRef(false);
-  // Street map only (other layers removed by design)
-  const [userPos, setUserPos] = useState<[number, number] | null>(null);
-  const [displayPos, setDisplayPos] = useState<[number, number] | null>(null);
-  const [distance, setDistance] = useState(0);
-  const [elapsed, setElapsed] = useState(0);
-  const [currentSpeed, setCurrentSpeed] = useState<number | null>(null);
-  const [currentHeading, setCurrentHeading] = useState<number | null>(null);
-  const [wrongDirection, setWrongDirection] = useState(false);
-  const [offTrail, setOffTrail] = useState(false);
-  const [gpsSignal, setGpsSignal] = useState<'Strong' | 'Medium' | 'Weak' | 'None'>('None');
-  const [selectedTrail, setSelectedTrail] = useState(0);
-  const [offlineReady, setOfflineReady] = useState(false);
-  const [userTrailProgress, setUserTrailProgress] = useState<number | undefined>(undefined);
-  const [mobileControlsOpen, setMobileControlsOpen] = useState(false);
-  const [mobileViewportBottomInset, setMobileViewportBottomInset] = useState(0);
-  const [mobileViewportHeight, setMobileViewportHeight] = useState<number | null>(null);
-  const [legendOpen, setLegendOpen] = useState(false);
-  const [terrain3dOpen, setTerrain3dOpen] = useState(false);
-  const relockUserMap = useCallback(() => {
-    suppressFollowUnlockRef.current = true;
-    setFollowUser(true);
-    const current = displayPos ?? userPos;
-    if (mapRef.current && current) {
-      mapRef.current.setView(current, Math.max(mapRef.current.getZoom(), 17));
-    }
-    window.setTimeout(() => {
-      suppressFollowUnlockRef.current = false;
-    }, 1200);
-  }, [displayPos, userPos]);
-  const [isRecording, setIsRecording] = useState(false);
-  const [isGpsTestMode, setIsGpsTestMode] = useState(false);
-  type FilteredPoint = { lat: number; lon: number; };
-  const [rawGpsPoints, setRawGpsPoints] = useState<RecordedPoint[]>([]);
-  const [filteredPath, setFilteredPath] = useState<FilteredPoint[]>([]);
-
-  const [recordedPoints, setRecordedPoints] = useState<RecordedPoint[]>([]);
-  const [recordingPreviewReady, setRecordingPreviewReady] = useState(false);
-  const [savedRecordedRouteDraftId, setSavedRecordedRouteDraftId] = useState<string | null>(null);
-  const [discardingRecordedRoute, setDiscardingRecordedRoute] = useState(false);
-  const recordWatchRef = useRef<number | null>(null);
-  const recordPollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const recordedPointsRef = useRef<RecordedPoint[]>([]);
-  const rawRecordedPointsRef = useRef<RecordedPoint[]>([]);
-  const recordingActiveRef = useRef(false);
-  const recordSessionStartedAtRef = useRef<number | null>(null);
-  const recordPredictedCountRef = useRef(0);
-  const recordingFilterRef = useRef<MotionGpsFilter | null>(null);
-  const nativeRouteRecordingStartedRef = useRef(false);
-  const watchRef = useRef<number | null>(null);
-  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const currentHeadingRef = useRef<number | null>(null);
-  const compassPermissionRequestedRef = useRef(false);
-  const motionPermissionRequestedRef = useRef(false);
-  const motionStateRef = useRef({ moving: false, score: 0, lastMotionAt: 0 });
-  const [recordingNow, setRecordingNow] = useState(Date.now());
   const { role, user } = useAuth();
-  const { activeLocationId, locations } = useLocations();
+  const { activeLocationId } = useLocations();
   const navigate = useNavigate();
-  const isTrailRecorder = role === 'ranger' || role === 'guide' || role === 'admin' || role === 'super_admin';
-  const recordingStorageKey = useMemo(() => `altsys-route-recording:${user?.id ?? 'guest'}`, [user?.id]);
-  const [assignedTrailZoneId, setAssignedTrailZoneId] = useState<string | null>(null);
-
-
-
-  // Kalman Filter State for high-accuracy movement tracking
-  const kalmanStateRef = useRef<{
-    lat: number;
-    lon: number;
-    variance: number; // Error covariance
-    lastTimestamp: number;
-  } | null>(null);
-
-  // Offline-first session tracker (parallel to legacy GPS UI)
-  const trackerRef = useRef<HikeTracker | null>(null);
-  const trackerUnsubRef = useRef<(() => void) | null>(null);
-  const [summarySession, setSummarySession] = useState<OfflineSession | null>(null);
-  const [trackingPhase, setTrackingPhase] = useState<'ascent' | 'peak' | 'descent' | 'completed'>('ascent');
-  const [tileDownloadProgress, setTileDownloadProgress] = useState<{ done: number; total: number } | null>(null);
-  const [dbTrails, setDbTrails] = useState<MapTrail[]>([]);
-  const [officialRoutesRevision, setOfficialRoutesRevision] = useState(0);
   
+  const isTrailRecorder = role === 'ranger' || role === 'guide' || role === 'admin' || role === 'super_admin';
+  const [activeMapTab, setActiveMapTab] = useState<'tracker' | 'editor'>('tracker');
+  
+  const [dbTrails, setDbTrails] = useState<MapTrail[]>([]);
+  const [rawTrailZones, setRawTrailZones] = useState<DBTrailZone[]>([]);
+  const [selectedTrail] = useState<number>(0);
+  const [mapInstance, setMapInstance] = useState<L.Map | null>(null);
+  
+  const [simulationHikers, setSimulationHikers] = useState<SimulatedHiker[]>([]);
+  const [assignedTrailZoneId, setAssignedTrailZoneId] = useState<string | null>(null);
+  const [officialRoutesRevision, setOfficialRoutesRevision] = useState(0);
+  const [terrain3dOpen, setTerrain3dOpen] = useState(false);
 
-  // Smooth interpolation for the hiker marker
-  useEffect(() => {
-    if (!userPos) return;
-    if (!displayPos) {
-      setDisplayPos(userPos);
-      return;
+  // Redesign state: Collapsible sidebar, card expansions, search
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+  const [expandedHikerId, setExpandedHikerId] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  const availableTrails: MapTrail[] = dbTrails.length > 0 ? dbTrails : TRAILS;
+  const currentTrail = availableTrails[selectedTrail] || availableTrails[0];
+  const currentRouteDistanceKm = currentTrail.path.reduce((total, point, index) => {
+    if (index === 0) return total;
+    const previous = currentTrail.path[index - 1];
+    return total + haversineDistance(previous[0], previous[1], point[0], point[1]);
+  }, 0);
+
+  // Tracker routes and editor routes intentionally use different visibility rules.
+  const fetchTrails = useCallback(async () => {
+    const restrictToAssignedTrail = role === 'hiker' && !!assignedTrailZoneId;
+    let trackerQuery = supabase
+      .from('trail_zones')
+      .select('id,location_id,name,difficulty,elevation_meters,coordinates_json,status,is_official,review_status,recording_metadata')
+      .eq('status', 'active')
+      .eq('is_official', true)
+      .order('created_at', { ascending: true });
+    if (restrictToAssignedTrail) {
+      trackerQuery = trackerQuery.eq('id', assignedTrailZoneId) as typeof trackerQuery;
+    } else if (activeLocationId) {
+      trackerQuery = trackerQuery.eq('location_id', activeLocationId) as typeof trackerQuery;
     }
-
-    let frameId: number;
-    const startPos = displayPos;
-    const endPos = userPos;
-    const startTime = performance.now();
-    const duration = 220; // Keep the marker responsive; long easing made the arrow feel delayed.
-
-    const animate = (currentTime: number) => {
-      const elapsed = currentTime - startTime;
-      const progress = Math.min(elapsed / duration, 1);
-
-      // Simple linear interpolation
-      const lat = startPos[0] + (endPos[0] - startPos[0]) * progress;
-      const lng = startPos[1] + (endPos[1] - startPos[1]) * progress;
-
-      setDisplayPos([lat, lng]);
-
-      if (progress < 1) {
-        frameId = requestAnimationFrame(animate);
-      }
-    };
-
-    frameId = requestAnimationFrame(animate);
-    return () => cancelAnimationFrame(frameId);
-  }, [userPos]);
-
-  /**
-   * Dynamic Kalman Filter for GPS smoothing.
-   * Adjusts filtering based on speed and GPS accuracy for more intelligent path tracking.
-   */
-  const applyKalmanFilter = useCallback((raw: RecordedPoint, speed: number): RecordedPoint => {
-    const minAccuracy = 1.0;
     
-    // Dynamically adjust process noise based on speed. Higher speed = more movement expected.
-    const speedMps = speed / 3.6;
-    const processNoise = 0.0000001 + (speedMps * 0.0000005);
-
-    if (!kalmanStateRef.current) {
-      kalmanStateRef.current = {
-        lat: raw.lat,
-        lon: raw.lon,
-        variance: (raw.accuracy || 10) ** 2, // Use variance, not std deviation
-        lastTimestamp: raw.timestamp
-      };
-      return raw;
-    }
-
-    const state = kalmanStateRef.current;
-    const dt = (raw.timestamp - state.lastTimestamp) / 1000.0;
-    if (dt <= 0) return { ...raw, lat: state.lat, lon: state.lon };
-
-    // Dynamically adjust measurement noise based on GPS accuracy.
-    const measurementNoise = Math.max(raw.accuracy || 10, minAccuracy) ** 2;
-
-    // Prediction Step
-    const predictedVariance = state.variance + processNoise * dt;
-
-    // Update Step (Kalman Gain)
-    const kalmanGain = predictedVariance / (predictedVariance + measurementNoise);
-
-    // New State
-    const filteredLat = state.lat + kalmanGain * (raw.lat - state.lat);
-    const filteredLon = state.lon + kalmanGain * (raw.lon - state.lon);
-    const filteredVariance = (1 - kalmanGain) * predictedVariance;
-
-    kalmanStateRef.current = {
-      lat: filteredLat,
-      lon: filteredLon,
-      variance: filteredVariance,
-      lastTimestamp: raw.timestamp
-    };
-
-    return { ...raw, lat: filteredLat, lon: filteredLon };
-  }, []);
-
-  const speedTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-    const viewport = window.visualViewport;
-    const updateInset = () => {
-      if (!viewport) {
-        setMobileViewportBottomInset(0);
-        setMobileViewportHeight(window.innerHeight);
-        return;
+    const { data: primaryData, error } = await trackerQuery;
+    let trackerData = primaryData;
+    
+    if (error && isSchemaCacheError(error)) {
+      let fallback = supabase
+        .from('trail_zones')
+        .select('id,location_id,name,difficulty,elevation_meters,coordinates_json,status')
+        .eq('status', 'active')
+        .order('created_at', { ascending: true });
+      if (restrictToAssignedTrail) {
+        fallback = fallback.eq('id', assignedTrailZoneId) as typeof fallback;
+      } else if (activeLocationId) {
+        fallback = fallback.eq('location_id', activeLocationId) as typeof fallback;
       }
-      const bottomInset = Math.max(0, window.innerHeight - viewport.height - viewport.offsetTop);
-      setMobileViewportBottomInset(Math.round(bottomInset));
-      setMobileViewportHeight(Math.round(viewport.height));
-    };
-    updateInset();
-    viewport?.addEventListener('resize', updateInset);
-    viewport?.addEventListener('scroll', updateInset);
-    window.addEventListener('orientationchange', updateInset);
-    return () => {
-      viewport?.removeEventListener('resize', updateInset);
-      viewport?.removeEventListener('scroll', updateInset);
-      window.removeEventListener('orientationchange', updateInset);
-    };
-  }, []);
-
-  useEffect(() => {
-    currentHeadingRef.current = currentHeading;
-  }, [currentHeading]);
-
-  useEffect(() => {
-    recordingActiveRef.current = isRecording;
-  }, [isRecording]);
-
-  useEffect(() => {
-    if (!mapInstance || !followUser || (!tracking && !isRecording)) return;
-    const pos = displayPos || userPos;
-    if (!pos) return;
-    mapInstance.setView(pos, mapInstance.getZoom(), { animate: true, duration: 0.25 });
-  }, [displayPos, followUser, isRecording, mapInstance, tracking, userPos]);
-
-  const persistRecording = useCallback((points: RecordedPoint[], active = recordingActiveRef.current, rawPoints = rawRecordedPointsRef.current) => {
-    if (typeof window === 'undefined') return;
-    if (points.length === 0 && rawPoints.length === 0 && !active) {
-      localStorage.removeItem(recordingStorageKey);
-      return;
+      const res = await fallback;
+      trackerData = res.data;
     }
-    const now = Date.now();
-    const payload: StoredRecording = {
-      active,
-      startedAt: recordSessionStartedAtRef.current ?? points[0]?.timestamp ?? rawPoints[0]?.timestamp ?? now,
-      updatedAt: now,
-      points,
-      rawPoints,
-    };
-    localStorage.setItem(recordingStorageKey, JSON.stringify(payload));
-  }, [recordingStorageKey]);
+    
+    const loaded = ((trackerData as DBTrailZone[]) ?? [])
+      .map((trail, index) => {
+        const coords = Array.isArray(trail.coordinates_json) ? (trail.coordinates_json as { lat: number; lng: number }[]) : [];
+        const path = coords
+          .map((p) => [Number(p.lat), Number(p.lng)] as [number, number])
+          .filter(([lat, lng]) => Number.isFinite(lat) && Number.isFinite(lng));
+        if (path.length < 2) return null;
+        let distanceKm = 0;
+        for (let i = 1; i < path.length; i++) {
+          distanceKm += haversineDistance(path[i - 1][0], path[i - 1][1], path[i][0], path[i][1]);
+        }
+        const colors = ['#16a34a', '#2563eb', '#dc2626', '#9333ea', '#ea580c'];
+        return {
+          id: trail.id,
+          name: trail.name || `Official Trail ${index + 1}`,
+          difficulty: (trail.difficulty || 'moderate') as 'easy' | 'moderate' | 'hard',
+          color: colors[index % colors.length],
+          elevation: `${Number(trail.elevation_meters || 0)}m`,
+          distance: `${distanceKm.toFixed(1)} km`,
+          path,
+          stations: routeStationsFromMetadata(trail.recording_metadata, path),
+        };
+      })
+      .filter(Boolean) as MapTrail[];
 
-  const updateRecordedPoints = useCallback((updater: (prev: RecordedPoint[]) => RecordedPoint[]) => {
-    setRecordedPoints((prev) => {
-      const next = updater(prev);
-      recordedPointsRef.current = next;
-      persistRecording(next);
-      return next;
-    });
-  }, [persistRecording]);
+    setDbTrails(loaded);
 
-  const ensureCompassEnabled = useCallback(async () => {
-    if (typeof window === 'undefined' || !('DeviceOrientationEvent' in window)) return;
-    const OrientationEvent = (window as any).DeviceOrientationEvent;
-    if (typeof OrientationEvent?.requestPermission !== 'function') return;
-    if (compassPermissionRequestedRef.current) return;
-    compassPermissionRequestedRef.current = true;
-    try {
-      const result = await OrientationEvent.requestPermission();
-      if (result !== 'granted') {
-        toast.warning('Compass permission was not granted. GPS tracking still works, but the arrow may rotate only while moving.');
+    if (isTrailRecorder) {
+      let editorQuery = supabase
+        .from('trail_zones')
+        .select('id,location_id,name,difficulty,elevation_meters,coordinates_json,status,is_official,review_status,source,raw_recording_json,cleaned_recording_json,recording_metadata,recording_count,recorded_by')
+        .neq('status', 'deleted')
+        .order('created_at', { ascending: false });
+      if (activeLocationId) {
+        editorQuery = editorQuery.eq('location_id', activeLocationId) as typeof editorQuery;
       }
-    } catch {
-      compassPermissionRequestedRef.current = false;
-      toast.warning('Compass permission could not be opened. GPS tracking still works.');
+
+      const editorResult = await editorQuery;
+      if (!editorResult.error) {
+        setRawTrailZones((editorResult.data as DBTrailZone[]) ?? []);
+      } else if (isSchemaCacheError(editorResult.error)) {
+        let editorFallback = supabase
+          .from('trail_zones')
+          .select('id,location_id,name,difficulty,elevation_meters,coordinates_json,status')
+          .neq('status', 'deleted')
+          .order('created_at', { ascending: false });
+        if (activeLocationId) {
+          editorFallback = editorFallback.eq('location_id', activeLocationId) as typeof editorFallback;
+        }
+        const fallbackResult = await editorFallback;
+        setRawTrailZones((fallbackResult.data as DBTrailZone[]) ?? []);
+      } else {
+        toast.error(`Could not load editable routes: ${editorResult.error.message}`);
+      }
+    } else {
+      setRawTrailZones([]);
     }
-  }, []);
-
-  const ensureMotionEnabled = useCallback(async () => {
-    if (typeof window === 'undefined' || !('DeviceMotionEvent' in window)) return;
-    const MotionEvent = (window as any).DeviceMotionEvent;
-    if (typeof MotionEvent?.requestPermission !== 'function') return;
-    if (motionPermissionRequestedRef.current) return;
-    motionPermissionRequestedRef.current = true;
-    try {
-      await MotionEvent.requestPermission();
-    } catch {
-      motionPermissionRequestedRef.current = false;
-    }
-  }, []);
-
-  useEffect(() => {
-    if (typeof window === 'undefined' || !('DeviceOrientationEvent' in window)) return;
-    const handler = (e: DeviceOrientationEvent) => {
-      const heading = deviceOrientationHeading(e);
-      if (heading == null) return;
-      setCurrentHeading(Math.round(heading));
-    };
-    window.addEventListener('deviceorientationabsolute', handler as EventListener, true);
-    window.addEventListener('deviceorientation', handler, true);
-    return () => {
-      window.removeEventListener('deviceorientationabsolute', handler as EventListener, true);
-      window.removeEventListener('deviceorientation', handler, true);
-    };
-  }, []);
-
-  useEffect(() => {
-    if (typeof window === 'undefined' || !('DeviceMotionEvent' in window)) return;
-    const handler = (e: DeviceMotionEvent) => {
-      const a = e.acceleration;
-      const values = [a?.x, a?.y, a?.z].filter((v): v is number => typeof v === 'number' && Number.isFinite(v));
-      if (values.length === 0) return;
-      const magnitude = Math.sqrt(values.reduce((sum, v) => sum + v * v, 0));
-      const previous = motionStateRef.current.score;
-      const score = previous * 0.82 + Math.min(3, magnitude) * 0.18;
-      motionStateRef.current = {
-        score,
-        moving: score > 0.18,
-        lastMotionAt: Date.now(),
-      };
-    };
-    window.addEventListener('devicemotion', handler);
-    return () => window.removeEventListener('devicemotion', handler);
-  }, []);
-
-  useEffect(() => {
-    if (!isRecording) return;
-    const id = setInterval(() => setRecordingNow(Date.now()), 1000);
-    return () => clearInterval(id);
-  }, [isRecording]);
+  }, [role, assignedTrailZoneId, activeLocationId, isTrailRecorder]);
 
   useEffect(() => {
     let active = true;
     if (!user || role !== 'hiker') {
       setAssignedTrailZoneId(null);
-      return () => { active = false; };
+      return () => {
+        active = false;
+      };
     }
+
     void (async () => {
       const { data, error } = await supabase
-        .from('hiker_sessions' as any)
+        .from('hiker_sessions')
         .select('trail_zone_id,start_time,status')
         .eq('user_id', user.id)
         .eq('status', 'active')
         .order('start_time', { ascending: false })
         .limit(1)
         .maybeSingle();
+
       if (!active) return;
       if (error && !isSchemaCacheError(error)) {
         console.warn('Unable to load assigned trail for hiker map', error);
         return;
       }
-      setAssignedTrailZoneId((data as any)?.trail_zone_id ?? null);
+      setAssignedTrailZoneId((data as { trail_zone_id?: string | null } | null)?.trail_zone_id ?? null);
     })();
-    return () => { active = false; };
+
+    return () => {
+      active = false;
+    };
   }, [role, user]);
 
   useEffect(() => {
-    let active = true;
-    void (async () => {
-      const restrictToAssignedTrail = role === 'hiker' && !!assignedTrailZoneId;
-      let q: any = supabase
-        .from('trail_zones' as any)
-        .select('id,location_id,name,difficulty,elevation_meters,coordinates_json,recording_metadata,status,is_official,review_status')
-        .eq('status', 'active')
-        .eq('is_official', true)
-        .order('created_at', { ascending: true });
-      if (restrictToAssignedTrail) q = q.eq('id', assignedTrailZoneId);
-      else if (activeLocationId) q = q.eq('location_id', activeLocationId);
-      const { data: primaryData, error } = await q;
-      let data = primaryData;
-      if (error && isSchemaCacheError(error)) {
-        let fallback: any = supabase
-          .from('trail_zones' as any)
-          .select('id,location_id,name,difficulty,elevation_meters,coordinates_json,status')
-          .eq('status', 'active')
-          .order('created_at', { ascending: true });
-        if (restrictToAssignedTrail) fallback = fallback.eq('id', assignedTrailZoneId);
-        else if (activeLocationId) fallback = fallback.eq('location_id', activeLocationId);
-        const res = await fallback;
-        data = res.data;
-      }
-      if (!active) return;
-      const loaded = ((data as any[]) ?? [])
-        .map((trail, index) => {
-          const coords = Array.isArray(trail.coordinates_json) ? trail.coordinates_json : [];
-          const path = coords
-            .map((p: any) => [Number(p.lat), Number(p.lng)] as [number, number])
-            .filter(([lat, lng]) => Number.isFinite(lat) && Number.isFinite(lng));
-          if (path.length < 2) return null;
-          let distanceKm = 0;
-          for (let i = 1; i < path.length; i++) {
-            distanceKm += haversineDistance(path[i - 1][0], path[i - 1][1], path[i][0], path[i][1]);
-          }
-          const colors = ['#16a34a', '#2563eb', '#dc2626', '#9333ea', '#ea580c'];
-          return {
-            id: trail.id,
-            name: trail.name || `Official Trail ${index + 1}`,
-            difficulty: (trail.difficulty || 'moderate') as 'easy' | 'moderate' | 'hard',
-            color: colors[index % colors.length],
-            elevation: `${Number(trail.elevation_meters || 0)}m`,
-            distance: `${distanceKm.toFixed(1)} km`,
-            path,
-            stations: routeStationsFromMetadata(trail.recording_metadata, path),
-          };
-        })
-        .filter(Boolean) as MapTrail[];
-      setDbTrails(loaded);
-    })();
-    return () => { active = false; };
-  }, [activeLocationId, assignedTrailZoneId, officialRoutesRevision, role]);
+    fetchTrails();
+  }, [fetchTrails, officialRoutesRevision]);
 
   useEffect(() => {
     const channel = supabase
@@ -870,1514 +301,536 @@ export default function MapPage() {
         () => setOfficialRoutesRevision((revision) => revision + 1),
       )
       .subscribe();
-    return () => { void supabase.removeChannel(channel); };
+
+    return () => {
+      void supabase.removeChannel(channel);
+    };
   }, [user?.id]);
 
-  const availableTrails = useMemo<MapTrail[]>(
-    () => dbTrails.length > 0
-      ? dbTrails
-      : TRAILS.map((trail) => ({ ...trail, stations: buildRouteStations(trail.path) })),
-    [dbTrails],
-  );
-
-  useEffect(() => {
-    if (selectedTrail >= availableTrails.length) setSelectedTrail(0);
-  }, [availableTrails.length, selectedTrail]);
-
-  useEffect(() => {
-    if (!mapInstance) return;
-    const onFound = (e: L.LocationEvent) => {
-      const next: [number, number] = [e.latlng.lat, e.latlng.lng];
-      setUserPos(next);
-      setDisplayPos(next);
-      setGpsSignal(e.accuracy <= 12 ? 'Strong' : e.accuracy <= 50 ? 'Medium' : 'Weak');
-      mapInstance.setView(next, Math.max(mapInstance.getZoom(), 17));
-    };
-    const onError = (e: L.ErrorEvent) => {
-      toast.error(e.message || 'Unable to locate you. Check phone location permission.');
-    };
-    mapInstance.on('locationfound', onFound);
-    mapInstance.on('locationerror', onError);
-    return () => {
-      mapInstance.off('locationfound', onFound);
-      mapInstance.off('locationerror', onError);
-    };
-  }, [mapInstance]);
-
-  const startTracking = useCallback(async () => {
-    void ensureCompassEnabled();
-    setFollowUser(false);
-    setTracking(true);
-    if (trackerRef.current) {
-      void trackerRef.current.resume().catch((e) => console.warn('HikeTracker resume failed', e));
-      toast.success('Route tracking resumed from your last saved position.');
-      return;
-    }
-    if (user && !trackerRef.current) {
-      let { data: activeSession, error: activeSessionError } = await supabase
-        .from('hiker_sessions' as any)
-        .select('id,booking_id,trail_zone_id,location_id,start_time,tracking_phase')
-        .eq('user_id', user.id)
-        .eq('status', 'active')
-        .order('start_time', { ascending: false })
-        .limit(1)
-        .maybeSingle() as { data: any; error: any };
-      if (activeSessionError && isSchemaCacheError(activeSessionError)) {
-        const fallback = await supabase
-          .from('hiker_sessions' as any)
-          .select('id,booking_id,trail_zone_id,start_time')
-          .eq('user_id', user.id)
-          .eq('status', 'active')
-          .order('start_time', { ascending: false })
-          .limit(1)
-          .maybeSingle();
-        activeSession = fallback.data;
-        activeSessionError = fallback.error;
-      }
-      if (activeSessionError) {
-        toast.error(`Unable to check active session: ${activeSessionError.message}`);
-        setTracking(false);
-        return;
-      }
-
-      const participantRole =
-        role === 'guide' || role === 'ranger' || role === 'admin' || role === 'super_admin'
-          ? role === 'super_admin' ? 'admin' : role
-          : 'hiker';
-      const sessionLocationId = activeSession?.location_id ?? activeLocationId ?? locations[0]?.id ?? null;
-      let sessionTrailZoneId: string | null = activeSession?.trail_zone_id ?? null;
-      if (!sessionTrailZoneId && participantRole === 'hiker') {
-        let routeQuery: any = supabase
-          .from('trail_zones' as any)
-          .select('id,name')
-          .eq('status', 'active')
-          .eq('is_official', true)
-          .limit(2);
-        if (sessionLocationId) routeQuery = routeQuery.eq('location_id', sessionLocationId);
-        let { data: routeRows, error: routeError } = await routeQuery;
-        if (routeError && isSchemaCacheError(routeError)) {
-          let fallback: any = supabase
-            .from('trail_zones' as any)
-            .select('id,name')
-            .eq('status', 'active')
-            .limit(2);
-          if (sessionLocationId) fallback = fallback.eq('location_id', sessionLocationId);
-          const res = await fallback;
-          routeRows = res.data;
-          routeError = res.error;
-        }
-        if (!routeError && Array.isArray(routeRows) && routeRows.length === 1) {
-          sessionTrailZoneId = routeRows[0].id;
-        }
-      }
-
-      if (!activeSession) {
-        let { data: created, error } = await supabase
-          .from('hiker_sessions' as any)
-          .insert({
-            user_id: user.id,
-            location_id: sessionLocationId,
-            trail_zone_id: sessionTrailZoneId,
-            participant_role: participantRole,
-            tracking_phase: 'ascent',
-            start_time: new Date().toISOString(),
-            status: 'active',
-            total_distance_km: 0,
-          })
-          .select('id,booking_id,trail_zone_id,location_id,start_time,tracking_phase')
-          .single();
-        if (error && isSchemaCacheError(error)) {
-          const fallback = await supabase
-            .from('hiker_sessions' as any)
-            .insert({
-              user_id: user.id,
-              start_time: new Date().toISOString(),
-              status: 'active',
-              total_distance_km: 0,
-            })
-            .select('id,booking_id,trail_zone_id,start_time')
-            .single();
-          created = fallback.data;
-          error = fallback.error;
-        }
-        if (error) {
-          toast.error(`Unable to start live session: ${error.message}`);
-          setTracking(false);
-          return;
-        }
-        activeSession = created;
-      }
-      if (sessionTrailZoneId && activeSession?.trail_zone_id !== sessionTrailZoneId) {
-        void supabase
-          .from('hiker_sessions' as any)
-          .update({ trail_zone_id: sessionTrailZoneId })
-          .eq('id', activeSession.id);
-        activeSession = { ...activeSession, trail_zone_id: sessionTrailZoneId };
-      }
-      setAssignedTrailZoneId(sessionTrailZoneId);
-
-      const tr = await HikeTracker.createOrResume({
-        userId: user.id,
-        serverSessionId: activeSession?.id ?? null,
-        bookingId: activeSession?.booking_id ?? null,
-        trailZoneId: activeSession?.trail_zone_id ?? sessionTrailZoneId,
-        locationId: activeSession?.location_id ?? sessionLocationId,
-        participantRole,
-      });
-      trackerRef.current = tr;
-      trackerUnsubRef.current?.();
-      trackerUnsubRef.current = tr.subscribe((snap) => {
-        setTrackingPhase(snap.phase);
-        setElapsed(snap.elapsedSec);
-        setDistance(snap.distanceM / 1000);
-        setFilteredPath(snap.path.map((p) => ({ lat: p.lat, lon: p.lng })));
-        if (snap.lastFix) {
-          setUserPos([snap.lastFix.lat, snap.lastFix.lng]);
-          setGpsSignal(snap.lastFix.accuracy <= 10 ? 'Strong' : snap.lastFix.accuracy <= 30 ? 'Medium' : 'Weak');
-        }
-      });
-      void tr.start().catch((e) => console.warn('HikeTracker start failed', e));
-    }
-  }, [activeLocationId, ensureCompassEnabled, locations, role, user]);
-
-  // Weather-aware routing: if 'avoid', recommend an easier trail.
-  const lastAdviceRef = useRef<string | null>(null);
-  const handleWeatherAdvice = useCallback((advice: RouteAdvice) => {
-    const key = `${advice.level}:${advice.headline}`;
-    if (lastAdviceRef.current === key) return;
-    lastAdviceRef.current = key;
-    if (advice.level === 'avoid') {
-      toast.error(advice.headline, { description: advice.reasons[0], duration: 8000 });
-      // Switch to easiest trail
-      const easyIdx = availableTrails.findIndex((t) => t.difficulty === 'easy');
-      if (easyIdx >= 0) setSelectedTrail(easyIdx);
-    } else if (advice.level === 'caution') {
-      toast.warning(advice.headline, { description: advice.reasons[0], duration: 6000 });
-    }
-  }, [availableTrails]);
-
-  // Auto-start tracking when admin checks in the hiker (?auto=1)
-  const [searchParams, setSearchParams] = useSearchParams();
-  const autoStartedRef = useRef(false);
-  useEffect(() => {
-    if (autoStartedRef.current) return;
-    if (searchParams.get('auto') !== '1') return;
-    if (!user) return;
-    autoStartedRef.current = true;
-    toast.success('Check-in confirmed — tracking started.');
-    startTracking();
-    const next = new URLSearchParams(searchParams);
-    next.delete('auto');
-    setSearchParams(next, { replace: true });
-  }, [searchParams, user, startTracking, setSearchParams]);
-
-
-
-  const handleNewPosition = useCallback((pos: GeolocationPosition) => {
-      // Step 1: GPS Signal Quality Filter
-      const accuracy = pos.coords.accuracy;
-      const signal: typeof gpsSignal = accuracy <= 10 ? 'Strong' : accuracy <= 30 ? 'Medium' : 'Weak';
-      setGpsSignal(signal);
-
-      if (signal === 'Weak') {
-        console.warn(`GPS signal is weak (accuracy: ${accuracy}m), discarding point.`);
-        return; // Discard points with weak signal
-      }
-
-      // Velocity-gating: If accuracy is poor (> 20m) and speed is zero, skip update
-      if (pos.coords.accuracy > 20 && (pos.coords.speed === 0 || pos.coords.speed == null)) {
-        return;
-      }
-
-      const raw: RecordedPoint = {
-        timestamp: Date.now(),
-        lat: pos.coords.latitude,
-        lon: pos.coords.longitude,
-        accuracy: pos.coords.accuracy,
-        speed: pos.coords.speed,
-        heading: normalizeHeading(pos.coords.heading ?? currentHeadingRef.current),
-        alt: pos.coords.altitude,
-      };
-      setRawGpsPoints(prev => [...prev, raw]);
-
-      const rawSpeed = pos.coords.speed != null && pos.coords.speed > 0.3 ? pos.coords.speed * 3.6 : 0;
-      const heading = normalizeHeading(pos.coords.heading ?? currentHeadingRef.current);
-      if (heading != null) setCurrentHeading(heading);
-      
-      const filtered = applyKalmanFilter(raw, rawSpeed);
-      const newPos: [number, number] = [filtered.lat, filtered.lon];
-      
-      // Update current speed with dead-zone (reported in m/s, convert to km/h)
-      setCurrentSpeed(rawSpeed);
-
-      // Clear any pending "set to zero" timeout
-      if (speedTimeoutRef.current) clearTimeout(speedTimeoutRef.current);
-      if (rawSpeed > 0) {
-        // If no speed update for 4 seconds, assume stopped
-        speedTimeoutRef.current = setTimeout(() => setCurrentSpeed(0), 4000);
-      }
-
-      setUserPos(newPos);
-      setFilteredPath((prev) => {
-        if (prev.length > 0) {
-          const last = prev[prev.length - 1];
-          const d = haversineDistance(last.lat, last.lon, newPos[0], newPos[1]);
-          
-          // Step 3: Distance Thresholding
-          // If moving > 3m and speed > 1km/h, or a large jump (> 50m)
-          if ((d > 0.003 && rawSpeed > 1.0) || d > 0.05) {
-            setDistance((old) => old + d);
-            return [...prev, { lat: newPos[0], lon: newPos[1] }];
-          }
-          return prev;
-        }
-        return [{ lat: newPos[0], lon: newPos[1] }];
-      });
-
-      // Track progress along selected trail
-      const activePath = availableTrails[selectedTrail]?.path ?? availableTrails[0].path;
-      const idx = findNearestTrailIndex(newPos, activePath);
-      setUserTrailProgress(idx);
-
-      // Check if off-trail (> 100m from nearest trail point)
-      const minDist = distanceToTrail(newPos[0], newPos[1], activePath);
-      const targetIdx = trackingPhase === 'descent'
-        ? Math.max(0, idx - 1)
-        : Math.min(activePath.length - 1, idx + 1);
-      const expectedBearing = activePath[targetIdx] ? bearingDeg(newPos, [activePath[targetIdx][0], activePath[targetIdx][1]] as [number, number]) : null;
-      const facingWrongWay = expectedBearing != null && heading != null && rawSpeed > 1 && angleDelta(heading, expectedBearing) > 110;
-      setWrongDirection(!isGpsTestMode && (minDist > 0.1 || facingWrongWay));
-      if (!isGpsTestMode && minDist > 0.1) {
-        setOffTrail(true);
-        toast.warning('You are off the marked trail!', { id: 'off-trail' });
-      } else if (!isGpsTestMode && facingWrongWay) {
-        toast.warning('Your direction looks away from the route.', { id: 'wrong-direction' });
-      } else {
-        setOffTrail(false);
-      }
-    }, [selectedTrail, applyKalmanFilter, isGpsTestMode, availableTrails, trackingPhase]);
-
-  const handleError = useCallback((err: GeolocationPositionError) => {
-    if (err.code === err.PERMISSION_DENIED) {
-      toast.error('GPS Error: Location permission denied.');
-      stopTracking();
-    } else if (err.code !== 3) { // Ignore timeout errors, they are frequent
-      toast.error(`GPS Error: ${err.message}`);
-    } else {
-      console.warn('GPS Timeout: Still waiting for signal...');
-    }
-  }, []);
-
-  const pollingIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
-
-  useEffect(() => {
-    if (!tracking) return;
-
-    const adjustPollingRate = (speedKmh: number) => {
-      if (pollingIntervalRef.current) clearInterval(pollingIntervalRef.current);
-      
-      const interval = speedKmh > 5 ? 3000 : 8000; // 3s if fast, 8s if slow
-      
-      pollingIntervalRef.current = setInterval(() => {
-        navigator.geolocation.getCurrentPosition(handleNewPosition, handleError, { enableHighAccuracy: true, maximumAge: 0, timeout: 30000 });
-      }, interval);
-    };
-
-    adjustPollingRate(currentSpeed || 0);
-
-    return () => {
-      if (pollingIntervalRef.current) clearInterval(pollingIntervalRef.current);
-    };
-  }, [tracking, currentSpeed, handleNewPosition]);
-
-  const stopTracking = () => {
-    setTracking(false);
-    setGpsSignal('None');
-    const tr = trackerRef.current;
-    if (tr) {
-      void tr.pause()
-        .then(() => toast.info('Route paused. Tap Start to continue from here.'))
-        .catch((e) => console.warn('HikeTracker pause failed', e));
-    }
-  };
-
-  const markPeakReached = () => {
-    const tr = trackerRef.current;
-    if (!tr) {
-      toast.error('Start tracking before marking the peak.');
-      return;
-    }
-    void tr.markPeak().then(() => {
-      setTrackingPhase('peak');
-      toast.success('Peak marked. Your ascent is saved.');
-    });
-  };
-
-  const startDescentTracking = () => {
-    const tr = trackerRef.current;
-    if (!tr) {
-      toast.error('Start tracking before descent.');
-      return;
-    }
-    void tr.startDescent().then(() => {
-      setTrackingPhase('descent');
-      toast.success('Descent tracking started.');
-    });
-  };
-
-  useEffect(() => {
-    if (tracking) {
-      if (!navigator.geolocation) { toast.error('Geolocation not supported'); return; }
-      setRawGpsPoints([]);
-      setCurrentSpeed(0);
-      kalmanStateRef.current = null;
-      timerRef.current = setInterval(() => setElapsed((s) => s + 1), 1000);
-      return () => {
-        if (timerRef.current) clearInterval(timerRef.current);
-      };
-    }
-  }, [tracking]);
-
-  const handleOfflineCache = async () => {
-    toast.info('Downloading map tiles for offline use…');
-    setTileDownloadProgress({ done: 0, total: 0 });
-    try {
-      const tpl = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
-      const res = await downloadArea({
-        centerLat: 14.1475, centerLng: 121.3454,
-        zMin: 13, zMax: 16, radiusTiles: 4,
-        template: tpl,
-        onProgress: (done, total) => setTileDownloadProgress({ done, total }),
-      });
-      setOfflineReady(true);
-      toast.success(`Cached ${res.downloaded} map tiles offline`);
-    } catch {
-      toast.error('Failed to cache tiles.');
-    } finally {
-      setTileDownloadProgress(null);
-    }
-  };
-
-  const currentTrail = availableTrails[selectedTrail] ?? availableTrails[0];
-  const currentProgressIndex = userTrailProgress ?? 0;
-  const visibleTrailPath = useMemo(() => {
-    if (!tracking || userTrailProgress === undefined) return currentTrail.path;
-    const idx = Math.max(0, Math.min(currentTrail.path.length - 1, userTrailProgress));
-    const remaining = trackingPhase === 'descent'
-      ? currentTrail.path.slice(0, idx + 1).reverse()
-      : currentTrail.path.slice(idx);
-    const livePos = displayPos || userPos;
-    if (!livePos || remaining.length === 0) return remaining.length > 1 ? remaining : currentTrail.path;
-    return [livePos, ...remaining] as LatLngTuple[];
-  }, [currentTrail.path, displayPos, tracking, trackingPhase, userPos, userTrailProgress]);
-  const remainingDistanceKm = trackingPhase === 'descent'
-    ? trailDistanceKm(currentTrail.path, currentProgressIndex, 0)
-    : trailDistanceKm(currentTrail.path, currentProgressIndex, currentTrail.path.length - 1);
-  const avgPace = elapsed > 0 && distance > 0 ? (elapsed / 60) / distance : 0;
-  const realTimePace = currentSpeed && currentSpeed > 0 ? 60 / currentSpeed : 0;
-  const displayPace = realTimePace > 0 ? realTimePace : avgPace;
-  const etaMinutes = remainingDistanceKm > 0 && displayPace > 0 ? Math.round(remainingDistanceKm * displayPace) : null;
-  const mapBearing = (tracking || isRecording || isGpsTestMode) && currentHeading != null ? currentHeading : null;
-  const markerHeading = mapBearing != null && currentHeading != null
-    ? normalizeHeading(currentHeading - mapBearing)
-    : currentHeading;
-  const userOrientationIcon = useMemo(() => makeUserIcon(markerHeading, wrongDirection || offTrail), [markerHeading, wrongDirection, offTrail]);
-
-  useEffect(() => {
-    // keep the map clean by default on mobile when switching trails
-    setMobileControlsOpen(false);
-  }, [selectedTrail]);
-
-  const startRecording = useCallback((opts?: { resumeExisting?: boolean; recovered?: boolean }) => {
-    if (!navigator.geolocation) {
-      toast.error('Geolocation not supported');
-      return;
-    }
-    void ensureCompassEnabled();
-    void ensureMotionEnabled();
-    setFollowUser(false);
-    const existingPoints = recordedPointsRef.current;
-    const resumeExisting = opts?.resumeExisting || (existingPoints.length > 1 && window.confirm('Continue the previous recording and connect new points from the last saved position? Press Cancel to start a new trail.'));
-    if (!opts?.recovered) {
-      const ok = window.confirm(resumeExisting
-        ? 'Continue recording this trail? It will keep saving offline until you tap Stop Recording.'
-        : 'Start recording this trail now? It will keep saving offline until you tap Stop Recording.');
-      if (!ok) return;
-    }
-    if (!resumeExisting) {
-      setSavedRecordedRouteDraftId(null);
-      void clearNativeTrailPoints(recordingStorageKey).catch(() => {});
-      recordedPointsRef.current = [];
-      rawRecordedPointsRef.current = [];
-      setRecordedPoints([]);
-      recordPredictedCountRef.current = 0;
-    }
-    void startNativeTrailRecording(recordingStorageKey, 'route')
-      .then((started) => { nativeRouteRecordingStartedRef.current = started; })
-      .catch((e) => console.warn('Native background route recorder unavailable', e));
-    recordingFilterRef.current = new MotionGpsFilter({
-      minAccuracyForStartM: 50,
-      maxAccuracyM: 85,
-      minAppendDistanceM: 1.6,
-    });
-    if (resumeExisting && recordedPointsRef.current.length > 0) {
-      recordingFilterRef.current.seed(recordedPointsRef.current.map(toTrackPoint));
-    }
-    setRecordingPreviewReady(false);
-    recordSessionStartedAtRef.current = resumeExisting
-      ? recordSessionStartedAtRef.current ?? existingPoints[0]?.timestamp ?? Date.now()
-      : Date.now();
-    recordingActiveRef.current = true;
-    setIsRecording(true);
-    setRecordingNow(Date.now());
-    persistRecording(resumeExisting ? recordedPointsRef.current : [], true, resumeExisting ? rawRecordedPointsRef.current : []);
-    toast.info(opts?.recovered
-      ? 'Recovered recording. GPS is reconnecting and will continue the trail.'
-      : 'Locating you. Keep the phone outside or near open sky for best trail accuracy.');
-
-    const handleNewRecordPoint = (pos: GeolocationPosition) => {
-      const accuracy = pos.coords.accuracy;
-      const signal: typeof gpsSignal = gpsSignalFromAccuracy(accuracy);
-      setGpsSignal(signal);
-
-      const raw: RecordedPoint = {
-        timestamp: Number.isFinite(pos.timestamp) ? pos.timestamp : Date.now(),
-        lat: pos.coords.latitude,
-        lon: pos.coords.longitude,
-        alt: pos.coords.altitude,
-        speed: pos.coords.speed,
-        accuracy: pos.coords.accuracy,
-        heading: normalizeHeading(pos.coords.heading ?? currentHeadingRef.current),
-      };
-      rawRecordedPointsRef.current = [...rawRecordedPointsRef.current, raw];
-      persistRecording(recordedPointsRef.current, true, rawRecordedPointsRef.current);
-      if (raw.heading != null) setCurrentHeading(raw.heading);
-
-      const motionState = motionStateRef.current;
-      const motionFresh = Date.now() - motionState.lastMotionAt < 2500;
-      const hasRecentPace = recordedPointsRef.current.length > 1 && recentWalkingSpeedMps(recordedPointsRef.current) > 0.45;
-      const inferredMoving = motionFresh ? motionState.moving : (raw.speed ?? 0) > 0.35 || hasRecentPace;
-      const filter = recordingFilterRef.current ?? new MotionGpsFilter({
-        minAccuracyForStartM: 50,
-        maxAccuracyM: 85,
-        minAppendDistanceM: 1.6,
-      });
-      recordingFilterRef.current = filter;
-      const filtered = filter.filter(toTrackPoint(raw), {
-        heading: normalizeHeading(raw.heading ?? currentHeadingRef.current),
-        moving: inferredMoving,
-        consecutivePredicted: recordPredictedCountRef.current,
-      });
-      if (filtered.reason === 'waiting') {
-        toast.warning(`Waiting for a cleaner GPS lock (${Math.round(accuracy)}m accuracy). Step into open sky if possible.`, { id: 'recording-accuracy' });
-        return;
-      }
-      if (filtered.reason === 'weak' && !filtered.appended) {
-        toast.warning(`Weak GPS ignored (${Math.round(accuracy)}m). Trail recording is still running offline.`, { id: 'recording-accuracy' });
-        return;
-      }
-      if (filtered.reason === 'jump' && !filtered.appended) {
-        console.warn(`GPS jump rejected while recording: ${Math.round(accuracy)}m accuracy`);
-        return;
-      }
-
-      const cleanPoint = filtered.point ? fromTrackPoint(filtered.point) : null;
-      const displayPoint = filtered.displayPoint ? fromTrackPoint(filtered.displayPoint) : cleanPoint;
-      if (cleanPoint && filtered.appended) {
-        updateRecordedPoints((prev) => [...prev, cleanPoint]);
-      }
-      const lastClean = cleanPoint;
-      recordPredictedCountRef.current = lastClean?.inferred ? recordPredictedCountRef.current + 1 : 0;
-      if (filtered.appended && recordedPointsRef.current.length === 1) {
-        toast.success('Trail recording started. First clean GPS point saved offline.', { id: 'recording-started' });
-      }
-      if (displayPoint) {
-        setUserPos([displayPoint.lat, displayPoint.lon]);
-        setDisplayPos([displayPoint.lat, displayPoint.lon]);
-      }
-    };
-
-    const handleRecordError = (err: GeolocationPositionError) => {
-      if (err.code !== 3) {
-        toast.error(`Recording Error: ${err.message}`);
-      } else {
-        console.warn('Recording GPS Timeout: Still waiting...');
-      }
-    };
-
-    const options = { enableHighAccuracy: true, maximumAge: 0, timeout: 30000 };
-
-    navigator.geolocation.getCurrentPosition(handleNewRecordPoint, handleRecordError, options);
-    recordWatchRef.current = navigator.geolocation.watchPosition(handleNewRecordPoint, handleRecordError, options);
-
-    if (recordPollingRef.current) clearInterval(recordPollingRef.current);
-    recordPollingRef.current = setInterval(() => {
-      navigator.geolocation.getCurrentPosition(handleNewRecordPoint, () => {}, options);
-    }, 3000);
-  }, [ensureCompassEnabled, ensureMotionEnabled, persistRecording, recordingStorageKey, updateRecordedPoints]);
-
-  const stopRecording = useCallback(async () => {
-    if (nativeRouteRecordingStartedRef.current) {
-      await stopNativeTrailRecording().catch((e) => console.warn('Native route recorder stop failed', e));
-      nativeRouteRecordingStartedRef.current = false;
-    }
-    const nativePoints = await getNativeTrailPoints(recordingStorageKey).catch(() => []);
-    if (nativePoints.length > 0) {
-      const existingKeys = new Set(rawRecordedPointsRef.current.map((p) => Math.round(p.timestamp / 1000)));
-      const imported = nativePoints
-        .filter((p) => Number.isFinite(p.lat) && Number.isFinite(p.lng) && Number.isFinite(p.ts))
-        .filter((p) => {
-          const key = Math.round(p.ts / 1000);
-          if (existingKeys.has(key)) return false;
-          existingKeys.add(key);
-          return true;
-        })
-        .map((p) => ({
-          timestamp: p.ts,
-          lat: p.lat,
-          lon: p.lng,
-          accuracy: p.accuracy ?? 999,
-          speed: p.speed ?? 0,
-          heading: normalizeHeading(p.heading ?? null),
-          alt: p.alt ?? null,
-        } as RecordedPoint));
-      if (imported.length > 0) {
-        const mergedRaw = [...rawRecordedPointsRef.current, ...imported].sort((a, b) => a.timestamp - b.timestamp);
-        rawRecordedPointsRef.current = mergedRaw;
-        const processed = postProcessTrack(mergedRaw.map(toTrackPoint), 1.4).map(fromTrackPoint);
-        recordedPointsRef.current = processed;
-        setRecordedPoints(processed);
-      }
-    }
-    let points = recordedPointsRef.current;
-    recordingActiveRef.current = false;
-    setIsRecording(false);
-    setGpsSignal('None');
-    if (recordWatchRef.current != null) {
-      navigator.geolocation.clearWatch(recordWatchRef.current);
-      recordWatchRef.current = null;
-    }
-    if (recordPollingRef.current) {
-      clearInterval(recordPollingRef.current);
-      recordPollingRef.current = null;
-    }
-    if (points.length > 2) {
-      points = postProcessTrack(points.map(toTrackPoint), 1.4).map(fromTrackPoint);
-      recordedPointsRef.current = points;
-      setRecordedPoints(points);
-    }
-    persistRecording(points, false);
-    setRecordingPreviewReady(points.length > 1);
-    if (mapInstance && points.length > 1) {
-      mapInstance.fitBounds(L.latLngBounds(points.map((p) => [p.lat, p.lon] as [number, number])), { padding: [40, 40] });
-    }
-    if (points.length > 1) {
-      let previewMeters = 0;
-      for (let i = 1; i < points.length; i++) {
-        previewMeters += haversineDistance(points[i - 1].lat, points[i - 1].lon, points[i].lat, points[i].lon) * 1000;
-      }
-      const previewDurationSec = Math.round(((points[points.length - 1]?.timestamp ?? Date.now()) - points[0].timestamp) / 1000);
-      const distanceLabel = previewMeters < 1000 ? `${previewMeters.toFixed(0)} m` : `${(previewMeters / 1000).toFixed(2)} km`;
-      const minutes = Math.floor(previewDurationSec / 60);
-      const seconds = previewDurationSec % 60;
-      toast.success(`Recording stopped. Preview ready: ${distanceLabel} over ${minutes}:${String(seconds).padStart(2, '0')}.`);
-    } else {
-      toast.warning('No walking trail recorded yet. Move outdoors and try again.');
-    }
-  }, [mapInstance, persistRecording, recordingStorageKey]);
-
-  useEffect(() => {
-    return () => {
-      trackerUnsubRef.current?.();
-      trackerUnsubRef.current = null;
-      if (recordWatchRef.current != null) {
-        navigator.geolocation.clearWatch(recordWatchRef.current);
-      }
-      if (recordPollingRef.current) {
-        clearInterval(recordPollingRef.current);
-        recordPollingRef.current = null;
-      }
-    };
-  }, []);
-
-  useEffect(() => {
-    const pullNativeOnResume = () => {
-      if (document.visibilityState === 'hidden') return;
-      void trackerRef.current?.pullNativePoints().catch((e) => console.warn('Native hike point import failed', e));
-      if (isRecording || recordingPreviewReady) {
-        void getNativeTrailPoints(recordingStorageKey)
-          .then((nativePoints) => {
-            if (nativePoints.length === 0) return;
-            const existingKeys = new Set(rawRecordedPointsRef.current.map((p) => Math.round(p.timestamp / 1000)));
-            const imported = nativePoints
-              .filter((p) => Number.isFinite(p.lat) && Number.isFinite(p.lng) && Number.isFinite(p.ts))
-              .filter((p) => {
-                const key = Math.round(p.ts / 1000);
-                if (existingKeys.has(key)) return false;
-                existingKeys.add(key);
-                return true;
-              })
-              .map((p) => ({
-                timestamp: p.ts,
-                lat: p.lat,
-                lon: p.lng,
-                accuracy: p.accuracy ?? 999,
-                speed: p.speed ?? 0,
-                heading: normalizeHeading(p.heading ?? null),
-                alt: p.alt ?? null,
-              } as RecordedPoint));
-            if (imported.length === 0) return;
-            const mergedRaw = [...rawRecordedPointsRef.current, ...imported].sort((a, b) => a.timestamp - b.timestamp);
-            rawRecordedPointsRef.current = mergedRaw;
-            const processed = postProcessTrack(mergedRaw.map(toTrackPoint), 1.4).map(fromTrackPoint);
-            recordedPointsRef.current = processed;
-            setRecordedPoints(processed);
-            persistRecording(processed, recordingActiveRef.current, mergedRaw);
-          })
-          .catch((e) => console.warn('Native route point import failed', e));
-      }
-    };
-    document.addEventListener('visibilitychange', pullNativeOnResume);
-    window.addEventListener('focus', pullNativeOnResume);
-    return () => {
-      document.removeEventListener('visibilitychange', pullNativeOnResume);
-      window.removeEventListener('focus', pullNativeOnResume);
-    };
-  }, [isRecording, persistRecording, recordingPreviewReady, recordingStorageKey]);
-
-  const toggleRecording = () => {
-    if (isRecording) {
-      stopRecording();
-    } else {
-      // turning on recording turns off accuracy test for now
-      setIsGpsTestMode(false);
-      startRecording();
-    }
-  };
-
-  const toggleGpsTestMode = () => {
-    if (isGpsTestMode) {
-      setIsGpsTestMode(false);
-      stopRecording(); // Stop the recording when exiting test mode
-    } else {
-      if (isRecording) stopRecording(); // Ensure normal recording is stopped first
-      setIsGpsTestMode(true);
-      startRecording(); // Use the recording engine for testing
-    }
-  };
-
-  const discardRecordedRoute = useCallback(async () => {
-    if (isRecording || isGpsTestMode) {
-      await stopRecording();
-    }
-    if (savedRecordedRouteDraftId) {
-      const shouldDelete = window.confirm('Delete this saved route draft and remove it from recorded trails?');
-      if (!shouldDelete) return;
-      setDiscardingRecordedRoute(true);
+  // Sync hiker list from the simulated localStorage state in ActiveHikersLayer
+  const loadSimulatedHikers = useCallback(() => {
+    const saved = localStorage.getItem('trail_hiker_simulation_state');
+    if (saved) {
       try {
-        const recordingsDelete = await supabase
-          .from('trail_recordings' as any)
-          .delete()
-          .eq('trail_zone_id', savedRecordedRouteDraftId);
-        if (recordingsDelete.error) throw recordingsDelete.error;
-
-        const routeDelete = await supabase
-          .from('trail_zones' as any)
-          .delete()
-          .eq('id', savedRecordedRouteDraftId);
-        if (routeDelete.error) {
-          const archive = await supabase
-            .from('trail_zones' as any)
-            .update({
-              status: 'deleted',
-              review_status: 'deleted',
-              is_official: false,
-              coordinates_json: [],
-              raw_recording_json: [],
-              cleaned_recording_json: [],
-              recording_metadata: { deleted_at: new Date().toISOString(), delete_error: routeDelete.error.message },
-              recording_count: 0,
-            })
-            .eq('id', savedRecordedRouteDraftId);
-          if (archive.error) throw routeDelete.error;
-        }
-        toast.success('Saved route draft removed from recorded trails.');
-      } catch (err: any) {
-        toast.error(`Failed to delete saved route draft: ${err.message}`);
-        setDiscardingRecordedRoute(false);
-        return;
+        setSimulationHikers(JSON.parse(saved));
+      } catch (e) {
+        // Fallback
       }
-      setDiscardingRecordedRoute(false);
-    } else {
-      toast.info('Recorded trail discarded.');
     }
-    recordedPointsRef.current = [];
-    rawRecordedPointsRef.current = [];
-    recordSessionStartedAtRef.current = null;
-    recordPredictedCountRef.current = 0;
-    recordingFilterRef.current?.reset();
-    recordingFilterRef.current = null;
-    setRecordedPoints([]);
-    setRecordingPreviewReady(false);
-    setSavedRecordedRouteDraftId(null);
-    setIsGpsTestMode(false);
-    localStorage.removeItem(recordingStorageKey);
-    void clearNativeTrailPoints(recordingStorageKey).catch(() => {});
-  }, [isGpsTestMode, isRecording, recordingStorageKey, savedRecordedRouteDraftId, stopRecording]);
+  }, []);
 
   useEffect(() => {
-    if (!isTrailRecorder || typeof window === 'undefined') return;
-    const raw = localStorage.getItem(recordingStorageKey);
-    if (!raw) return;
-    try {
-      const stored = JSON.parse(raw) as StoredRecording;
-      const points = Array.isArray(stored.points)
-        ? stored.points.filter((p) => Number.isFinite(p.lat) && Number.isFinite(p.lon) && Number.isFinite(p.timestamp))
-        : [];
-      const rawPoints = Array.isArray(stored.rawPoints)
-        ? stored.rawPoints.filter((p) => Number.isFinite(p.lat) && Number.isFinite(p.lon) && Number.isFinite(p.timestamp))
-        : points;
-      if (points.length === 0 && rawPoints.length === 0) return;
-      recordSessionStartedAtRef.current = stored.startedAt ?? points[0]?.timestamp ?? rawPoints[0]?.timestamp ?? Date.now();
-      recordedPointsRef.current = points;
-      rawRecordedPointsRef.current = rawPoints;
-      setSavedRecordedRouteDraftId(null);
-      setRecordedPoints(points);
-      setRecordingPreviewReady(points.length > 1);
-      const last = points[points.length - 1];
-      setUserPos([last.lat, last.lon]);
-      setDisplayPos([last.lat, last.lon]);
-      setCurrentHeading(normalizeHeading(last.heading ?? currentHeadingRef.current));
-      if (mapInstance && points.length > 1) {
-        mapInstance.fitBounds(L.latLngBounds(points.map((p) => [p.lat, p.lon] as [number, number])), { padding: [40, 40] });
-      }
-      if (stored.active && !recordingActiveRef.current) {
-        window.setTimeout(() => startRecording({ resumeExisting: true, recovered: true }), 250);
-      } else {
-        toast.info('Recovered a stopped trail preview. Review it on the map or save it as a route draft.', { id: 'recording-recovered' });
-      }
-    } catch {
-      localStorage.removeItem(recordingStorageKey);
-    }
-  }, [isTrailRecorder, mapInstance, recordingStorageKey, startRecording]);
+    loadSimulatedHikers();
+    const interval = setInterval(loadSimulatedHikers, 1000);
+    return () => clearInterval(interval);
+  }, [loadSimulatedHikers]);
 
-  const saveRecordedRouteDraft = async () => {
-    const points = recordedPointsRef.current;
-    if (savedRecordedRouteDraftId) {
-      navigate(`/admin?tab=overview&routeDraft=${savedRecordedRouteDraftId}#trail-recorder`);
-      return;
-    }
-    if (!user || points.length < 2) {
-      toast.error('Record at least two GPS points before saving a route.');
-      return;
-    }
-    const locationId = activeLocationId ?? locations[0]?.id;
-    if (!locationId) {
-      toast.error('No trail location is available for this route.');
-      return;
-    }
-    const cleanedPoints = postProcessTrack(points.map(toTrackPoint), 1.2).map(fromTrackPoint);
-    recordedPointsRef.current = cleanedPoints;
-    setRecordedPoints(cleanedPoints);
-    const rawPoints = rawRecordedPointsRef.current.length > 0 ? rawRecordedPointsRef.current : points;
-    const rawRecordingJson = rawPoints.map((p) => serializeRoutePoint(p, 'gps'));
-    const cleanedRecordingJson = cleanedPoints.map((p) => serializeRoutePoint(p));
-    const qualitySummary = buildRecordingQuality(rawPoints.map(toTrackPoint), cleanedPoints.map(toTrackPoint));
-    const routeStations = buildRouteStations(cleanedPoints.map((point) => [point.lat, point.lon] as LatLngTuple));
-    const path = cleanedRecordingJson;
-    const baseRoute = {
-      location_id: locationId,
-      name: `${currentTrail.name} recorded ${new Date().toLocaleDateString('en-PH')}`,
-      description: `GPS draft recorded by ${role ?? 'staff'} for admin review. Cleaned distance ${formatDistance(qualitySummary.distanceM)} from ${qualitySummary.rawPointCount} raw fixes.`,
-      difficulty: currentTrail.difficulty,
-      elevation_meters: Number.parseInt(currentTrail.elevation, 10) || 0,
-      coordinates_json: path,
-      raw_recording_json: rawRecordingJson,
-      cleaned_recording_json: cleanedRecordingJson,
-      recording_metadata: {
-        ...qualitySummary,
-        stations: routeStations,
-      },
-      recording_count: 1,
-      status: 'draft',
-      max_capacity: 50,
-    };
-    let { data: savedDraft, error } = await supabase.from('trail_zones' as any).insert({
-      ...baseRoute,
-      recorded_by: user.id,
-      source: 'gps_recording',
-      review_status: 'pending',
-      is_official: false,
-    }).select('id').single();
-    if (error && isSchemaCacheError(error)) {
-      const { raw_recording_json, cleaned_recording_json, recording_metadata, recording_count, ...legacyRoute } = baseRoute;
-      const fallback = await supabase.from('trail_zones' as any).insert(legacyRoute).select('id').single();
-      error = fallback.error;
-      savedDraft = fallback.data;
-    }
-    if (error) {
-      toast.error(`Failed to save route draft: ${error.message}`);
-      return;
-    }
-    const savedDraftId = (savedDraft as { id?: string } | null)?.id ?? null;
-    if (savedDraftId) {
-      await supabase.from('trail_recordings' as any).insert({
-        trail_zone_id: savedDraftId,
-        location_id: locationId,
-        recorded_by: user.id,
-        source: 'gps_recording',
-        status: 'draft',
-        raw_points_json: rawRecordingJson,
-        cleaned_points_json: cleanedRecordingJson,
-        quality_summary: qualitySummary,
-      });
-    }
-    toast.success('Route draft saved. Open the route editor to publish or test it.', {
-      action: {
-        label: 'Open editor',
-        onClick: () => navigate(`/admin?tab=overview&routeDraft=${savedDraftId ?? 'latest'}#trail-recorder`),
-      },
+  // Center/zoom map onto a selected simulated hiker's interpolated position
+  const handleLocateHiker = (hiker: SimulatedHiker) => {
+    if (!mapInstance) return;
+    
+    const routePath = currentTrail.path;
+    const scaledProgress = Math.max(0, Math.min(1, hiker.progress / 9)) * (routePath.length - 1);
+    const index = Math.floor(scaledProgress);
+    const nextIndex = Math.min(index + 1, routePath.length - 1);
+    const ratio = scaledProgress - index;
+    const [lat1, lng1] = routePath[index];
+    const [lat2, lng2] = routePath[nextIndex];
+    const lat = lat1 + (lat2 - lat1) * ratio;
+    const lng = lng1 + (lng2 - lng1) * ratio;
+    
+    mapInstance.setView([lat, lng], 18);
+    toast.info(`Locating Hiker Group`, {
+      description: `Centered map on ${hiker.name}.`,
+      duration: 3000
     });
-    localStorage.removeItem(recordingStorageKey);
-    void clearNativeTrailPoints(recordingStorageKey).catch(() => {});
-    setSavedRecordedRouteDraftId(savedDraftId);
-    recordPredictedCountRef.current = 0;
-    recordingFilterRef.current?.reset();
-    recordingFilterRef.current = null;
   };
 
-  const recordDistanceMeters = useMemo(() => {
-    if (recordedPoints.length < 2) return 0;
-    let d = 0;
-    for (let i = 1; i < recordedPoints.length; i++) {
-      d += haversineDistance(
-        recordedPoints[i - 1].lat,
-        recordedPoints[i - 1].lon,
-        recordedPoints[i].lat,
-        recordedPoints[i].lon
-      ) * 1000;
-    }
-    return d;
-  }, [recordedPoints]);
-
-  const recordDurationSec = useMemo(() => {
-    if (recordedPoints.length === 0) return 0;
-    const start = recordedPoints[0].timestamp;
-    const end = isRecording ? recordingNow : recordedPoints[recordedPoints.length - 1].timestamp;
-    return Math.round((end - start) / 1000);
-  }, [isRecording, recordedPoints, recordingNow]);
-
-  const recordSpeedKmh = useMemo(() => {
-    if (recordedPoints.length === 0) return 0;
-
-    const lastPoint = recordedPoints[recordedPoints.length - 1];
-
-    // Real-time: Use the most recent reported speed if fresh (within 4s)
-    if (lastPoint.speed != null && lastPoint.speed >= 0 && (Date.now() - lastPoint.timestamp < 4000)) {
-      return lastPoint.speed * 3.6;
-    }
-
-    // Fallback: calculate from last few points (windowed for stability)
-    if (recordedPoints.length < 2) return 0;
-    const pointsToUse = recordedPoints.slice(-3); // smaller window for more "real-time" feel
-    const first = pointsToUse[0];
-    const last = pointsToUse[pointsToUse.length - 1];
-    const d = haversineDistance(first.lat, first.lon, last.lat, last.lon) * 1000;
-    const t = (last.timestamp - first.timestamp) / 1000;
-
-    if (t <= 0 || d < 0.5) return 0; // Ignore tiny movements for speed
-    return (d / t) * 3.6;
-  }, [recordedPoints]);
-
-  const formatDistance = (m: number) => {
-    if (m < 1000) return `${m.toFixed(0)} m`;
-    return `${(m / 1000).toFixed(2)} km`;
+  // Center/zoom map onto a selected station
+  const handleLocateStation = (st: OfficialStation) => {
+    if (!mapInstance) return;
+    mapInstance.setView(st.pos, 18);
+    toast.info(`Station Focused`, {
+      description: `Viewing ${st.name}.`,
+      duration: 3500
+    });
   };
 
-  const formatDuration = (s: number) => {
-    const h = Math.floor(s / 3600);
-    const m = Math.floor((s % 3600) / 60);
-    const sec = s % 60;
-    if (h > 0) return `${h}:${String(m).padStart(2, '0')}:${String(sec).padStart(2, '0')}`;
-    return `${String(m).padStart(2, '0')}:${String(sec).padStart(2, '0')}`;
+  // Calculate simulated hikers resting/crossing each station
+  const hikersAtStation = (stationIndex: number) => {
+    return simulationHikers.filter((h) => {
+      if (h.phase === 'completed') return false;
+      
+      const currentStation = Math.round((Math.max(0, Math.min(9, h.progress)) / 9) * 6) + 1;
+      
+      return currentStation === stationIndex;
+    });
   };
-  const openRouteEditor = useCallback(() => {
-    navigate('/admin?tab=overview#trail-recorder');
-  }, [navigate]);
-  const mobileControlsBottom = `calc(env(safe-area-inset-bottom) + ${mobileViewportBottomInset}px + 0.75rem)`;
+
+  // Search filter
+  const filteredHikers = useMemo(() => {
+    return simulationHikers.filter((h) => {
+      if (h.phase === 'completed') return false;
+      const query = searchQuery.toLowerCase().trim();
+      if (!query) return true;
+      return (
+        h.name.toLowerCase().includes(query) ||
+        h.guideName.toLowerCase().includes(query) ||
+        (h.companions && h.companions.some((c) => c.toLowerCase().includes(query)))
+      );
+    });
+  }, [simulationHikers, searchQuery]);
+
+  const currentOfficialStations: OfficialStation[] = currentTrail?.stations?.length
+    ? currentTrail.stations.map((station) => ({
+        index: station.index,
+        name: station.name,
+        pos: [station.lat, station.lng],
+        description: station.description,
+      }))
+    : OFFICIAL_STATIONS;
 
   return (
-    <div
-      className={`h-[100dvh] pt-16 flex flex-col ${mobileControlsOpen ? 'map-mobile-controls-open' : ''}`}
-      style={mobileViewportHeight ? { height: `${mobileViewportHeight}px` } : undefined}
-    >
-      {/* Desktop/tablet top bar */}
-      <div className="hidden md:block">
-        <TrailStats
-          distance={distance}
-          elapsed={elapsed}
-          currentSpeed={currentSpeed}
-          gpsSignal={gpsSignal}
-          selectedTrail={selectedTrail}
-          offTrail={offTrail}
-          tracking={tracking}
-          offlineReady={offlineReady}
-          trailName={currentTrail.name}
-          trailColor={currentTrail.color}
-          phase={trackingPhase}
-          remainingKm={remainingDistanceKm}
-          etaMinutes={etaMinutes}
-          wrongDirection={wrongDirection}
-          onMarkPeak={markPeakReached}
-          onStartDescent={startDescentTracking}
-          onStartTracking={startTracking}
-          onStopTracking={stopTracking}
-          onOfflineCache={handleOfflineCache}
-        />
-      </div>
-
-      {isTrailRecorder && (
-        <div className="hidden md:flex justify-end items-center gap-2 px-4 py-2">
-          <Button
-            size="sm"
-            variant="secondary"
-            className="gap-1"
-            onClick={openRouteEditor}
-          >
-            <MapPinned className="h-3.5 w-3.5" />
-            Route Editor
-          </Button>
-          <Button
-            size="sm"
-            variant={isRecording ? 'destructive' : 'outline'}
-            className="gap-1"
-            onClick={toggleRecording}
-          >
-            {isRecording ? 'Stop Recording' : 'Record Trail'}
-          </Button>
-          <Button
-            size="sm"
-            variant={isGpsTestMode ? 'secondary' : 'ghost'}
-            className="gap-1"
-            onClick={toggleGpsTestMode}
-          >
-            Test GPS Accuracy
-          </Button>
-          {recordedPoints.length > 1 && !isRecording && !isGpsTestMode && (
-            <>
-              <Button
-                size="sm"
-                variant="secondary"
-                className="gap-1"
-                onClick={saveRecordedRouteDraft}
-              >
-                Save Route Draft
-              </Button>
-              <Button
-                size="sm"
-                variant="outline"
-                className="gap-1"
-                onClick={discardRecordedRoute}
-              >
-                Discard
-              </Button>
-            </>
-          )}
+    <div className="h-[100dvh] pt-16 flex flex-col bg-slate-50 dark:bg-slate-950 font-sans overflow-hidden">
+      
+      {/* ── Dashboard Subheader / Mode Switcher ── */}
+      <div className="bg-white dark:bg-slate-900 border-b border-slate-200/60 dark:border-slate-800/60 px-3 py-2.5 sm:px-6 sm:py-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2.5 sm:gap-4 shrink-0 shadow-sm z-10">
+        <div>
+          <h1 className="text-base sm:text-xl font-bold text-slate-900 dark:text-slate-50 flex items-center gap-2">
+            <MapPinned className="h-5 w-5 text-emerald-600 dark:text-emerald-500" />
+            Mt. Kalisungan Tracking Console
+          </h1>
+          <p className="hidden sm:block text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+            Real-time hiker monitoring, emergency safety pings, and official trail line editor.
+          </p>
         </div>
-      )}
-
-      {/* Desktop/tablet trail selector */}
-      <div className="hidden md:flex glass-card border-b border-border/30 px-4 py-2 items-center gap-2 overflow-x-auto">
-        {availableTrails.map((t, i) => (
-          <button
-            key={t.name}
-            onClick={() => setSelectedTrail(i)}
-            className={`whitespace-nowrap px-3 py-1 rounded-full text-xs font-medium transition-all ${
-              selectedTrail === i ? 'text-primary-foreground' : 'text-muted-foreground hover:text-foreground'
+        
+        <div className="flex w-full sm:w-auto items-center gap-1.5 bg-slate-100 dark:bg-slate-800 p-1 rounded-lg border border-slate-200/50 dark:border-slate-700/50 self-start sm:self-auto">
+          <Button
+            size="sm"
+            variant={activeMapTab === 'tracker' ? 'secondary' : 'ghost'}
+            className={`h-8 flex-1 sm:flex-none text-xs gap-1.5 px-3 rounded-md transition-all ${
+              activeMapTab === 'tracker' 
+                ? 'bg-white dark:bg-slate-900 shadow-sm text-slate-900 dark:text-slate-50' 
+                : 'text-slate-600 dark:text-slate-400'
             }`}
-            style={selectedTrail === i ? { backgroundColor: t.color } : {}}
+            onClick={() => {
+              setActiveMapTab('tracker');
+              navigate('/map');
+            }}
           >
-            {t.name} • {t.distance} • {t.elevation}
-          </button>
-        ))}
+            <Activity className="h-3.5 w-3.5 text-emerald-500" />
+            Hiker Tracker
+          </Button>
+          {isTrailRecorder && (
+            <Button
+              size="sm"
+              variant={activeMapTab === 'editor' ? 'secondary' : 'ghost'}
+              className={`h-8 flex-1 sm:flex-none text-xs gap-1.5 px-3 rounded-md transition-all ${
+                activeMapTab === 'editor' 
+                  ? 'bg-white dark:bg-slate-900 shadow-sm text-slate-900 dark:text-slate-50' 
+                  : 'text-slate-600 dark:text-slate-400'
+              }`}
+              onClick={() => setActiveMapTab('editor')}
+            >
+              <Layers className="h-3.5 w-3.5 text-blue-500" />
+              Trail Route Editor
+            </Button>
+          )}
+          <Button
+            type="button"
+            size="icon"
+            variant="ghost"
+            className="h-8 w-8 shrink-0 rounded-md text-emerald-600 hover:bg-white hover:text-emerald-700 dark:text-emerald-400 dark:hover:bg-slate-900"
+            onClick={() => setTerrain3dOpen(true)}
+            aria-label="Open 3D terrain"
+            title="Open 3D terrain"
+          >
+            <Box className="h-4 w-4" />
+          </Button>
+        </div>
       </div>
 
-      {/* Map */}
-      <div className="flex-1 relative">
-        <ErrorBoundary title="Map failed to render">
+      {/* ── Main Workspace ── */}
+      <div className="flex-1 relative overflow-hidden w-full h-full">
+        
+        {/* Fullscreen Map container shared by both Tracking Console & Trail Route Editor */}
+        <div className="absolute inset-0 w-full h-full z-0">
           <MapContainer
             center={MT_KALISUNGAN_CENTER}
             zoom={DEFAULT_ZOOM}
             maxZoom={20}
-            className={`h-full w-full ${mapBearing != null ? 'leaflet-bearing-map' : ''}`}
-            style={mapBearing != null ? { '--map-bearing': `${mapBearing}deg` } as CSSProperties : undefined}
-            zoomControl={false}
+            className="h-full w-full"
+            zoomControl={true}
             attributionControl={false}
-            ref={mapRef as any}
-            whenReady={() => {}}
           >
             <MapInstanceBridge onReady={setMapInstance} />
-            <MapInteractionUnlock
-              active={followUser && (tracking || isRecording || isGpsTestMode)}
-              onUnlock={() => {
-                if (!suppressFollowUnlockRef.current) setFollowUser(false);
-              }}
-            />
-            <OfflineLayer url="https://tile.openstreetmap.org/{z}/{x}/{y}.png" maxZoom={20} attribution="© OpenStreetMap" />
-
-
-            {availableTrails.map((t, i) => (
-              <Polyline
-                key={t.name}
-                positions={i === selectedTrail ? visibleTrailPath : t.path}
-                pathOptions={{
-                  color: t.color,
-                  weight: i === selectedTrail ? 6 : 3,
-                  opacity: i === selectedTrail ? 1 : 0.25,
-                }}
-              />
-            ))}
-
-            {currentTrail.stations.map((station) => (
-              <Marker
-                key={`${currentTrail.id ?? currentTrail.name}-${station.id}`}
-                position={[station.lat, station.lng]}
-                icon={makeRouteStationIcon(station)}
-                zIndexOffset={100}
-              >
-                <Popup>
-                  <strong>{station.name}</strong>
-                  <br />
-                  <span>{station.description}</span>
-                </Popup>
-              </Marker>
-            ))}
-
-            {(role === 'admin' || role === 'super_admin') && (
-              <RouteSimulationLayer routeName={currentTrail.name} routePath={currentTrail.path} />
-            )}
-
-            {recordedPoints.length > 1 && (
-              <Polyline
-                positions={recordedPoints.map((p) => [p.lat, p.lon] as [number, number])}
-                pathOptions={{ color: '#f97316', weight: 5, opacity: 0.95, dashArray: isRecording ? '4 8' : undefined }}
-              />
-            )}
-
-            <Marker
-              position={currentTrail.path[0]}
-              icon={new L.DivIcon({
-                html: `<div style="width:18px;height:18px;background:${currentTrail.color};border:3px solid #fff;border-radius:50%;box-shadow:0 0 12px ${currentTrail.color}80;display:flex;align-items:center;justify-content:center;font-size:8px;color:#fff;font-weight:bold;">S</div>`,
-                className: '',
-                iconSize: [18, 18],
-                iconAnchor: [9, 9],
-              })}
-            >
-              <Popup><strong>Start: {currentTrail.name}</strong></Popup>
-            </Marker>
-            <Marker
-              position={currentTrail.path[currentTrail.path.length - 1]}
-              icon={new L.DivIcon({
-                html: `<div style="width:18px;height:18px;background:${currentTrail.color};border:3px solid #fff;border-radius:50%;box-shadow:0 0 12px ${currentTrail.color}80;display:flex;align-items:center;justify-content:center;font-size:8px;color:#fff;font-weight:bold;">E</div>`,
-                className: '',
-                iconSize: [18, 18],
-                iconAnchor: [9, 9],
-              })}
-            >
-              <Popup><strong>End: {currentTrail.name}</strong></Popup>
-            </Marker>
-
-            {ZONES.map((z) => (
-              <Polygon key={z.name} positions={z.positions} pathOptions={{ color: z.color, fillColor: z.color, fillOpacity: 0.15, weight: 2, dashArray: '5 5' }}>
-                <Popup><strong>{z.name}</strong></Popup>
-              </Polygon>
-            ))}
-
-            {POI.map((p) => (
-              <Marker key={p.name} position={p.pos} icon={poiIcons[p.type] || poiIcons.checkpoint}>
-                <Popup><strong>{p.name}</strong><br /><span className="capitalize">{p.type}</span></Popup>
-              </Marker>
-            ))}
-
-            {/* User Location Hiker Marker */}
-            {(displayPos || userPos) && (
+            <TileLayer url="https://tile.openstreetmap.org/{z}/{x}/{y}.png" maxZoom={20} attribution="© OpenStreetMap" />
+            
+            {activeMapTab === 'tracker' ? (
               <>
-                <Marker position={displayPos || userPos!} icon={userOrientationIcon} zIndexOffset={2200}>
-                  <Popup>
-                    Your Position<br />
-                    {wrongDirection ? 'Direction warning' : trackingPhase}
-                  </Popup>
-                </Marker>
-                <Circle center={displayPos || userPos!} radius={15} pathOptions={{ color: '#22c55e', fillColor: '#22c55e', fillOpacity: 0.15 }} />
-              </>
-            )}
+                {/* Active Simulated Hikers & Pings Layer */}
+                <ActiveHikersLayer
+                  showStations={dbTrails.length === 0}
+                  routePath={currentTrail.path}
+                  routeStations={currentTrail.stations}
+                  routeDistanceKm={currentRouteDistanceKm}
+                />
 
-            {filteredPath.length > 1 && (
-              <Polyline positions={filteredPath.map(p => [p.lat, p.lon] as [number, number])} pathOptions={{ color: '#22c55e', weight: 5 }} />
-            )}
+                {/* Show Summit Trail lines */}
+                {availableTrails.map((t, i) => (
+                  <Polyline
+                    key={t.name}
+                    positions={t.path}
+                    pathOptions={{
+                      color: t.color,
+                      weight: i === selectedTrail ? 6 : 3,
+                      opacity: i === selectedTrail ? 1 : 0.45,
+                    }}
+                  />
+                ))}
 
-            {/* Raw GPS data for debugging (optional) */}
-            {/* {rawGpsPoints.length > 1 && (
-              <Polyline positions={rawGpsPoints.map(p => [p.lat, p.lon])} pathOptions={{ color: '#f97316', weight: 2, dashArray: '5, 10' }} />
-            )} */}
-          </MapContainer>
-        </ErrorBoundary>
-
-        {/* Turn-by-turn navigation overlay */}
-        <div className={`${tracking ? 'absolute' : 'hidden md:block absolute'} top-3 left-3 right-16 z-[1000] md:top-4 md:left-4 md:right-auto md:w-72`}>
-          <TrailNavigation
-            trailPath={currentTrail.path}
-            trailName={currentTrail.name}
-            trailColor={currentTrail.color}
-            userPos={userPos}
-            tracking={tracking}
-            userTrailProgress={userTrailProgress}
-          />
-        </div>
-
-        {/* Route recording / accuracy badge + stopped preview */}
-        {isTrailRecorder && (isRecording || isGpsTestMode || recordingPreviewReady) && (
-          <div className="absolute top-3 left-3 right-16 z-[1000] glass-card rounded-lg px-2 py-2 text-[11px] flex flex-col gap-1.5 md:top-24 md:left-4 md:right-auto md:max-w-xs md:px-3 md:text-xs">
-            <div className="font-semibold leading-tight">
-              {isGpsTestMode ? 'Accuracy Test Active' : recordingPreviewReady && !isRecording ? 'Recorded Trail Preview' : 'Recording Trail'}
-            </div>
-            <div className="flex flex-wrap gap-x-2 gap-y-1 text-muted-foreground">
-              <span>Dist: <span className="text-foreground font-medium">{formatDistance(recordDistanceMeters)}</span></span>
-              <span>Time: <span className="text-foreground font-medium">{formatDuration(recordDurationSec)}</span></span>
-              <span>Points: <span className="text-foreground font-medium">{recordedPoints.length}</span></span>
-              <span>Speed: <span className="text-foreground font-medium">
-                {recordSpeedKmh > 0 ? `${recordSpeedKmh.toFixed(1)} km/h` : '--'}
-              </span></span>
-            </div>
-            {recordingPreviewReady && !isRecording && (
-              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                <Button size="sm" className="h-10 text-sm md:h-8 md:text-xs" onClick={saveRecordedRouteDraft} disabled={discardingRecordedRoute}>
-                  {savedRecordedRouteDraftId ? 'Open Draft' : 'Save Draft'}
-                </Button>
-                <Button size="sm" variant={savedRecordedRouteDraftId ? 'destructive' : 'outline'} className="h-10 text-sm md:h-8 md:text-xs" onClick={discardRecordedRoute} disabled={discardingRecordedRoute}>
-                  {savedRecordedRouteDraftId ? 'Delete Draft' : 'Discard'}
-                </Button>
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* Compass */}
-        <div className="absolute top-3 right-3 z-[1000] md:hidden">
-          <MapCompass userPos={userPos} headingOverride={currentHeading} compact />
-        </div>
-        <div className="hidden md:block absolute top-4 right-16 z-[1000] w-24">
-          <MapCompass userPos={userPos} headingOverride={currentHeading} />
-        </div>
-
-        {/* SOS compact button — bottom-left above mobile controls */}
-        <div className="hidden md:block absolute md:bottom-[11rem] left-4 z-[1100]">
-          <SOSPanel compact />
-        </div>
-
-        {/* Desktop right-side stack */}
-        <div className="hidden md:flex absolute right-4 bottom-4 z-[1100] flex-col items-end gap-2">
-          <Button
-            size="icon"
-            variant="outline"
-            className="glass-card"
-            onClick={() => setTerrain3dOpen(true)}
-            aria-label="Open 3D terrain"
-            title="Open 3D terrain"
-          >
-            <Box className="h-4 w-4" />
-          </Button>
-          <WeatherPanel lat={MT_KALISUNGAN_CENTER[0]} lng={MT_KALISUNGAN_CENTER[1]} onAdvice={handleWeatherAdvice} />
-          <ElevationProfile
-            trailPath={currentTrail.path}
-            trailName={currentTrail.name}
-            trailColor={currentTrail.color}
-            userProgress={userTrailProgress}
-          />
-          <LocateControl map={mapInstance} onLocate={relockUserMap} className="glass-card" />
-        </div>
-
-        {/* Desktop legend */}
-        <MapLegend className="absolute bottom-44 left-4 z-[1000] hidden md:block" />
-
-        {/* Mobile legend toggle (other side) */}
-        <div
-          className={`md:hidden absolute left-4 z-[1100] flex flex-col items-start gap-2 ${
-            mobileControlsOpen ? 'bottom-[52dvh]' : 'bottom-[6.5rem]'
-          }`}
-        >
-          {!legendOpen ? (
-            <Button
-              size="icon"
-              variant="outline"
-              className="glass-card"
-              onClick={() => setLegendOpen(true)}
-              aria-label="Open legend"
-            >
-              <ChevronRight className="h-4 w-4" />
-            </Button>
-          ) : (
-            <div className="relative">
-              <MapLegend className="w-56" />
-              <button
-                type="button"
-                onClick={() => setLegendOpen(false)}
-                aria-label="Close legend"
-                className="absolute -left-2 -top-2 h-7 w-7 rounded-full glass-card flex items-center justify-center"
-              >
-                <ChevronLeft className="h-4 w-4" />
-              </button>
-            </div>
-          )}
-        </div>
-
-        {/* Mobile right-side map tools */}
-        <div
-          className="md:hidden absolute right-3 top-[5.25rem] z-[1100] flex flex-col items-end gap-2"
-        >
-          {isTrailRecorder && (
-            <Button
-              size="icon"
-              variant="secondary"
-              className="glass-card"
-              onClick={openRouteEditor}
-              aria-label="Open route editor"
-            >
-              <MapPinned className="h-4 w-4" />
-            </Button>
-          )}
-          <Button
-            size="icon"
-            variant="outline"
-            className="glass-card"
-            onClick={() => setTerrain3dOpen(true)}
-            aria-label="Open 3D terrain"
-            title="Open 3D terrain"
-          >
-            <Box className="h-4 w-4" />
-          </Button>
-          <WeatherPanel lat={MT_KALISUNGAN_CENTER[0]} lng={MT_KALISUNGAN_CENTER[1]} onAdvice={handleWeatherAdvice} />
-          <ElevationProfile
-            trailPath={currentTrail.path}
-            trailName={currentTrail.name}
-            trailColor={currentTrail.color}
-            userProgress={userTrailProgress}
-          />
-          <LocateControl map={mapInstance} onLocate={relockUserMap} className="glass-card" />
-        </div>
-
-        {/* Mobile bottom controls (collapsible) */}
-        <div
-          className="md:hidden absolute left-3 right-3 z-[1000]"
-          style={{ bottom: mobileControlsBottom }}
-        >
-          <div className="glass-card-strong rounded-lg overflow-hidden max-h-[min(58dvh,calc(100dvh-10rem))] overflow-y-auto overscroll-contain">
-            <div
-              className="w-full px-3 py-2 flex items-center gap-2 hover:bg-white/5 transition-colors"
-              aria-expanded={mobileControlsOpen}
-              aria-label={mobileControlsOpen ? 'Collapse controls' : 'Expand controls'}
-            >
-              <button
-                type="button"
-                onClick={() => setMobileControlsOpen((v) => !v)}
-                className="flex-1 min-w-0 rounded-md text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
-                aria-expanded={mobileControlsOpen}
-                aria-label={mobileControlsOpen ? 'Collapse controls' : 'Expand controls'}
-              >
-                <div className="flex items-center gap-2">
-                  <div className="text-sm font-semibold truncate" style={{ color: currentTrail.color }}>
-                    {currentTrail.name}
-                  </div>
-                  {offTrail && (
-                    <div className="inline-flex items-center gap-1 text-destructive text-xs animate-pulse">
-                      <AlertTriangle className="h-3.5 w-3.5" />
-                      <span>Off</span>
-                    </div>
-                  )}
-                  <div className="ml-auto text-muted-foreground">
-                    {mobileControlsOpen ? <ChevronDown className="h-4 w-4" /> : <ChevronUp className="h-4 w-4" />}
-                  </div>
-                </div>
-                <div className="text-[11px] text-muted-foreground grid grid-cols-4 gap-2">
-                  <span>
-                    <span className="text-foreground font-semibold">{distance.toFixed(2)}</span> km
-                  </span>
-                  <span>
-                    <span className="text-foreground font-semibold">{String(Math.floor(elapsed / 60)).padStart(2, '0')}:{String(elapsed % 60).padStart(2, '0')}</span>
-                  </span>
-                  <span>
-                    <span className="text-foreground font-semibold">{displayPace > 0 ? displayPace.toFixed(1) : '--'}</span> min/km
-                  </span>
-                  <span>
-                    <span className="text-foreground font-semibold">{remainingDistanceKm.toFixed(2)}</span> km left
-                  </span>
-
-                </div>
-                <div className="text-[10px] text-muted-foreground">
-                  <span className="capitalize text-primary font-semibold">{trackingPhase}</span>
-                  <span> ETA {etaMinutes == null ? '--' : `${etaMinutes}m`}</span>
-                  {wrongDirection && <span className="text-destructive font-semibold"> Wrong direction</span>}
-                </div>
-                {gpsSignal !== 'None' && (
-                  <div className="text-[10px] text-muted-foreground">
-                    GPS Signal: <span className={gpsSignal === 'Strong' ? 'text-success' : gpsSignal === 'Medium' ? 'text-warning' : 'text-destructive'}>{gpsSignal}</span>
-                  </div>
+                {dbTrails.flatMap((trail) =>
+                  (trail.stations ?? []).map((station) => (
+                    <Marker
+                      key={`${trail.id ?? trail.name}-${station.id}`}
+                      position={[station.lat, station.lng]}
+                      icon={routeStationIcon(station)}
+                      zIndexOffset={100}
+                    >
+                      <Popup>
+                        <div className="max-w-[230px] p-1">
+                          <p className="font-bold">{station.name}</p>
+                          <p className="mt-1 text-xs text-muted-foreground">{station.description}</p>
+                        </div>
+                      </Popup>
+                    </Marker>
+                  )),
                 )}
-              </button>
+              </>
+            ) : (
+              /* Trail Route Editor Layers & Handles inside MapContainer */
+              <TrailRecorder
+                existingTrails={rawTrailZones}
+                locationId={activeLocationId}
+                onSaved={fetchTrails}
+              />
+            )}
+          </MapContainer>
+        </div>
 
-              <div className="flex items-center gap-1 shrink-0">
-                <div onClick={(e) => { e.preventDefault(); e.stopPropagation(); }}>
-                  <SOSPanel compact />
+        {/* Floating Controls Overlay for Tracker */}
+        {activeMapTab === 'tracker' && (
+          isSidebarCollapsed ? (
+            /* Collapsed Minimap Control Button */
+            <button
+              onClick={() => setIsSidebarCollapsed(false)}
+              className="absolute top-4 left-4 z-[1000] p-3 rounded-2xl bg-white/95 dark:bg-slate-900/95 backdrop-blur-md shadow-xl border border-slate-200/60 dark:border-slate-800/60 hover:bg-slate-50 dark:hover:bg-slate-800 transition-all flex items-center gap-2 group pointer-events-auto"
+              title="Expand Tracking Console"
+            >
+              <Users className="h-5 w-5 text-emerald-600 dark:text-emerald-400 group-hover:scale-105 transition-transform" />
+              <span className="text-xs font-bold text-slate-700 dark:text-slate-300 pr-1">Show Tracker</span>
+              <ChevronRight className="h-4 w-4 text-slate-400" />
+            </button>
+          ) : (
+            /* Expanded Glassmorphic Dashboard Panel */
+            <div 
+              className="absolute top-4 left-4 z-[1000] w-[calc(100%-2rem)] sm:w-[360px] max-h-[calc(100dvh-14rem)] sm:max-h-[78vh] flex flex-col bg-white/95 dark:bg-slate-900/95 backdrop-blur-md rounded-2xl border border-slate-200/50 dark:border-slate-800/50 shadow-2xl pointer-events-auto overflow-hidden"
+            >
+              {/* Floating Header */}
+              <div className="p-4 border-b border-slate-100 dark:border-slate-800/50 flex items-center justify-between shrink-0">
+                <div className="flex items-center gap-2">
+                  <div className="bg-emerald-500/10 p-1.5 rounded-lg">
+                    <Activity className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                  </div>
+                  <div>
+                    <h2 className="text-xs font-bold uppercase tracking-wider text-slate-800 dark:text-slate-200">
+                      Tracking Console
+                    </h2>
+                    <span className="text-[10px] text-slate-500 dark:text-slate-400 font-medium">
+                      {simulationHikers.filter(h => h.phase !== 'completed').length} active groups
+                    </span>
+                  </div>
                 </div>
+                
                 <Button
                   size="icon"
-                  variant="outline"
-                  onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleOfflineCache(); }}
-                  aria-label={offlineReady ? 'Map downloaded for offline use' : 'Download map for offline use'}
-                  disabled={offlineReady}
+                  variant="ghost"
+                  className="h-7 w-7 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+                  onClick={() => setIsSidebarCollapsed(true)}
+                  title="Collapse Panel"
                 >
-                  {offlineReady ? <CheckCircle2 className="h-4 w-4" /> : <Download className="h-4 w-4" />}
+                  <ChevronLeft className="h-4 w-4" />
                 </Button>
-                {tracking ? (
-                  <Button
-                    size="icon"
-                    variant="destructive"
-                    onClick={(e) => { e.preventDefault(); e.stopPropagation(); stopTracking(); }}
-                    aria-label="Stop tracking"
-                  >
-                    <Pause className="h-4 w-4" />
-                  </Button>
-                ) : (
-                  <Button
-                    size="icon"
-                    onClick={(e) => { e.preventDefault(); e.stopPropagation(); startTracking(); }}
-                    aria-label="Start hike"
-                  >
-                    <Play className="h-4 w-4" />
-                  </Button>
-                )}
               </div>
-            </div>
 
-            {mobileControlsOpen && (
-              <div className="border-t border-border/30 px-3 py-2 space-y-2">
-                <div className="flex items-center gap-2 overflow-x-auto pb-1">
-                  {availableTrails.map((t, i) => (
-                    <button
-                      key={t.name}
-                      onClick={() => setSelectedTrail(i)}
-                      className={`whitespace-nowrap px-3 py-1 rounded-full text-xs font-medium transition-all ${
-                        selectedTrail === i ? 'text-primary-foreground' : 'text-muted-foreground hover:text-foreground'
-                      }`}
-                      style={selectedTrail === i ? { backgroundColor: t.color } : {}}
+              {/* Scrollable Body Content */}
+              <div className="flex-1 overflow-y-auto p-4 space-y-4 font-sans">
+                
+                {/* Search Box - Premium Minimal */}
+                <div className="relative">
+                  <Search className="absolute left-3 top-2.5 h-3.5 w-3.5 text-slate-400 dark:text-slate-500" />
+                  <input
+                    type="text"
+                    placeholder="Search groups, guides, team..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="w-full pl-8 pr-8 py-2 text-xs bg-slate-50 dark:bg-slate-950/40 border border-slate-200/60 dark:border-slate-800/60 rounded-xl focus:outline-none focus:ring-1 focus:ring-emerald-500 focus:border-emerald-500 dark:text-slate-200 transition-all"
+                  />
+                  {searchQuery && (
+                    <button 
+                      onClick={() => setSearchQuery('')}
+                      className="absolute right-3 top-2 text-[10px] text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300 bg-slate-100 dark:bg-slate-800 rounded px-1"
                     >
-                      {t.name}
+                      clear
                     </button>
-                  ))}
-                </div>
-
-                <div className="flex items-center justify-between text-xs text-muted-foreground">
-                  <span>{currentTrail.distance} • {currentTrail.elevation}</span>
-                  <span className="capitalize">{currentTrail.difficulty}</span>
-                </div>
-
-                <div className="flex items-center gap-2">
-                  <Button size="sm" variant="outline" onClick={handleOfflineCache} className="gap-1 flex-1" disabled={offlineReady}>
-                    {offlineReady ? <CheckCircle2 className="h-3 w-3" /> : <Download className="h-3 w-3" />}
-                    {offlineReady ? 'Downloaded' : 'Download Map'}
-                  </Button>
-                  {tracking ? (
-                    <Button size="sm" variant="destructive" onClick={stopTracking} className="gap-1 flex-1">
-                      <Pause className="h-3 w-3" /> Stop
-                    </Button>
-                  ) : (
-                    <Button size="sm" onClick={startTracking} className="gap-1 flex-1">
-                      <Play className="h-3 w-3" /> Start
-                    </Button>
                   )}
                 </div>
-                {tracking && (
-                  <div className="flex items-center gap-2">
-                    {trackingPhase === 'ascent' && (
-                      <Button size="sm" variant="outline" onClick={markPeakReached} className="gap-1 flex-1">
-                        I'm on Peak
-                      </Button>
-                    )}
-                    {trackingPhase === 'peak' && (
-                      <Button size="sm" variant="outline" onClick={startDescentTracking} className="gap-1 flex-1">
-                        Start Descent
-                      </Button>
-                    )}
-                  </div>
-                )}
-                {isTrailRecorder && (
-                  <div className="flex flex-col gap-2 pt-2 border-t border-border/30">
-                    <div className="flex items-center gap-2">
-                      <Button
-                        size="sm"
-                        variant={isRecording && !isGpsTestMode ? 'destructive' : 'outline'}
-                        className="gap-1 flex-1"
-                        onClick={toggleRecording}
-                        disabled={isGpsTestMode}
-                      >
-                        {isRecording && !isGpsTestMode ? 'Stop Recording' : 'Record Trail'}
-                      </Button>
-                    <Button
-                        size="sm"
-                        variant={isGpsTestMode ? 'secondary' : 'ghost'}
-                        className="gap-1 flex-1"
-                        onClick={toggleGpsTestMode}
-                      >
-                        {isGpsTestMode ? 'Stop Test' : 'Test Accuracy'}
-                      </Button>
-                    </div>
-                    {recordedPoints.length > 1 && !isRecording && !isGpsTestMode && (
-                      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                        <Button
-                          size="sm"
-                          variant="secondary"
-                          className="h-11 gap-1 text-sm"
-                          onClick={saveRecordedRouteDraft}
-                          disabled={discardingRecordedRoute}
-                        >
-                          {savedRecordedRouteDraftId ? 'Open Draft' : 'Save Draft'}
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant={savedRecordedRouteDraftId ? 'destructive' : 'outline'}
-                          className="h-11 gap-1 text-sm"
-                          onClick={discardRecordedRoute}
-                          disabled={discardingRecordedRoute}
-                        >
-                          {savedRecordedRouteDraftId ? 'Delete Draft' : 'Discard'}
-                        </Button>
+
+                {/* Active Expeditions List */}
+                <div className="space-y-2.5">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 block px-1">
+                    Active Hiker Groups
+                  </span>
+                  
+                  <div className="space-y-2.5 pr-0.5">
+                    {filteredHikers.length === 0 ? (
+                      <div className="text-center py-6 text-xs text-slate-400 dark:text-slate-500 border border-dashed rounded-xl border-slate-200/60 dark:border-slate-800/60 p-4">
+                        {searchQuery ? "No groups match your query." : "No active groups found on the mountain."}
                       </div>
+                    ) : (
+                      filteredHikers.map((h) => {
+                        const isSos = h.phase === 'sos';
+                        const isExpanded = expandedHikerId === h.id;
+                        
+                        return (
+                          <div 
+                            key={h.id}
+                            className={`group relative p-3 rounded-xl border transition-all duration-300 flex flex-col gap-2 cursor-pointer ${
+                              isSos 
+                                ? 'bg-rose-50/70 dark:bg-rose-950/10 border-rose-200 dark:border-rose-900/40 text-rose-950 dark:text-rose-100 shadow-sm shadow-rose-100/50 dark:shadow-none' 
+                                : isExpanded 
+                                  ? 'bg-slate-50/80 dark:bg-slate-900/40 border-emerald-500/50 dark:border-emerald-500/30 shadow-sm'
+                                  : 'bg-white/60 dark:bg-slate-950/40 hover:bg-white dark:hover:bg-slate-900/50 border-slate-200/60 dark:border-slate-800/50 text-slate-900 dark:text-slate-100'
+                            }`}
+                            onClick={() => {
+                              handleLocateHiker(h);
+                              setExpandedHikerId(isExpanded ? null : h.id);
+                            }}
+                          >
+                            <div className="flex items-start justify-between gap-2">
+                              <div>
+                                <div className="flex items-center gap-1.5">
+                                  <span className={`h-2 w-2 rounded-full ${
+                                    isSos ? 'bg-rose-500 animate-ping' :
+                                    h.phase === 'peak' ? 'bg-amber-500 animate-pulse' :
+                                    h.phase === 'descent' ? 'bg-blue-500' : 'bg-emerald-500'
+                                  }`} />
+                                  <h3 className="font-semibold text-xs tracking-tight text-slate-800 dark:text-slate-200 group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors">
+                                    {h.name}
+                                  </h3>
+                                </div>
+                                <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5 flex items-center gap-1">
+                                  <User className="h-3 w-3 text-slate-400" />
+                                  Guide: <span className="font-semibold text-slate-700 dark:text-slate-300">{h.guideName}</span>
+                                </p>
+                              </div>
+                              
+                              <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold tracking-wide capitalize select-none ${
+                                h.phase === 'ascent' ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-400 border border-emerald-100/40 dark:border-emerald-900/20' :
+                                h.phase === 'peak' ? 'bg-amber-50 text-amber-700 dark:bg-amber-950/30 dark:text-amber-400 border border-amber-100/40 dark:border-amber-900/20' :
+                                h.phase === 'descent' ? 'bg-blue-50 text-blue-700 dark:bg-blue-950/30 dark:text-blue-400 border border-blue-100/40 dark:border-blue-900/20' : 
+                                'bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-400 animate-pulse'
+                              }`}>
+                                {h.phase === 'sos' ? '⚠️ SOS' : h.phase}
+                              </span>
+                            </div>
+                            
+                            {/* Progress Line */}
+                            <div className="w-full bg-slate-100 dark:bg-slate-800/80 h-1.5 rounded-full overflow-hidden mt-0.5">
+                              <div 
+                                className={`h-full rounded-full transition-all duration-500 ${
+                                  h.phase === 'sos' ? 'bg-rose-500 animate-pulse' :
+                                  h.phase === 'peak' ? 'bg-amber-500' :
+                                  h.phase === 'descent' ? 'bg-blue-500' : 'bg-emerald-500'
+                                }`}
+                                style={{ width: `${(h.progress / 9.0) * 100}%` }}
+                              />
+                            </div>
+
+                            <div className="flex items-center justify-between text-[9px] text-slate-400 dark:text-slate-500">
+                              <span className="flex items-center gap-1 font-medium text-slate-500 dark:text-slate-400">📍 {h.progress <= 0.05 ? 'Basecamp' : h.progress >= 8.95 ? 'Summit' : `Station ${Math.floor(h.progress) + 1}`}</span>
+                              <span className="font-semibold text-emerald-600 dark:text-emerald-400 flex items-center gap-0.5">
+                                {h.phase === 'sos' ? 'STALLED' : h.phase === 'peak' ? `Peak Stay` : `${Math.round((h.progress / 9.0) * 100)}%`}
+                              </span>
+                            </div>
+
+                            {/* Expanded Detailed Section */}
+                            {isExpanded && (
+                              <div className="mt-2.5 pt-2.5 border-t border-slate-100 dark:border-slate-800/60 space-y-2.5 text-[11px] text-slate-600 dark:text-slate-300">
+                                
+                                <div className="grid grid-cols-2 gap-2">
+                                  <div className="bg-slate-50/50 dark:bg-slate-950 p-2 rounded-lg border border-slate-100/50 dark:border-slate-850/40">
+                                    <span className="text-[9px] uppercase font-bold tracking-wider text-slate-400 dark:text-slate-500 block">Group Size</span>
+                                    <span className="font-semibold text-slate-800 dark:text-slate-200">{h.groupSize} Pax</span>
+                                  </div>
+                                  <div className="bg-slate-50/50 dark:bg-slate-950 p-2 rounded-lg border border-slate-100/50 dark:border-slate-850/40">
+                                    <span className="text-[9px] uppercase font-bold tracking-wider text-slate-400 dark:text-slate-500 block">Minors</span>
+                                    <span className="font-semibold text-slate-800 dark:text-slate-200">
+                                      {h.hasMinors ? `${h.minorCount} child(ren)` : 'None'}
+                                    </span>
+                                  </div>
+                                </div>
+
+                                <div className="space-y-1.5 bg-slate-50/50 dark:bg-slate-950 p-2 rounded-lg border border-slate-100/50 dark:border-slate-850/40">
+                                  <div className="flex items-center justify-between">
+                                    <span className="text-[9px] uppercase font-bold tracking-wider text-slate-400 dark:text-slate-500">Contact Guide</span>
+                                    <span className="font-mono text-[10px] text-emerald-600 dark:text-emerald-400">{h.guidePhone}</span>
+                                  </div>
+                                  <div className="flex items-center justify-between">
+                                    <span className="text-[9px] uppercase font-bold tracking-wider text-slate-400 dark:text-slate-500">Emergency Contact</span>
+                                    <span className="font-mono text-[10px] text-slate-700 dark:text-slate-300">{h.emergencyContact}</span>
+                                  </div>
+                                </div>
+
+                                {h.companions && h.companions.length > 0 && (
+                                  <div>
+                                    <span className="text-[9px] uppercase font-bold tracking-wider text-slate-400 dark:text-slate-500 block mb-1">Companions</span>
+                                    <div className="flex flex-wrap gap-1">
+                                      {h.companions.map((comp, idx) => (
+                                        <span key={idx} className="bg-slate-100 dark:bg-slate-850 px-1.5 py-0.5 rounded text-[9px] text-slate-600 dark:text-slate-300 border border-slate-200/20 dark:border-slate-750/30">
+                                          {comp}
+                                        </span>
+                                      ))}
+                                    </div>
+                                  </div>
+                                )}
+
+                                {h.medicalNotes && (
+                                  <div className="bg-rose-50/50 dark:bg-rose-950/10 p-2 rounded-lg border border-rose-100 dark:border-rose-950/30 text-rose-900 dark:text-rose-300">
+                                    <span className="text-[9px] uppercase font-bold tracking-wider text-rose-400 block mb-0.5">⚠️ Medical Alert</span>
+                                    <p className="text-[10px] leading-relaxed">{h.medicalNotes}</p>
+                                  </div>
+                                )}
+
+                                <div className="flex items-center gap-1.5 pt-1">
+                                  <Button
+                                    type="button"
+                                    size="sm"
+                                    variant="secondary"
+                                    className="flex-1 h-7 text-[10px] text-slate-700 dark:text-slate-300 border border-slate-200/50 dark:border-slate-800 bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleLocateHiker(h);
+                                    }}
+                                  >
+                                    Locate On Map
+                                  </Button>
+                                  <Button
+                                    type="button"
+                                    size="sm"
+                                    className="flex-1 h-7 text-[10px] bg-emerald-600 hover:bg-emerald-500 text-white"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      toast.success(`Message sent to guide ${h.guideName}`, {
+                                        description: `Alert ping dispatched to guide companion channel.`
+                                      });
+                                    }}
+                                  >
+                                    Ping Guide
+                                  </Button>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })
                     )}
                   </div>
-                )}
+                </div>
+
+                {/* Checkpoint Timeline */}
+                <div className="space-y-3 pt-3 border-t border-slate-100 dark:border-slate-800/65">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 block px-1">
+                    Stations Timeline
+                  </span>
+
+                  <div className="relative pl-3 space-y-3.5 before:absolute before:left-5 before:top-2 before:bottom-2 before:w-[1.5px] before:bg-slate-100 dark:before:bg-slate-800">
+                    {currentOfficialStations.map((st) => {
+                      const activeGroupsHere = hikersAtStation(st.index);
+                      const hasActiveHikers = activeGroupsHere.length > 0;
+                      
+                      return (
+                        <div key={st.index} className="relative flex gap-3 group">
+                          {/* Circle Bullet */}
+                          <button
+                            type="button"
+                            onClick={() => handleLocateStation(st)}
+                            className={`relative z-10 w-5 h-5 rounded-full font-bold text-[9px] flex items-center justify-center shrink-0 border transition-all shadow-sm ${
+                              st.index === 7 
+                                ? 'bg-rose-500 border-rose-400 text-white ring-4 ring-rose-500/10' 
+                                : hasActiveHikers
+                                  ? 'bg-emerald-600 border-emerald-500 text-white ring-4 ring-emerald-500/20'
+                                  : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 hover:border-emerald-500 hover:text-emerald-500'
+                            }`}
+                          >
+                            {st.index === 1 ? 'J' : st.index === 7 ? 'P' : st.index - 1}
+                          </button>
+
+                          <div className="flex-1 text-left bg-slate-50/20 dark:bg-slate-950/20 hover:bg-slate-50/50 dark:hover:bg-slate-900/40 p-2.5 rounded-xl border border-slate-100 dark:border-slate-800/60 transition-all flex flex-col gap-0.5 w-full">
+                            <div className="flex items-center justify-between gap-1 w-full">
+                              <span 
+                                onClick={() => handleLocateStation(st)}
+                                className="font-bold text-[10px] text-slate-800 dark:text-slate-200 hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors cursor-pointer"
+                              >
+                                {st.name}
+                              </span>
+                              
+                              {hasActiveHikers && (
+                                <span className="bg-emerald-50 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-400 text-[8px] font-bold px-1.5 py-0.5 rounded-full flex items-center gap-0.5 animate-pulse">
+                                  <span className="h-1 w-1 rounded-full bg-emerald-500" />
+                                  {activeGroupsHere.length} active
+                                </span>
+                              )}
+                            </div>
+                            <p className="text-[9px] text-slate-400 dark:text-slate-500 leading-relaxed">{st.description}</p>
+                            
+                            {hasActiveHikers && (
+                              <div className="mt-1.5 pt-1.5 border-t border-slate-100 dark:border-slate-800/40 flex flex-wrap gap-1">
+                                {activeGroupsHere.map((hg) => (
+                                  <span 
+                                    key={hg.id}
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleLocateHiker(hg);
+                                      setExpandedHikerId(hg.id);
+                                    }}
+                                    className="text-[8px] bg-white dark:bg-slate-900 hover:bg-emerald-50 dark:hover:bg-emerald-950/20 text-slate-600 dark:text-slate-300 hover:text-emerald-600 px-1.5 py-0.5 rounded border border-slate-200/40 dark:border-slate-800/60 cursor-pointer font-medium transition-colors"
+                                  >
+                                    👤 {hg.name}
+                                  </span>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+
               </div>
-            )}
-          </div>
-        </div>
+            </div>
+          )
+        )}
+
       </div>
-
-      {tileDownloadProgress && tileDownloadProgress.total > 0 && (
-        <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-[2000] glass-card-strong rounded-full px-4 py-2 text-xs">
-          Caching tiles {tileDownloadProgress.done}/{tileDownloadProgress.total}
-        </div>
-      )}
-
-      <HikeSummary
-        session={summarySession}
-        open={!!summarySession}
-        onClose={() => setSummarySession(null)}
-      />
       <Terrain3DDialog
         open={terrain3dOpen}
         onOpenChange={setTerrain3dOpen}
         routeName={currentTrail.name}
         routePath={currentTrail.path}
-        stations={currentTrail.stations}
+        stations={currentTrail.stations ?? []}
       />
     </div>
   );

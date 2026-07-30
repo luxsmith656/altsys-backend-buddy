@@ -1,7 +1,7 @@
 import { lazy, Suspense } from 'react';
 import type { LatLngTuple } from 'leaflet';
 import { Box, Mountain, Route } from 'lucide-react';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import type { RouteStation } from '@/lib/map-data';
 
 const Terrain3DScene = lazy(() => import('@/components/map/Terrain3DScene'));
@@ -29,6 +29,9 @@ export default function Terrain3DDialog({
             <Mountain className="h-5 w-5 shrink-0 text-primary" />
             <span className="truncate">Mt. Kalisungan 3D Terrain</span>
           </DialogTitle>
+          <DialogDescription className="sr-only">
+            Interactive elevation model with the selected official trail and route stations.
+          </DialogDescription>
           <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
             <span className="inline-flex items-center gap-1">
               <Route className="h-3.5 w-3.5 text-sky-500" />

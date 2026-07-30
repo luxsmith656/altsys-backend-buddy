@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useLocations } from '@/hooks/useLocations';
+import RealtimeMonitorMap from '@/components/admin/RealtimeMonitorMap';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -91,6 +92,7 @@ import {
 import TrailRecorder from '@/components/map/TrailRecorder';
 import QRCameraScanner from '@/components/admin/QRCameraScanner';
 import DemographicsTab from '@/components/admin/DemographicsTab';
+import OverviewDashboard from '@/components/admin/OverviewDashboard';
 import PaymentSummaryTab from '@/components/admin/PaymentSummaryTab';
 import AppDownloadButton from '@/components/AppDownloadButton';
 import { Calendar } from '@/components/ui/calendar';
@@ -130,7 +132,12 @@ const ANNOUNCEMENT_TYPE_STYLES: Record<string, string> = {
 export default function AdminDashboard() {
   const [searchParams, setSearchParams] = useSearchParams();
   const routeEditorRef = useRef<HTMLDivElement | null>(null);
-  const [activeTab, setActiveTab] = useState(searchParams.get('tab') || 'requests');
+  const getMappedTab = (t: string) => { if (['overview', 'demographics'].includes(t)) return 'overview'; if (['requests', 'scan', 'live-map'].includes(t)) return 'operations'; if (['guides', 'announcements', 'capacity'].includes(t)) return 'management'; if (['payment-summary'].includes(t)) return 'finance'; return t; };
+  const [activeTab, setActiveTab] = useState(getMappedTab(searchParams.get('tab') || 'overview'));
+  const [operationsTab, setOperationsTab] = useState<'requests' | 'scan' | 'live-map'>(() => {
+    const initialTab = searchParams.get('tab');
+    return initialTab === 'scan' || initialTab === 'live-map' ? initialTab : 'requests';
+  });
   /* ── Overview state ── */
   const [stats, setStats] = useState({ totalBookings: 0, activeHikers: 0, totalZones: 5, todayVisitors: 0 });
   const [bookings, setBookings] = useState<any[]>([]);
@@ -1168,17 +1175,18 @@ export default function AdminDashboard() {
               Monitor real-time hiker activity, manage zones, announcements, and guides.
             </p>
           </div>
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex w-full items-center gap-2 sm:w-auto">
             <Button
-              size="sm"
-              className="gap-2"
+              type="button"
+              className="flex-1 gap-2 sm:flex-none"
               onClick={() => {
-                setActiveTab('scan');
+                setActiveTab('operations');
+                setOperationsTab('scan');
                 const next = new URLSearchParams(searchParams);
                 next.set('tab', 'scan');
                 next.delete('routeDraft');
                 setSearchParams(next, { replace: true });
-                window.requestAnimationFrame(() => window.scrollTo({ top: 0, behavior: 'smooth' }));
+                window.scrollTo({ top: 0, behavior: 'smooth' });
               }}
             >
               <ScanLine className="h-4 w-4" />
@@ -1197,42 +1205,58 @@ export default function AdminDashboard() {
             if (value !== 'overview') next.delete('routeDraft');
             setSearchParams(next, { replace: true });
           }}
-          className="space-y-6"
+          className="flex flex-col md:flex-row gap-6"
         >
-          <TabsList className="glass-card gap-1 h-auto flex-wrap p-1">
-            <TabsTrigger value="requests" className="gap-1.5 data-[state=active]:bg-primary/20 data-[state=active]:text-primary relative">
-              <ClipboardList className="h-3.5 w-3.5" /> Bookings
-              {pendingCount > 0 && (
-                <span className="absolute -top-1 -right-1 h-4 w-4 rounded-full bg-destructive text-white text-[10px] flex items-center justify-center font-bold">
-                  {pendingCount}
-                </span>
-              )}
-            </TabsTrigger>
-            <TabsTrigger value="overview" className="gap-1.5 data-[state=active]:bg-primary/20 data-[state=active]:text-primary">
-              <LayoutDashboard className="h-3.5 w-3.5" /> Overview
-            </TabsTrigger>
-            <TabsTrigger value="announcements" className="gap-1.5 data-[state=active]:bg-primary/20 data-[state=active]:text-primary">
-              <Megaphone className="h-3.5 w-3.5" /> Announcements
-            </TabsTrigger>
-            <TabsTrigger value="guides" className="gap-1.5 data-[state=active]:bg-primary/20 data-[state=active]:text-primary">
-              <UserCog className="h-3.5 w-3.5" /> Guide Management
-            </TabsTrigger>
-            <TabsTrigger value="capacity" className="gap-1.5 data-[state=active]:bg-primary/20 data-[state=active]:text-primary">
-              <SlidersHorizontal className="h-3.5 w-3.5" /> Daily Capacity
-            </TabsTrigger>
-            <TabsTrigger value="scan" className="gap-1.5 data-[state=active]:bg-primary/20 data-[state=active]:text-primary">
-              <ScanLine className="h-3.5 w-3.5" /> QR Check-in
-            </TabsTrigger>
-            <TabsTrigger value="payment-summary" className="gap-1.5 data-[state=active]:bg-primary/20 data-[state=active]:text-primary">
-              <DollarSign className="h-3.5 w-3.5" /> Finance
-            </TabsTrigger>
-            <TabsTrigger value="demographics" className="gap-1.5 data-[state=active]:bg-primary/20 data-[state=active]:text-primary">
-              <Users className="h-3.5 w-3.5" /> Demographics
-            </TabsTrigger>
-          </TabsList>
+          <div className="w-full md:w-64 shrink-0 md:sticky md:top-24 h-max">
+            <TabsList className="glass-card flex flex-row md:flex-col p-2 gap-1 h-auto w-full items-stretch justify-start overflow-x-auto overflow-y-hidden md:overflow-visible custom-scrollbar">
+              <TabsTrigger value="overview" className="justify-start gap-2.5 px-3 py-2.5 data-[state=active]:bg-primary/20 data-[state=active]:text-primary whitespace-nowrap">
+                <LayoutDashboard className="h-4 w-4 shrink-0" /> <span className="hidden md:inline">Overview</span>
+              </TabsTrigger>
+              <TabsTrigger value="operations" className="justify-start gap-2.5 px-3 py-2.5 data-[state=active]:bg-primary/20 data-[state=active]:text-primary whitespace-nowrap relative">
+                <ClipboardList className="h-4 w-4 shrink-0" /> <span className="hidden md:inline">Operations</span>
+                {pendingCount > 0 && (
+                  <span className="md:relative absolute top-0 right-0 md:top-auto md:right-auto md:ml-auto h-5 w-5 rounded-full bg-destructive text-white text-[10px] flex items-center justify-center font-bold shadow-sm">
+                    {pendingCount}
+                  </span>
+                )}
+              </TabsTrigger>
+              <TabsTrigger value="management" className="justify-start gap-2.5 px-3 py-2.5 data-[state=active]:bg-primary/20 data-[state=active]:text-primary whitespace-nowrap">
+                <UserCog className="h-4 w-4 shrink-0" /> <span className="hidden md:inline">Management</span>
+              </TabsTrigger>
+              <TabsTrigger value="finance" className="justify-start gap-2.5 px-3 py-2.5 data-[state=active]:bg-primary/20 data-[state=active]:text-primary whitespace-nowrap">
+                <DollarSign className="h-4 w-4 shrink-0" /> <span className="hidden md:inline">Finance</span>
+              </TabsTrigger>
+            </TabsList>
+          </div>
 
+          <div className="flex-1 min-w-0">
           {/* ─────────────────────────────── BOOKINGS TAB ── */}
-          <TabsContent value="requests" className="space-y-4">
+          
+          <TabsContent value="overview" className="space-y-6 mt-0">
+            <OverviewDashboard locationId={activeLocationId} />
+          </TabsContent>
+
+          <TabsContent value="operations" className="mt-0">
+            <Tabs
+              value={operationsTab}
+              onValueChange={(value) => {
+                const nextTab = value as 'requests' | 'scan' | 'live-map';
+                setOperationsTab(nextTab);
+                const next = new URLSearchParams(searchParams);
+                next.set('tab', nextTab);
+                next.delete('routeDraft');
+                setSearchParams(next, { replace: true });
+              }}
+              className="space-y-4"
+            >
+              <div className="mb-4 overflow-x-auto pb-2">
+                <TabsList className="glass-card">
+                  <TabsTrigger value="requests">Bookings</TabsTrigger>
+                  <TabsTrigger value="scan">QR Check-in</TabsTrigger>
+                  <TabsTrigger value="live-map">Live Map</TabsTrigger>
+                </TabsList>
+              </div>
+              <TabsContent value="requests" className="space-y-4 mt-0">
             <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
               <div>
                 <h2 className="text-lg font-semibold">All Bookings</h2>
@@ -1294,7 +1318,7 @@ export default function AdminDashboard() {
                 <p className="text-muted-foreground">No bookings found for this filter.</p>
               </div>
             ) : (
-              <div className="space-y-4">
+              <div className="space-y-4 mt-0">
                 {filteredTabBookings.map((b) => {
                   const meta = parseMeta(b.notes);
                   const displayStatus = getDisplayStatus(b);
@@ -1459,7 +1483,7 @@ export default function AdminDashboard() {
                       <UserCheck className="h-5 w-5 text-primary" /> Accept & Assign Guide
                     </CardTitle>
                   </CardHeader>
-                  <CardContent className="space-y-4">
+                  <CardContent className="space-y-4 mt-0">
                     <p className="text-sm text-muted-foreground">Select an available guide to assign to this booking.</p>
                     <div className="space-y-2">
                       <Label>Assign Guide</Label>
@@ -1518,7 +1542,7 @@ export default function AdminDashboard() {
                       <CalendarClock className="h-5 w-5 text-sky-500" /> Adjust Booking Date/Time
                     </CardTitle>
                   </CardHeader>
-                  <CardContent className="space-y-4">
+                  <CardContent className="space-y-4 mt-0">
                     <p className="text-sm text-muted-foreground">Propose a new schedule. The hiker will be asked to confirm or decline.</p>
                     <div className="space-y-2">
                       <Label htmlFor="adjustDate">New Date</Label>
@@ -1547,606 +1571,7 @@ export default function AdminDashboard() {
               </div>
             )}
           </TabsContent>
-
-          {/* ─────────────────────────────── OVERVIEW TAB ── */}
-          <TabsContent value="overview" className="space-y-6">
-            {todaysPendingAttention.length > 0 && (
-              <Card className="glass-card border-amber-500/30">
-                <CardContent className="p-4">
-                  <div className="flex items-start gap-3">
-                    <AlertTriangle className="h-5 w-5 text-amber-500 mt-0.5" />
-                    <div>
-                      <p className="font-semibold text-amber-700 dark:text-amber-300">
-                        Reminder: {todaysPendingAttention.length} booking(s) today still need attention
-                      </p>
-                      <p className="text-sm text-muted-foreground">
-                        Pending, unconfirmed, or not-started bookings are listed in the Bookings and QR Check-in tabs.
-                      </p>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            )}
-
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-              {statCards.map((s, i) => (
-                <motion.div key={s.label} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.08 }}>
-                  <Card className="glass-card">
-                    <CardContent className="p-5">
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <p className="text-xs text-muted-foreground">{s.label}</p>
-                          <p className="text-3xl font-bold mt-1">{s.value}</p>
-                        </div>
-                        <s.icon className={`h-8 w-8 ${s.color} opacity-60`} />
-                      </div>
-                    </CardContent>
-                  </Card>
-                </motion.div>
-              ))}
-            </div>
-
-            <div className="grid lg:grid-cols-2 gap-6">
-              <Card className="glass-card">
-                <CardHeader><CardTitle className="text-lg">Weekly Visitors</CardTitle></CardHeader>
-                <CardContent>
-                  <ResponsiveContainer width="100%" height={250}>
-                    <BarChart data={weeklyData}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="hsl(155 15% 18%)" />
-                      <XAxis dataKey="day" stroke="hsl(150 10% 55%)" fontSize={12} />
-                      <YAxis stroke="hsl(150 10% 55%)" fontSize={12} />
-                      <Tooltip contentStyle={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: '8px', color: 'hsl(var(--foreground))' }} />
-                      <Bar dataKey="visitors" fill="hsl(152 60% 42%)" radius={[4, 4, 0, 0]} />
-                    </BarChart>
-                  </ResponsiveContainer>
-                </CardContent>
-              </Card>
-
-              <Card className="glass-card">
-                <CardHeader><CardTitle className="text-lg">Trail Capacity Distribution</CardTitle></CardHeader>
-                <CardContent>
-                  <ResponsiveContainer width="100%" height={250}>
-                    <PieChart>
-                      <Pie data={trailData} cx="50%" cy="50%" outerRadius={90} dataKey="value" label={({ name }) => name}>
-                        {trailData.map((_, i) => (<Cell key={i} fill={COLORS[i % COLORS.length]} />))}
-                      </Pie>
-                      <Tooltip contentStyle={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: '8px', color: 'hsl(var(--foreground))' }} />
-                    </PieChart>
-                  </ResponsiveContainer>
-                </CardContent>
-              </Card>
-            </div>
-
-            <div className="grid lg:grid-cols-2 gap-6">
-              <Card className="glass-card">
-                <CardHeader>
-                  <CardTitle className="text-lg flex items-center gap-2">
-                    <CalendarCheck className="h-5 w-5 text-primary" /> Booking Calendar
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <Calendar
-                    mode="single"
-                    selected={calendarDate}
-                    onSelect={setCalendarDate}
-                    modifiers={{ booked: bookedDates }}
-                    modifiersClassNames={{ booked: 'bg-primary/15 text-primary font-bold border border-primary/30 rounded-md' }}
-                  />
-                  <p className="text-xs text-muted-foreground mt-3">
-                    Highlighted dates have bookings. Select a date to view expected bookings and statuses.
-                  </p>
-                </CardContent>
-              </Card>
-
-              <Card className="glass-card">
-                <CardHeader>
-                  <CardTitle className="text-lg">Expected Bookings on {selectedDateKey || 'Selected Date'}</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                  <div className="grid grid-cols-4 gap-2 text-center text-xs">
-                    <div className="rounded-lg border border-border/20 bg-secondary/20 p-2">
-                      <p className="text-muted-foreground">Total</p>
-                      <p className="text-lg font-bold">{bookingsPerDate[selectedDateKey]?.total || 0}</p>
-                    </div>
-                    <div className="rounded-lg border border-border/20 bg-secondary/20 p-2">
-                      <p className="text-muted-foreground">Pending</p>
-                      <p className="text-lg font-bold text-amber-500">{bookingsPerDate[selectedDateKey]?.pending || 0}</p>
-                    </div>
-                    <div className="rounded-lg border border-border/20 bg-secondary/20 p-2">
-                      <p className="text-muted-foreground">Confirmed</p>
-                      <p className="text-lg font-bold text-primary">{bookingsPerDate[selectedDateKey]?.confirmed || 0}</p>
-                    </div>
-                    <div className="rounded-lg border border-border/20 bg-secondary/20 p-2">
-                      <p className="text-muted-foreground">Started</p>
-                      <p className="text-lg font-bold text-emerald-500">{bookingsPerDate[selectedDateKey]?.started || 0}</p>
-                    </div>
-                  </div>
-                  <div className="max-h-[240px] overflow-y-auto space-y-2 pr-1">
-                    {selectedDateBookings.length === 0 ? (
-                      <p className="text-sm text-muted-foreground text-center py-6">No bookings on this date.</p>
-                    ) : (
-                      selectedDateBookings.map((b) => {
-                        const meta = parseMeta(b.notes);
-                        const started = !!meta.onsiteStartConfirmed;
-                        return (
-                          <div key={b.id} className="rounded-lg border border-border/20 p-3 text-sm bg-secondary/10">
-                            <div className="flex items-center justify-between gap-2">
-                              <p className="font-semibold truncate">{meta.fullName || b.emergency_contact_name || '—'}</p>
-                              <Badge className={started ? 'bg-emerald-500/20 text-emerald-600 dark:text-emerald-400' : BOOKING_STATUS_STYLE[b.status] || ''}>
-                                {started ? 'started' : b.status}
-                              </Badge>
-                            </div>
-                            <p className="text-xs text-muted-foreground">{b.group_size} pax • {b.id.slice(0, 8)}…</p>
-                          </div>
-                        );
-                      })
-                    )}
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
-
-            <div id="trail-recorder" ref={routeEditorRef} className="scroll-mt-24">
-              <TrailRecorder
-                locationId={activeLocationId}
-                existingTrails={zones.map((z: any) => ({
-                  id: z.id,
-                  location_id: z.location_id,
-                  name: z.name,
-                  coordinates_json: z.coordinates_json,
-                  status: z.status,
-                  difficulty: z.difficulty,
-                  elevation_meters: z.elevation_meters,
-                  review_status: z.review_status,
-                  source: z.source,
-                  raw_recording_json: z.raw_recording_json,
-                  cleaned_recording_json: z.cleaned_recording_json,
-                  recording_metadata: z.recording_metadata,
-                  recording_count: z.recording_count,
-                }))}
-                onSaved={loadData}
-              />
-            </div>
-
-            <Card className="glass-card">
-              <CardHeader><CardTitle className="text-lg flex items-center gap-2"><MapPin className="h-5 w-5 text-primary" /> Zone Management</CardTitle></CardHeader>
-              <CardContent>
-                <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="border-b border-border/30 text-muted-foreground">
-                        <th className="text-left py-2 px-3">Zone</th>
-                        <th className="text-left py-2 px-3">Difficulty</th>
-                        <th className="text-left py-2 px-3">Elevation</th>
-                        <th className="text-left py-2 px-3">Capacity</th>
-                        <th className="text-left py-2 px-3">Status</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {zones.map((z: any) => (
-                        <tr key={z.id} className="border-b border-border/10">
-                          <td className="py-3 px-3 font-medium">{z.name}</td>
-                          <td className="py-3 px-3 capitalize">{z.difficulty}</td>
-                          <td className="py-3 px-3">{z.elevation_meters}m</td>
-                          <td className="py-3 px-3">{z.max_capacity}</td>
-                          <td className="py-3 px-3">
-                            <span className={`px-2 py-0.5 rounded-full text-xs ${z.status === 'active' ? 'bg-primary/20 text-primary' : 'bg-destructive/20 text-destructive'}`}>
-                              {z.status}
-                            </span>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card className="glass-card">
-              <CardHeader><CardTitle className="text-lg flex items-center gap-2"><CalendarCheck className="h-5 w-5 text-primary" /> Recent Bookings</CardTitle></CardHeader>
-              <CardContent>
-                {bookings.length === 0 ? (
-                  <p className="text-muted-foreground text-sm text-center py-8">No bookings yet.</p>
-                ) : (
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-sm">
-                      <thead>
-                        <tr className="border-b border-border/30 text-muted-foreground">
-                          <th className="text-left py-2 px-3">Date</th>
-                          <th className="text-left py-2 px-3">Group</th>
-                          <th className="text-left py-2 px-3">Status</th>
-                          <th className="text-left py-2 px-3">Created</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {bookings.map((b: any) => (
-                          <tr key={b.id} className="border-b border-border/10">
-                            <td className="py-3 px-3">{b.booking_date}</td>
-                            <td className="py-3 px-3">{b.group_size} pax</td>
-                            <td className="py-3 px-3">
-                              <span className={`px-2 py-0.5 rounded-full text-xs ${b.status === 'confirmed' ? 'bg-primary/20 text-primary' : b.status === 'cancelled' ? 'bg-destructive/20 text-destructive' : 'bg-warning/20 text-warning'}`}>
-                                {b.status}
-                              </span>
-                            </td>
-                            <td className="py-3 px-3 text-muted-foreground">{new Date(b.created_at).toLocaleDateString()}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          {/* ─────────────────────────────── ANNOUNCEMENTS TAB ── */}
-          <TabsContent value="announcements" className="space-y-6">
-            <div className="grid lg:grid-cols-2 gap-6">
-              <Card className="glass-card">
-                <CardHeader><CardTitle className="text-lg flex items-center gap-2"><Megaphone className="h-5 w-5 text-primary" /> Post Announcement</CardTitle></CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="space-y-2">
-                    <Label>Type</Label>
-                    <Select value={annType} onValueChange={(v) => setAnnType(v as any)}>
-                      <SelectTrigger><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="info">ℹ️ Info / General</SelectItem>
-                        <SelectItem value="warning">⚠️ Weather Warning</SelectItem>
-                        <SelectItem value="closure">🚫 Trail Closure</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="annTitle">Title</Label>
-                    <Input id="annTitle" value={annTitle} onChange={(e) => setAnnTitle(e.target.value)} placeholder="e.g. Trail Closure Notice" maxLength={100} />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="annBody">Message</Label>
-                    <Textarea id="annBody" value={annBody} onChange={(e) => setAnnBody(e.target.value)} placeholder="Describe the announcement in detail..." rows={4} maxLength={500} />
-                    <p className="text-xs text-muted-foreground">{annBody.length}/500</p>
-                  </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <div className="space-y-2">
-                      <Label htmlFor="annStartDate">Show From (optional)</Label>
-                      <Input id="annStartDate" type="date" value={annStartDate} onChange={(e) => setAnnStartDate(e.target.value)} />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="annEndDate">Expires On (optional)</Label>
-                      <Input id="annEndDate" type="date" value={annEndDate} onChange={(e) => setAnnEndDate(e.target.value)} min={annStartDate || undefined} />
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2 rounded-lg border border-border/20 bg-secondary/20 p-3">
-                    <Checkbox id="annImportant" checked={annImportant} onCheckedChange={(v) => setAnnImportant(!!v)} />
-                    <Label htmlFor="annImportant" className="text-sm cursor-pointer">Mark as important (show on user dashboard)</Label>
-                  </div>
-                  <Button className="w-full gap-2" onClick={postAnnouncement} disabled={annSending}>
-                    {annSending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-                    Post Announcement
-                  </Button>
-                </CardContent>
-              </Card>
-
-              <Card className="glass-card">
-                <CardHeader><CardTitle className="text-lg flex items-center gap-2"><Clock className="h-5 w-5 text-primary" /> Recent Announcements</CardTitle></CardHeader>
-                <CardContent>
-                  {announcements.length === 0 ? (
-                    <div className="text-center py-12">
-                      <Megaphone className="h-10 w-10 text-muted-foreground/30 mx-auto mb-3" />
-                      <p className="text-muted-foreground text-sm">No announcements posted yet.</p>
-                    </div>
-                  ) : (
-                    <div className="space-y-3">
-                      {announcements.map((a) => (
-                        <div key={a.id} className={`rounded-xl border p-4 relative ${ANNOUNCEMENT_TYPE_STYLES[a.type]}`}>
-                          <button onClick={() => deleteAnnouncement(a.id)} className="absolute top-3 right-3 text-muted-foreground hover:text-destructive transition-colors" aria-label="Delete announcement">
-                            <Trash2 className="h-4 w-4" />
-                          </button>
-                          <div className="flex items-center gap-2 mb-1">
-                            {a.type === 'warning' && <AlertTriangle className="h-3.5 w-3.5" />}
-                            {a.type === 'closure' && <AlertTriangle className="h-3.5 w-3.5" />}
-                            {a.type === 'info' && <CheckCircle2 className="h-3.5 w-3.5" />}
-                            <span className="font-semibold text-sm">{a.title}</span>
-                            {a.isImportant && <Badge className="text-[10px] bg-destructive/15 text-destructive border-destructive/30">Important</Badge>}
-                          </div>
-                          <p className="text-sm leading-relaxed opacity-90">{a.body}</p>
-                          <p className="text-xs opacity-60 mt-2">{format(new Date(a.created_at), 'MMM d, yyyy • h:mm a')}</p>
-                          {(a.starts_at || a.expires_at) && (
-                            <p className="text-xs opacity-70 mt-1">
-                              Visible: {a.starts_at ? format(new Date(a.starts_at), 'MMM d, yyyy') : 'Now'} - {a.expires_at ? format(new Date(a.expires_at), 'MMM d, yyyy') : 'No expiry'}
-                            </p>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-            </div>
-          </TabsContent>
-
-          {/* ─────────────────────────────── GUIDE MANAGEMENT TAB ── */}
-          <TabsContent value="guides" className="space-y-6">
-            <div className="flex flex-wrap items-center justify-between gap-3 mb-2">
-              <div>
-                <h2 className="text-lg font-semibold">Local Guide Roster</h2>
-                <p className="text-sm text-muted-foreground">Manage guide availability and view their hike history.</p>
-              </div>
-              <Badge variant="outline" className="text-primary border-primary/30">
-                {guides.filter((g) => g.status === 'available').length} available
-              </Badge>
-            </div>
-
-            <Card className="glass-card">
-              <CardHeader>
-                <CardTitle className="text-base flex items-center gap-2">
-                  <UserPlus className="h-4 w-4 text-primary" /> Add Guide
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="grid sm:grid-cols-3 gap-2">
-                <Input placeholder="Full name *" value={newGuideName} onChange={(e) => setNewGuideName(e.target.value)} />
-                <Input placeholder="Login email *" type="email" value={newGuideEmail} onChange={(e) => setNewGuideEmail(e.target.value)} />
-                <Input placeholder="Temp password (min 8) *" type="text" value={newGuidePassword} onChange={(e) => setNewGuidePassword(e.target.value)} />
-                <Input placeholder="Phone" value={newGuidePhone} onChange={(e) => setNewGuidePhone(e.target.value)} />
-                <Input placeholder="Per-trip fee (PHP)" type="number" value={newGuideFee} onChange={(e) => setNewGuideFee(e.target.value)} />
-                <div className="text-xs text-muted-foreground self-center px-1">
-                  Trail: <span className="text-foreground font-medium">{locations.find((l) => l.id === activeLocationId)?.name || 'Pick active location'}</span> (auto-assigned)
-                </div>
-
-                <p className="sm:col-span-2 text-[11px] text-muted-foreground self-center">
-                  Creates a real sign-in account for this guide at the currently active location. Share the temp password with them.
-                </p>
-                <Button onClick={handleAddGuide} disabled={addGuideSaving}>
-                  {addGuideSaving ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : null}
-                  Add Guide
-                </Button>
-              </CardContent>
-            </Card>
-
-            {/* Guide search */}
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
-              <Input placeholder="Search guides by name or trail…" value={guideSearch} onChange={(e) => setGuideSearch(e.target.value)} className="pl-9" />
-            </div>
-
-            <div className="grid sm:grid-cols-2 gap-4">
-              {filteredGuides.map((guide) => (
-                <Card key={guide.id} className={`glass-card cursor-pointer transition-all ${selectedGuideId === guide.id ? 'border-primary/50 ring-1 ring-primary/30' : ''}`}>
-                  <CardContent className="p-5">
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="flex items-center gap-3">
-                        <div className="w-11 h-11 rounded-full bg-primary/20 flex items-center justify-center flex-shrink-0 text-primary font-bold text-lg">
-                          {guide.name.charAt(0)}
-                        </div>
-                        <div>
-                          <p className="font-semibold">{guide.name}</p>
-                          <p className="text-xs text-muted-foreground">{guide.phone}</p>
-                        </div>
-                      </div>
-                      <span className={`px-2.5 py-1 rounded-full text-xs font-medium ${GUIDE_STATUS_STYLES[guide.status]}`}>
-                        {guide.status}
-                      </span>
-                    </div>
-
-                    <div className="mt-4 grid grid-cols-2 gap-3 text-sm">
-                      <div className="rounded-lg bg-secondary/30 px-3 py-2">
-                        <p className="text-xs text-muted-foreground">Assigned Trail</p>
-                        <p className="font-medium truncate">{guide.trail}</p>
-                      </div>
-                      <div className="rounded-lg bg-secondary/30 px-3 py-2">
-                        <p className="text-xs text-muted-foreground">Total Hikes</p>
-                        <p className="font-medium">{guide.totalHikes}</p>
-                      </div>
-                    </div>
-
-                    <div className="mt-3 flex gap-2">
-                      <Button variant="outline" size="sm" className="flex-1 text-xs" onClick={() => cycleGuideStatus(guide.id)}>
-                        <UserCog className="h-3.5 w-3.5 mr-1.5" /> Change Status
-                      </Button>
-                      <Button variant="outline" size="sm" className="flex-1 text-xs" onClick={() => handleSelectGuide(guide)}>
-                        <FileText className="h-3.5 w-3.5 mr-1.5" />
-                        {selectedGuideId === guide.id ? 'Hide History' : 'View History'}
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="text-xs text-destructive border-destructive/30 hover:bg-destructive/10"
-                        onClick={() => setRemoveGuideId(guide.id)}
-                      >
-                        Remove
-                      </Button>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-
-            {/* Floating guide history panel */}
-            {selectedGuideId && (
-              <div className="fixed right-4 top-24 z-40 w-[360px] max-w-[90vw]">
-                <Card className="glass-card border-primary/20 shadow-xl">
-                  <CardHeader>
-                    <CardTitle className="text-base flex items-center gap-2">
-                      <FileText className="h-4 w-4 text-primary" />
-                      {guides.find((g) => g.id === selectedGuideId)?.name} — Hike History
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                  {guideHistoryLoading ? (
-                    <div className="flex items-center justify-center py-10">
-                      <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-                    </div>
-                  ) : guideHistoryBookings.length === 0 ? (
-                    <div className="text-center py-10">
-                      <Mountain className="h-10 w-10 text-muted-foreground/20 mx-auto mb-2" />
-                      <p className="text-sm text-muted-foreground">No bookings found for this guide yet.</p>
-                    </div>
-                  ) : (
-                    <div className="space-y-3 max-h-[65vh] overflow-y-auto pr-1">
-                      {guideHistoryBookings.map((b) => {
-                        const meta = parseMeta(b.notes);
-                        return (
-                          <div key={b.id} className="rounded-xl border border-border/20 bg-secondary/10 p-4 space-y-2">
-                            <div className="flex items-center justify-between flex-wrap gap-2">
-                              <div>
-                                <p className="font-semibold text-sm">{meta.fullName || b.emergency_contact_name || '—'}</p>
-                                <p className="text-xs text-muted-foreground">{b.booking_date} • {b.group_size} pax • {meta.hikeType === 'night' ? '🌙 Night' : '☀️ Day'} Hike</p>
-                              </div>
-                              <span className={`px-2 py-0.5 rounded-full text-xs font-bold ${BOOKING_STATUS_STYLE[b.status] || ''}`}>
-                                {b.status}
-                              </span>
-                            </div>
-                            {meta.userNotes && (
-                              <div className="text-xs bg-secondary/30 rounded-lg p-2.5">
-                                <p className="text-muted-foreground font-semibold mb-0.5 uppercase tracking-wide text-[10px]">Hiker Notes / Feedback</p>
-                                <p>{meta.userNotes}</p>
-                              </div>
-                            )}
-                            {meta.medicalNotes && (
-                              <div className="text-xs bg-destructive/5 border border-destructive/15 rounded-lg p-2.5 text-destructive">
-                                <p className="font-semibold mb-0.5 uppercase tracking-wide text-[10px]">Medical Notes</p>
-                                <p>{meta.medicalNotes}</p>
-                              </div>
-                            )}
-                            {meta.onsiteStartConfirmed && (
-                              <div className="text-xs text-emerald-600 dark:text-emerald-400 flex items-center gap-1.5">
-                                <CheckCircle2 className="h-3 w-3" />
-                                Hike started {meta.onsiteStartTime ? format(new Date(meta.onsiteStartTime), 'MMM d, yyyy h:mm a') : '—'}
-                              </div>
-                            )}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-                  </CardContent>
-                </Card>
-              </div>
-            )}
-
-            {/* Guide summary */}
-            <Card className="glass-card">
-              <CardHeader><CardTitle className="text-base">Guide Summary</CardTitle></CardHeader>
-              <CardContent>
-                <div className="grid grid-cols-3 gap-4 text-center text-sm">
-                  {[
-                    { label: 'Available', count: guides.filter((g) => g.status === 'available').length, color: 'text-primary' },
-                    { label: 'On Duty', count: guides.filter((g) => g.status === 'on-duty').length, color: 'text-sky-500' },
-                    { label: 'Off Duty', count: guides.filter((g) => g.status === 'off-duty').length, color: 'text-muted-foreground' },
-                  ].map((s) => (
-                    <div key={s.label} className="rounded-xl bg-secondary/30 border border-border/20 py-4">
-                      <p className={`text-3xl font-bold ${s.color}`}>{s.count}</p>
-                      <p className="text-xs text-muted-foreground mt-1">{s.label}</p>
-                    </div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
-
-            <AdminOffDutyApprovals />
-          </TabsContent>
-
-          {/* ─────────────────────────────── DAILY CAPACITY TAB ── */}
-          <TabsContent value="capacity" className="space-y-6">
-            <div>
-              <h2 className="text-lg font-semibold">Daily Hiker Capacity</h2>
-              <p className="text-sm text-muted-foreground">Set the maximum number of hikers allowed per day. Default is 100 if not set.</p>
-            </div>
-
-            <div className="grid lg:grid-cols-2 gap-6">
-              <Card className="glass-card">
-                <CardHeader><CardTitle className="text-lg flex items-center gap-2"><SlidersHorizontal className="h-5 w-5 text-primary" /> Set Limit for a Date</CardTitle></CardHeader>
-                <CardContent className="space-y-4">
-                  <p className="text-sm text-muted-foreground">Choose a future date and set how many total hiker slots are available. This updates the booking calendar in real-time.</p>
-                  <div className="space-y-2">
-                    <Label htmlFor="capDate">Date</Label>
-                    <Input id="capDate" type="date" value={capDate} onChange={(e) => setCapDate(e.target.value)} min={format(new Date(), 'yyyy-MM-dd')} />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="capMax">Max Hikers Per Day</Label>
-                    <Input id="capMax" type="number" min={1} max={500} value={capMax} onChange={(e) => setCapMax(Math.max(1, parseInt(e.target.value) || 1))} placeholder="100" className="font-bold text-lg h-12" />
-                    <p className="text-xs text-muted-foreground">Setting a lower number restricts new bookings once the count is reached.</p>
-                  </div>
-                  <Button className="w-full gap-2" onClick={saveCapacity} disabled={capSaving || !capDate}>
-                    {capSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <CalendarCheck className="h-4 w-4" />}
-                    Save Capacity Limit
-                  </Button>
-                  <div className="h-px bg-border/30 my-2" />
-                  <p className="text-sm font-semibold">Bulk date-range update</p>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <div className="space-y-2">
-                      <Label htmlFor="capRangeStart">Start Date</Label>
-                      <Input id="capRangeStart" type="date" value={capRangeStart} onChange={(e) => setCapRangeStart(e.target.value)} min={format(new Date(), 'yyyy-MM-dd')} />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="capRangeEnd">End Date</Label>
-                      <Input id="capRangeEnd" type="date" value={capRangeEnd} onChange={(e) => setCapRangeEnd(e.target.value)} min={capRangeStart || format(new Date(), 'yyyy-MM-dd')} />
-                    </div>
-                  </div>
-                  <Button variant="secondary" className="w-full gap-2" onClick={saveCapacityRange} disabled={capSaving || !capRangeStart || !capRangeEnd}>
-                    {capSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <CalendarCheck className="h-4 w-4" />}
-                    Apply to Date Range
-                  </Button>
-                </CardContent>
-              </Card>
-
-              <Card className="glass-card">
-                <CardHeader><CardTitle className="text-lg flex items-center gap-2"><CalendarCheck className="h-5 w-5 text-primary" /> Upcoming Limits</CardTitle></CardHeader>
-                <CardContent>
-                  {upcomingCapacities.length === 0 ? (
-                    <div className="text-center py-12">
-                      <SlidersHorizontal className="h-10 w-10 text-muted-foreground/30 mx-auto mb-3" />
-                      <p className="text-muted-foreground text-sm">No custom limits set. All dates use the default of 100 hikers/day.</p>
-                    </div>
-                  ) : (
-                    <div className="space-y-2 max-h-[380px] overflow-y-auto pr-1">
-                      {upcomingCapacities.map((cap) => {
-                        const available = Math.max(0, cap.max_capacity - cap.current_count);
-                        const ratio = cap.max_capacity > 0 ? available / cap.max_capacity : 0;
-                        const statusColor = available === 0
-                          ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'
-                          : ratio <= 0.3 ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400'
-                          : 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400';
-                        return (
-                          <div key={cap.id} className="flex items-center justify-between p-3 rounded-xl border border-border/20 bg-secondary/20">
-                            <div className="space-y-0.5">
-                              <p className="text-sm font-semibold">{cap.date}</p>
-                              <div className="flex items-center gap-2">
-                                <span className="text-xs text-muted-foreground">Booked: <strong>{cap.current_count}</strong> / {cap.max_capacity}</span>
-                                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${statusColor}`}>{available === 0 ? 'Full' : `${available} left`}</span>
-                              </div>
-                            </div>
-                            <div className="flex items-center gap-2">
-                              <div className="w-16 h-1.5 rounded-full bg-border/30 overflow-hidden">
-                                <div className={`h-full rounded-full transition-all ${ratio <= 0.3 ? 'bg-amber-500' : ratio === 0 ? 'bg-red-500' : 'bg-emerald-500'}`} style={{ width: `${(cap.current_count / cap.max_capacity) * 100}%` }} />
-                              </div>
-                              <button onClick={() => deleteCapacityLimit(cap.id)} className="text-muted-foreground hover:text-destructive transition-colors" aria-label={`Remove limit for ${cap.date}`}>
-                                <Trash2 className="h-4 w-4" />
-                              </button>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-            </div>
-
-            <Card className="glass-card border-primary/20">
-              <CardContent className="p-4">
-                <div className="flex gap-3 items-start text-sm">
-                  <CheckCircle2 className="h-4 w-4 text-primary flex-shrink-0 mt-0.5" />
-                  <p className="text-muted-foreground leading-relaxed">
-                    <strong className="text-foreground">How it works:</strong>{' '}
-                    When a booking is confirmed, slots are automatically deducted. When cancelled, they are restored. Hikers see live availability on the booking calendar.
-                  </p>
-                </div>
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          {/* ─────────────────────────────── QR CHECK-IN TAB ── */}
-          <TabsContent value="scan" className="space-y-6">
+              <TabsContent value="scan" className="space-y-6 mt-0">
             <div>
               <h2 className="text-lg font-semibold">Onsite QR Check-in</h2>
               <p className="text-sm text-muted-foreground">
@@ -2373,45 +1798,391 @@ export default function AdminDashboard() {
               </CardContent>
             </Card>
           </TabsContent>
+              <TabsContent value="live-map" className="mt-0 h-[calc(100vh-180px)] min-h-[600px] border border-border/30 rounded-lg overflow-hidden relative">
+            <RealtimeMonitorMap locationId={null} canAddCheckpoints={false} />
+          </TabsContent>
+            </Tabs>
+          </TabsContent>
 
-          {removeGuideId && (
-            <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4">
-              <Card className="glass-card w-full max-w-md border-destructive/30">
-                <CardHeader>
-                  <CardTitle>Remove Guide</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                  <p className="text-sm text-muted-foreground">
-                    Enter admin password to remove <strong>{guides.find((g) => g.id === removeGuideId)?.name}</strong>.
-                  </p>
-                  <Input
-                    type="password"
-                    placeholder="Admin password"
-                    value={removeGuidePassword}
-                    onChange={(e) => setRemoveGuidePassword(e.target.value)}
-                  />
-                  <div className="flex gap-2">
-                    <Button variant="outline" className="flex-1" onClick={() => { setRemoveGuideId(null); setRemoveGuidePassword(''); }}>
-                      Cancel
-                    </Button>
-                    <Button className="flex-1 bg-destructive hover:bg-destructive/90 text-destructive-foreground" onClick={handleRemoveGuide}>
-                      Confirm Remove
-                    </Button>
+          <TabsContent value="management" className="mt-0">
+            <Tabs defaultValue="guides" className="space-y-4">
+              <div className="mb-4 overflow-x-auto pb-2">
+                <TabsList className="glass-card">
+                  <TabsTrigger value="guides">Guide Roster</TabsTrigger>
+                  <TabsTrigger value="announcements">Announcements</TabsTrigger>
+                  <TabsTrigger value="capacity">Daily Capacity</TabsTrigger>
+                </TabsList>
+              </div>
+              <TabsContent value="guides" className="space-y-6 mt-0">
+            <div className="flex flex-wrap items-center justify-between gap-3 mb-2">
+              <div>
+                <h2 className="text-lg font-semibold">Local Guide Roster</h2>
+                <p className="text-sm text-muted-foreground">Manage guide availability and view their hike history.</p>
+              </div>
+              <Badge variant="outline" className="text-primary border-primary/30">
+                {guides.filter((g) => g.status === 'available').length} available
+              </Badge>
+            </div>
+
+            <Card className="glass-card">
+              <CardHeader>
+                <CardTitle className="text-base flex items-center gap-2">
+                  <UserPlus className="h-4 w-4 text-primary" /> Add Guide
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="grid sm:grid-cols-3 gap-2">
+                <Input placeholder="Full name *" value={newGuideName} onChange={(e) => setNewGuideName(e.target.value)} />
+                <Input placeholder="Login email *" type="email" value={newGuideEmail} onChange={(e) => setNewGuideEmail(e.target.value)} />
+                <Input placeholder="Temp password (min 8) *" type="text" value={newGuidePassword} onChange={(e) => setNewGuidePassword(e.target.value)} />
+                <Input placeholder="Phone" value={newGuidePhone} onChange={(e) => setNewGuidePhone(e.target.value)} />
+                <Input placeholder="Per-trip fee (PHP)" type="number" value={newGuideFee} onChange={(e) => setNewGuideFee(e.target.value)} />
+                <div className="text-xs text-muted-foreground self-center px-1">
+                  Trail: <span className="text-foreground font-medium">{locations.find((l) => l.id === activeLocationId)?.name || 'Pick active location'}</span> (auto-assigned)
+                </div>
+
+                <p className="sm:col-span-2 text-[11px] text-muted-foreground self-center">
+                  Creates a real sign-in account for this guide at the currently active location. Share the temp password with them.
+                </p>
+                <Button onClick={handleAddGuide} disabled={addGuideSaving}>
+                  {addGuideSaving ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : null}
+                  Add Guide
+                </Button>
+              </CardContent>
+            </Card>
+
+            {/* Guide search */}
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+              <Input placeholder="Search guides by name or trail…" value={guideSearch} onChange={(e) => setGuideSearch(e.target.value)} className="pl-9" />
+            </div>
+
+            <div className="grid sm:grid-cols-2 gap-4">
+              {filteredGuides.map((guide) => (
+                <Card key={guide.id} className={`glass-card cursor-pointer transition-all ${selectedGuideId === guide.id ? 'border-primary/50 ring-1 ring-primary/30' : ''}`}>
+                  <CardContent className="p-5">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex items-center gap-3">
+                        <div className="w-11 h-11 rounded-full bg-primary/20 flex items-center justify-center flex-shrink-0 text-primary font-bold text-lg">
+                          {guide.name.charAt(0)}
+                        </div>
+                        <div>
+                          <p className="font-semibold">{guide.name}</p>
+                          <p className="text-xs text-muted-foreground">{guide.phone}</p>
+                        </div>
+                      </div>
+                      <span className={`px-2.5 py-1 rounded-full text-xs font-medium ${GUIDE_STATUS_STYLES[guide.status]}`}>
+                        {guide.status}
+                      </span>
+                    </div>
+
+                    <div className="mt-4 grid grid-cols-2 gap-3 text-sm">
+                      <div className="rounded-lg bg-secondary/30 px-3 py-2">
+                        <p className="text-xs text-muted-foreground">Assigned Trail</p>
+                        <p className="font-medium truncate">{guide.trail}</p>
+                      </div>
+                      <div className="rounded-lg bg-secondary/30 px-3 py-2">
+                        <p className="text-xs text-muted-foreground">Total Hikes</p>
+                        <p className="font-medium">{guide.totalHikes}</p>
+                      </div>
+                    </div>
+
+                    <div className="mt-3 flex gap-2">
+                      <Button variant="outline" size="sm" className="flex-1 text-xs" onClick={() => cycleGuideStatus(guide.id)}>
+                        <UserCog className="h-3.5 w-3.5 mr-1.5" /> Change Status
+                      </Button>
+                      <Button variant="outline" size="sm" className="flex-1 text-xs" onClick={() => handleSelectGuide(guide)}>
+                        <FileText className="h-3.5 w-3.5 mr-1.5" />
+                        {selectedGuideId === guide.id ? 'Hide History' : 'View History'}
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="text-xs text-destructive border-destructive/30 hover:bg-destructive/10"
+                        onClick={() => setRemoveGuideId(guide.id)}
+                      >
+                        Remove
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+
+            {/* Floating guide history panel */}
+            {selectedGuideId && (
+              <div className="fixed right-4 top-24 z-40 w-[360px] max-w-[90vw]">
+                <Card className="glass-card border-primary/20 shadow-xl">
+                  <CardHeader>
+                    <CardTitle className="text-base flex items-center gap-2">
+                      <FileText className="h-4 w-4 text-primary" />
+                      {guides.find((g) => g.id === selectedGuideId)?.name} — Hike History
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                  {guideHistoryLoading ? (
+                    <div className="flex items-center justify-center py-10">
+                      <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                    </div>
+                  ) : guideHistoryBookings.length === 0 ? (
+                    <div className="text-center py-10">
+                      <Mountain className="h-10 w-10 text-muted-foreground/20 mx-auto mb-2" />
+                      <p className="text-sm text-muted-foreground">No bookings found for this guide yet.</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-3 max-h-[65vh] overflow-y-auto pr-1">
+                      {guideHistoryBookings.map((b) => {
+                        const meta = parseMeta(b.notes);
+                        return (
+                          <div key={b.id} className="rounded-xl border border-border/20 bg-secondary/10 p-4 space-y-2">
+                            <div className="flex items-center justify-between flex-wrap gap-2">
+                              <div>
+                                <p className="font-semibold text-sm">{meta.fullName || b.emergency_contact_name || '—'}</p>
+                                <p className="text-xs text-muted-foreground">{b.booking_date} • {b.group_size} pax • {meta.hikeType === 'night' ? '🌙 Night' : '☀️ Day'} Hike</p>
+                              </div>
+                              <span className={`px-2 py-0.5 rounded-full text-xs font-bold ${BOOKING_STATUS_STYLE[b.status] || ''}`}>
+                                {b.status}
+                              </span>
+                            </div>
+                            {meta.userNotes && (
+                              <div className="text-xs bg-secondary/30 rounded-lg p-2.5">
+                                <p className="text-muted-foreground font-semibold mb-0.5 uppercase tracking-wide text-[10px]">Hiker Notes / Feedback</p>
+                                <p>{meta.userNotes}</p>
+                              </div>
+                            )}
+                            {meta.medicalNotes && (
+                              <div className="text-xs bg-destructive/5 border border-destructive/15 rounded-lg p-2.5 text-destructive">
+                                <p className="font-semibold mb-0.5 uppercase tracking-wide text-[10px]">Medical Notes</p>
+                                <p>{meta.medicalNotes}</p>
+                              </div>
+                            )}
+                            {meta.onsiteStartConfirmed && (
+                              <div className="text-xs text-emerald-600 dark:text-emerald-400 flex items-center gap-1.5">
+                                <CheckCircle2 className="h-3 w-3" />
+                                Hike started {meta.onsiteStartTime ? format(new Date(meta.onsiteStartTime), 'MMM d, yyyy h:mm a') : '—'}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                  </CardContent>
+                </Card>
+              </div>
+            )}
+
+            {/* Guide summary */}
+            <Card className="glass-card">
+              <CardHeader><CardTitle className="text-base">Guide Summary</CardTitle></CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-3 gap-4 text-center text-sm">
+                  {[
+                    { label: 'Available', count: guides.filter((g) => g.status === 'available').length, color: 'text-primary' },
+                    { label: 'On Duty', count: guides.filter((g) => g.status === 'on-duty').length, color: 'text-sky-500' },
+                    { label: 'Off Duty', count: guides.filter((g) => g.status === 'off-duty').length, color: 'text-muted-foreground' },
+                  ].map((s) => (
+                    <div key={s.label} className="rounded-xl bg-secondary/30 border border-border/20 py-4">
+                      <p className={`text-3xl font-bold ${s.color}`}>{s.count}</p>
+                      <p className="text-xs text-muted-foreground mt-1">{s.label}</p>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+
+            <AdminOffDutyApprovals />
+          </TabsContent>
+              <TabsContent value="announcements" className="space-y-6 mt-0">
+            <div className="grid lg:grid-cols-2 gap-6">
+              <Card className="glass-card">
+                <CardHeader><CardTitle className="text-lg flex items-center gap-2"><Megaphone className="h-5 w-5 text-primary" /> Post Announcement</CardTitle></CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="space-y-2">
+                    <Label>Type</Label>
+                    <Select value={annType} onValueChange={(v) => setAnnType(v as any)}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="info">ℹ️ Info / General</SelectItem>
+                        <SelectItem value="warning">⚠️ Weather Warning</SelectItem>
+                        <SelectItem value="closure">🚫 Trail Closure</SelectItem>
+                      </SelectContent>
+                    </Select>
                   </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="annTitle">Title</Label>
+                    <Input id="annTitle" value={annTitle} onChange={(e) => setAnnTitle(e.target.value)} placeholder="e.g. Trail Closure Notice" maxLength={100} />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="annBody">Message</Label>
+                    <Textarea id="annBody" value={annBody} onChange={(e) => setAnnBody(e.target.value)} placeholder="Describe the announcement in detail..." rows={4} maxLength={500} />
+                    <p className="text-xs text-muted-foreground">{annBody.length}/500</p>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div className="space-y-2">
+                      <Label htmlFor="annStartDate">Show From (optional)</Label>
+                      <Input id="annStartDate" type="date" value={annStartDate} onChange={(e) => setAnnStartDate(e.target.value)} />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="annEndDate">Expires On (optional)</Label>
+                      <Input id="annEndDate" type="date" value={annEndDate} onChange={(e) => setAnnEndDate(e.target.value)} min={annStartDate || undefined} />
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 rounded-lg border border-border/20 bg-secondary/20 p-3">
+                    <Checkbox id="annImportant" checked={annImportant} onCheckedChange={(v) => setAnnImportant(!!v)} />
+                    <Label htmlFor="annImportant" className="text-sm cursor-pointer">Mark as important (show on user dashboard)</Label>
+                  </div>
+                  <Button className="w-full gap-2" onClick={postAnnouncement} disabled={annSending}>
+                    {annSending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+                    Post Announcement
+                  </Button>
+                </CardContent>
+              </Card>
+
+              <Card className="glass-card">
+                <CardHeader><CardTitle className="text-lg flex items-center gap-2"><Clock className="h-5 w-5 text-primary" /> Recent Announcements</CardTitle></CardHeader>
+                <CardContent>
+                  {announcements.length === 0 ? (
+                    <div className="text-center py-12">
+                      <Megaphone className="h-10 w-10 text-muted-foreground/30 mx-auto mb-3" />
+                      <p className="text-muted-foreground text-sm">No announcements posted yet.</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      {announcements.map((a) => (
+                        <div key={a.id} className={`rounded-xl border p-4 relative ${ANNOUNCEMENT_TYPE_STYLES[a.type]}`}>
+                          <button onClick={() => deleteAnnouncement(a.id)} className="absolute top-3 right-3 text-muted-foreground hover:text-destructive transition-colors" aria-label="Delete announcement">
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                          <div className="flex items-center gap-2 mb-1">
+                            {a.type === 'warning' && <AlertTriangle className="h-3.5 w-3.5" />}
+                            {a.type === 'closure' && <AlertTriangle className="h-3.5 w-3.5" />}
+                            {a.type === 'info' && <CheckCircle2 className="h-3.5 w-3.5" />}
+                            <span className="font-semibold text-sm">{a.title}</span>
+                            {a.isImportant && <Badge className="text-[10px] bg-destructive/15 text-destructive border-destructive/30">Important</Badge>}
+                          </div>
+                          <p className="text-sm leading-relaxed opacity-90">{a.body}</p>
+                          <p className="text-xs opacity-60 mt-2">{format(new Date(a.created_at), 'MMM d, yyyy • h:mm a')}</p>
+                          {(a.starts_at || a.expires_at) && (
+                            <p className="text-xs opacity-70 mt-1">
+                              Visible: {a.starts_at ? format(new Date(a.starts_at), 'MMM d, yyyy') : 'Now'} - {a.expires_at ? format(new Date(a.expires_at), 'MMM d, yyyy') : 'No expiry'}
+                            </p>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </CardContent>
               </Card>
             </div>
-          )}
+          </TabsContent>
+              <TabsContent value="capacity" className="space-y-6 mt-0">
+            <div>
+              <h2 className="text-lg font-semibold">Daily Hiker Capacity</h2>
+              <p className="text-sm text-muted-foreground">Set the maximum number of hikers allowed per day. Default is 100 if not set.</p>
+            </div>
 
-          {/* ─────────────────────────────── FINANCE TAB ── */}
-          <TabsContent value="payment-summary">
+            <div className="grid lg:grid-cols-2 gap-6">
+              <Card className="glass-card">
+                <CardHeader><CardTitle className="text-lg flex items-center gap-2"><SlidersHorizontal className="h-5 w-5 text-primary" /> Set Limit for a Date</CardTitle></CardHeader>
+                <CardContent className="space-y-4">
+                  <p className="text-sm text-muted-foreground">Choose a future date and set how many total hiker slots are available. This updates the booking calendar in real-time.</p>
+                  <div className="space-y-2">
+                    <Label htmlFor="capDate">Date</Label>
+                    <Input id="capDate" type="date" value={capDate} onChange={(e) => setCapDate(e.target.value)} min={format(new Date(), 'yyyy-MM-dd')} />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="capMax">Max Hikers Per Day</Label>
+                    <Input id="capMax" type="number" min={1} max={500} value={capMax} onChange={(e) => setCapMax(Math.max(1, parseInt(e.target.value) || 1))} placeholder="100" className="font-bold text-lg h-12" />
+                    <p className="text-xs text-muted-foreground">Setting a lower number restricts new bookings once the count is reached.</p>
+                  </div>
+                  <Button className="w-full gap-2" onClick={saveCapacity} disabled={capSaving || !capDate}>
+                    {capSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <CalendarCheck className="h-4 w-4" />}
+                    Save Capacity Limit
+                  </Button>
+                  <div className="h-px bg-border/30 my-2" />
+                  <p className="text-sm font-semibold">Bulk date-range update</p>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div className="space-y-2">
+                      <Label htmlFor="capRangeStart">Start Date</Label>
+                      <Input id="capRangeStart" type="date" value={capRangeStart} onChange={(e) => setCapRangeStart(e.target.value)} min={format(new Date(), 'yyyy-MM-dd')} />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="capRangeEnd">End Date</Label>
+                      <Input id="capRangeEnd" type="date" value={capRangeEnd} onChange={(e) => setCapRangeEnd(e.target.value)} min={capRangeStart || format(new Date(), 'yyyy-MM-dd')} />
+                    </div>
+                  </div>
+                  <Button variant="secondary" className="w-full gap-2" onClick={saveCapacityRange} disabled={capSaving || !capRangeStart || !capRangeEnd}>
+                    {capSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <CalendarCheck className="h-4 w-4" />}
+                    Apply to Date Range
+                  </Button>
+                </CardContent>
+              </Card>
+
+              <Card className="glass-card">
+                <CardHeader><CardTitle className="text-lg flex items-center gap-2"><CalendarCheck className="h-5 w-5 text-primary" /> Upcoming Limits</CardTitle></CardHeader>
+                <CardContent>
+                  {upcomingCapacities.length === 0 ? (
+                    <div className="text-center py-12">
+                      <SlidersHorizontal className="h-10 w-10 text-muted-foreground/30 mx-auto mb-3" />
+                      <p className="text-muted-foreground text-sm">No custom limits set. All dates use the default of 100 hikers/day.</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-2 max-h-[380px] overflow-y-auto pr-1">
+                      {upcomingCapacities.map((cap) => {
+                        const available = Math.max(0, cap.max_capacity - cap.current_count);
+                        const ratio = cap.max_capacity > 0 ? available / cap.max_capacity : 0;
+                        const statusColor = available === 0
+                          ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'
+                          : ratio <= 0.3 ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400'
+                          : 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400';
+                        return (
+                          <div key={cap.id} className="flex items-center justify-between p-3 rounded-xl border border-border/20 bg-secondary/20">
+                            <div className="space-y-0.5">
+                              <p className="text-sm font-semibold">{cap.date}</p>
+                              <div className="flex items-center gap-2">
+                                <span className="text-xs text-muted-foreground">Booked: <strong>{cap.current_count}</strong> / {cap.max_capacity}</span>
+                                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${statusColor}`}>{available === 0 ? 'Full' : `${available} left`}</span>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <div className="w-16 h-1.5 rounded-full bg-border/30 overflow-hidden">
+                                <div className={`h-full rounded-full transition-all ${ratio <= 0.3 ? 'bg-amber-500' : ratio === 0 ? 'bg-red-500' : 'bg-emerald-500'}`} style={{ width: `${(cap.current_count / cap.max_capacity) * 100}%` }} />
+                              </div>
+                              <button onClick={() => deleteCapacityLimit(cap.id)} className="text-muted-foreground hover:text-destructive transition-colors" aria-label={`Remove limit for ${cap.date}`}>
+                                <Trash2 className="h-4 w-4" />
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            </div>
+
+            <Card className="glass-card border-primary/20">
+              <CardContent className="p-4">
+                <div className="flex gap-3 items-start text-sm">
+                  <CheckCircle2 className="h-4 w-4 text-primary flex-shrink-0 mt-0.5" />
+                  <p className="text-muted-foreground leading-relaxed">
+                    <strong className="text-foreground">How it works:</strong>{' '}
+                    When a booking is confirmed, slots are automatically deducted. When cancelled, they are restored. Hikers see live availability on the booking calendar.
+                  </p>
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+            </Tabs>
+          </TabsContent>
+
+          <TabsContent value="finance" className="mt-0">
+            
             <PaymentSummaryTab />
+          
           </TabsContent>
 
-          {/* ─────────────────────────────── DEMOGRAPHICS TAB ── */}
-          <TabsContent value="demographics">
-            <DemographicsTab />
-          </TabsContent>
+          </div>
         </Tabs>
       </div>
 

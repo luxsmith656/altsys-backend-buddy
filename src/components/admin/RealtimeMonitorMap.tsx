@@ -92,7 +92,7 @@ export default function RealtimeMonitorMap({ locationId, canAddCheckpoints = fal
 
   const [sessions, setSessions] = useState<ActiveSession[]>([]);
   const [checkpoints, setCheckpoints] = useState<Checkpoint[]>([]);
-  const [trailZones, setTrailZones] = useState<TrailZoneRef[]>([]);
+  const [officialRoutes, setOfficialRoutes] = useState<TrailZoneRef[]>([]);
   const [progress, setProgress] = useState<Record<string, { checkpoint_id: string; created_at: string }[]>>({});
   const [loading, setLoading] = useState(true);
 
@@ -156,25 +156,15 @@ export default function RealtimeMonitorMap({ locationId, canAddCheckpoints = fal
     const { data: cpData } = await cpQuery;
     setCheckpoints(((cpData as unknown as Checkpoint[]) ?? []));
 
-    let officialRouteQuery = supabase
+    let routeQuery = supabase
       .from('trail_zones' as any)
       .select('id,location_id,name,coordinates_json,recording_metadata')
       .eq('status', 'active')
       .eq('is_official', true)
-      .order('official_at', { ascending: false });
-    if (locationId) officialRouteQuery = officialRouteQuery.eq('location_id', locationId);
-    const officialRouteResult = await officialRouteQuery;
-    let officialRoutes = (officialRouteResult.data as unknown as TrailZoneRef[] | null) ?? [];
-    if (officialRouteResult.error) {
-      let fallbackRouteQuery = supabase
-        .from('trail_zones' as any)
-        .select('id,location_id,name,coordinates_json')
-        .eq('status', 'active');
-      if (locationId) fallbackRouteQuery = fallbackRouteQuery.eq('location_id', locationId);
-      const fallbackRouteResult = await fallbackRouteQuery;
-      officialRoutes = (fallbackRouteResult.data as unknown as TrailZoneRef[] | null) ?? [];
-    }
-    setTrailZones(officialRoutes);
+      .order('created_at', { ascending: true });
+    if (locationId) routeQuery = routeQuery.eq('location_id', locationId);
+    const { data: routeData } = await routeQuery;
+    setOfficialRoutes(((routeData as unknown as TrailZoneRef[]) ?? []));
 
     const sessQuery = supabase
       .from('hiker_sessions' as any)
@@ -183,33 +173,20 @@ export default function RealtimeMonitorMap({ locationId, canAddCheckpoints = fal
     const { data: sessData } = await sessQuery;
     let sessList = ((sessData as any[]) ?? []) as ActiveSession[];
 
+    const trailZoneIds = Array.from(new Set(sessList.map((s) => s.trail_zone_id).filter(Boolean))) as string[];
     const trailZoneMap: Record<string, TrailZoneRef> = {};
-    officialRoutes.forEach((route) => { trailZoneMap[route.id] = route; });
-    const missingTrailZoneIds = Array.from(new Set(
-      sessList
-        .map((session) => session.trail_zone_id)
-        .filter((id): id is string => Boolean(id && !trailZoneMap[id])),
-    ));
-    if (missingTrailZoneIds.length > 0) {
-      const zoneResult = await supabase
+    if (trailZoneIds.length > 0) {
+      const { data: zoneData } = await supabase
         .from('trail_zones' as any)
-        .select('id,location_id,name,coordinates_json,recording_metadata')
-        .in('id', missingTrailZoneIds);
-      let zoneData = zoneResult.data;
-      if (zoneResult.error) {
-        const fallback = await supabase
-          .from('trail_zones' as any)
-          .select('id,location_id,name,coordinates_json')
-          .in('id', missingTrailZoneIds);
-        zoneData = fallback.data;
-      }
+        .select('id,location_id,name')
+        .in('id', trailZoneIds);
       ((zoneData as unknown as TrailZoneRef[] | null) ?? []).forEach((z) => { trailZoneMap[z.id] = z; });
+      sessList.forEach((s) => {
+        if (s.trail_zone_id && trailZoneMap[s.trail_zone_id]) {
+          (s as any).trail_zone_name = trailZoneMap[s.trail_zone_id].name;
+        }
+      });
     }
-    sessList.forEach((session) => {
-      if (session.trail_zone_id && trailZoneMap[session.trail_zone_id]) {
-        (session as any).trail_zone_name = trailZoneMap[session.trail_zone_id].name;
-      }
-    });
 
     const bookingIds = Array.from(new Set(sessList.map((s) => s.booking_id).filter(Boolean))) as string[];
     const bookingMap: Record<string, any> = {};
@@ -311,7 +288,24 @@ export default function RealtimeMonitorMap({ locationId, canAddCheckpoints = fal
       setProgress(map);
     }
 
-    setSessions(sessList);
+    // Group by booking_id
+    const groupedSessions: ActiveSession[] = [];
+    const bookingGroupMap = new Map<string, ActiveSession[]>();
+    sessList.forEach((s) => {
+      if (s.booking_id) {
+        if (!bookingGroupMap.has(s.booking_id)) bookingGroupMap.set(s.booking_id, []);
+        bookingGroupMap.get(s.booking_id)!.push(s);
+      } else {
+        groupedSessions.push(s);
+      }
+    });
+
+    bookingGroupMap.forEach((group) => {
+      const primary = group.find((s) => s.participant_role === 'guide') || group[0];
+      groupedSessions.push(primary);
+    });
+
+    setSessions(groupedSessions);
     setLoading(false);
   };
 
@@ -351,39 +345,44 @@ export default function RealtimeMonitorMap({ locationId, canAddCheckpoints = fal
     checkpointLayer.current.clearLayers();
     routeLayer.current.clearLayers();
 
-    trailZones.forEach((route, routeIndex) => {
+    officialRoutes.forEach((route, routeIndex) => {
       const path = Array.isArray(route.coordinates_json)
         ? route.coordinates_json
-          .map((point) => {
-            if (!point || typeof point !== 'object') return null;
-            const item = point as { lat?: unknown; lng?: unknown };
-            const lat = Number(item.lat);
-            const lng = Number(item.lng);
-            return Number.isFinite(lat) && Number.isFinite(lng) ? [lat, lng] as [number, number] : null;
-          })
-          .filter((point): point is [number, number] => point !== null)
+            .map((point: any) => [Number(point.lat), Number(point.lng)] as [number, number])
+            .filter(([lat, lng]) => Number.isFinite(lat) && Number.isFinite(lng))
         : [];
       if (path.length < 2) return;
-      const color = ['#16a34a', '#2563eb', '#dc2626'][routeIndex % 3];
-      L.polyline(path, { color, weight: 5, opacity: 0.8 }).bindPopup(`<strong>${esc(route.name)}</strong><br/><small>Official assigned route</small>`).addTo(routeLayer.current!);
+
+      const routeColor = ['#059669', '#2563eb', '#dc2626', '#9333ea'][routeIndex % 4];
+      L.polyline(path, {
+        color: routeColor,
+        weight: 5,
+        opacity: 0.9,
+      })
+        .bindPopup(`<strong>${esc(route.name)}</strong><br/><small>Official published route</small>`)
+        .addTo(routeLayer.current!);
+
       routeStationsFromMetadata(route.recording_metadata, path).forEach((station) => {
-        const isPeak = station.kind === 'peak';
-        const label = station.kind === 'jump_off' ? 'J' : isPeak ? 'P' : String(station.index - 1);
+        const label = station.kind === 'jump_off' ? 'J' : station.kind === 'peak' ? 'P' : `S${station.index - 1}`;
+        const color = station.kind === 'peak' ? '#dc2626' : station.kind === 'jump_off' ? '#059669' : '#2563eb';
         L.marker([station.lat, station.lng], {
           zIndexOffset: 100,
           icon: L.divIcon({
             className: '',
-            iconSize: [24, 24],
-            iconAnchor: [12, 12],
-            html: `<div style="width:24px;height:24px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:${isPeak ? '#dc2626' : color};color:white;border:2px solid white;box-shadow:0 2px 6px rgba(0,0,0,.35);font-size:10px;font-weight:800">${label}</div>`,
+            html: `<div style="background:${color};color:white;width:28px;height:28px;border-radius:50%;border:3px solid white;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;box-shadow:0 2px 7px rgba(0,0,0,.4)">${label}</div>`,
+            iconSize: [28, 28],
+            iconAnchor: [14, 14],
           }),
-        }).bindPopup(`<strong>${esc(station.name)}</strong><br/><small>${esc(station.description)}</small>`).addTo(routeLayer.current!);
+        })
+          .bindPopup(`<strong>${esc(station.name)}</strong><br/><small>${esc(station.description)}</small>`)
+          .addTo(routeLayer.current!);
       });
     });
 
     // checkpoints
     checkpoints.forEach((cp, idx) => {
       const marker = L.marker([cp.latitude, cp.longitude], {
+        zIndexOffset: 200,
         icon: L.divIcon({
           className: '',
           html: `<div style="background:hsl(var(--primary));color:white;width:26px;height:26px;border-radius:6px;border:2px solid white;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;box-shadow:0 2px 6px rgba(0,0,0,.4)">${idx + 1}</div>`,
@@ -411,6 +410,8 @@ export default function RealtimeMonitorMap({ locationId, canAddCheckpoints = fal
       const distanceKm = Number(s.total_distance_km ?? 0);
       const movingMin = Math.round(Number(s.moving_time_sec ?? 0) / 60);
       const pace = distanceKm > 0 && movingMin > 0 ? movingMin / distanceKm : null;
+      // Assume average 8km trail for ETA if specific zone length is not known
+      const etaMin = pace && distanceKm < 8 ? Math.round((8 - distanceKm) * pace) : null;
       if ((s.path?.length ?? 0) > 1) {
         L.polyline(s.path!, {
           color: markerColor,
@@ -439,6 +440,15 @@ export default function RealtimeMonitorMap({ locationId, canAddCheckpoints = fal
             <div><b>Distance:</b> ${distanceKm.toFixed(2)} km</div>
             <div><b>Moving:</b> ${movingMin} min</div>
             <div><b>Pace:</b> ${pace == null ? 'not enough data' : `${pace.toFixed(1)} min/km`}</div>
+            ${s.tracking_phase === 'peak' ? `
+              <div style="margin-top:4px;padding:4px;background:rgba(234,179,8,0.1);border-radius:4px">
+                <b style="color:#eab308">At Peak</b><br/>
+                <div>Reached: ${s.peak_reached_at ? new Date(s.peak_reached_at).toLocaleTimeString() : 'Unknown'}</div>
+                ${s.peak_reached_at ? `<div>Must descend by: ${new Date(new Date(s.peak_reached_at).getTime() + 2 * 60 * 60 * 1000).toLocaleTimeString()}</div>` : ''}
+              </div>
+            ` : `
+              <div><b>${s.tracking_phase === 'descent' ? 'ETA Basecamp' : 'ETA Peak'}:</b> ${etaMin == null ? 'calculating...' : `${Math.floor(etaMin / 60)}h ${etaMin % 60}m`}</div>
+            `}
             <div><b>Checkpoints:</b> ${reached}/${checkpoints.length}</div>
             <div><b>Trail points:</b> ${s.path?.length ?? 0}</div>
             ${s.hasMinors ? `<div style="color:#b45309"><b>Minors:</b> ${s.minorCount ?? 1}</div>` : ''}
@@ -458,7 +468,7 @@ export default function RealtimeMonitorMap({ locationId, canAddCheckpoints = fal
       }).bindPopup(popupHtml);
       hikerLayer.current!.addLayer(m);
     });
-  }, [sessions, checkpoints, progress, trailZones]);
+  }, [sessions, checkpoints, progress, officialRoutes]);
 
   /* ── Inactivity alert: warn admin when a hiker hasn't pinged in 20+ min ── */
   const alertedRef = useRef<Set<string>>(new Set());

@@ -438,3 +438,7 @@ html {
     hsl(var(--accent) / 0.8)
   );
 }
+-e 
+.custom-scrollbar::-webkit-scrollbar { display: none; }
+.custom-scrollbar { scrollbar-width: none; }
+

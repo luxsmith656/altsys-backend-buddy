@@ -136,7 +136,6 @@ function pointAtDistance(path: LatLngTuple[], targetMeters: number): LatLngTuple
     }
     coveredMeters += segmentMeters;
   }
-
   return path[path.length - 1];
 }
 
@@ -157,16 +156,18 @@ export function buildRouteStations(path: LatLngTuple[]): RouteStation[] {
     return hasFiveFullKilometers ? stationNumber * 1000 : totalMeters * (stationNumber / 6);
   });
 
-  const stations: RouteStation[] = [{
-    id: 'jump-off',
-    index: 1,
-    kind: 'jump_off',
-    name: 'Jump-off: Start of Trail (0 km)',
-    description: 'Official route start, registration, and safety briefing point.',
-    lat: validPath[0][0],
-    lng: validPath[0][1],
-    distanceKm: 0,
-  }];
+  const stations: RouteStation[] = [
+    {
+      id: 'jump-off',
+      index: 1,
+      kind: 'jump_off',
+      name: 'Jump-off: Start of Trail (0 km)',
+      description: 'Official route start, registration, and safety briefing point.',
+      lat: validPath[0][0],
+      lng: validPath[0][1],
+      distanceKm: 0,
+    },
+  ];
 
   stationTargets.forEach((targetMeters, index) => {
     const position = pointAtDistance(validPath, targetMeters);
@@ -202,7 +203,6 @@ export function routeStationsFromMetadata(metadata: unknown, path: LatLngTuple[]
   const stored = metadata && typeof metadata === 'object'
     ? (metadata as { stations?: unknown }).stations
     : null;
-
   if (Array.isArray(stored)) {
     const parsed = stored
       .map((station, index) => {
@@ -225,7 +225,6 @@ export function routeStationsFromMetadata(metadata: unknown, path: LatLngTuple[]
       .filter((station): station is RouteStation => station !== null);
     if (parsed.length >= 2) return parsed;
   }
-
   return buildRouteStations(path);
 }
 

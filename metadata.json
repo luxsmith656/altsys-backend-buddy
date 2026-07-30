@@ -1,0 +1,6 @@
+{
+  "name": "AltSys Backend Buddy",
+  "description": "Admin dashboard for Altsys, migrated from GitHub and refactored for a cleaner sidebar layout.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

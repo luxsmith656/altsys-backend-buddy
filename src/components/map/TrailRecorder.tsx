@@ -1,13 +1,30 @@
 import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
-import { MapContainer, TileLayer, Polyline, useMapEvents, Marker, useMap } from 'react-leaflet';
+import { Polyline, useMapEvents, Marker, useMap } from 'react-leaflet';
 import L from 'leaflet';
+import { createPortal } from 'react-dom';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { supabase } from '@/integrations/supabase/client';
-import { Activity, AlertTriangle, CheckCircle2, GitCompare, Locate, Play, Square, MousePointer, Navigation, Trash2, Save, Undo2 } from 'lucide-react';
+import { 
+  Activity, 
+  AlertTriangle, 
+  CheckCircle2, 
+  GitCompare, 
+  Eye,
+  Locate, 
+  Pencil,
+  Play, 
+  RefreshCw,
+  Square, 
+  MousePointer, 
+  Navigation, 
+  Trash2, 
+  Save, 
+  Undo2,
+  X
+} from 'lucide-react';
 import { toast } from 'sonner';
 import { buildRouteStations, MT_KALISUNGAN_CENTER, DEFAULT_ZOOM } from '@/lib/map-data';
 import {
@@ -30,10 +47,24 @@ import { useAuth } from '@/hooks/useAuth';
 import type { LatLngTuple } from 'leaflet';
 
 const pointIcon = new L.DivIcon({
-  html: `<div style="width:10px;height:10px;background:#f59e0b;border:2px solid #fff;border-radius:50%;"></div>`,
+  html: `<div style="width:14px;height:14px;background:#f59e0b;border:3px solid #fff;border-radius:50%;box-shadow:0 1px 5px rgba(15,23,42,.45);cursor:grab"></div>`,
   className: '',
-  iconSize: [10, 10],
-  iconAnchor: [5, 5],
+  iconSize: [14, 14],
+  iconAnchor: [7, 7],
+});
+
+const routeStartIcon = new L.DivIcon({
+  html: `<div style="width:26px;height:26px;display:grid;place-items:center;background:#059669;color:#fff;border:3px solid #fff;border-radius:50%;box-shadow:0 2px 8px rgba(15,23,42,.35);font:700 11px system-ui">S</div>`,
+  className: '',
+  iconSize: [26, 26],
+  iconAnchor: [13, 13],
+});
+
+const routeEndIcon = new L.DivIcon({
+  html: `<div style="width:26px;height:26px;display:grid;place-items:center;background:#2563eb;color:#fff;border:3px solid #fff;border-radius:50%;box-shadow:0 2px 8px rgba(15,23,42,.35);font:700 11px system-ui">E</div>`,
+  className: '',
+  iconSize: [26, 26],
+  iconAnchor: [13, 13],
 });
 
 // Component for click-to-draw on map
@@ -122,60 +153,14 @@ function formatMeters(value: number | null | undefined) {
   return value < 1000 ? `${Math.round(value)} m` : `${(value / 1000).toFixed(2)} km`;
 }
 
-function formatPercent(value: number | null | undefined) {
-  if (value == null || !Number.isFinite(value)) return '--';
-  return `${Math.round(value * 100)}%`;
-}
-
-function RecordingMapFollower({
-  path,
-  active,
-  following,
-  onManualMove,
-}: {
-  path: LatLngTuple[];
-  active: boolean;
-  following: boolean;
-  onManualMove: () => void;
-}) {
-  const map = useMap();
-  useEffect(() => {
-    if (path.length === 0) return;
-    const last = path[path.length - 1];
-    if (active && following) {
-      map.setView(last, Math.max(map.getZoom(), 17));
-    } else if (!active && path.length > 1) {
-      map.fitBounds(L.latLngBounds(path), { padding: [24, 24] });
-    }
-  }, [active, following, map, path]);
-  useEffect(() => {
-    if (!active || !following) return;
-    map.on('dragstart', onManualMove);
-    map.on('zoomstart', onManualMove);
-    return () => {
-      map.off('dragstart', onManualMove);
-      map.off('zoomstart', onManualMove);
-    };
-  }, [active, following, map, onManualMove]);
-  return null;
-}
-
-function RecorderMapBridge({ onReady }: { onReady: (map: L.Map) => void }) {
-  const map = useMap();
-  useEffect(() => {
-    onReady(map);
-  }, [map, onReady]);
-  return null;
-}
-
 interface TrailRecorderProps {
-  locationId?: string | null;
   existingTrails?: {
     id: string;
     location_id?: string | null;
     name: string;
     coordinates_json: any;
     status?: string;
+    is_official?: boolean;
     difficulty?: string;
     elevation_meters?: number;
     review_status?: string;
@@ -185,15 +170,19 @@ interface TrailRecorderProps {
     recording_metadata?: any;
     recording_count?: number;
   }[];
+  locationId?: string | null;
   onSaved?: () => void;
 }
 
 type TrailRecordingRow = {
   id: string;
   trail_zone_id?: string | null;
+  location_id?: string | null;
+  recorded_by?: string | null;
   created_at: string;
   status?: string | null;
   source?: string | null;
+  notes?: string | null;
   quality_summary?: any;
   raw_points_json?: any;
   cleaned_points_json?: any;
@@ -201,8 +190,10 @@ type TrailRecordingRow = {
   comparison_summary?: any;
 };
 
-export default function TrailRecorder({ locationId, existingTrails, onSaved }: TrailRecorderProps) {
+export default function TrailRecorder({ existingTrails, locationId, onSaved }: TrailRecorderProps) {
   const { user } = useAuth();
+  const map = useMap(); // Consume the parent leaflet map context directly!
+
   const visibleExistingTrails = existingTrails?.filter((trail) => trail.status !== 'deleted' && trail.review_status !== 'deleted') ?? [];
   const [mode, setMode] = useState<'idle' | 'drawing' | 'recording'>('idle');
   const [path, setPath] = useState<LatLngTuple[]>([]);
@@ -222,27 +213,67 @@ export default function TrailRecorder({ locationId, existingTrails, onSaved }: T
   const [recordingStartedAt, setRecordingStartedAt] = useState<number | null>(null);
   const [recordingNow, setRecordingNow] = useState(Date.now());
   const pathRef = useRef<LatLngTuple[]>([]);
-  const [recorderMap, setRecorderMap] = useState<L.Map | null>(null);
   const [followRecordingMap, setFollowRecordingMap] = useState(false);
   const suppressRecorderUnlockRef = useRef(false);
   const offlineDraftKey = 'altsys-admin-trail-recorder-draft';
   const [trailRecordings, setTrailRecordings] = useState<TrailRecordingRow[]>([]);
   const [recordingsLoading, setRecordingsLoading] = useState(false);
-  const [selectedTrailLocationId, setSelectedTrailLocationId] = useState<string | null>(null);
+  const [selectedTrailLocationId, setSelectedTrailLocationId] = useState<string | null>(locationId ?? null);
   const [selectedTrailRecordingCount, setSelectedTrailRecordingCount] = useState(0);
   const [recordingsModalOpen, setRecordingsModalOpen] = useState(false);
   const [recordingSort, setRecordingSort] = useState<'newest' | 'quality' | 'distance'>('newest');
   const [recordingActionId, setRecordingActionId] = useState<string | null>(null);
+  const [availableRecordings, setAvailableRecordings] = useState<TrailRecordingRow[]>([]);
+  const [availableRecordingsLoading, setAvailableRecordingsLoading] = useState(false);
+  const [selectedRecordingId, setSelectedRecordingId] = useState<string | null>(null);
   const selectedTrailForDelete = visibleExistingTrails.find((trail) => trail.id === editingTrailId);
+  const selectedAvailableRecording = availableRecordings.find((recording) => recording.id === selectedRecordingId);
+  const [isEditingPoints, setIsEditingPoints] = useState(false);
+  const [originalPath, setOriginalPath] = useState<LatLngTuple[]>([]);
+
+  // Floating panel collapse state
+  const [isConsoleCollapsed, setIsConsoleCollapsed] = useState(false);
 
   useEffect(() => {
     pathRef.current = path;
   }, [path]);
 
+  useEffect(() => {
+    if (!editingTrailId) {
+      setSelectedTrailLocationId(locationId ?? null);
+    }
+  }, [editingTrailId, locationId]);
+
+  // Handle map center view updates
+  useEffect(() => {
+    if (path.length === 0) return;
+    const last = path[path.length - 1];
+    if (mode === 'recording' && followRecordingMap) {
+      map.setView(last, Math.max(map.getZoom(), 17));
+    }
+  }, [mode, followRecordingMap, map, path]);
+
+  // Bind drag events to unlock camera following during recording
+  useEffect(() => {
+    if (mode !== 'recording' || !followRecordingMap) return;
+    const onManualMove = () => {
+      if (!suppressRecorderUnlockRef.current) {
+        setFollowRecordingMap(false);
+      }
+    };
+    map.on('dragstart', onManualMove);
+    map.on('zoomstart', onManualMove);
+    return () => {
+      map.off('dragstart', onManualMove);
+      map.off('zoomstart', onManualMove);
+    };
+  }, [mode, followRecordingMap, map]);
+
   const currentCleanTrack = cleanedGpsPointsRef.current.length > 0 ? cleanedGpsPointsRef.current : pathToTrack(path);
   const currentRawTrack = rawGpsPointsRef.current.length > 0 ? rawGpsPointsRef.current : currentCleanTrack;
   const currentQuality = path.length > 1 ? buildRecordingQuality(currentRawTrack, currentCleanTrack) : null;
   const currentReview = currentQuality ? reviewRecordingQuality(currentQuality) : null;
+  
   const currentComparisons = currentCleanTrack.length > 1
     ? trailRecordings
         .map((recording) => ({
@@ -251,12 +282,14 @@ export default function TrailRecorder({ locationId, existingTrails, onSaved }: T
         }))
         .filter((item) => item.comparison.consistency !== 'unknown')
     : [];
+
   const bestComparison = currentComparisons.reduce<{ recording: TrailRecordingRow; comparison: TrackComparison } | null>((best, item) => {
     if (!best) return item;
     const bestAvg = best.comparison.averageDeviationM ?? Infinity;
     const itemAvg = item.comparison.averageDeviationM ?? Infinity;
     return itemAvg < bestAvg ? item : best;
   }, null);
+
   const sortedTrailRecordings = useMemo(() => {
     const rows = [...trailRecordings];
     if (recordingSort === 'quality') {
@@ -335,7 +368,7 @@ export default function TrailRecorder({ locationId, existingTrails, onSaved }: T
       }
       if (!filtered.appended || !filtered.point) {
         if (filtered.reason === 'weak') {
-          toast.warning(`Weak GPS ignored (${Math.round(accuracy)}m). Recording is still active offline.`, { id: 'trail-recorder-accuracy' });
+          toast.warning(`Weak GPS ignored (${Math.round(accuracy)}m). Recording is active offline.`, { id: 'trail-recorder-accuracy' });
         }
         return;
       }
@@ -442,13 +475,14 @@ export default function TrailRecorder({ locationId, existingTrails, onSaved }: T
     }
     setMode('idle');
     setRecordingStartedAt(null);
-    toast.success(`Recorded ${pathRef.current.length} points. Review the trail on the map before saving.`);
+    setName((current) => current.trim() || `Recorded Trail ${new Date().toLocaleString()}`);
+    toast.success(`Recorded ${pathRef.current.length} points. Review it, then tap Save Recording to add it to the list.`);
   }, [offlineDraftKey, path.length]);
 
   const startDrawing = () => {
     setMode('drawing');
     setPath([]);
-    toast.info('Click on the map to draw trail points');
+    toast.info('Click directly on the map page to draw trail points');
   };
 
   const stopDrawing = () => {
@@ -470,7 +504,10 @@ export default function TrailRecorder({ locationId, existingTrails, onSaved }: T
     setSelectedTrailLocationId(locationId ?? null);
     setSelectedTrailRecordingCount(0);
     setTrailRecordings([]);
+    setSelectedRecordingId(null);
     setFollowRecordingMap(false);
+    setIsEditingPoints(false);
+    setOriginalPath([]);
     gpsFilterRef.current?.reset();
     gpsFilterRef.current = null;
     predictedCountRef.current = 0;
@@ -480,14 +517,63 @@ export default function TrailRecorder({ locationId, existingTrails, onSaved }: T
     void clearNativeTrailPoints(offlineDraftKey).catch(() => {});
   };
 
-  const [originalPath, setOriginalPath] = useState<LatLngTuple[]>([]);
+  const loadAvailableRecordings = useCallback(async () => {
+    if (!user?.id) {
+      setAvailableRecordings([]);
+      return;
+    }
+
+    setAvailableRecordingsLoading(true);
+    const columns = 'id,trail_zone_id,location_id,recorded_by,created_at,status,source,notes,quality_summary,raw_points_json,cleaned_points_json,review_decision,comparison_summary';
+    try {
+      let primaryQuery = supabase
+        .from('trail_recordings' as any)
+        .select(columns)
+        .order('created_at', { ascending: false })
+        .limit(100);
+      if (locationId) {
+        primaryQuery = primaryQuery.eq('location_id', locationId) as typeof primaryQuery;
+      }
+
+      const primaryResult = await primaryQuery;
+      if (primaryResult.error) throw primaryResult.error;
+      const rows = ((primaryResult.data as unknown as TrailRecordingRow[] | null) ?? []);
+
+      if (locationId) {
+        const orphanResult = await supabase
+          .from('trail_recordings' as any)
+          .select(columns)
+          .is('location_id', null)
+          .eq('recorded_by', user.id)
+          .order('created_at', { ascending: false })
+          .limit(100);
+        if (!orphanResult.error) {
+          rows.push(...((orphanResult.data as unknown as TrailRecordingRow[] | null) ?? []));
+        }
+      }
+
+      const uniqueRows = Array.from(new Map(rows.map((recording) => [recording.id, recording])).values())
+        .filter((recording) => pointsFromJson(recording.cleaned_points_json).length >= 2)
+        .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+      setAvailableRecordings(uniqueRows);
+    } catch (err: any) {
+      setAvailableRecordings([]);
+      toast.error(`Could not load recorded GPS trails: ${err.message}`);
+    } finally {
+      setAvailableRecordingsLoading(false);
+    }
+  }, [locationId, user?.id]);
+
+  useEffect(() => {
+    void loadAvailableRecordings();
+  }, [loadAvailableRecordings]);
 
   const loadTrailRecordings = useCallback(async (trailId: string) => {
     setRecordingsLoading(true);
     try {
       const { data, error } = await supabase
         .from('trail_recordings' as any)
-        .select('id,trail_zone_id,created_at,status,source,quality_summary,raw_points_json,cleaned_points_json,review_decision,comparison_summary')
+        .select('id,trail_zone_id,location_id,recorded_by,created_at,status,source,notes,quality_summary,raw_points_json,cleaned_points_json,review_decision,comparison_summary')
         .eq('trail_zone_id', trailId)
         .order('created_at', { ascending: false })
         .limit(20);
@@ -516,17 +602,51 @@ export default function TrailRecorder({ locationId, existingTrails, onSaved }: T
       setPath(parsed);
       pathRef.current = parsed;
       cleanedGpsPointsRef.current = coords
-        .filter((c: any) => Number.isFinite(Number(c.lat)) && Number.isFinite(Number(c.lng)))
-        .map(trackPointFromJson);
+          .filter((c: any) => Number.isFinite(Number(c.lat)) && Number.isFinite(Number(c.lng)))
+          .map(trackPointFromJson);
       rawGpsPointsRef.current = Array.isArray(trail.raw_recording_json)
         ? pointsFromJson(trail.raw_recording_json)
         : [];
       setOriginalPath(parsed);
       setFollowRecordingMap(false);
+      setIsEditingPoints(false);
       void loadTrailRecordings(trailId);
+      
+      // Pan main map bounds to show entire selected trail
+      if (parsed.length > 1) {
+        map.fitBounds(L.latLngBounds(parsed), { padding: [40, 40] });
+      } else if (parsed.length === 1) {
+        map.setView(parsed[0], 17);
+      }
       toast.info(`Loaded trail "${trail.name}" for editing`);
     }
   };
+
+  const focusPathOnMap = useCallback(() => {
+    if (pathRef.current.length > 1) {
+      map.fitBounds(L.latLngBounds(pathRef.current), {
+        paddingTopLeft: [32, 96],
+        paddingBottomRight: [32, 32],
+        maxZoom: 18,
+      });
+      return;
+    }
+    if (pathRef.current.length === 1) {
+      map.setView(pathRef.current[0], 18);
+      return;
+    }
+    toast.info('Select or draw a route to preview it on the map.');
+  }, [map]);
+
+  const movePathPoint = useCallback((index: number, position: LatLngTuple) => {
+    setPath((current) => {
+      if (!current[index]) return current;
+      const next = current.map((point, pointIndex) => pointIndex === index ? position : point);
+      pathRef.current = next;
+      cleanedGpsPointsRef.current = pathToTrack(next);
+      return next;
+    });
+  }, []);
 
   const [deletingTrailId, setDeletingTrailId] = useState<string | null>(null);
   const deleteTrailPermanently = async (trailId: string, trailName: string) => {
@@ -578,6 +698,7 @@ export default function TrailRecorder({ locationId, existingTrails, onSaved }: T
       return;
     }
     const trail = visibleExistingTrails.find((t) => t.id === recording.trail_zone_id);
+    setSelectedRecordingId(recording.id);
     if (trail) {
       setEditingTrailId(trail.id);
       setSelectedTrailLocationId(trail.location_id ?? null);
@@ -585,6 +706,15 @@ export default function TrailRecorder({ locationId, existingTrails, onSaved }: T
       setName(trail.name);
       setDifficulty(trail.difficulty || 'moderate');
       setElevation(trail.elevation_meters ? String(trail.elevation_meters) : '');
+      void loadTrailRecordings(trail.id);
+    } else {
+      setEditingTrailId(recording.trail_zone_id ?? null);
+      setSelectedTrailLocationId(recording.location_id ?? locationId ?? null);
+      setSelectedTrailRecordingCount(1);
+      setName(recording.notes?.trim() || `Recorded Trail ${new Date(recording.created_at).toLocaleDateString()}`);
+      setDifficulty('moderate');
+      setElevation('');
+      if (recording.trail_zone_id) void loadTrailRecordings(recording.trail_zone_id);
     }
     cleanedGpsPointsRef.current = cleanTrack;
     rawGpsPointsRef.current = pointsFromJson(recording.raw_points_json);
@@ -593,15 +723,15 @@ export default function TrailRecorder({ locationId, existingTrails, onSaved }: T
     setOriginalPath([]);
     setMode('idle');
     setFollowRecordingMap(false);
+    setIsEditingPoints(false);
     setRecordingsModalOpen(false);
+
+    // Focus camera on the loaded path
+    map.fitBounds(L.latLngBounds(cleanPath), { padding: [40, 40] });
     toast.success('Recording loaded on the map for review.');
   };
 
   const publishRecordingAsOfficial = async (recording: TrailRecordingRow) => {
-    if (!recording.trail_zone_id) {
-      toast.error('This recording is not linked to a trail draft.');
-      return;
-    }
     const cleanTrack = pointsFromJson(recording.cleaned_points_json);
     if (cleanTrack.length < 2) {
       toast.error('This recording has no cleaned path to publish.');
@@ -613,8 +743,10 @@ export default function TrailRecorder({ locationId, existingTrails, onSaved }: T
       const coordsJson = cleanTrack.map((p) => serializeTrackPoint(p));
       const rawRecordingJson = (rawTrack.length > 0 ? rawTrack : cleanTrack).map((p) => serializeTrackPoint(p, 'accepted'));
       const qualitySummary = recording.quality_summary ?? buildRecordingQuality(rawTrack.length > 0 ? rawTrack : cleanTrack, cleanTrack);
-      const routeStations = buildRouteStations(cleanTrack.map((point) => [point.lat, point.lng] as LatLngTuple));
+      const routeStations = buildRouteStations(cleanTrack.map(toLatLng));
+      const routeLocationId = recording.location_id ?? selectedTrailLocationId ?? locationId ?? null;
       const payload = {
+        location_id: routeLocationId,
         coordinates_json: coordsJson,
         cleaned_recording_json: coordsJson,
         raw_recording_json: rawRecordingJson,
@@ -622,39 +754,91 @@ export default function TrailRecorder({ locationId, existingTrails, onSaved }: T
           ...qualitySummary,
           review: reviewRecordingQuality(qualitySummary),
           comparison: recording.comparison_summary ?? null,
+          stations: routeStations,
           source_recording_id: recording.id,
           published_at: new Date().toISOString(),
-          stations: routeStations,
         },
         status: 'active',
         review_status: 'approved',
         is_official: true,
         official_at: new Date().toISOString(),
       };
-      let { error } = await supabase
-        .from('trail_zones' as any)
-        .update(payload)
-        .eq('id', recording.trail_zone_id);
-      if (error && String(error.message ?? '').toLowerCase().includes('column')) {
-        const { cleaned_recording_json, raw_recording_json, recording_metadata, review_status, is_official, official_at, ...legacyPayload } = payload;
-        const fallback = await supabase
+      let targetTrailId = recording.trail_zone_id ?? null;
+
+      if (targetTrailId) {
+        let { error } = await supabase
           .from('trail_zones' as any)
-          .update(legacyPayload)
-          .eq('id', recording.trail_zone_id);
-        error = fallback.error;
+          .update(payload)
+          .eq('id', targetTrailId);
+        if (error && String(error.message ?? '').toLowerCase().includes('column')) {
+          const { cleaned_recording_json, raw_recording_json, recording_metadata, review_status, is_official, official_at, ...legacyPayload } = payload;
+          const fallback = await supabase
+            .from('trail_zones' as any)
+            .update(legacyPayload)
+            .eq('id', targetTrailId);
+          error = fallback.error;
+        }
+        if (error) throw error;
+      } else {
+        const insertPayload = {
+          ...payload,
+          name: name.trim() || `Recorded Trail ${new Date(recording.created_at).toLocaleDateString()}`,
+          difficulty,
+          elevation_meters: elevation ? parseInt(elevation) : 0,
+          max_capacity: 50,
+          source: recording.source ?? 'gps_recording',
+          recorded_by: user?.id ?? recording.recorded_by ?? null,
+          recording_count: 1,
+        };
+        let insertResult = await supabase
+          .from('trail_zones' as any)
+          .insert(insertPayload)
+          .select('id')
+          .single();
+        if (insertResult.error && String(insertResult.error.message ?? '').toLowerCase().includes('column')) {
+          const {
+            cleaned_recording_json,
+            raw_recording_json,
+            recording_metadata,
+            review_status,
+            is_official,
+            official_at,
+            source,
+            recorded_by,
+            recording_count,
+            ...legacyInsertPayload
+          } = insertPayload;
+          insertResult = await supabase
+            .from('trail_zones' as any)
+            .insert(legacyInsertPayload)
+            .select('id')
+            .single();
+        }
+        if (insertResult.error) throw insertResult.error;
+        targetTrailId = (insertResult.data as { id?: string } | null)?.id ?? null;
+        if (!targetTrailId) throw new Error('The official route was created without an ID.');
       }
-      if (error) throw error;
-      await supabase
+
+      const recordingUpdate = await supabase
         .from('trail_recordings' as any)
         .update({
+          trail_zone_id: targetTrailId,
+          location_id: routeLocationId,
           status: 'active',
           review_decision: 'approved',
           reviewed_by: user?.id ?? null,
           reviewed_at: new Date().toISOString(),
         })
         .eq('id', recording.id);
+      if (recordingUpdate.error) throw recordingUpdate.error;
+
+      setEditingTrailId(targetTrailId);
+      setSelectedTrailLocationId(routeLocationId);
       toast.success('Recording published as the official route.');
-      await loadTrailRecordings(recording.trail_zone_id);
+      await Promise.all([
+        loadTrailRecordings(targetTrailId),
+        loadAvailableRecordings(),
+      ]);
       onSaved?.();
     } catch (err: any) {
       toast.error(`Failed to publish recording: ${err.message}`);
@@ -738,6 +922,7 @@ export default function TrailRecorder({ locationId, existingTrails, onSaved }: T
       const rawRecordingJson = rawTrack.map((p) => serializeTrackPoint(p, 'accepted'));
       const qualitySummary = buildRecordingQuality(rawTrack, finalTrack);
       const review = reviewRecordingQuality(qualitySummary);
+      const routeStations = buildRouteStations(finalTrack.map(toLatLng));
       const isGpsRecording = rawGpsPointsRef.current.length > 0;
       const comparisonSummary = {
         comparedRecordingCount: trailRecordings.length,
@@ -745,7 +930,6 @@ export default function TrailRecorder({ locationId, existingTrails, onSaved }: T
         requiresSecondPass: isGpsRecording && trailRecordings.length === 0,
         generatedAt: new Date().toISOString(),
       };
-      const routeStations = buildRouteStations(finalTrack.map((point) => [point.lat, point.lng] as LatLngTuple));
       const forceDraftReview = isGpsRecording && review.level !== 'good';
       const finalStatus = forceDraftReview ? 'draft' : status;
       const finalReviewStatus = finalStatus === 'active' ? 'approved' : 'pending';
@@ -770,6 +954,8 @@ export default function TrailRecorder({ locationId, existingTrails, onSaved }: T
         review_status: finalReviewStatus,
         is_official: finalIsOfficial,
         official_at: finalIsOfficial ? new Date().toISOString() : null,
+        source: isGpsRecording ? 'gps_recording' : 'manual_editor',
+        recorded_by: user?.id ?? null,
         max_capacity: 50,
       };
       let savedTrailId = editingTrailId;
@@ -797,7 +983,7 @@ export default function TrailRecorder({ locationId, existingTrails, onSaved }: T
       }
 
       if (savedTrailId && user?.id) {
-        await supabase.from('trail_recordings' as any).insert({
+        const recordingInsert = await supabase.from('trail_recordings' as any).insert({
           trail_zone_id: savedTrailId,
           location_id: routeLocationId,
           recorded_by: user.id,
@@ -810,7 +996,11 @@ export default function TrailRecorder({ locationId, existingTrails, onSaved }: T
           cleaned_points_json: coordsJson,
           quality_summary: qualitySummary,
           comparison_summary: comparisonSummary,
+          notes: name.trim(),
         });
+        if (recordingInsert.error) {
+          toast.warning(`Route saved, but GPS recording evidence could not be indexed: ${recordingInsert.error.message}`);
+        }
       }
       if (forceDraftReview) {
         toast.warning('GPS quality needs review, so the trail was saved as a draft instead of official.');
@@ -827,8 +1017,10 @@ export default function TrailRecorder({ locationId, existingTrails, onSaved }: T
       setTrailRecordings([]);
       setSelectedTrailRecordingCount(0);
       setSelectedTrailLocationId(locationId ?? null);
+      setSelectedRecordingId(null);
       localStorage.removeItem(offlineDraftKey);
       void clearNativeTrailPoints(offlineDraftKey).catch(() => {});
+      void loadAvailableRecordings();
       onSaved?.();
     } catch (err: any) {
       toast.error(`Failed to save: ${err.message}`);
@@ -848,6 +1040,15 @@ export default function TrailRecorder({ locationId, existingTrails, onSaved }: T
     return total + distanceMeters(path[index - 1], point);
   }, 0);
   const recordedDurationSec = recordingStartedAt ? Math.round((recordingNow - recordingStartedAt) / 1000) : 0;
+  const editablePointIndexes = useMemo(() => {
+    if (!isEditingPoints || path.length <= 2) return [];
+    const stride = Math.max(1, Math.ceil(path.length / 80));
+    const indexes: number[] = [];
+    for (let index = stride; index < path.length - 1; index += stride) {
+      indexes.push(index);
+    }
+    return indexes;
+  }, [isEditingPoints, path.length]);
 
   useEffect(() => {
     return () => {
@@ -885,357 +1086,628 @@ export default function TrailRecorder({ locationId, existingTrails, onSaved }: T
   }, []);
 
   return (
-    <Card className="glass-card">
-      <CardHeader>
-        <CardTitle className="text-lg flex items-center gap-2">
-          <Navigation className="h-5 w-5 text-primary" />
-          Trail Route Editor
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        {/* Load existing trail */}
-        {visibleExistingTrails.length > 0 && (
-          <div>
-            <label className="text-xs text-muted-foreground mb-1 block">Edit Existing Trail</label>
-            <Select value={editingTrailId ?? undefined} onValueChange={loadExistingTrail}>
-              <SelectTrigger><SelectValue placeholder="Select trail to edit..." /></SelectTrigger>
-              <SelectContent className="z-[3200]">
-                {visibleExistingTrails.map((t) => (
-                  <SelectItem key={t.id} value={t.id}>
-                    {t.name} {t.status === 'draft' ? '(draft)' : '(official)'}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            {selectedTrailForDelete && (
-              <Button
-                type="button"
-                variant="destructive"
-                className="mt-2 h-11 w-full gap-2 text-sm"
-                disabled={deletingTrailId === selectedTrailForDelete.id}
-                onClick={() => deleteTrailPermanently(selectedTrailForDelete.id, selectedTrailForDelete.name)}
-              >
-                <Trash2 className="h-4 w-4" />
-                Delete Route
-              </Button>
-            )}
-            <div className="mt-2 max-h-40 overflow-y-auto rounded-md border border-border/50 divide-y divide-border/40">
-              {visibleExistingTrails.map((t) => (
-                <div key={t.id} className="flex items-center gap-2 px-2 py-2 text-xs">
-                  <span className="min-w-0 flex-1 truncate">
-                    {t.name} <span className="text-muted-foreground">{t.status === 'draft' ? '(draft)' : '(official)'}</span>
+    <>
+      {/* ── 1. Map Drawing & Visual Layers (rendered directly into the parent MapContainer) ── */}
+      <ClickDrawHandler active={mode === 'drawing'} onAddPoint={addPoint} />
+
+      {/* Show all existing trails as faint, sleek reference lines */}
+      {visibleExistingTrails.map((t) => {
+        const coords = Array.isArray(t.coordinates_json) ? t.coordinates_json : [];
+        if (coords.length < 2) return null;
+        const positions = coords.map((c: any) => [c.lat, c.lng] as LatLngTuple);
+        const isEditing = t.id === editingTrailId;
+        return (
+          <Polyline
+            key={t.id}
+            positions={positions}
+            pathOptions={{
+              color: isEditing ? '#3b82f6' : '#94a3b8',
+              weight: isEditing ? 5 : 2,
+              opacity: isEditing ? 0.8 : 0.25,
+              dashArray: isEditing ? '8 4' : '4 4',
+            }}
+          />
+        );
+      })}
+
+      {/* Original path reference when editing (translucent blue line) */}
+      {originalPath.length > 1 && editingTrailId && (
+        <Polyline positions={originalPath} pathOptions={{ color: '#3b82f6', weight: 4, opacity: 0.4, dashArray: '10 5' }} />
+      )}
+
+      {/* New drafted path (glowing custom amber line) */}
+      {path.length > 1 && (
+        <Polyline positions={path} pathOptions={{ color: '#f59e0b', weight: 4, opacity: 0.95 }} />
+      )}
+      {path.length > 0 && (
+        <Marker
+          position={path[0]}
+          icon={routeStartIcon}
+          draggable={isEditingPoints}
+          title={isEditingPoints ? 'Drag route start' : 'Route start'}
+          eventHandlers={{
+            dragend: (event) => {
+              const marker = event.target as L.Marker;
+              const next = marker.getLatLng();
+              movePathPoint(0, [next.lat, next.lng]);
+            },
+          }}
+        />
+      )}
+      {path.length > 1 && (
+        <Marker
+          position={path[path.length - 1]}
+          icon={routeEndIcon}
+          draggable={isEditingPoints}
+          title={isEditingPoints ? 'Drag route end' : 'Route end'}
+          eventHandlers={{
+            dragend: (event) => {
+              const marker = event.target as L.Marker;
+              const next = marker.getLatLng();
+              movePathPoint(path.length - 1, [next.lat, next.lng]);
+            },
+          }}
+        />
+      )}
+      {editablePointIndexes.map((index) => (
+        <Marker
+          key={`edit-${index}`}
+          position={path[index]}
+          icon={pointIcon}
+          draggable
+          title={`Drag route point ${index + 1}`}
+          eventHandlers={{
+            dragend: (event) => {
+              const marker = event.target as L.Marker;
+              const next = marker.getLatLng();
+              movePathPoint(index, [next.lat, next.lng]);
+            },
+          }}
+        />
+      ))}
+
+      {/* Absolute follow target locator button during GPS recordings */}
+      {mode === 'recording' && path.length > 0 && (
+        <div className="absolute right-4 bottom-20 z-[1000]">
+          <Button
+            type="button"
+            size="icon"
+            className={`shadow-xl rounded-xl h-10 w-10 border border-slate-200/40 dark:border-slate-800/40 backdrop-blur-md ${
+              followRecordingMap 
+                ? 'bg-emerald-600 hover:bg-emerald-500 text-white' 
+                : 'bg-white/90 dark:bg-slate-900/90 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
+            }`}
+            aria-label="Follow current recording location"
+            onClick={() => {
+              const last = pathRef.current[pathRef.current.length - 1];
+              suppressRecorderUnlockRef.current = true;
+              setFollowRecordingMap(true);
+              if (last) map.setView(last, Math.max(map.getZoom(), 17));
+              window.setTimeout(() => {
+                suppressRecorderUnlockRef.current = false;
+              }, 900);
+            }}
+            title={followRecordingMap ? "Camera locked on location" : "Follow my location"}
+          >
+            <Locate className="h-5 w-5" />
+          </Button>
+        </div>
+      )}
+
+
+      {/* ── 2. Floating Console Overlay Controls (Portalled to document.body) ── */}
+      {isConsoleCollapsed ? (
+        createPortal(
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              setIsConsoleCollapsed(false);
+            }}
+            onMouseDown={(e) => e.stopPropagation()}
+            onPointerDown={(e) => e.stopPropagation()}
+            className="fixed top-[9.25rem] left-3 sm:left-4 z-[1000] p-3 rounded-xl bg-white/95 dark:bg-slate-900/95 backdrop-blur-md shadow-2xl border border-slate-200/60 dark:border-slate-800/60 hover:bg-slate-50 dark:hover:bg-slate-800 transition-all flex items-center gap-2 group pointer-events-auto"
+            title="Expand Route Editor Panel"
+          >
+            <Navigation className="h-5 w-5 text-blue-600 dark:text-blue-400 group-hover:scale-105 transition-transform" />
+            <span className="text-xs font-bold text-slate-700 dark:text-slate-300 pr-1">Show Editor</span>
+            <Activity className="h-4 w-4 text-slate-400" />
+          </button>,
+          document.body
+        )
+      ) : (
+        createPortal(
+          <div 
+            className="fixed top-[9.25rem] bottom-3 left-3 z-[1000] w-[calc(100%-1.5rem)] sm:bottom-4 sm:left-4 sm:w-[380px] flex flex-col bg-white/95 dark:bg-slate-900/95 backdrop-blur-md rounded-xl border border-slate-200/50 dark:border-slate-800/50 shadow-2xl pointer-events-auto overflow-hidden"
+            onMouseDown={(e) => e.stopPropagation()}
+            onMouseUp={(e) => e.stopPropagation()}
+            onClick={(e) => e.stopPropagation()}
+            onPointerDown={(e) => e.stopPropagation()}
+            onPointerUp={(e) => e.stopPropagation()}
+            onTouchStart={(e) => e.stopPropagation()}
+            onTouchEnd={(e) => e.stopPropagation()}
+            onKeyDown={(e) => e.stopPropagation()}
+            onKeyUp={(e) => e.stopPropagation()}
+            onDoubleClick={(e) => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div className="p-4 border-b border-slate-100 dark:border-slate-800/50 flex items-center justify-between shrink-0">
+              <div className="flex items-center gap-2.5">
+                <div className="bg-blue-500/10 p-1.5 rounded-lg">
+                  <Navigation className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                </div>
+                <div>
+                  <h2 className="text-xs font-bold uppercase tracking-wider text-slate-800 dark:text-slate-200">
+                    Route Editor
+                  </h2>
+                  <span className="text-[10px] text-slate-500 dark:text-slate-400 font-medium">
+                    Mt. Kalisungan Path Manager
                   </span>
                 </div>
-              ))}
+              </div>
+              
+              <Button
+                size="icon"
+                variant="ghost"
+                className="h-7 w-7 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+                onClick={() => setIsConsoleCollapsed(true)}
+                title="Collapse Panel"
+              >
+                <X className="h-4 w-4" />
+              </Button>
             </div>
-          </div>
-        )}
 
-        {/* Trail info inputs */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-          <Input placeholder="Trail name" value={name} onChange={(e) => setName(e.target.value)} className="col-span-1" />
-          <Select value={difficulty} onValueChange={setDifficulty}>
-            <SelectTrigger><SelectValue /></SelectTrigger>
-            <SelectContent className="z-[3200]">
-              <SelectItem value="easy">Easy</SelectItem>
-              <SelectItem value="moderate">Moderate</SelectItem>
-              <SelectItem value="hard">Hard</SelectItem>
-            </SelectContent>
-          </Select>
-          <Input placeholder="Elevation (m)" type="number" value={elevation} onChange={(e) => setElevation(e.target.value)} />
-          <Select value={status} onValueChange={(v) => setStatus(v as 'draft' | 'active')}>
-            <SelectTrigger><SelectValue /></SelectTrigger>
-            <SelectContent className="z-[3200]">
-              <SelectItem value="active">Official Active</SelectItem>
-              <SelectItem value="draft">Draft Review</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
+            {/* Scrollable controls list */}
+            <div className="flex-1 overflow-y-auto p-4 space-y-4">
 
-        {/* Recording controls */}
-        <div className="flex gap-2 flex-wrap">
-          {mode === 'idle' && (
-            <>
-              <Button size="sm" onClick={startDrawing} className="gap-1">
-                <MousePointer className="h-3 w-3" /> Draw on Map
-              </Button>
-              <Button size="sm" variant="secondary" onClick={startRecording} className="gap-1">
-                <Play className="h-3 w-3" /> GPS Record
-              </Button>
-            </>
-          )}
-          {mode === 'drawing' && (
-            <Button size="sm" variant="destructive" onClick={stopDrawing} className="gap-1">
-              <Square className="h-3 w-3" /> Stop Drawing
-            </Button>
-          )}
-          {mode === 'recording' && (
-            <Button size="sm" variant="destructive" onClick={stopRecording} className="gap-1">
-              <Square className="h-3 w-3" /> Stop Recording
-            </Button>
-          )}
-          {path.length > 0 && (
-            <>
-              <Button size="sm" variant="outline" onClick={undoLastPoint} className="gap-1">
-                <Undo2 className="h-3 w-3" /> Undo
-              </Button>
-              <Button size="sm" variant="outline" onClick={clearPath} className="gap-1">
-                <Trash2 className="h-3 w-3" /> Discard Draft
-              </Button>
-              <Button size="sm" onClick={saveTrail} disabled={saving} className="gap-1">
-                <Save className="h-3 w-3" /> {editingTrailId ? 'Update' : 'Save'} Trail
-              </Button>
-            </>
-          )}
-          {editingTrailId && (
-            <Dialog open={recordingsModalOpen} onOpenChange={setRecordingsModalOpen}>
-              <DialogTrigger asChild>
-                <Button size="sm" variant="secondary" className="gap-1" onClick={() => loadTrailRecordings(editingTrailId)}>
-                  <GitCompare className="h-3 w-3" /> Review Recordings
-                </Button>
-              </DialogTrigger>
-              <DialogContent className="z-[3100] max-h-[85vh] max-w-3xl overflow-y-auto">
-                <DialogHeader>
-                  <DialogTitle>Recorded Trail Review</DialogTitle>
-                </DialogHeader>
-                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                  <p className="text-sm text-muted-foreground">
-                    Sort saved GPS recordings, load one for review, publish the cleaned path, or delete bad captures.
-                  </p>
-                  <Select value={recordingSort} onValueChange={(v) => setRecordingSort(v as typeof recordingSort)}>
-                    <SelectTrigger className="w-full sm:w-44"><SelectValue /></SelectTrigger>
-                    <SelectContent className="z-[3200]">
-                      <SelectItem value="newest">Newest first</SelectItem>
-                      <SelectItem value="quality">Best quality</SelectItem>
-                      <SelectItem value="distance">Longest distance</SelectItem>
+              {/* Standalone and linked GPS recordings */}
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between px-1">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">
+                    Recorded GPS Trails ({availableRecordings.length})
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => void loadAvailableRecordings()}
+                    disabled={availableRecordingsLoading}
+                    className="text-slate-400 transition-colors hover:text-blue-600 disabled:opacity-50"
+                    title="Reload recorded trails"
+                    aria-label="Reload recorded trails"
+                  >
+                    <RefreshCw className={`h-3.5 w-3.5 ${availableRecordingsLoading ? 'animate-spin' : ''}`} />
+                  </button>
+                </div>
+
+                {availableRecordings.length > 0 ? (
+                  <>
+                    <Select
+                      value={selectedRecordingId ?? undefined}
+                      onValueChange={(recordingId) => {
+                        const recording = availableRecordings.find((item) => item.id === recordingId);
+                        if (recording) loadRecordingForReview(recording);
+                      }}
+                    >
+                      <SelectTrigger className="h-9 rounded-xl border-slate-200/60 bg-slate-50/50 text-xs dark:border-slate-800/60 dark:bg-slate-950/40">
+                        <SelectValue placeholder="Select a recorded trail..." />
+                      </SelectTrigger>
+                      <SelectContent className="z-[3200] max-h-64">
+                        {availableRecordings.map((recording) => {
+                          const pointCount = pointsFromJson(recording.cleaned_points_json).length;
+                          const routeName = recording.notes?.trim() || `Recording ${new Date(recording.created_at).toLocaleDateString()}`;
+                          return (
+                            <SelectItem key={recording.id} value={recording.id} className="text-xs">
+                              {routeName} - {pointCount} pts ({recording.review_decision === 'approved' ? 'official' : 'draft'})
+                            </SelectItem>
+                          );
+                        })}
+                      </SelectContent>
+                    </Select>
+
+                    {selectedAvailableRecording && (
+                      <div className="grid grid-cols-2 gap-2">
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          className="h-9 gap-1.5 rounded-lg text-xs"
+                          onClick={() => loadRecordingForReview(selectedAvailableRecording)}
+                        >
+                          <Eye className="h-3.5 w-3.5" />
+                          Preview Track
+                        </Button>
+                        <Button
+                          type="button"
+                          size="sm"
+                          className="h-9 gap-1.5 rounded-lg bg-emerald-600 text-xs text-white hover:bg-emerald-500"
+                          disabled={recordingActionId === selectedAvailableRecording.id}
+                          onClick={() => void publishRecordingAsOfficial(selectedAvailableRecording)}
+                        >
+                          <CheckCircle2 className="h-3.5 w-3.5" />
+                          Publish Path
+                        </Button>
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  <div className="rounded-lg border border-dashed border-slate-300 px-3 py-2 text-center text-[10px] text-slate-500 dark:border-slate-700 dark:text-slate-400">
+                    {availableRecordingsLoading ? 'Loading recorded trails...' : 'No saved GPS recordings found for this location.'}
+                  </div>
+                )}
+              </div>
+
+              {/* Load existing trail */}
+              {visibleExistingTrails.length > 0 && (
+                <div className="space-y-1.5">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 block px-1">
+                    Route Library ({visibleExistingTrails.length})
+                  </span>
+                  <Select value={editingTrailId ?? undefined} onValueChange={loadExistingTrail}>
+                    <SelectTrigger className="text-xs h-9 bg-slate-50/50 dark:bg-slate-950/40 border-slate-200/60 dark:border-slate-800/60 rounded-xl">
+                      <SelectValue placeholder="Select trail to edit..." />
+                    </SelectTrigger>
+                    <SelectContent className="z-[3200] max-h-60">
+                      {visibleExistingTrails.map((t) => (
+                        <SelectItem key={t.id} value={t.id} className="text-xs">
+                          {t.name} {t.is_official ? '(official)' : '(draft)'}
+                        </SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
-                </div>
-                <div className="space-y-3">
-                  {recordingsLoading ? (
-                    <div className="rounded-md border border-border/30 bg-muted/20 p-4 text-sm text-muted-foreground">
-                      Loading recordings...
-                    </div>
-                  ) : sortedTrailRecordings.length === 0 ? (
-                    <div className="rounded-md border border-border/30 bg-muted/20 p-4 text-sm text-muted-foreground">
-                      No saved recordings yet for this trail.
-                    </div>
-                  ) : (
-                    sortedTrailRecordings.map((recording) => {
-                      const quality = recording.quality_summary ?? {};
-                      const review = reviewRecordingQuality(quality);
-                      const busy = recordingActionId === recording.id;
-                      return (
-                        <div key={recording.id} className="rounded-lg border border-border/30 bg-background/60 p-3">
-                          <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-                            <div className="space-y-2">
-                              <div className="flex flex-wrap items-center gap-2">
-                                <span className="font-semibold text-foreground">{new Date(recording.created_at).toLocaleString()}</span>
-                                <span className="rounded-full bg-muted px-2 py-0.5 text-xs capitalize text-muted-foreground">{review.label}</span>
-                                <span className="rounded-full bg-muted px-2 py-0.5 text-xs capitalize text-muted-foreground">{recording.review_decision ?? 'pending'}</span>
-                              </div>
-                              <div className="grid grid-cols-2 gap-2 text-xs text-muted-foreground sm:grid-cols-5">
-                                <span>Raw: <b className="text-foreground">{quality.rawPointCount ?? '--'}</b></span>
-                                <span>Clean: <b className="text-foreground">{quality.cleanedPointCount ?? '--'}</b></span>
-                                <span>Rejected: <b className="text-foreground">{quality.rejectedPointCount ?? '--'}</b></span>
-                                <span>Estimated: <b className="text-foreground">{quality.estimatedPointCount ?? '--'}</b></span>
-                                <span>Avg acc: <b className="text-foreground">{quality.averageAccuracyM == null ? '--' : `${Number(quality.averageAccuracyM).toFixed(1)} m`}</b></span>
-                              </div>
-                              <div className="text-xs text-muted-foreground">
-                                Distance {formatMeters(quality.distanceM)} / Score {review.score}/100
-                              </div>
-                            </div>
-                            <div className="grid grid-cols-1 gap-2 sm:grid-cols-3 lg:w-[290px]">
-                              <Button size="sm" variant="outline" className="h-10" onClick={() => loadRecordingForReview(recording)} disabled={busy}>
-                                Load
-                              </Button>
-                              <Button size="sm" className="h-10" onClick={() => publishRecordingAsOfficial(recording)} disabled={busy}>
-                                Publish
-                              </Button>
-                              <Button size="sm" variant="destructive" className="h-10" onClick={() => deleteTrailRecording(recording)} disabled={busy}>
-                                Delete Route
-                              </Button>
-                            </div>
-                          </div>
+
+                  {selectedTrailForDelete && path.length > 0 && (
+                    <div className="rounded-xl border border-slate-200/70 bg-slate-50/80 p-2.5 dark:border-slate-800/70 dark:bg-slate-950/40">
+                      <div className="mb-2 grid grid-cols-3 gap-2 text-center">
+                        <div>
+                          <p className="text-[9px] font-bold uppercase text-slate-400">Distance</p>
+                          <p className="text-xs font-bold text-slate-800 dark:text-slate-100">{formatMeters(recordedDistanceM)}</p>
                         </div>
-                      );
-                    })
+                        <div>
+                          <p className="text-[9px] font-bold uppercase text-slate-400">Points</p>
+                          <p className="text-xs font-bold text-slate-800 dark:text-slate-100">{path.length}</p>
+                        </div>
+                        <div>
+                          <p className="text-[9px] font-bold uppercase text-slate-400">Status</p>
+                          <p className="truncate text-xs font-bold capitalize text-slate-800 dark:text-slate-100">
+                            {selectedTrailForDelete.is_official ? 'Official' : 'Draft'}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-2 gap-2">
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          className="h-9 gap-1.5 rounded-lg text-xs"
+                          onClick={focusPathOnMap}
+                        >
+                          <Eye className="h-3.5 w-3.5" />
+                          Preview
+                        </Button>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant={isEditingPoints ? 'default' : 'outline'}
+                          className="h-9 gap-1.5 rounded-lg text-xs"
+                          disabled={mode === 'recording'}
+                          onClick={() => setIsEditingPoints((current) => !current)}
+                        >
+                          <Pencil className="h-3.5 w-3.5" />
+                          {isEditingPoints ? 'Done Editing' : 'Edit Points'}
+                        </Button>
+                      </div>
+                      {isEditingPoints && (
+                        <p className="mt-2 text-[10px] leading-4 text-slate-500 dark:text-slate-400">
+                          Drag the start, end, or amber handles. Large GPS tracks show evenly spaced handles to keep the map smooth.
+                        </p>
+                      )}
+                    </div>
+                  )}
+
+                  {selectedTrailForDelete && (
+                    <Button
+                      type="button"
+                      variant="destructive"
+                      className="mt-1.5 h-8 w-full gap-1.5 text-xs rounded-xl font-bold bg-rose-600/10 hover:bg-rose-600 text-rose-600 hover:text-white border border-rose-200/30 dark:border-rose-900/40 transition-colors"
+                      disabled={deletingTrailId === selectedTrailForDelete.id}
+                      onClick={() => deleteTrailPermanently(selectedTrailForDelete.id, selectedTrailForDelete.name)}
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                      Delete Trail
+                    </Button>
                   )}
                 </div>
-              </DialogContent>
-            </Dialog>
-          )}
-        </div>
+              )}
 
-        <div className="text-xs text-muted-foreground">
-          {mode === 'drawing' && 'Click on the map below to add trail points.'}
-          {mode === 'recording' && `Recording... ${path.length} points, ${(recordedDistanceM / 1000).toFixed(2)} km, ${Math.floor(recordedDurationSec / 60)}:${String(recordedDurationSec % 60).padStart(2, '0')}`}
-          {mode === 'idle' && path.length > 0 && `${path.length} points ready. Enter details and save.`}
-        </div>
-
-        {currentQuality && currentReview && (
-          <div className="rounded-lg border border-border/40 bg-background/55 p-3 space-y-3">
-            <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-              <div className="flex items-start gap-2">
-                {currentReview.level === 'good' ? (
-                  <CheckCircle2 className="mt-0.5 h-4 w-4 text-success" />
-                ) : currentReview.level === 'poor' ? (
-                  <AlertTriangle className="mt-0.5 h-4 w-4 text-destructive" />
-                ) : (
-                  <Activity className="mt-0.5 h-4 w-4 text-warning" />
-                )}
-                <div>
-                  <div className="text-sm font-semibold text-foreground">Recording quality: {currentReview.label}</div>
-                  <div className="text-xs text-muted-foreground">
-                    Score {currentReview.score}/100
-                    {rawGpsPointsRef.current.length > 0 && currentReview.level !== 'good' && status === 'active'
-                      ? ' - will save as draft review until approved'
-                      : ''}
+              {/* Trail info parameters */}
+              <div className="space-y-2">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 block px-1">
+                  Route Details
+                </span>
+                
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="col-span-2">
+                    <Input 
+                      placeholder="Trail name" 
+                      value={name} 
+                      onChange={(e) => setName(e.target.value)} 
+                      className="text-xs h-9 bg-slate-50/50 dark:bg-slate-950/40 border border-slate-200/60 dark:border-slate-800/60 rounded-xl" 
+                    />
+                  </div>
+                  <div>
+                    <Select value={difficulty} onValueChange={setDifficulty}>
+                      <SelectTrigger className="text-xs h-9 bg-slate-50/50 dark:bg-slate-950/40 border border-slate-200/60 dark:border-slate-800/60 rounded-xl">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent className="z-[3200]">
+                        <SelectItem value="easy" className="text-xs">Easy</SelectItem>
+                        <SelectItem value="moderate" className="text-xs">Moderate</SelectItem>
+                        <SelectItem value="hard" className="text-xs">Hard</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <Input 
+                      placeholder="Elevation (m)" 
+                      type="number" 
+                      value={elevation} 
+                      onChange={(e) => setElevation(e.target.value)} 
+                      className="text-xs h-9 bg-slate-50/50 dark:bg-slate-950/40 border border-slate-200/60 dark:border-slate-800/60 rounded-xl" 
+                    />
+                  </div>
+                  <div className="col-span-2">
+                    <Select value={status} onValueChange={(v) => setStatus(v as 'draft' | 'active')}>
+                      <SelectTrigger className="text-xs h-9 bg-slate-50/50 dark:bg-slate-950/40 border border-slate-200/60 dark:border-slate-800/60 rounded-xl">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent className="z-[3200]">
+                        <SelectItem value="active" className="text-xs">Official Active Route</SelectItem>
+                        <SelectItem value="draft" className="text-xs">Draft / Review Only</SelectItem>
+                      </SelectContent>
+                    </Select>
                   </div>
                 </div>
               </div>
-              <div className="text-xs text-muted-foreground">
-                {trailRecordings.length > 0 ? `${trailRecordings.length} previous recording${trailRecordings.length === 1 ? '' : 's'}` : 'No previous recordings yet'}
-              </div>
-            </div>
 
-            <div className="grid grid-cols-2 gap-2 md:grid-cols-6">
-              {[
-                ['Raw', currentQuality.rawPointCount],
-                ['Clean', currentQuality.cleanedPointCount],
-                ['Rejected', currentQuality.rejectedPointCount],
-                ['Estimated', currentQuality.estimatedPointCount],
-                ['Avg acc.', currentQuality.averageAccuracyM == null ? '--' : `${currentQuality.averageAccuracyM.toFixed(1)} m`],
-                ['Distance', formatMeters(currentQuality.distanceM)],
-              ].map(([label, value]) => (
-                <div key={label} className="rounded-md border border-border/30 bg-muted/20 px-2 py-2">
-                  <div className="text-[10px] uppercase text-muted-foreground">{label}</div>
-                  <div className="text-sm font-semibold text-foreground">{value}</div>
+              {/* Action buttons */}
+              <div className="space-y-2">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 block px-1">
+                  Editor Controls
+                </span>
+
+                <div className="flex gap-2 flex-wrap">
+                  {mode === 'idle' && (
+                    <>
+                      <Button 
+                        size="sm" 
+                        onClick={startDrawing} 
+                        className="gap-1.5 bg-blue-600 hover:bg-blue-500 text-white text-xs flex-1 h-9 rounded-xl shadow-md transition-all"
+                      >
+                        <MousePointer className="h-3.5 w-3.5" /> 
+                        Draw Path
+                      </Button>
+                      <Button 
+                        size="sm" 
+                        variant="secondary" 
+                        onClick={startRecording} 
+                        className="gap-1.5 text-xs flex-1 h-9 rounded-xl border border-slate-200/50 dark:border-slate-800/60 hover:bg-slate-100 dark:hover:bg-slate-800 transition-all"
+                      >
+                        <Play className="h-3.5 w-3.5 text-blue-500" /> 
+                        GPS Record
+                      </Button>
+                    </>
+                  )}
+
+                  {mode === 'drawing' && (
+                    <Button 
+                      size="sm" 
+                      variant="destructive" 
+                      onClick={stopDrawing} 
+                      className="gap-1.5 text-xs w-full h-9 rounded-xl animate-pulse shadow-md"
+                    >
+                      <Square className="h-3.5 w-3.5" /> 
+                      Stop Drawing (Lock Path)
+                    </Button>
+                  )}
+
+                  {mode === 'recording' && (
+                    <Button 
+                      size="sm" 
+                      variant="destructive" 
+                      onClick={stopRecording} 
+                      className="gap-1.5 text-xs w-full h-9 rounded-xl animate-pulse shadow-md"
+                    >
+                      <Square className="h-3.5 w-3.5" /> 
+                      Stop GPS Capture
+                    </Button>
+                  )}
+
+                  {path.length > 0 && (
+                    <div className="grid grid-cols-3 gap-1.5 w-full">
+                      <Button 
+                        size="sm" 
+                        variant="outline" 
+                        onClick={undoLastPoint} 
+                        className="gap-1 text-xs h-9 rounded-xl border border-slate-200/65 dark:border-slate-800/65"
+                      >
+                        <Undo2 className="h-3.5 w-3.5" /> 
+                        Undo
+                      </Button>
+                      <Button 
+                        size="sm" 
+                        variant="outline" 
+                        onClick={clearPath} 
+                        className="gap-1 text-xs h-9 rounded-xl border-rose-200/60 text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/20"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" /> 
+                        Discard
+                      </Button>
+                      <Button 
+                        size="sm" 
+                        onClick={saveTrail} 
+                        disabled={saving} 
+                        className="gap-1 text-xs h-9 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold"
+                      >
+                        <Save className="h-3.5 w-3.5" /> 
+                        {saving
+                          ? 'Saving...'
+                          : editingTrailId
+                            ? 'Update Route'
+                            : rawGpsPointsRef.current.length > 0
+                              ? 'Save Recording'
+                              : 'Save Route'}
+                      </Button>
+                    </div>
+                  )}
+
+                  {editingTrailId && (
+                    <Dialog open={recordingsModalOpen} onOpenChange={setRecordingsModalOpen}>
+                      <DialogTrigger asChild>
+                        <Button size="sm" variant="secondary" className="gap-1.5 text-xs w-full h-9 rounded-xl border border-slate-200/50 dark:border-slate-800/50">
+                          <GitCompare className="h-3.5 w-3.5 text-blue-500" /> 
+                          Compare Repeat GPS Tracks ({trailRecordings.length})
+                        </Button>
+                      </DialogTrigger>
+                      <DialogContent 
+                        className="z-[3100] max-h-[85vh] max-w-3xl overflow-y-auto"
+                        onMouseDown={(e) => e.stopPropagation()}
+                        onMouseUp={(e) => e.stopPropagation()}
+                        onClick={(e) => e.stopPropagation()}
+                        onPointerDown={(e) => e.stopPropagation()}
+                        onPointerUp={(e) => e.stopPropagation()}
+                      >
+                        <DialogHeader>
+                          <DialogTitle>Compare GPS Tracks & Recordings</DialogTitle>
+                        </DialogHeader>
+                        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between py-2 border-b">
+                          <p className="text-xs text-muted-foreground">
+                            Load alternate records onto map, publish cleanest track as the official route lines, or clean poor captures.
+                          </p>
+                          <Select value={recordingSort} onValueChange={(v) => setRecordingSort(v as typeof recordingSort)}>
+                            <SelectTrigger className="w-full sm:w-44"><SelectValue /></SelectTrigger>
+                            <SelectContent className="z-[3200]">
+                              <SelectItem value="newest">Newest first</SelectItem>
+                              <SelectItem value="quality">Best quality</SelectItem>
+                              <SelectItem value="distance">Longest distance</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div className="space-y-3 mt-3">
+                          {recordingsLoading ? (
+                            <div className="rounded-xl border border-border/30 bg-muted/20 p-4 text-xs text-muted-foreground text-center">
+                              Loading previous trail tracks...
+                            </div>
+                          ) : sortedTrailRecordings.length === 0 ? (
+                            <div className="rounded-xl border border-border/30 bg-muted/20 p-4 text-xs text-muted-foreground text-center">
+                              No previous raw/cleaned recordings yet for this trail.
+                            </div>
+                          ) : (
+                            sortedTrailRecordings.map((recording) => {
+                              const quality = recording.quality_summary ?? {};
+                              const review = reviewRecordingQuality(quality);
+                              const busy = recordingActionId === recording.id;
+                              return (
+                                <div key={recording.id} className="rounded-xl border border-border/40 bg-background/60 p-3.5 text-xs flex flex-col gap-3">
+                                  <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                                    <div className="space-y-1">
+                                      <div className="flex flex-wrap items-center gap-2">
+                                        <span className="font-bold text-foreground">{new Date(recording.created_at).toLocaleString()}</span>
+                                        <span className="rounded-full bg-slate-100 dark:bg-slate-800 text-[10px] font-bold px-2 py-0.5 capitalize text-slate-700 dark:text-slate-300">{review.label} Quality</span>
+                                        <span className="rounded-full bg-blue-50 dark:bg-blue-950 text-[10px] font-bold px-2 py-0.5 capitalize text-blue-700 dark:text-blue-300">Status: {recording.review_decision ?? 'pending'}</span>
+                                      </div>
+                                      <div className="grid grid-cols-2 gap-2 text-[10px] text-muted-foreground sm:grid-cols-5 pt-1">
+                                        <span>Raw: <b className="text-foreground font-semibold">{quality.rawPointCount ?? '--'}</b></span>
+                                        <span>Clean: <b className="text-foreground font-semibold">{quality.cleanedPointCount ?? '--'}</b></span>
+                                        <span>Rejected: <b className="text-foreground font-semibold">{quality.rejectedPointCount ?? '--'}</b></span>
+                                        <span>Inferred: <b className="text-foreground font-semibold">{quality.estimatedPointCount ?? '--'}</b></span>
+                                        <span>Accuracy: <b className="text-foreground font-semibold">{quality.averageAccuracyM == null ? '--' : `${Number(quality.averageAccuracyM).toFixed(1)}m`}</b></span>
+                                      </div>
+                                      <div className="text-[10px] text-muted-foreground">
+                                        Distance: <b>{formatMeters(quality.distanceM)}</b> / Match score: <b>{review.score}/100</b>
+                                      </div>
+                                    </div>
+                                    <div className="flex gap-1.5 w-full lg:w-auto shrink-0 mt-2 lg:mt-0">
+                                      <Button size="sm" variant="outline" className="flex-1 lg:flex-none h-8 text-[11px] rounded-lg" onClick={() => loadRecordingForReview(recording)} disabled={busy}>
+                                        Load
+                                      </Button>
+                                      <Button size="sm" className="flex-1 lg:flex-none h-8 text-[11px] bg-blue-600 hover:bg-blue-500 text-white rounded-lg" onClick={() => publishRecordingAsOfficial(recording)} disabled={busy}>
+                                        Publish
+                                      </Button>
+                                      <Button size="sm" variant="destructive" className="flex-1 lg:flex-none h-8 text-[11px] rounded-lg" onClick={() => deleteTrailRecording(recording)} disabled={busy}>
+                                        Delete
+                                      </Button>
+                                    </div>
+                                  </div>
+                                </div>
+                              );
+                            })
+                          )}
+                        </div>
+                      </DialogContent>
+                    </Dialog>
+                  )}
                 </div>
-              ))}
-            </div>
-
-            <div className="grid gap-2 md:grid-cols-2">
-              <div className="space-y-1">
-                {currentReview.reasons.slice(0, 3).map((reason) => (
-                  <div key={reason} className="text-xs text-muted-foreground">{reason}</div>
-                ))}
-                {rawGpsPointsRef.current.length > 0 && trailRecordings.length === 0 && (
-                  <div className="text-xs text-warning">Record this trail again on another pass before making it the final official route.</div>
-                )}
               </div>
-              <div className="rounded-md border border-border/30 bg-muted/20 px-2 py-2">
-                <div className="mb-1 flex items-center gap-1 text-xs font-semibold text-foreground">
-                  <GitCompare className="h-3.5 w-3.5" />
-                  Repeat recording comparison
-                </div>
-                {bestComparison ? (
-                  <div className="text-xs text-muted-foreground">
-                    Best match: {bestComparison.comparison.consistency}, avg {formatMeters(bestComparison.comparison.averageDeviationM)}, max {formatMeters(bestComparison.comparison.maxDeviationM)}
-                  </div>
-                ) : recordingsLoading ? (
-                  <div className="text-xs text-muted-foreground">Loading previous recordings...</div>
-                ) : (
-                  <div className="text-xs text-muted-foreground">No comparison available yet.</div>
-                )}
-              </div>
-            </div>
 
-            {trailRecordings.length > 0 && (
-              <div className="space-y-1">
-                {trailRecordings.slice(0, 3).map((recording) => {
-                  const review = reviewRecordingQuality(recording.quality_summary ?? {});
-                  const comparison = currentComparisons.find((item) => item.recording.id === recording.id)?.comparison;
-                  return (
-                    <div key={recording.id} className="flex flex-col gap-1 rounded-md border border-border/25 bg-background/45 px-2 py-2 text-xs sm:flex-row sm:items-center sm:justify-between">
-                      <span className="font-medium text-foreground">
-                        {new Date(recording.created_at).toLocaleDateString()} - {review.label}
-                      </span>
-                      <span className="text-muted-foreground">
-                        {formatMeters((recording.quality_summary ?? {}).distanceM)} / avg acc. {(recording.quality_summary ?? {}).averageAccuracyM ?? '--'}m
-                        {comparison ? ` / dev ${formatMeters(comparison.averageDeviationM)}` : ''}
+              {/* Dynamic state instruction banner */}
+              <div className="text-[10px] leading-relaxed text-slate-500 dark:text-slate-400 p-2.5 rounded-xl bg-slate-50 dark:bg-slate-950/40 border border-slate-200/50 dark:border-slate-800/60 font-medium">
+                {mode === 'drawing' && '🔴 DRAW MODE ACTIVE: Click directly on the main fullscreen map to insert route segments.'}
+                {mode === 'recording' && `🟢 GPS CAPTURE: Pinned ${path.length} points, Distance: ${(recordedDistanceM / 1000).toFixed(2)}km, Elapsed: ${Math.floor(recordedDurationSec / 60)}:${String(recordedDurationSec % 60).padStart(2, '0')}`}
+                {mode === 'idle' && path.length > 0 && `📝 DRAFT PATH READY: ${path.length} segments defined. Specify details above & tap save.`}
+                {mode === 'idle' && path.length === 0 && '💡 Choose a trail above to modify, or click "Draw Path" or "GPS Record" to chart a new route directly on the mountain.'}
+              </div>
+
+              {/* Quality details panel */}
+              {currentQuality && currentReview && (
+                <div className="rounded-xl border border-blue-100/50 dark:border-blue-900/30 bg-blue-50/10 dark:bg-blue-950/10 p-3 space-y-2.5">
+                  <div className="flex items-start gap-2 border-b border-blue-100/30 dark:border-blue-900/20 pb-1.5">
+                    {currentReview.level === 'good' ? (
+                      <CheckCircle2 className="mt-0.5 h-4 w-4 text-emerald-500 shrink-0" />
+                    ) : currentReview.level === 'poor' ? (
+                      <AlertTriangle className="mt-0.5 h-4 w-4 text-rose-500 shrink-0" />
+                    ) : (
+                      <Activity className="mt-0.5 h-4 w-4 text-amber-500 shrink-0" />
+                    )}
+                    <div>
+                      <span className="text-[9px] uppercase font-bold tracking-wider text-slate-400 dark:text-slate-500 block">Quality Assessment</span>
+                      <span className="text-xs font-semibold text-slate-800 dark:text-slate-200">
+                        GPS Accuracy: <span className="text-blue-600 dark:text-blue-400 font-bold">{currentReview.label}</span> ({currentReview.score}/100)
                       </span>
                     </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-        )}
+                  </div>
 
-        {/* Mini map for drawing */}
-        <div className="relative h-[min(58vh,560px)] min-h-[360px] md:min-h-[480px] rounded-lg overflow-hidden border border-border/30">
-          <MapContainer center={MT_KALISUNGAN_CENTER} zoom={DEFAULT_ZOOM} className="h-full w-full" zoomControl={true}>
-            <RecorderMapBridge onReady={setRecorderMap} />
-            <TileLayer
-              attribution='&copy; <a href="https://opentopomap.org">OpenTopoMap</a>'
-              url="https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png"
-            />
-            <ClickDrawHandler active={mode === 'drawing'} onAddPoint={addPoint} />
-            <RecordingMapFollower
-              path={path}
-              active={mode === 'recording'}
-              following={followRecordingMap}
-              onManualMove={() => {
-                if (!suppressRecorderUnlockRef.current) setFollowRecordingMap(false);
-              }}
-            />
+                  <div className="grid grid-cols-3 gap-1">
+                    {[
+                      ['Raw', currentQuality.rawPointCount],
+                      ['Cleaned', currentQuality.cleanedPointCount],
+                      ['Discarded', currentQuality.rejectedPointCount],
+                      ['Inferred', currentQuality.estimatedPointCount],
+                      ['Accuracy', currentQuality.averageAccuracyM == null ? '--' : `${currentQuality.averageAccuracyM.toFixed(1)}m`],
+                      ['Distance', formatMeters(currentQuality.distanceM)],
+                    ].map(([label, value]) => (
+                      <div key={label} className="bg-white/50 dark:bg-slate-900/50 rounded-lg p-1.5 border border-slate-200/30 dark:border-slate-800/30 text-center">
+                        <div className="text-[8px] uppercase font-bold tracking-wider text-slate-400 dark:text-slate-500">{label}</div>
+                        <div className="text-[11px] font-bold text-slate-800 dark:text-slate-200 mt-0.5">{value}</div>
+                      </div>
+                    ))}
+                  </div>
 
-            {/* Show all existing trails as faint reference lines */}
-            {visibleExistingTrails.map((t) => {
-              const coords = Array.isArray(t.coordinates_json) ? t.coordinates_json : [];
-              if (coords.length < 2) return null;
-              const positions = coords.map((c: any) => [c.lat, c.lng] as LatLngTuple);
-              const isEditing = t.id === editingTrailId;
-              return (
-                <Polyline
-                  key={t.id}
-                  positions={positions}
-                  pathOptions={{
-                    color: isEditing ? '#3b82f6' : '#6b7280',
-                    weight: isEditing ? 3 : 2,
-                    opacity: isEditing ? 0.7 : 0.3,
-                    dashArray: isEditing ? '8 4' : '4 4',
-                  }}
-                />
-              );
-            })}
+                  {currentReview.reasons.length > 0 && (
+                    <div className="text-[9px] text-slate-500 dark:text-slate-400 space-y-0.5 bg-white/40 dark:bg-slate-900/30 p-2 rounded-lg border border-slate-200/20 dark:border-slate-800/20">
+                      {currentReview.reasons.slice(0, 3).map((reason) => (
+                        <div key={reason} className="flex items-start gap-1">
+                          <span className="text-blue-500 shrink-0">•</span>
+                          <span>{reason}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
 
-            {/* Original path when editing (blue reference) */}
-            {originalPath.length > 1 && editingTrailId && (
-              <Polyline positions={originalPath} pathOptions={{ color: '#3b82f6', weight: 3, opacity: 0.5, dashArray: '8 4' }} />
-            )}
-
-            {/* New/edited path (yellow) */}
-            {path.length > 1 && (
-              <Polyline positions={path} pathOptions={{ color: '#f59e0b', weight: 3, dashArray: '5 5' }} />
-            )}
-            {path.map((p, i) => (
-              <Marker key={i} position={p} icon={pointIcon} />
-            ))}
-          </MapContainer>
-          {mode === 'recording' && path.length > 0 && (
-            <Button
-              type="button"
-              size="icon"
-              variant="outline"
-              className="absolute right-3 bottom-3 z-[1000] glass-card"
-              aria-label="Follow current recording location"
-              onClick={() => {
-                const last = pathRef.current[pathRef.current.length - 1];
-                suppressRecorderUnlockRef.current = true;
-                setFollowRecordingMap(true);
-                if (recorderMap && last) recorderMap.setView(last, Math.max(recorderMap.getZoom(), 17));
-                window.setTimeout(() => {
-                  suppressRecorderUnlockRef.current = false;
-                }, 900);
-              }}
-            >
-              <Locate className="h-4 w-4" />
-            </Button>
-          )}
-        </div>
-      </CardContent>
-    </Card>
+            </div>
+          </div>,
+          document.body
+        )
+      )}
+    </>
   );
 }
