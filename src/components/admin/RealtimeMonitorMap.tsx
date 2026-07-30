@@ -156,6 +156,26 @@ export default function RealtimeMonitorMap({ locationId, canAddCheckpoints = fal
     const { data: cpData } = await cpQuery;
     setCheckpoints(((cpData as unknown as Checkpoint[]) ?? []));
 
+    let officialRouteQuery = supabase
+      .from('trail_zones' as any)
+      .select('id,location_id,name,coordinates_json,recording_metadata')
+      .eq('status', 'active')
+      .eq('is_official', true)
+      .order('official_at', { ascending: false });
+    if (locationId) officialRouteQuery = officialRouteQuery.eq('location_id', locationId);
+    const officialRouteResult = await officialRouteQuery;
+    let officialRoutes = (officialRouteResult.data as unknown as TrailZoneRef[] | null) ?? [];
+    if (officialRouteResult.error) {
+      let fallbackRouteQuery = supabase
+        .from('trail_zones' as any)
+        .select('id,location_id,name,coordinates_json')
+        .eq('status', 'active');
+      if (locationId) fallbackRouteQuery = fallbackRouteQuery.eq('location_id', locationId);
+      const fallbackRouteResult = await fallbackRouteQuery;
+      officialRoutes = (fallbackRouteResult.data as unknown as TrailZoneRef[] | null) ?? [];
+    }
+    setTrailZones(officialRoutes);
+
     const sessQuery = supabase
       .from('hiker_sessions' as any)
       .select('id,user_id,booking_id,trail_zone_id,location_id,participant_role,tracking_phase,total_distance_km,moving_time_sec,resting_time_sec,peak_reached_at,descent_started_at,start_time')
@@ -163,31 +183,33 @@ export default function RealtimeMonitorMap({ locationId, canAddCheckpoints = fal
     const { data: sessData } = await sessQuery;
     let sessList = ((sessData as any[]) ?? []) as ActiveSession[];
 
-    const trailZoneIds = Array.from(new Set(sessList.map((s) => s.trail_zone_id).filter(Boolean))) as string[];
     const trailZoneMap: Record<string, TrailZoneRef> = {};
-    if (trailZoneIds.length > 0) {
+    officialRoutes.forEach((route) => { trailZoneMap[route.id] = route; });
+    const missingTrailZoneIds = Array.from(new Set(
+      sessList
+        .map((session) => session.trail_zone_id)
+        .filter((id): id is string => Boolean(id && !trailZoneMap[id])),
+    ));
+    if (missingTrailZoneIds.length > 0) {
       const zoneResult = await supabase
         .from('trail_zones' as any)
         .select('id,location_id,name,coordinates_json,recording_metadata')
-        .in('id', trailZoneIds);
+        .in('id', missingTrailZoneIds);
       let zoneData = zoneResult.data;
       if (zoneResult.error) {
         const fallback = await supabase
           .from('trail_zones' as any)
           .select('id,location_id,name,coordinates_json')
-          .in('id', trailZoneIds);
+          .in('id', missingTrailZoneIds);
         zoneData = fallback.data;
       }
-      setTrailZones((zoneData as unknown as TrailZoneRef[] | null) ?? []);
       ((zoneData as unknown as TrailZoneRef[] | null) ?? []).forEach((z) => { trailZoneMap[z.id] = z; });
-      sessList.forEach((s) => {
-        if (s.trail_zone_id && trailZoneMap[s.trail_zone_id]) {
-          (s as any).trail_zone_name = trailZoneMap[s.trail_zone_id].name;
-        }
-      });
-    } else {
-      setTrailZones([]);
     }
+    sessList.forEach((session) => {
+      if (session.trail_zone_id && trailZoneMap[session.trail_zone_id]) {
+        (session as any).trail_zone_name = trailZoneMap[session.trail_zone_id].name;
+      }
+    });
 
     const bookingIds = Array.from(new Set(sessList.map((s) => s.booking_id).filter(Boolean))) as string[];
     const bookingMap: Record<string, any> = {};
@@ -314,6 +336,9 @@ export default function RealtimeMonitorMap({ locationId, canAddCheckpoints = fal
       .on('postgres_changes', { event: '*', schema: 'public', table: 'checkpoints' }, () => {
         void loadData();
       })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'trail_zones' }, () => {
+        void loadData();
+      })
       .subscribe();
     return () => { supabase.removeChannel(ch); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -345,6 +370,7 @@ export default function RealtimeMonitorMap({ locationId, canAddCheckpoints = fal
         const isPeak = station.kind === 'peak';
         const label = station.kind === 'jump_off' ? 'J' : isPeak ? 'P' : String(station.index - 1);
         L.marker([station.lat, station.lng], {
+          zIndexOffset: 100,
           icon: L.divIcon({
             className: '',
             iconSize: [24, 24],
@@ -422,6 +448,7 @@ export default function RealtimeMonitorMap({ locationId, canAddCheckpoints = fal
         </div>
       `;
       const m = L.marker([s.lastLat, s.lastLng], {
+        zIndexOffset: role === 'guide' ? 1800 : 2000,
         icon: L.divIcon({
           className: '',
           html: `<div style="background:${markerColor};width:${role === 'guide' ? 18 : 16}px;height:${role === 'guide' ? 18 : 16}px;border-radius:${role === 'guide' ? '4px' : '50%'};border:3px solid white;box-shadow:0 0 0 3px ${stale ? 'rgba(249,115,22,.3)' : 'rgba(34,197,94,.3)'}"></div>`,

@@ -1168,7 +1168,24 @@ export default function AdminDashboard() {
               Monitor real-time hiker activity, manage zones, announcements, and guides.
             </p>
           </div>
-          <AppDownloadButton />
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              size="sm"
+              className="gap-2"
+              onClick={() => {
+                setActiveTab('scan');
+                const next = new URLSearchParams(searchParams);
+                next.set('tab', 'scan');
+                next.delete('routeDraft');
+                setSearchParams(next, { replace: true });
+                window.requestAnimationFrame(() => window.scrollTo({ top: 0, behavior: 'smooth' }));
+              }}
+            >
+              <ScanLine className="h-4 w-4" />
+              Check In
+            </Button>
+            <AppDownloadButton />
+          </div>
         </motion.div>
 
         <Tabs

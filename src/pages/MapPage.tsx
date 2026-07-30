@@ -16,7 +16,7 @@ import {
   type RouteStation,
 } from '@/lib/map-data';
 import { Button } from '@/components/ui/button';
-import { ChevronDown, ChevronUp, Locate, Pause, Play, AlertTriangle, ChevronLeft, ChevronRight, Layers, Download, CheckCircle2, MapPinned } from 'lucide-react';
+import { Box, ChevronDown, ChevronUp, Locate, Pause, Play, AlertTriangle, ChevronLeft, ChevronRight, Layers, Download, CheckCircle2, MapPinned } from 'lucide-react';
 import { toast } from 'sonner';
 import ElevationProfile from '@/components/map/ElevationProfile';
 import MapLegend from '@/components/map/MapLegend';
@@ -24,6 +24,7 @@ import TrailStats from '@/components/map/TrailStats';
 import TrailNavigation from '@/components/map/TrailNavigation';
 import MapCompass from '@/components/map/MapCompass';
 import RouteSimulationLayer from '@/components/map/RouteSimulationLayer';
+import Terrain3DDialog from '@/components/map/Terrain3DDialog';
 import WeatherPanel from '@/components/map/WeatherPanel';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { useAuth } from '@/hooks/useAuth';
@@ -496,6 +497,7 @@ export default function MapPage() {
   const [mobileViewportBottomInset, setMobileViewportBottomInset] = useState(0);
   const [mobileViewportHeight, setMobileViewportHeight] = useState<number | null>(null);
   const [legendOpen, setLegendOpen] = useState(false);
+  const [terrain3dOpen, setTerrain3dOpen] = useState(false);
   const relockUserMap = useCallback(() => {
     suppressFollowUnlockRef.current = true;
     setFollowUser(true);
@@ -557,6 +559,7 @@ export default function MapPage() {
   const [trackingPhase, setTrackingPhase] = useState<'ascent' | 'peak' | 'descent' | 'completed'>('ascent');
   const [tileDownloadProgress, setTileDownloadProgress] = useState<{ done: number; total: number } | null>(null);
   const [dbTrails, setDbTrails] = useState<MapTrail[]>([]);
+  const [officialRoutesRevision, setOfficialRoutesRevision] = useState(0);
   
 
   // Smooth interpolation for the hiker marker
@@ -856,7 +859,19 @@ export default function MapPage() {
       setDbTrails(loaded);
     })();
     return () => { active = false; };
-  }, [activeLocationId, assignedTrailZoneId, role]);
+  }, [activeLocationId, assignedTrailZoneId, officialRoutesRevision, role]);
+
+  useEffect(() => {
+    const channel = supabase
+      .channel(`official-route-map-${user?.id ?? 'guest'}`)
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'trail_zones' },
+        () => setOfficialRoutesRevision((revision) => revision + 1),
+      )
+      .subscribe();
+    return () => { void supabase.removeChannel(channel); };
+  }, [user?.id]);
 
   const availableTrails = useMemo<MapTrail[]>(
     () => dbTrails.length > 0
@@ -1928,6 +1943,7 @@ export default function MapPage() {
                 key={`${currentTrail.id ?? currentTrail.name}-${station.id}`}
                 position={[station.lat, station.lng]}
                 icon={makeRouteStationIcon(station)}
+                zIndexOffset={100}
               >
                 <Popup>
                   <strong>{station.name}</strong>
@@ -1986,7 +2002,7 @@ export default function MapPage() {
             {/* User Location Hiker Marker */}
             {(displayPos || userPos) && (
               <>
-                <Marker position={displayPos || userPos!} icon={userOrientationIcon}>
+                <Marker position={displayPos || userPos!} icon={userOrientationIcon} zIndexOffset={2200}>
                   <Popup>
                     Your Position<br />
                     {wrongDirection ? 'Direction warning' : trackingPhase}
@@ -2059,8 +2075,18 @@ export default function MapPage() {
           <SOSPanel compact />
         </div>
 
-        {/* Desktop right-side stack: layers + elevation + locate */}
+        {/* Desktop right-side stack */}
         <div className="hidden md:flex absolute right-4 bottom-4 z-[1100] flex-col items-end gap-2">
+          <Button
+            size="icon"
+            variant="outline"
+            className="glass-card"
+            onClick={() => setTerrain3dOpen(true)}
+            aria-label="Open 3D terrain"
+            title="Open 3D terrain"
+          >
+            <Box className="h-4 w-4" />
+          </Button>
           <WeatherPanel lat={MT_KALISUNGAN_CENTER[0]} lng={MT_KALISUNGAN_CENTER[1]} onAdvice={handleWeatherAdvice} />
           <ElevationProfile
             trailPath={currentTrail.path}
@@ -2105,7 +2131,7 @@ export default function MapPage() {
           )}
         </div>
 
-        {/* Mobile right-side stack: ONLY 3 controls (layers, elevation, locate) */}
+        {/* Mobile right-side map tools */}
         <div
           className="md:hidden absolute right-3 top-[5.25rem] z-[1100] flex flex-col items-end gap-2"
         >
@@ -2120,6 +2146,16 @@ export default function MapPage() {
               <MapPinned className="h-4 w-4" />
             </Button>
           )}
+          <Button
+            size="icon"
+            variant="outline"
+            className="glass-card"
+            onClick={() => setTerrain3dOpen(true)}
+            aria-label="Open 3D terrain"
+            title="Open 3D terrain"
+          >
+            <Box className="h-4 w-4" />
+          </Button>
           <WeatherPanel lat={MT_KALISUNGAN_CENTER[0]} lng={MT_KALISUNGAN_CENTER[1]} onAdvice={handleWeatherAdvice} />
           <ElevationProfile
             trailPath={currentTrail.path}
@@ -2335,6 +2371,13 @@ export default function MapPage() {
         session={summarySession}
         open={!!summarySession}
         onClose={() => setSummarySession(null)}
+      />
+      <Terrain3DDialog
+        open={terrain3dOpen}
+        onOpenChange={setTerrain3dOpen}
+        routeName={currentTrail.name}
+        routePath={currentTrail.path}
+        stations={currentTrail.stations}
       />
     </div>
   );

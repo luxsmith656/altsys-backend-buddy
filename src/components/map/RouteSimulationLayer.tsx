@@ -213,7 +213,12 @@ export default function RouteSimulationLayer({ routeName, routePath }: RouteSimu
   return (
     <>
       {groups.map((group) => (
-        <Marker key={group.id} position={pointAlongRoute(validPath, group.progress)} icon={groupIcon(group.phase)}>
+        <Marker
+          key={group.id}
+          position={pointAlongRoute(validPath, group.progress)}
+          icon={groupIcon(group.phase)}
+          zIndexOffset={1800}
+        >
           <Popup>
             <div className="min-w-56 space-y-2 text-xs">
               <div>
