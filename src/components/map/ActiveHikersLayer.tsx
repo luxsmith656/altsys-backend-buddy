@@ -243,7 +243,7 @@ export default function ActiveHikersLayer({
         if (h.phase === 'sos') return h; // Freeze or stop on SOS
 
         let nextProgress = h.progress;
-        let nextPhase = h.phase;
+        let nextPhase: 'ascent' | 'peak' | 'descent' | 'completed' | 'sos' = h.phase;
         let nextTimer = h.peakTimerLeft;
         let nextDirection = h.direction;
         let nextPeakTime = h.peakReachedAt;

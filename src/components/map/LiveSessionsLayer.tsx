@@ -233,7 +233,7 @@ export default function LiveSessionsLayer({
       {sessions.map((session) => {
         const points = renderedPaths[session.id] ?? [];
         if (points.length === 0) return null;
-        const latest = points[points.length - 1];
+        const latest = points[points.length - 1] as { latitude: number; longitude: number; timestamp: string; heading?: number | null; accuracy?: number | null };
         const isSelf = mode === 'self' && session.user_id === userId;
         const role = session.participant_role ?? (isSelf && userRole === 'guide' ? 'guide' : 'hiker');
         const heading = isSelf && localSnapshot?.lastFix
