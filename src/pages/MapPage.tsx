@@ -92,7 +92,7 @@ type MapTrail = (typeof TRAILS)[number] & {
 };
 
 // Fix default marker icons
-delete (L.Icon.Default.prototype as Record<string, unknown>)._getIconUrl;
+delete (L.Icon.Default.prototype as unknown as Record<string, unknown>)._getIconUrl;
 L.Icon.Default.mergeOptions({
   iconRetinaUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-icon-2x.png',
   iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-icon.png',
@@ -203,7 +203,7 @@ export default function MapPage() {
         fallback = fallback.eq('location_id', activeLocationId) as typeof fallback;
       }
       const res = await fallback;
-      trackerData = res.data;
+      trackerData = res.data as unknown as typeof trackerData;
     }
     
     const loaded = ((trackerData as DBTrailZone[]) ?? [])
@@ -530,7 +530,7 @@ export default function MapPage() {
                 {canMonitorAll && simulationMode && (
                   <ActiveHikersLayer
                     showStations={false}
-                    routePath={currentTrail.path}
+                    routePath={currentTrail.path as [number, number][]}
                     routeStations={currentTrail.stations}
                     routeDistanceKm={currentRouteDistanceKm}
                     simulationControlsOpen={simulationControlsOpen}
@@ -911,7 +911,7 @@ export default function MapPage() {
         open={terrain3dOpen}
         onOpenChange={setTerrain3dOpen}
         routeName={currentTrail.name}
-        routePath={currentTrail.path}
+        routePath={currentTrail.path as [number, number][]}
         stations={currentTrail.stations ?? []}
       />
     </div>

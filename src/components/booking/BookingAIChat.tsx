@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import { MessageSquare, X, Send, Sparkles, Users, Calendar, Mountain } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
+import { supabase } from '@/integrations/supabase/client';
 
 type HikeType = 'day' | 'night';
 
@@ -20,11 +21,20 @@ export interface GroupComposition {
   seniors: number;
 }
 
+export interface BookingSuggestion {
+  date?: string;      // yyyy-MM-dd
+  hikeTime?: string;  // "06:00 AM"
+  groupSize?: number;
+  hikeType?: HikeType;
+  label?: string;
+}
+
 interface ChatMsg {
   id: string;
   role: 'user' | 'assistant';
   content: string;
   quickReplies?: string[];
+  suggestion?: BookingSuggestion;
 }
 
 interface BookingAIChatProps {
@@ -35,10 +45,37 @@ interface BookingAIChatProps {
   groupComposition?: GroupComposition | null;
   onGroupCompositionSet?: (composition: GroupComposition) => void;
   onTimeSuggest?: (time: string) => void;
+  hikeTime?: string;
+  onApplySuggestion?: (s: BookingSuggestion) => void;
 }
 
 const TYPING_DELAY = 750;
-const CHAT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/trail-chat`;
+const CHAT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/trail-chat-rag`;
+const APPLY_RE = /\[\[APPLY\s*(\{[\s\S]*?\})\s*\]\]/;
+
+/** Pull the machine-readable booking suggestion out of an assistant reply. */
+function extractSuggestion(text: string): { clean: string; suggestion?: BookingSuggestion } {
+  const match = text.match(APPLY_RE);
+  if (!match) return { clean: text };
+  const clean = text.replace(APPLY_RE, '').trim();
+  try {
+    const raw = JSON.parse(match[1]) as Record<string, unknown>;
+    const suggestion: BookingSuggestion = {};
+    if (typeof raw.date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(raw.date)) suggestion.date = raw.date;
+    if (typeof raw.hikeTime === 'string' && /^\d{1,2}:\d{2}\s?(AM|PM)$/i.test(raw.hikeTime.trim())) {
+      suggestion.hikeTime = raw.hikeTime.trim().toUpperCase();
+    }
+    if (typeof raw.groupSize === 'number' && raw.groupSize >= 1 && raw.groupSize <= 30) {
+      suggestion.groupSize = Math.round(raw.groupSize);
+    }
+    if (raw.hikeType === 'day' || raw.hikeType === 'night') suggestion.hikeType = raw.hikeType;
+    if (typeof raw.label === 'string') suggestion.label = raw.label.slice(0, 80);
+    const hasValue = suggestion.date || suggestion.hikeTime || suggestion.groupSize || suggestion.hikeType;
+    return hasValue ? { clean, suggestion } : { clean };
+  } catch {
+    return { clean };
+  }
+}
 
 function generateId() {
   return Math.random().toString(36).slice(2, 9);
@@ -429,6 +466,8 @@ export default function BookingAIChat({
   groupComposition,
   onGroupCompositionSet,
   onTimeSuggest: _onTimeSuggest,
+  hikeTime,
+  onApplySuggestion,
 }: BookingAIChatProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [messages, setMessages] = useState<ChatMsg[]>([]);
@@ -446,16 +485,19 @@ export default function BookingAIChat({
     if (messages.length > 0) scrollToBottom();
   }, [messages, scrollToBottom]);
 
-  const addAIMessage = useCallback((content: string, quickReplies?: string[]) => {
-    setIsTyping(true);
-    setTimeout(() => {
-      setIsTyping(false);
-      setMessages((prev) => [
-        ...prev,
-        { id: generateId(), role: 'assistant', content, quickReplies },
-      ]);
-    }, TYPING_DELAY);
-  }, []);
+  const addAIMessage = useCallback(
+    (content: string, quickReplies?: string[], suggestion?: BookingSuggestion) => {
+      setIsTyping(true);
+      setTimeout(() => {
+        setIsTyping(false);
+        setMessages((prev) => [
+          ...prev,
+          { id: generateId(), role: 'assistant', content, quickReplies, suggestion },
+        ]);
+      }, TYPING_DELAY);
+    },
+    [],
+  );
 
   useEffect(() => {
     if (!isOpen || messages.length > 0) return;
@@ -471,6 +513,7 @@ export default function BookingAIChat({
   const getOnlineAnswer = useCallback(async (text: string): Promise<string | null> => {
     if (!navigator.onLine) return null;
     try {
+      const { data: { session } } = await supabase.auth.getSession();
       const thread = [
         ...messages.map((m) => ({ role: m.role, content: m.content })),
         { role: 'user' as const, content: text },
@@ -479,9 +522,19 @@ export default function BookingAIChat({
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+          Authorization: `Bearer ${session?.access_token ?? import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
         },
-        body: JSON.stringify({ messages: thread }),
+        body: JSON.stringify({
+          messages: thread,
+          booking_context: {
+            selected_date: date ? format(date, 'yyyy-MM-dd') : null,
+            selected_start_time: hikeTime ?? null,
+            group_size: groupSize,
+            hike_type: hikeType,
+            group_composition: groupComposition ?? null,
+            weather_forecast: weatherInsight ?? null,
+          },
+        }),
       });
       if (!resp.ok) return null;
       const reader = resp.body?.getReader();
@@ -514,7 +567,7 @@ export default function BookingAIChat({
     } catch {
       return null;
     }
-  }, [messages]);
+  }, [messages, date, hikeTime, groupSize, hikeType, groupComposition, weatherInsight]);
 
   const sendMessage = useCallback(
     async (text: string) => {
@@ -525,9 +578,15 @@ export default function BookingAIChat({
 
       const onlineAnswer = await getOnlineAnswer(text);
       if (onlineAnswer) {
-        addAIMessage(onlineAnswer);
+        const { clean, suggestion } = extractSuggestion(onlineAnswer);
+        addAIMessage(clean, undefined, suggestion);
         setTimeout(() => inputRef.current?.focus(), 100);
         return;
+      }
+      if (navigator.onLine) {
+        addAIMessage(
+          "I couldn't reach the assistant just now — we're fixing it, please try again in a few minutes. Meanwhile I can still help with the basics below.",
+        );
       }
 
       const response = generateResponse(
@@ -660,6 +719,14 @@ export default function BookingAIChat({
                       className="whitespace-pre-wrap"
                       dangerouslySetInnerHTML={{ __html: handleMarkdown(msg.content) }}
                     />
+                    {msg.suggestion && onApplySuggestion && (
+                      <button
+                        onClick={() => onApplySuggestion(msg.suggestion!)}
+                        className="mt-2.5 w-full text-[11px] font-semibold bg-primary text-primary-foreground px-3 py-2 rounded-xl hover:bg-primary/90 transition-colors"
+                      >
+                        {msg.suggestion.label || 'Apply these details to my booking'}
+                      </button>
+                    )}
                     {msg.quickReplies && msg.quickReplies.length > 0 && (
                       <div className="flex flex-wrap gap-1.5 mt-2.5">
                         {msg.quickReplies.map((reply) => (

@@ -505,7 +505,7 @@ export default function AdminDashboard() {
         .select('id,user_id,full_name')
         .eq('id', assignedGuideId)
         .limit(1);
-      const guideRow = (guideRows as Array<{ id: string; user_id: string | null; full_name: string }> | null)?.[0];
+      const guideRow = (guideRows as unknown as Array<{ id: string; user_id: string | null; full_name: string }> | null)?.[0];
       if (guideRow) {
         assignedGuide = {
           id: guideRow.id,

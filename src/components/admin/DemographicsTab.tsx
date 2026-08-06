@@ -78,7 +78,7 @@ export default function DemographicsTab() {
       for (const b of (data || [])) {
         const meta = parseMeta(b.notes);
         // Process hiker
-        const n = b.hiker_name || meta.fullName || 'Unknown';
+        const n = (b as any).hiker_name || meta.fullName || 'Unknown';
         if (n && n !== 'Unknown') {
           total++;
           const age = meta.age || 'Unknown';

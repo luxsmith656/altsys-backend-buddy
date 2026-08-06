@@ -58,7 +58,8 @@ export default function OverviewDashboard({ locationId }: { locationId: string |
         if (b.status !== 'cancelled' && b.status !== 'declined') {
           const fees = calculateFees(b.group_size || 1);
           revenue += fees.totalFee;
-          if (b.payment_status === 'paid' || b.payment_status === 'partial') {
+          const payStatus = (b as any).payment_status;
+          if (payStatus === 'paid' || payStatus === 'partial') {
              collected += fees.totalFee; // Rough estimate for partial
           }
         }
