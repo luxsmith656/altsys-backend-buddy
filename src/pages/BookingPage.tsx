@@ -1910,9 +1910,22 @@ export default function BookingPage() {
         date={date}
         groupSize={groupSize}
         hikeType={hikeType}
+        hikeTime={hikeTime}
         weatherInsight={weatherInsight}
         groupComposition={groupComposition}
         onGroupCompositionSet={setGroupComposition}
+        onApplySuggestion={(s) => {
+          const applied: string[] = [];
+          if (s.date) {
+            const [y, m, d] = s.date.split('-').map(Number);
+            const next = new Date(y, m - 1, d);
+            if (!Number.isNaN(next.getTime())) { setDate(next); applied.push(format(next, 'MMM d, yyyy')); }
+          }
+          if (s.hikeType) { setHikeType(s.hikeType); applied.push(s.hikeType === 'night' ? 'Night hike' : 'Day hike'); }
+          if (s.hikeTime) { setHikeTime(s.hikeTime); setUseCustomTime(true); applied.push(s.hikeTime); }
+          if (typeof s.groupSize === 'number') { setGroupSize(s.groupSize); applied.push(`${s.groupSize} pax`); }
+          if (applied.length) toast.success(`Applied: ${applied.join(' · ')}`);
+        }}
       />
 
       {/* Floating AI Insights Panel — right side (desktop) */}
