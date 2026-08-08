@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -220,6 +220,27 @@ export default function BookingPage() {
   const [hikeTime, setHikeTime] = useState('06:00 AM');
   const [groupSize, setGroupSize] = useState(1);
   const [useCustomTime, setUseCustomTime] = useState(false);
+
+  /* Prefill from the global AI assistant redirect: /booking?date=&time=&pax=&type= */
+  const [searchParams, setSearchParams] = useSearchParams();
+  useEffect(() => {
+    const d = searchParams.get('date');
+    const t = searchParams.get('time');
+    const pax = searchParams.get('pax');
+    const type = searchParams.get('type');
+    if (!d && !t && !pax && !type) return;
+    const applied: string[] = [];
+    if (d && /^\d{4}-\d{2}-\d{2}$/.test(d)) {
+      const [y, m, day] = d.split('-').map(Number);
+      const next = new Date(y, m - 1, day);
+      if (!Number.isNaN(next.getTime())) { setDate(next); applied.push(format(next, 'MMM d, yyyy')); }
+    }
+    if (t) { setHikeTime(t); setUseCustomTime(true); applied.push(t); }
+    if (pax && Number(pax) >= 1) { setGroupSize(Math.min(30, Number(pax))); applied.push(`${pax} pax`); }
+    if (type === 'day' || type === 'night') { setHikeType(type); applied.push(type === 'night' ? 'Night hike' : 'Day hike'); }
+    if (applied.length) toast.success(`Assistant applied: ${applied.join(' · ')}`);
+    setSearchParams({}, { replace: true });
+  }, [searchParams, setSearchParams]);
   const [customTimeInput, setCustomTimeInput] = useState('');
   const [monthCapacity, setMonthCapacity] = useState<DayCapacityMap>({});
   const [smartGuideEnabled, setSmartGuideEnabled] = useState(false);
