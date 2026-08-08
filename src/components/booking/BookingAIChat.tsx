@@ -473,6 +473,8 @@ export default function BookingAIChat({
   onTimeSuggest: _onTimeSuggest,
   hikeTime,
   onApplySuggestion,
+  pageContext,
+  greeting,
 }: BookingAIChatProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [messages, setMessages] = useState<ChatMsg[]>([]);
