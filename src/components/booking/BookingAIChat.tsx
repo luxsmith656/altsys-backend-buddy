@@ -537,7 +537,9 @@ export default function BookingAIChat({
         },
         body: JSON.stringify({
           messages: thread,
+          page_context: pageContext ?? 'Book a Hike',
           booking_context: {
+            current_page: pageContext ?? 'Book a Hike',
             selected_date: date ? format(date, 'yyyy-MM-dd') : null,
             selected_start_time: hikeTime ?? null,
             group_size: groupSize,
