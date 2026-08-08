@@ -47,7 +47,12 @@ interface BookingAIChatProps {
   onTimeSuggest?: (time: string) => void;
   hikeTime?: string;
   onApplySuggestion?: (s: BookingSuggestion) => void;
+  /** Where the assistant is being shown (page name/route) so it can answer page questions */
+  pageContext?: string;
+  /** Greeting override for non-booking pages */
+  greeting?: string;
 }
+
 
 const TYPING_DELAY = 750;
 const CHAT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/trail-chat-rag`;
