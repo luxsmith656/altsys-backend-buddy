@@ -52,7 +52,6 @@ import { encodeMeta } from '@/lib/bookingMeta';
 import { confirmReservation } from '@/lib/notification-service';
 import { CapacityCalendar, type DayCapacityMap } from '@/components/booking/CapacityCalendar';
 import BookingAIChat, { type GroupComposition } from '@/components/booking/BookingAIChat';
-import BookingInsightsPanel from '@/components/booking/BookingInsightsPanel';
 import { cn } from '@/lib/utils';
 import { getPHLocationOptions, COMMON_NATIONALITIES } from '@/lib/ph-locations';
 import { uploadPaymentScreenshot, isFirebaseConfigured } from '@/lib/firebase-storage';
@@ -1928,19 +1927,6 @@ export default function BookingPage() {
         }}
       />
 
-      {/* Floating AI Insights Panel — right side (desktop) */}
-      <BookingInsightsPanel
-        date={date}
-        smartGuideEnabled={smartGuideEnabled}
-        weatherInsight={weatherInsight}
-        weatherLoading={weatherLoading}
-        weatherError={weatherError}
-        smartRecommendations={smartRecommendations}
-        groupSize={groupSize}
-        hikeType={hikeType}
-        onToggleSmartGuide={setSmartGuideEnabled}
-        onClear={handleClearInsights}
-      />
 
       {showSwornPrompt && (
         <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4">
