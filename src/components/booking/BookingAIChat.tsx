@@ -47,7 +47,14 @@ interface BookingAIChatProps {
   onTimeSuggest?: (time: string) => void;
   hikeTime?: string;
   onApplySuggestion?: (s: BookingSuggestion) => void;
+  /** Where the assistant is being shown (page name/route) so it can answer page questions */
+  pageContext?: string;
+  /** Greeting override for non-booking pages */
+  greeting?: string;
+  /** Override label for the apply-suggestion button */
+  applyLabel?: string;
 }
+
 
 const TYPING_DELAY = 750;
 const CHAT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/trail-chat-rag`;
@@ -468,6 +475,9 @@ export default function BookingAIChat({
   onTimeSuggest: _onTimeSuggest,
   hikeTime,
   onApplySuggestion,
+  pageContext,
+  greeting,
+  applyLabel,
 }: BookingAIChatProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [messages, setMessages] = useState<ChatMsg[]>([]);
@@ -502,13 +512,17 @@ export default function BookingAIChat({
   useEffect(() => {
     if (!isOpen || messages.length > 0) return;
     addAIMessage(
-      `Let's plan this booking together.\n\n` +
+      greeting ??
+      (`Let's plan this booking together.\n\n` +
       `I can guide your **date**, **start time**, and **group size**.\n` +
       `Current setup: ${date ? format(date, 'MMM d, yyyy') : 'No date yet'} · ${hikeType === 'night' ? 'Night hike' : 'Day hike'} · ${groupSize} pax.\n\n` +
-      `What should we adjust first?`,
-      ['Pick best date', 'Recommend time', 'Set group size tips', 'Check weather for my date'],
+      `What should we adjust first?`),
+      greeting
+        ? ['Help me book a hike', 'What can I do on this page?', 'Weather and best time', 'What should I bring?']
+        : ['Pick best date', 'Recommend time', 'Set group size tips', 'Check weather for my date'],
     );
-  }, [isOpen, messages.length, date, hikeType, groupSize, addAIMessage]);
+  }, [isOpen, messages.length, date, hikeType, groupSize, addAIMessage, greeting]);
+
 
   const getOnlineAnswer = useCallback(async (text: string): Promise<string | null> => {
     if (!navigator.onLine) return null;
@@ -526,7 +540,9 @@ export default function BookingAIChat({
         },
         body: JSON.stringify({
           messages: thread,
+          page_context: pageContext ?? 'Book a Hike',
           booking_context: {
+            current_page: pageContext ?? 'Book a Hike',
             selected_date: date ? format(date, 'yyyy-MM-dd') : null,
             selected_start_time: hikeTime ?? null,
             group_size: groupSize,
@@ -567,7 +583,7 @@ export default function BookingAIChat({
     } catch {
       return null;
     }
-  }, [messages, date, hikeTime, groupSize, hikeType, groupComposition, weatherInsight]);
+  }, [messages, date, hikeTime, groupSize, hikeType, groupComposition, weatherInsight, pageContext]);
 
   const sendMessage = useCallback(
     async (text: string) => {
@@ -724,7 +740,7 @@ export default function BookingAIChat({
                         onClick={() => onApplySuggestion(msg.suggestion!)}
                         className="mt-2.5 w-full text-[11px] font-semibold bg-primary text-primary-foreground px-3 py-2 rounded-xl hover:bg-primary/90 transition-colors"
                       >
-                        {msg.suggestion.label || 'Apply these details to my booking'}
+                        {applyLabel || msg.suggestion.label || 'Apply these details to my booking'}
                       </button>
                     )}
                     {msg.quickReplies && msg.quickReplies.length > 0 && (

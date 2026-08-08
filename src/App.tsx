@@ -7,6 +7,7 @@ import { AuthProvider } from "@/hooks/useAuth";
 import { LocationsProvider } from "@/hooks/useLocations";
 import { ThemeProvider } from "@/hooks/useTheme";
 import Navbar from "@/components/layout/Navbar";
+import GlobalAIAssistant from "@/components/booking/GlobalAIAssistant";
 import Index from "./pages/Index";
 import Login from "./pages/Login";
 import Register from "./pages/Register";
@@ -74,6 +75,7 @@ const App = () => (
                 <Route path="/onboarding" element={<Onboarding />} />
                 <Route path="*" element={<NotFound />} />
               </Routes>
+              <GlobalAIAssistant />
             </LocationsProvider>
           </AuthProvider>
         </ThemeProvider>
