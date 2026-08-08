@@ -580,7 +580,7 @@ export default function BookingAIChat({
     } catch {
       return null;
     }
-  }, [messages, date, hikeTime, groupSize, hikeType, groupComposition, weatherInsight]);
+  }, [messages, date, hikeTime, groupSize, hikeType, groupComposition, weatherInsight, pageContext]);
 
   const sendMessage = useCallback(
     async (text: string) => {
