@@ -51,6 +51,8 @@ interface BookingAIChatProps {
   pageContext?: string;
   /** Greeting override for non-booking pages */
   greeting?: string;
+  /** Override label for the apply-suggestion button */
+  applyLabel?: string;
 }
 
 
@@ -475,6 +477,7 @@ export default function BookingAIChat({
   onApplySuggestion,
   pageContext,
   greeting,
+  applyLabel,
 }: BookingAIChatProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [messages, setMessages] = useState<ChatMsg[]>([]);
@@ -737,7 +740,7 @@ export default function BookingAIChat({
                         onClick={() => onApplySuggestion(msg.suggestion!)}
                         className="mt-2.5 w-full text-[11px] font-semibold bg-primary text-primary-foreground px-3 py-2 rounded-xl hover:bg-primary/90 transition-colors"
                       >
-                        {msg.suggestion.label || 'Apply these details to my booking'}
+                        {applyLabel || msg.suggestion.label || 'Apply these details to my booking'}
                       </button>
                     )}
                     {msg.quickReplies && msg.quickReplies.length > 0 && (
