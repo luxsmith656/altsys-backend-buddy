@@ -509,13 +509,17 @@ export default function BookingAIChat({
   useEffect(() => {
     if (!isOpen || messages.length > 0) return;
     addAIMessage(
-      `Let's plan this booking together.\n\n` +
+      greeting ??
+      (`Let's plan this booking together.\n\n` +
       `I can guide your **date**, **start time**, and **group size**.\n` +
       `Current setup: ${date ? format(date, 'MMM d, yyyy') : 'No date yet'} · ${hikeType === 'night' ? 'Night hike' : 'Day hike'} · ${groupSize} pax.\n\n` +
-      `What should we adjust first?`,
-      ['Pick best date', 'Recommend time', 'Set group size tips', 'Check weather for my date'],
+      `What should we adjust first?`),
+      greeting
+        ? ['Help me book a hike', 'What can I do on this page?', 'Weather and best time', 'What should I bring?']
+        : ['Pick best date', 'Recommend time', 'Set group size tips', 'Check weather for my date'],
     );
-  }, [isOpen, messages.length, date, hikeType, groupSize, addAIMessage]);
+  }, [isOpen, messages.length, date, hikeType, groupSize, addAIMessage, greeting]);
+
 
   const getOnlineAnswer = useCallback(async (text: string): Promise<string | null> => {
     if (!navigator.onLine) return null;
