@@ -2,7 +2,7 @@ import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { useTheme } from '@/hooks/useTheme';
 import { Button } from '@/components/ui/button';
-import { Mountain, Map, MessageSquare, CalendarCheck, LayoutDashboard, LogOut, Menu, X, Moon, Sun, Bell, User } from 'lucide-react';
+import { Mountain, Map, CalendarCheck, LayoutDashboard, LogOut, Menu, X, Moon, Sun, Bell, User } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import logo from '@/assets/logo.png';
@@ -34,7 +34,6 @@ export default function Navbar() {
         { to: dashboardPath, label: 'Dashboard', icon: LayoutDashboard },
         { to: '/booking', label: 'Book Hike', icon: CalendarCheck },
         { to: '/map', label: 'Map', icon: Map },
-        { to: '/chat', label: 'AI Assistant', icon: MessageSquare },
       ]
     : [];
 

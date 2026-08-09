@@ -48,7 +48,6 @@ import SOSPanel from '@/components/core/SOSPanel';
 import { encodeMeta, parseMeta } from '@/lib/bookingMeta';
 import { loadAnnouncements, type AdminAnnouncement } from '@/lib/announcements';
 import { addGuideRating } from '@/lib/guideRatings';
-import AppDownloadButton from '@/components/AppDownloadButton';
 import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -285,7 +284,6 @@ export default function HikerDashboard() {
 
   return (
     <div className="min-h-screen px-3 pb-12 pt-20 sm:px-4">
-      <AppDownloadButton floating />
       <div className="container max-w-6xl mx-auto">
 
         {/* Header */}
@@ -405,6 +403,7 @@ export default function HikerDashboard() {
                           </AlertDialogContent>
                         </AlertDialog>
                       </div>
+                      <p className="text-xs text-muted-foreground">Did not request this? Open the booking chat or <a className="text-primary underline" href={import.meta.env.VITE_ADMIN_FACEBOOK_URL || 'https://www.facebook.com/'} target="_blank" rel="noreferrer">contact the admin on Facebook</a> and include your name.</p>
                     </div>
                   );
                 })}
@@ -458,9 +457,8 @@ export default function HikerDashboard() {
                   Book a Hike
                   <ArrowRight className="h-4 w-4 ml-1" />
                 </Link>
-                        </Button>
-                      </div>
-                      <p className="text-xs text-muted-foreground">Did not request this? Open the booking chat or <a className="text-primary underline" href={import.meta.env.VITE_ADMIN_FACEBOOK_URL || 'https://www.facebook.com/'} target="_blank" rel="noreferrer">contact the admin on Facebook</a> and include your name.</p>
+              </Button>
+            </div>
           </div>
         </motion.div>
 
@@ -656,26 +654,26 @@ export default function HikerDashboard() {
                 </Button>
               </div>
             ) : (
-              <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-2 lg:grid-cols-3 lg:gap-4">
                 {bookings.map((b) => {
                   const meta = parseMeta(b.notes);
                   return (
                     <div
                       key={b.id}
-                      className={`p-4 rounded-xl border flex flex-col gap-3 ${
+                        className={`min-w-0 rounded-xl border p-3 flex flex-col gap-2.5 sm:p-4 sm:gap-3 ${
                         b.status === 'adjustment_pending'
                           ? 'bg-sky-500/5 border-sky-500/30'
                           : 'bg-secondary/30 border-border/20'
                       }`}
                     >
                       {/* QR Code */}
-                      <div className="flex justify-center bg-white rounded-lg p-3">
-                        <QRCodeSVG value={b.qr_code_data || b.id} size={100} bgColor="#ffffff" fgColor="#1a2e1a" />
+                      <div className="flex justify-center bg-white rounded-lg p-2 sm:p-3">
+                        <QRCodeSVG value={b.qr_code_data || b.id} size={76} bgColor="#ffffff" fgColor="#1a2e1a" />
                       </div>
 
                       {/* Info */}
                       <div className="text-center space-y-1">
-                        <p className="font-semibold">{meta.adjustedDate ?? b.booking_date}</p>
+                        <p className="text-sm font-semibold">{meta.adjustedDate ?? b.booking_date}</p>
                         {meta.adjustedDate && meta.adjustedDate !== b.booking_date && (
                           <p className="text-xs text-muted-foreground line-through">{b.booking_date}</p>
                         )}
@@ -725,7 +723,7 @@ export default function HikerDashboard() {
                               <Button
                                 variant="outline"
                                 size="sm"
-                                className="w-full text-destructive border-destructive/30 hover:bg-destructive/10 gap-1.5"
+                                className="w-full text-[11px] text-destructive border-destructive/30 hover:bg-destructive/10 gap-1 px-2"
                                 disabled={cancellingId === b.id}
                               >
                                 {cancellingId === b.id ? (
@@ -775,7 +773,7 @@ export default function HikerDashboard() {
                       <Button
                         size="sm"
                         variant="outline"
-                        className="w-full gap-1.5"
+                        className="w-full gap-1 px-2 text-[11px]"
                         onClick={() => setChatBooking({ id: b.id, date: b.booking_date })}
                       >
                         <CalendarClock className="h-3.5 w-3.5" /> Reschedule

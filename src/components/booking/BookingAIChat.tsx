@@ -53,6 +53,8 @@ interface BookingAIChatProps {
   greeting?: string;
   /** Override label for the apply-suggestion button */
   applyLabel?: string;
+  /** Hide the built-in launcher when a shared mobile action dock owns it. */
+  showLauncher?: boolean;
 }
 
 
@@ -478,6 +480,7 @@ export default function BookingAIChat({
   pageContext,
   greeting,
   applyLabel,
+  showLauncher = true,
 }: BookingAIChatProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [messages, setMessages] = useState<ChatMsg[]>([]);
@@ -622,15 +625,20 @@ export default function BookingAIChat({
       .replace(/\*(.*?)\*/g, '<em>$1</em>')
       .replace(/\n/g, '<br/>');
 
+  useEffect(() => {
+    const openAssistant = () => setIsOpen(true);
+    window.addEventListener('open-global-ai-assistant', openAssistant);
+    return () => window.removeEventListener('open-global-ai-assistant', openAssistant);
+  }, []);
+
   return (
     <>
       {/* Toggle button */}
-      {!isOpen && (
+      {showLauncher && !isOpen && (
         <motion.button
           onClick={() => setIsOpen(true)}
           className={cn(
-            'fixed bottom-6 left-6 z-50 flex items-center gap-2 px-4 py-3 rounded-2xl shadow-2xl text-sm font-semibold transition-colors duration-200',
-            'bottom-24 md:bottom-6 left-3 md:left-6',
+            'fixed bottom-6 left-6 z-50 hidden items-center gap-2 rounded-2xl px-4 py-3 text-sm font-semibold shadow-2xl transition-colors duration-200 sm:flex',
             'bg-primary text-primary-foreground hover:bg-primary/90',
           )}
           whileHover={{ scale: 1.04 }}

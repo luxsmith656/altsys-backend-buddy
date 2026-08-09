@@ -186,6 +186,12 @@ export default function AdminDashboard() {
   }, [activeTab, operationsTab, searchParams]);
 
   useEffect(() => {
+    const openCalendar = () => setCalendarFloatingOpen(true);
+    window.addEventListener('open-admin-booking-calendar', openCalendar);
+    return () => window.removeEventListener('open-admin-booking-calendar', openCalendar);
+  }, []);
+
+  useEffect(() => {
     if (activeTab !== 'overview' || !searchParams.get('routeDraft')) return;
     const id = window.setTimeout(() => {
       routeEditorRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -1452,7 +1458,9 @@ export default function AdminDashboard() {
               <ScanLine className="h-4 w-4" />
               Check In
             </Button>
-            <AppDownloadButton />
+            <div className="hidden sm:block">
+              <AppDownloadButton />
+            </div>
           </div>
         </motion.div>
 
@@ -2498,7 +2506,7 @@ export default function AdminDashboard() {
       </div>
 
       {/* Floating collapsible booking calendar */}
-      <div className="fixed bottom-[calc(env(safe-area-inset-bottom)+0.75rem)] left-3 right-3 z-40 sm:left-auto sm:right-4 sm:w-[360px] sm:max-w-[92vw]">
+      <div className={`${calendarFloatingOpen ? 'block' : 'hidden'} fixed bottom-[calc(env(safe-area-inset-bottom)+0.75rem)] left-3 right-3 z-[2040] sm:block sm:left-auto sm:right-4 sm:w-[360px] sm:max-w-[92vw]`}>
         <Card className="glass-card border-primary/30 shadow-xl overflow-hidden">
           <button
             onClick={() => setCalendarFloatingOpen((v) => !v)}
