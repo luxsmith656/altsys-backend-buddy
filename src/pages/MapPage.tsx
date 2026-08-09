@@ -36,6 +36,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { useLocations } from '@/hooks/useLocations';
 import { supabase } from '@/integrations/supabase/client';
 import { ADMIN_CHECKIN_TOKEN_PREFIX } from '@/lib/tracking/sessionAuthorization';
+import { encodeMeta, parseMeta } from '@/lib/bookingMeta';
 
 import 'leaflet/dist/leaflet.css';
 
@@ -163,10 +164,13 @@ export default function MapPage() {
   const [simulationControlsOpen, setSimulationControlsOpen] = useState(false);
   const [simulationMode, setSimulationMode] = useState(false);
   const [selfLocation, setSelfLocation] = useState<{ lat: number; lng: number } | null>(null);
+  const [activeSelfSession, setActiveSelfSession] = useState<{ id: string; booking_id: string | null; participant_role?: string; tracking_phase?: string } | null>(null);
+  const [phaseSaving, setPhaseSaving] = useState(false);
   const [expandedHikerId, setExpandedHikerId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
-  const availableTrails: MapTrail[] = dbTrails.length > 0 ? dbTrails : TRAILS;
-  const currentTrail = availableTrails[selectedTrail] || availableTrails[0];
+  const availableTrails: MapTrail[] = dbTrails;
+  // A local fallback is used only for the staff simulation canvas; it is never rendered as an official route.
+  const currentTrail = availableTrails[selectedTrail] || TRAILS[0];
   const currentRouteDistanceKm = currentTrail.path.reduce((total, point, index) => {
     if (index === 0) return total;
     const previous = currentTrail.path[index - 1];
@@ -297,6 +301,82 @@ export default function MapPage() {
       active = false;
     };
   }, [role, user]);
+
+  useEffect(() => {
+    if (!user || !isSelfTrackingRole) {
+      setActiveSelfSession(null);
+      return;
+    }
+    let active = true;
+    void (async () => {
+      const { data } = await supabase
+        .from('hiker_sessions')
+        .select('id,booking_id,participant_role,tracking_phase')
+        .eq('user_id', user.id)
+        .eq('status', 'active')
+        .like('client_session_id', `${ADMIN_CHECKIN_TOKEN_PREFIX}%`)
+        .order('start_time', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (active) setActiveSelfSession(data as typeof activeSelfSession);
+    })();
+    const channel = supabase
+      .channel(`self-phase-${user.id}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'hiker_sessions', filter: `user_id=eq.${user.id}` }, () => {
+        void supabase
+          .from('hiker_sessions')
+          .select('id,booking_id,participant_role,tracking_phase')
+          .eq('user_id', user.id)
+          .eq('status', 'active')
+          .like('client_session_id', `${ADMIN_CHECKIN_TOKEN_PREFIX}%`)
+          .order('start_time', { ascending: false })
+          .limit(1)
+          .maybeSingle()
+          .then(({ data }) => active && setActiveSelfSession(data as typeof activeSelfSession));
+      })
+      .subscribe();
+    return () => { active = false; void supabase.removeChannel(channel); };
+  }, [isSelfTrackingRole, user]);
+
+  const setOwnGroupPhase = async (phase: 'peak' | 'descent') => {
+    if (!activeSelfSession?.booking_id) return;
+    if (phase === 'peak' && role !== 'hiker') return;
+    if (phase === 'descent' && role !== 'guide') return;
+    setPhaseSaving(true);
+    const now = new Date().toISOString();
+    const { data: booking, error: bookingReadError } = await supabase
+      .from('bookings')
+      .select('notes')
+      .eq('id', activeSelfSession.booking_id)
+      .maybeSingle();
+    if (bookingReadError || !booking) {
+      toast.error('Could not update the group hike status.');
+      setPhaseSaving(false);
+      return;
+    }
+    const meta = parseMeta(booking.notes);
+    const nextMeta = phase === 'peak'
+      ? {
+          ...meta,
+          groupPhase: 'peak' as const,
+          peakReachedAt: now,
+          peakDeadlineAt: new Date(Date.now() + (2 + Number(meta.peakExtensionHours ?? 0)) * 60 * 60 * 1000).toISOString(),
+        }
+      : { ...meta, groupPhase: 'descent' as const, descentStartedAt: now };
+    const sessionUpdate = phase === 'peak'
+      ? { tracking_phase: 'peak', peak_reached_at: now }
+      : { tracking_phase: 'descent', descent_started_at: now };
+    const [{ error: sessionError }, { error: bookingError }] = await Promise.all([
+      supabase.from('hiker_sessions').update(sessionUpdate as any).eq('id', activeSelfSession.id),
+      supabase.from('bookings').update({ notes: encodeMeta(nextMeta) }).eq('id', activeSelfSession.booking_id),
+    ]);
+    if (sessionError || bookingError) toast.error(`Status update could not be saved: ${(sessionError || bookingError)?.message}`);
+    else {
+      setActiveSelfSession({ ...activeSelfSession, tracking_phase: phase });
+      toast.success(phase === 'peak' ? 'Peak arrival saved. Your two-hour stay is now running.' : 'Descent saved and shared with your admin.');
+    }
+    setPhaseSaving(false);
+  };
 
   useEffect(() => {
     fetchTrails();
@@ -891,6 +971,20 @@ export default function MapPage() {
               </div>
             </div>
           )
+        )}
+
+        {isSelfTrackingRole && activeMapTab === 'tracker' && activeSelfSession && (
+          <div className="absolute bottom-4 left-4 z-[1000] max-w-[calc(100%-6rem)] rounded-lg border border-slate-200/70 bg-white/95 p-2 shadow-lg backdrop-blur dark:border-slate-800 dark:bg-slate-900/95">
+            {role === 'hiker' && activeSelfSession.tracking_phase === 'ascent' && (
+              <Button size="sm" className="h-9 text-xs" onClick={() => void setOwnGroupPhase('peak')} disabled={phaseSaving}>I am at the peak</Button>
+            )}
+            {role === 'guide' && activeSelfSession.tracking_phase === 'peak' && (
+              <Button size="sm" className="h-9 text-xs" onClick={() => void setOwnGroupPhase('descent')} disabled={phaseSaving}>Start group descent</Button>
+            )}
+            {activeSelfSession.tracking_phase !== 'ascent' && !(role === 'guide' && activeSelfSession.tracking_phase === 'peak') && (
+              <p className="px-1 text-xs font-medium capitalize text-slate-700 dark:text-slate-200">Group: {activeSelfSession.tracking_phase}</p>
+            )}
+          </div>
         )}
 
         {isSelfTrackingRole && activeMapTab === 'tracker' && selfLocation && (

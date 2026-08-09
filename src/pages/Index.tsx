@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Mountain, ArrowUpRight, Wind, Trees, MapPin } from 'lucide-react';
 import { motion } from 'framer-motion';
 import heroImage from '@/assets/mt-kalisungan-hero.jpg';
-import logo from '@/assets/logo.png';
+import logo from '@/assets/logo.svg';
 import TrailGallery from '@/components/landing/TrailGallery';
 import HikerReviews from '@/components/landing/HikerReviews';
 import GuideRatings from '@/components/landing/GuideRatings';

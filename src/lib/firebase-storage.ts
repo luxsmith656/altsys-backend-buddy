@@ -91,6 +91,23 @@ export async function uploadPaymentScreenshot(
   }
 }
 
+/** Upload a compact guide profile image for the public guide card. */
+export async function uploadGuideProfilePhoto(
+  file: File,
+  guideId: string,
+): Promise<{ url: string; path: string } | null> {
+  const store = getFirebaseStorage();
+  if (!store) return null;
+  const compressed = await compressImage(file, 900, 0.8);
+  const path = `guide-profiles/${guideId}_${Date.now()}.jpg`;
+  const storageRef = ref(store, path);
+  await uploadBytes(storageRef, compressed, {
+    contentType: 'image/jpeg',
+    customMetadata: { guideId, originalName: file.name },
+  });
+  return { url: await getDownloadURL(storageRef), path };
+}
+
 /**
  * Delete a payment screenshot from Firebase Storage by its path.
  */

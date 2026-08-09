@@ -17,7 +17,7 @@ import {
 } from '@/components/ui/dialog';
 import { Loader2, ShieldCheck, FileText, CheckCircle2 } from 'lucide-react';
 import { toast } from 'sonner';
-import logo from '@/assets/logo.png';
+import logo from '@/assets/logo.svg';
 
 const schema = z.object({
   fullName: z.string().trim().min(2, 'Please enter your full name').max(120),

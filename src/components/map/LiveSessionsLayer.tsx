@@ -3,7 +3,7 @@ import { Marker, Polyline, Popup, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
-import { ensureActiveHikeTracker } from '@/lib/tracking/activeTrackerManager';
+import { completeActiveHikeTracker, ensureActiveHikeTracker } from '@/lib/tracking/activeTrackerManager';
 import { ADMIN_CHECKIN_TOKEN_PREFIX } from '@/lib/tracking/sessionAuthorization';
 import type { TrackerSnapshot } from '@/lib/tracking/HikeTracker';
 
@@ -78,6 +78,7 @@ export default function LiveSessionsLayer({
   const [localSnapshot, setLocalSnapshot] = useState<TrackerSnapshot | null>(null);
   const centeredRef = useRef(false);
   const gpsErrorShownRef = useRef(false);
+  const hadSelfSessionRef = useRef(false);
 
   const load = useCallback(async () => {
     let sessionQuery = supabase
@@ -167,6 +168,18 @@ export default function LiveSessionsLayer({
   }, [load, locationId, mode, userId]);
 
   const selfSession = mode === 'self' ? sessions[0] ?? null : null;
+
+  useEffect(() => {
+    if (mode !== 'self') return;
+    if (selfSession) {
+      hadSelfSessionRef.current = true;
+      return;
+    }
+    if (hadSelfSessionRef.current) {
+      hadSelfSessionRef.current = false;
+      void completeActiveHikeTracker().catch((error) => console.warn('Could not close local hike tracker', error));
+    }
+  }, [mode, selfSession]);
 
   useEffect(() => {
     if (!selfSession || (userRole !== 'hiker' && userRole !== 'guide')) return;

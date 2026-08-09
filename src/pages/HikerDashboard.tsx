@@ -45,7 +45,7 @@ import { QRCodeSVG } from 'qrcode.react';
 import { toast } from 'sonner';
 import { motion, AnimatePresence } from 'framer-motion';
 import SOSPanel from '@/components/core/SOSPanel';
-import { parseMeta } from '@/lib/bookingMeta';
+import { encodeMeta, parseMeta } from '@/lib/bookingMeta';
 import { loadAnnouncements, type AdminAnnouncement } from '@/lib/announcements';
 import { addGuideRating } from '@/lib/guideRatings';
 import AppDownloadButton from '@/components/AppDownloadButton';
@@ -73,6 +73,8 @@ export default function HikerDashboard() {
   const [bookings, setBookings] = useState<any[]>([]);
   const [sessions, setSessions] = useState<any[]>([]);
   const [cancellingId, setCancellingId] = useState<string | null>(null);
+  const [cancelReason, setCancelReason] = useState('');
+  const [cancelConfirmation, setCancelConfirmation] = useState('');
   const [acceptingId, setAcceptingId] = useState<string | null>(null);
   const [decliningId, setDecliningId] = useState<string | null>(null);
   const [importantAnnouncements, setImportantAnnouncements] = useState<AdminAnnouncement[]>([]);
@@ -107,6 +109,11 @@ export default function HikerDashboard() {
           }
         },
       )
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'bookings', filter: `user_id=eq.${user.id}` },
+        () => { void loadData(); },
+      )
       .subscribe();
     return () => { supabase.removeChannel(ch); };
   }, [user, navigate]);
@@ -138,16 +145,35 @@ export default function HikerDashboard() {
   const totalDistance = sessions.reduce((sum, s) => sum + Number(s.total_distance_km || 0), 0);
 
   /* ── Cancel booking ── */
-  const handleCancelBooking = async (bookingId: string) => {
+  const handleCancelBooking = async (booking: any) => {
+    if (cancelConfirmation.trim().toUpperCase() !== 'CANCEL') {
+      toast.error('Type CANCEL to confirm this booking cancellation.');
+      return;
+    }
+    if (!cancelReason.trim()) {
+      toast.error('Please tell the admin why you are cancelling.');
+      return;
+    }
+    const bookingId = booking.id;
     setCancellingId(bookingId);
+    const meta = parseMeta(booking.notes);
     const { error } = await supabase
       .from('bookings')
-      .update({ status: 'cancelled' })
+      .update({
+        status: 'cancelled',
+        notes: encodeMeta({
+          ...meta,
+          cancellationReason: cancelReason.trim(),
+          cancellationConfirmedAt: new Date().toISOString(),
+        }),
+      })
       .eq('id', bookingId);
     if (error) toast.error('Failed to cancel booking');
     else {
       toast.success('Booking cancelled.');
       setBookings((prev) => prev.map((b) => (b.id === bookingId ? { ...b, status: 'cancelled' } : b)));
+      setCancelReason('');
+      setCancelConfirmation('');
     }
     setCancellingId(null);
   };
@@ -156,15 +182,24 @@ export default function HikerDashboard() {
   const handleAcceptAdjustment = async (b: any) => {
     setAcceptingId(b.id);
     const meta = parseMeta(b.notes);
+    const update: Record<string, unknown> = {
+      status: 'confirmed',
+      notes: encodeMeta({ ...meta, bookingChangeAcknowledgedAt: new Date().toISOString() }),
+    };
+    if (meta.adjustedDate) update.booking_date = meta.adjustedDate;
     const { error } = await supabase
       .from('bookings')
-      .update({
-        status: 'confirmed',
-        booking_date: meta.adjustedDate ?? b.booking_date,
-      })
+      .update(update as any)
       .eq('id', b.id);
     if (error) toast.error('Failed to confirm adjustment');
     else {
+      await supabase.from('booking_messages' as any).insert({
+        booking_id: b.id,
+        sender_id: user?.id,
+        sender_role: 'hiker',
+        kind: 'system',
+        content: 'Hiker confirmed the booking change receipt.',
+      } as any);
       toast.success('You accepted the new schedule. Booking confirmed!');
       loadData();
     }
@@ -212,8 +247,19 @@ export default function HikerDashboard() {
     } else {
       // Save guide rating to localStorage if guide was assigned and rated
       if (assignedGuide && guideReviewText.trim()) {
-        const guideId = `guide_${assignedGuide.replace(/\s+/g, '_').toLowerCase()}`;
+        const guideId = meta.assignedGuideId || `guide_${assignedGuide.replace(/\s+/g, '_').toLowerCase()}`;
         addGuideRating(guideId, assignedGuide, 'Summit Trail', guideRating, guideReviewText.trim(), meta.fullName || 'Hiker');
+        if (meta.assignedGuideId) {
+          const { error: guideReviewError } = await supabase.from('guide_reviews' as any).insert({
+            guide_id: meta.assignedGuideId,
+            booking_id: booking?.id ?? null,
+            reviewer_id: user.id,
+            reviewer_name: meta.fullName || user.email || 'Hiker',
+            rating: guideRating,
+            comment: guideReviewText.trim(),
+          } as any);
+          if (guideReviewError) console.warn('Guide review sync failed:', guideReviewError.message);
+        }
       }
       // Mark session as reviewed
       const updated = new Set([...reviewedSessionIds, session.id]);
@@ -254,7 +300,6 @@ export default function HikerDashboard() {
             </h1>
             <p className="text-muted-foreground">Your hiking journey on Mount Kalisungan.</p>
           </div>
-          <AppDownloadButton />
         </motion.div>
 
         {/* ── ACTION REQUIRED: Adjustment notifications ── */}
@@ -278,10 +323,7 @@ export default function HikerDashboard() {
                       key={b.id}
                       className="rounded-xl bg-secondary/40 border border-border/20 p-4 space-y-3"
                     >
-                      <p className="text-sm">
-                        The admin has proposed a new date for your booking originally on{' '}
-                        <strong>{b.booking_date}</strong>.
-                      </p>
+                      <p className="text-sm">The admin updated details for your booking on <strong>{b.booking_date}</strong>. Review the receipt below before confirming.</p>
                       <div className="flex flex-wrap gap-4 text-sm">
                         <div>
                           <p className="text-xs text-muted-foreground">Original Date</p>
@@ -303,6 +345,14 @@ export default function HikerDashboard() {
                           <div>
                             <p className="text-xs text-muted-foreground">Assigned Guide</p>
                             <p className="font-semibold">{meta.assignedGuide}</p>
+                          </div>
+                        )}
+                        {meta.bookingChange && (
+                          <div className="basis-full rounded-md border border-border/30 bg-background/40 p-3 text-xs space-y-1">
+                            <p className="font-semibold">Change receipt</p>
+                            <p>Reason: {meta.bookingChange.reason}</p>
+                            <p>Group: {meta.bookingChange.before.groupSize} to {meta.bookingChange.after.groupSize} pax</p>
+                            <p>Lead: {meta.bookingChange.before.leadName || 'Not provided'} to {meta.bookingChange.after.leadName || 'Not provided'}</p>
                           </div>
                         )}
                       </div>
@@ -408,8 +458,9 @@ export default function HikerDashboard() {
                   Book a Hike
                   <ArrowRight className="h-4 w-4 ml-1" />
                 </Link>
-              </Button>
-            </div>
+                        </Button>
+                      </div>
+                      <p className="text-xs text-muted-foreground">Did not request this? Open the booking chat or <a className="text-primary underline" href={import.meta.env.VITE_ADMIN_FACEBOOK_URL || 'https://www.facebook.com/'} target="_blank" rel="noreferrer">contact the admin on Facebook</a> and include your name.</p>
           </div>
         </motion.div>
 
@@ -688,15 +739,30 @@ export default function HikerDashboard() {
                             <AlertDialogContent>
                               <AlertDialogHeader>
                                 <AlertDialogTitle>Cancel this booking?</AlertDialogTitle>
-                                <AlertDialogDescription>
-                                  Your reservation for <strong>{b.booking_date}</strong> ({b.group_size} pax) will be cancelled. This cannot be undone.
+                              <AlertDialogDescription>
+                                  Your reservation for <strong>{b.booking_date}</strong> ({b.group_size} pax) will be cancelled. Please give a reason and type CANCEL to avoid an accidental cancellation.
                                 </AlertDialogDescription>
                               </AlertDialogHeader>
+                              <div className="space-y-3 py-2">
+                                <Textarea
+                                  value={cancelReason}
+                                  onChange={(event) => setCancelReason(event.target.value)}
+                                  placeholder="Reason for cancellation"
+                                  rows={3}
+                                />
+                                <Input
+                                  value={cancelConfirmation}
+                                  onChange={(event) => setCancelConfirmation(event.target.value)}
+                                  placeholder="Type CANCEL to confirm"
+                                  autoComplete="off"
+                                />
+                              </div>
                               <AlertDialogFooter>
                                 <AlertDialogCancel>Keep Booking</AlertDialogCancel>
                                 <AlertDialogAction
                                   className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                                  onClick={() => handleCancelBooking(b.id)}
+                                  disabled={cancelConfirmation.trim().toUpperCase() !== 'CANCEL' || !cancelReason.trim() || cancellingId === b.id}
+                                  onClick={() => handleCancelBooking(b)}
                                 >
                                   Yes, Cancel
                                 </AlertDialogAction>

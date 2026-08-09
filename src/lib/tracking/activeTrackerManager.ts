@@ -36,3 +36,12 @@ export async function ensureActiveHikeTracker(options: ActiveTrackerOptions) {
     if (activeKey === key) activeStart = null;
   }
 }
+
+/** Finish the locally-running tracker after staff have checked the group out. */
+export async function completeActiveHikeTracker() {
+  const tracker = activeTracker;
+  activeTracker = null;
+  activeStart = null;
+  activeKey = null;
+  if (tracker) await tracker.complete();
+}

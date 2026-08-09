@@ -2,6 +2,7 @@
 export const ENTRY_FEE_PER_PERSON = 50;   // ₱50 registration
 export const ENV_FEE_PER_PERSON   = 20;   // ₱20 environmental/DSPA
 export const GUIDE_FEE_FLAT       = 300;  // ₱300 guide fee per group (mandatory)
+export const PEAK_EXTENSION_FEE_PER_HOUR = 100;
 
 export interface FeeBreakdown {
   entryFee: number;
@@ -15,6 +16,10 @@ export function calculateFees(groupSize: number): FeeBreakdown {
   const envFee   = ENV_FEE_PER_PERSON   * groupSize;
   const guideFee = GUIDE_FEE_FLAT;
   return { entryFee, envFee, guideFee, totalFee: entryFee + envFee + guideFee };
+}
+
+export function calculatePeakExtensionFee(hours: number | null | undefined): number {
+  return Math.max(0, Math.floor(Number(hours) || 0)) * PEAK_EXTENSION_FEE_PER_HOUR;
 }
 
 export function formatPeso(amount: number): string {

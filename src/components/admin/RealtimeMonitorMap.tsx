@@ -36,6 +36,7 @@ interface ActiveSession {
   resting_time_sec?: number;
   peak_reached_at?: string | null;
   descent_started_at?: string | null;
+  peakDeadlineAt?: string | null;
   start_time: string;
   hiker_name?: string;
   groupSize?: number;
@@ -223,6 +224,12 @@ export default function RealtimeMonitorMap({ locationId, canAddCheckpoints = fal
         s.medicalNotes = meta.medicalNotes;
         s.hasMinors = meta.hasMinors;
         s.minorCount = meta.minorCount;
+        // The booking owns the shared group state. This keeps the hiker and guide
+        // represented as one group even when only one phone has connectivity.
+        s.tracking_phase = meta.groupPhase ?? s.tracking_phase;
+        s.peak_reached_at = meta.peakReachedAt ?? s.peak_reached_at;
+        s.descent_started_at = meta.descentStartedAt ?? s.descent_started_at;
+        s.peakDeadlineAt = meta.peakDeadlineAt ?? null;
       });
     } else if (locationId) {
       sessList = sessList.filter((s) => {
@@ -446,7 +453,7 @@ export default function RealtimeMonitorMap({ locationId, canAddCheckpoints = fal
               <div style="margin-top:4px;padding:4px;background:rgba(234,179,8,0.1);border-radius:4px">
                 <b style="color:#eab308">At Peak</b><br/>
                 <div>Reached: ${s.peak_reached_at ? new Date(s.peak_reached_at).toLocaleTimeString() : 'Unknown'}</div>
-                ${s.peak_reached_at ? `<div>Must descend by: ${new Date(new Date(s.peak_reached_at).getTime() + 2 * 60 * 60 * 1000).toLocaleTimeString()}</div>` : ''}
+                ${s.peakDeadlineAt ? `<div>Must descend by: ${new Date(s.peakDeadlineAt).toLocaleTimeString('en-PH', { timeZone: 'Asia/Manila' })} PHT</div>` : s.peak_reached_at ? `<div>Must descend by: ${new Date(new Date(s.peak_reached_at).getTime() + 2 * 60 * 60 * 1000).toLocaleTimeString()}</div>` : ''}
               </div>
             ` : `
               <div><b>${s.tracking_phase === 'descent' ? 'ETA Basecamp' : 'ETA Peak'}:</b> ${etaMin == null ? 'calculating...' : `${Math.floor(etaMin / 60)}h ${etaMin % 60}m`}</div>

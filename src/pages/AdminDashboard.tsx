@@ -73,10 +73,11 @@ import {
 } from 'lucide-react';
 import BookingChat from '@/components/booking/BookingChat';
 import ReassignGuideDialog from '@/components/booking/ReassignGuideDialog';
+import EditBookingDialog from '@/components/booking/EditBookingDialog';
 import { AdminOffDutyApprovals } from '@/components/booking/OffDutyManager';
 import { useAuth } from '@/hooks/useAuth';
 import { parseMeta, encodeMeta } from '@/lib/bookingMeta';
-import { calculateFees, formatPeso, PAYMENT_METHOD_LABELS, type PaymentMethod } from '@/lib/payments';
+import { calculateFees, calculatePeakExtensionFee, formatPeso, PAYMENT_METHOD_LABELS, type PaymentMethod } from '@/lib/payments';
 import { addAnnouncement, loadAnnouncements, removeAnnouncement, type AdminAnnouncement } from '@/lib/announcements';
 import { writeActivityLog } from '@/lib/activity-log';
 import { motion } from 'framer-motion';
@@ -173,6 +174,7 @@ export default function AdminDashboard() {
   const [guides, setGuides] = useState<UIGuide[]>([]);
   const [chatBooking, setChatBooking] = useState<{ id: string; date: string } | null>(null);
   const [reassignFor, setReassignFor] = useState<{ bookingId: string; guideName: string | null; guideId: string | null; locationId: string | null } | null>(null);
+  const [editingBooking, setEditingBooking] = useState<any | null>(null);
 
   useEffect(() => {
     const tab = searchParams.get('tab');
@@ -239,6 +241,11 @@ export default function AdminDashboard() {
   const [scanLoading, setScanLoading] = useState(false);
   const [startingHike, setStartingHike] = useState(false);
   const [hikeStarted, setHikeStarted] = useState(false);
+  const [checkInVerified, setCheckInVerified] = useState(false);
+  const [checkInHeadcount, setCheckInHeadcount] = useState('');
+  const [lifecycleSaving, setLifecycleSaving] = useState(false);
+  const [checkOutVerified, setCheckOutVerified] = useState(false);
+  const [checkOutHeadcount, setCheckOutHeadcount] = useState('');
 
   /* ── Reviews panel (shown after scan) ── */
   const [guideRatingForScan, setGuideRatingForScan] = useState<GuideRating | null>(null);
@@ -443,30 +450,40 @@ export default function AdminDashboard() {
     setHikeStarted(false);
     setShowScanPayForm(false);
 
-    const { data: exactData } = await supabase
+    let exactQuery = supabase
       .from('bookings')
       .select('*')
       .or(`qr_code_data.eq.${q},id.eq.${q}`)
-      .limit(1)
-      .maybeSingle();
+      .limit(1);
+    if (activeLocationId) exactQuery = exactQuery.eq('location_id', activeLocationId) as typeof exactQuery;
+    const { data: exactData } = await exactQuery.maybeSingle();
 
     if (exactData) {
       setScannedBooking(exactData);
+      setCheckInHeadcount(String(exactData.group_size));
+      setCheckInVerified(false);
+      setCheckOutHeadcount(String(exactData.group_size));
+      setCheckOutVerified(false);
       setScanLoading(false);
       return;
     }
 
-    const { data: nameData } = await supabase
+    let nameQuery = supabase
       .from('bookings')
       .select('*')
       .ilike('emergency_contact_name', `%${q}%`)
       .not('status', 'eq', 'cancelled')
       .order('created_at', { ascending: false })
-      .limit(1)
-      .maybeSingle();
+      .limit(1);
+    if (activeLocationId) nameQuery = nameQuery.eq('location_id', activeLocationId) as typeof nameQuery;
+    const { data: nameData } = await nameQuery.maybeSingle();
 
     if (nameData) {
       setScannedBooking(nameData);
+      setCheckInHeadcount(String(nameData.group_size));
+      setCheckInVerified(false);
+      setCheckOutHeadcount(String(nameData.group_size));
+      setCheckOutVerified(false);
       toast.info('Found booking by name match.');
     } else {
       toast.error('No booking found. Try the QR code, booking ID, or hiker name.');
@@ -477,6 +494,10 @@ export default function AdminDashboard() {
   /* ── QR Scan: start hike ── */
   const handleStartHike = async () => {
     if (!scannedBooking) return;
+    if (!checkInVerified || Number(checkInHeadcount) !== Number(scannedBooking.group_size)) {
+      toast.error('Verify every person and confirm the booked headcount before starting tracking.');
+      return;
+    }
     setStartingHike(true);
     const routeInfo = resolveAssignedTrail(scannedBooking);
     const meta = parseMeta(scannedBooking.notes);
@@ -593,9 +614,11 @@ export default function AdminDashboard() {
 
     const hikerResult = await createGroupSession(scannedBooking.user_id, 'hiker');
     let session = hikerResult.data;
+    let guideSession: any = null;
     let sessionErr = hikerResult.error;
     if (!sessionErr) {
       const guideResult = await createGroupSession(assignedGuide.user_id, 'guide');
+      guideSession = guideResult.data;
       if (guideResult.error) {
         if (hikerResult.created && session?.id) {
           await supabase.from('hiker_sessions').delete().eq('id', session.id);
@@ -612,12 +635,46 @@ export default function AdminDashboard() {
         ...meta,
         onsiteStartConfirmed: true,
         onsiteStartTime: startTime,
+        checkinVerifiedAt: startTime,
+        checkinHeadcount: Number(checkInHeadcount),
+        groupPhase: 'ascent',
         hikerSessionId: session?.id,
         assignedTrailZoneId: routeInfo.route.id,
         assignedTrailName: routeInfo.route.name,
         assignedTrailAuto: routeInfo.auto || meta.assignedTrailAuto,
       });
       await supabase.from('bookings').update({ notes: updatedNotes }).eq('id', scannedBooking.id);
+      const routePoints = Array.isArray(routeInfo.route.coordinates_json) ? routeInfo.route.coordinates_json : [];
+      const firstPoint = routePoints[0] as { lat?: number; lng?: number } | undefined;
+      if (firstPoint && Number.isFinite(Number(firstPoint.lat)) && Number.isFinite(Number(firstPoint.lng))) {
+        const startPoints = [session?.id, guideSession?.id]
+          .filter(Boolean)
+          .map((sessionId) => ({
+            session_id: sessionId,
+            latitude: Number(firstPoint.lat),
+            longitude: Number(firstPoint.lng),
+            altitude: null,
+            accuracy: 5,
+            speed_m_s: 0,
+            heading: null,
+            segment: 'ascent',
+            timestamp: startTime,
+          }));
+        if (startPoints.length) {
+          const { error: startPointError } = await supabase.from('hiker_locations').insert(startPoints as any);
+          if (startPointError) {
+            const legacyPoints = startPoints.map(({ session_id, latitude, longitude, altitude, timestamp }) => ({
+              session_id,
+              latitude,
+              longitude,
+              altitude,
+              timestamp,
+            }));
+            const { error: legacyStartPointError } = await supabase.from('hiker_locations').insert(legacyPoints as any);
+            if (legacyStartPointError) console.warn('Could not seed trailhead location', legacyStartPointError);
+          }
+        }
+      }
       toast.success(`✅ Hike started for ${meta.fullName || 'hiker'}! Session is now active.`);
       setHikeStarted(true);
       setScannedBooking({ ...scannedBooking, notes: updatedNotes });
@@ -660,12 +717,109 @@ export default function AdminDashboard() {
     setStartingHike(false);
   };
 
+  const updateGroupPhase = async (phase: 'peak' | 'descent') => {
+    if (!scannedBooking) return;
+    setLifecycleSaving(true);
+    const now = new Date().toISOString();
+    const meta = parseMeta(scannedBooking.notes);
+    const peakHours = Math.max(0, Number(meta.peakExtensionHours ?? 0));
+    const nextMeta = phase === 'peak'
+      ? {
+          ...meta,
+          groupPhase: 'peak' as const,
+          peakReachedAt: now,
+          peakDeadlineAt: new Date(Date.now() + (2 + peakHours) * 60 * 60 * 1000).toISOString(),
+        }
+      : { ...meta, groupPhase: 'descent' as const, descentStartedAt: now };
+    const update: Record<string, unknown> = {
+      tracking_phase: phase,
+      ...(phase === 'peak' ? { peak_reached_at: now } : { descent_started_at: now }),
+    };
+    const { error: sessionError } = await supabase
+      .from('hiker_sessions')
+      .update(update as any)
+      .eq('booking_id', scannedBooking.id)
+      .eq('status', 'active');
+    const { error: bookingError } = await supabase
+      .from('bookings')
+      .update({ notes: encodeMeta(nextMeta) })
+      .eq('id', scannedBooking.id);
+    if (sessionError || bookingError) {
+      toast.error(`Could not update group progress: ${(sessionError || bookingError)?.message}`);
+    } else {
+      setScannedBooking({ ...scannedBooking, notes: encodeMeta(nextMeta) });
+      toast.success(phase === 'peak' ? 'Peak arrival recorded. The two-hour stay has started.' : 'Guide descent recorded for the group.');
+    }
+    setLifecycleSaving(false);
+  };
+
+  const extendPeakStay = async () => {
+    if (!scannedBooking) return;
+    const meta = parseMeta(scannedBooking.notes);
+    if (meta.groupPhase !== 'peak' || !meta.peakDeadlineAt) {
+      toast.error('Peak extension is available only while the group is at the peak.');
+      return;
+    }
+    setLifecycleSaving(true);
+    const hours = Number(meta.peakExtensionHours ?? 0) + 1;
+    const nextMeta = {
+      ...meta,
+      peakExtensionHours: hours,
+      peakDeadlineAt: new Date(new Date(meta.peakDeadlineAt).getTime() + 60 * 60 * 1000).toISOString(),
+    };
+    const { error } = await supabase.from('bookings').update({ notes: encodeMeta(nextMeta) }).eq('id', scannedBooking.id);
+    if (error) toast.error(`Could not extend peak stay: ${error.message}`);
+    else {
+      setScannedBooking({ ...scannedBooking, notes: encodeMeta(nextMeta) });
+      toast.success(`Peak stay extended by one hour. ${formatPeso(calculatePeakExtensionFee(hours))} total extension fee.`);
+    }
+    setLifecycleSaving(false);
+  };
+
+  const completeGroupHike = async () => {
+    if (!scannedBooking) return;
+    if (!checkOutVerified || Number(checkOutHeadcount) !== Number(scannedBooking.group_size)) {
+      toast.error('Verify the returning group headcount before ending this hike.');
+      return;
+    }
+    setLifecycleSaving(true);
+    const now = new Date().toISOString();
+    const meta = parseMeta(scannedBooking.notes);
+    const nextMeta = {
+      ...meta,
+      groupPhase: 'completed' as const,
+      hikeCompletedAt: now,
+      hikeCompletedBy: adminUser?.id ?? 'admin',
+      guideReviewRequestedAt: now,
+    };
+    const { error: sessionError } = await supabase
+      .from('hiker_sessions')
+      .update({ status: 'completed', tracking_phase: 'completed', end_time: now } as any)
+      .eq('booking_id', scannedBooking.id)
+      .eq('status', 'active');
+    const { error: bookingError } = await supabase
+      .from('bookings')
+      .update({ notes: encodeMeta(nextMeta) })
+      .eq('id', scannedBooking.id);
+    if (sessionError || bookingError) {
+      toast.error(`Could not close the hike: ${(sessionError || bookingError)?.message}`);
+    } else {
+      setScannedBooking({ ...scannedBooking, notes: encodeMeta(nextMeta) });
+      setHikeStarted(false);
+      toast.success('Hike closed. The booking owner can now submit the guide review.');
+      void loadAllTabBookings();
+    }
+    setLifecycleSaving(false);
+  };
+
   /* ── QR Scan: record payment ── */
   const handleScanRecordPayment = async () => {
     if (!scannedBooking || !scanPayAmount) { toast.error('Enter amount paid.'); return; }
     setScanPaySaving(true);
     const meta = parseMeta(scannedBooking.notes);
-    const { entryFee, envFee, guideFee, totalFee } = calculateFees(scannedBooking.group_size);
+    const { entryFee, envFee, guideFee, totalFee: baseTotalFee } = calculateFees(scannedBooking.group_size);
+    const peakExtensionFee = calculatePeakExtensionFee(meta.peakExtensionHours);
+    const totalFee = baseTotalFee + peakExtensionFee;
     const paid = Number(scanPayAmount);
     const refundAmount = paid > totalFee ? paid - totalFee : 0;
     const paymentStatus = paid >= totalFee ? 'paid' : paid > 0 ? 'partial' : 'unpaid';
@@ -679,6 +833,7 @@ export default function AdminDashboard() {
       entryFee,
       envFee,
       guideFee,
+      peakExtensionFee: peakExtensionFee || undefined,
       totalFee,
       refundAmount: refundAmount > 0 ? refundAmount : undefined,
       refundReason: refundAmount > 0 ? `Overpayment: ${formatPeso(refundAmount)}` : undefined,
@@ -778,11 +933,13 @@ export default function AdminDashboard() {
 
   const loadPendingBookings = async () => {
     setPendingLoading(true);
-    const { data } = await supabase
+    let query = supabase
       .from('bookings')
       .select('*')
       .in('status', ['pending', 'adjustment_pending'])
       .order('created_at', { ascending: true });
+    if (activeLocationId) query = query.eq('location_id', activeLocationId) as typeof query;
+    const { data } = await query;
     setPendingBookings(data || []);
     setPendingLoading(false);
   };
@@ -805,6 +962,7 @@ export default function AdminDashboard() {
     const updatedMeta = encodeMeta({
       ...meta,
       assignedGuide: guideName,
+      assignedGuideId: guideRow?.id,
       assignedTrailZoneId: routeInfo.route?.id,
       assignedTrailName: routeInfo.route?.name,
       assignedTrailAuto: routeInfo.auto,
@@ -1529,6 +1687,9 @@ export default function AdminDashboard() {
                             )}
                             {displayStatus === 'confirmed' && (
                               <>
+                                <Button size="sm" variant="outline" className="gap-1.5" onClick={() => setEditingBooking(b)}>
+                                  <FileText className="h-3.5 w-3.5" /> Edit details
+                                </Button>
                                 {meta.assignedGuide && (
                                   <Button size="sm" variant="outline" className="gap-1.5 border-amber-500/40 text-amber-600 dark:text-amber-400 hover:bg-amber-500/10"
                                     onClick={() => {
@@ -1703,7 +1864,9 @@ export default function AdminDashboard() {
 
                 {scannedBooking && (() => {
                   const meta = parseMeta(scannedBooking.notes);
-                  const { totalFee } = calculateFees(scannedBooking.group_size);
+                  const { totalFee: baseTotalFee } = calculateFees(scannedBooking.group_size);
+                  const peakExtensionFee = calculatePeakExtensionFee(meta.peakExtensionHours);
+                  const totalFee = baseTotalFee + peakExtensionFee;
                   const payStatus = meta.paymentStatus ?? 'unpaid';
                   return (
                     <div className="rounded-2xl border border-primary/30 bg-primary/5 p-5 space-y-5">
@@ -1760,6 +1923,24 @@ export default function AdminDashboard() {
                         <div className="rounded-xl border border-destructive/20 bg-destructive/5 p-3 text-xs space-y-1">
                           <p className="font-bold text-destructive">Medical Notes</p>
                           <p className="text-muted-foreground">{meta.medicalNotes}</p>
+                        </div>
+                      )}
+
+                      {scannedBooking.status === 'confirmed' && !meta.onsiteStartConfirmed && !hikeStarted && (
+                        <div className="rounded-xl border border-primary/30 bg-primary/5 p-4 space-y-3">
+                          <div>
+                            <p className="text-sm font-semibold">Trailhead verification</p>
+                            <p className="text-xs text-muted-foreground">Review every companion and confirm the actual group before tracking begins.</p>
+                          </div>
+                          <div className="flex flex-col gap-2 min-[440px]:flex-row min-[440px]:items-center">
+                            <Label className="shrink-0 text-xs">Headcount</Label>
+                            <Input className="min-[440px]:w-28" type="number" min="1" value={checkInHeadcount} onChange={(event) => setCheckInHeadcount(event.target.value)} />
+                            <span className="text-xs text-muted-foreground">Booked: {scannedBooking.group_size}</span>
+                          </div>
+                          <label className="flex cursor-pointer items-start gap-2 rounded-lg border border-border/40 bg-background/50 p-3 text-xs">
+                            <Checkbox checked={checkInVerified} onCheckedChange={(checked) => setCheckInVerified(checked === true)} />
+                            <span>I verified every person, their details, and the booked headcount.</span>
+                          </label>
                         </div>
                       )}
 
@@ -1844,6 +2025,7 @@ export default function AdminDashboard() {
                         <div className="text-xs text-muted-foreground">
                           Current: <span className={`font-bold px-1.5 py-0.5 rounded-full ${PAY_STATUS_COLORS[payStatus] || ''}`}>{payStatus.toUpperCase()}</span>
                           {' '}{formatPeso(meta.amountPaid ?? 0)} paid of {formatPeso(totalFee)}
+                          {peakExtensionFee > 0 && <span> (includes {formatPeso(peakExtensionFee)} peak extension)</span>}
                         </div>
                         {showScanPayForm && (
                           <div className="space-y-3 pt-1">
@@ -1879,13 +2061,35 @@ export default function AdminDashboard() {
 
                       {/* Start Hike button */}
                       {meta.onsiteStartConfirmed || hikeStarted ? (
-                        <div className="flex items-center gap-2 rounded-xl bg-primary/10 border border-primary/30 p-3 text-sm text-primary font-semibold">
-                          <CheckCircle2 className="h-5 w-5" />
-                          Hike already started — session is active.
-                          {meta.onsiteStartTime && (
-                            <span className="text-xs font-normal text-muted-foreground ml-auto">
-                              {new Date(meta.onsiteStartTime).toLocaleTimeString('en-PH', { hour: '2-digit', minute: '2-digit' })}
-                            </span>
+                        <div className="space-y-3 rounded-xl border border-primary/30 bg-primary/5 p-4">
+                          <div className="flex items-center gap-2 text-sm font-semibold text-primary">
+                            <CheckCircle2 className="h-5 w-5" />
+                            Group status: {meta.groupPhase ?? 'ascent'}.
+                            {meta.onsiteStartTime && <span className="ml-auto text-xs font-normal text-muted-foreground">{new Date(meta.onsiteStartTime).toLocaleTimeString('en-PH', { timeZone: 'Asia/Manila', hour: '2-digit', minute: '2-digit' })} PHT</span>}
+                          </div>
+                          {meta.groupPhase === 'peak' && meta.peakDeadlineAt && (
+                            <div className="rounded-lg bg-amber-500/10 p-3 text-xs text-amber-800 dark:text-amber-300">
+                              Peak stay ends {new Date(meta.peakDeadlineAt).toLocaleTimeString('en-PH', { timeZone: 'Asia/Manila', hour: '2-digit', minute: '2-digit' })} PHT. Extension: {meta.peakExtensionHours ?? 0} hour(s), {formatPeso(calculatePeakExtensionFee(meta.peakExtensionHours))}.
+                            </div>
+                          )}
+                          {(meta.groupPhase ?? 'ascent') === 'ascent' && <Button size="sm" className="w-full" onClick={() => void updateGroupPhase('peak')} disabled={lifecycleSaving}>Simulation: mark group at peak</Button>}
+                          {meta.groupPhase === 'peak' && (
+                            <div className="grid gap-2 min-[460px]:grid-cols-2">
+                              <Button size="sm" variant="outline" onClick={() => void extendPeakStay()} disabled={lifecycleSaving}>Add 1 hour (+P100)</Button>
+                              <Button size="sm" onClick={() => void updateGroupPhase('descent')} disabled={lifecycleSaving}>Guide starts descent</Button>
+                            </div>
+                          )}
+                          {meta.groupPhase === 'descent' && (
+                            <div className="space-y-3 rounded-lg border border-border/40 bg-background/50 p-3">
+                              <p className="text-xs font-semibold">Trailhead closeout</p>
+                              <div className="flex flex-col gap-2 min-[440px]:flex-row min-[440px]:items-center">
+                                <Label className="shrink-0 text-xs">Returned headcount</Label>
+                                <Input className="min-[440px]:w-28" type="number" min="1" value={checkOutHeadcount} onChange={(event) => setCheckOutHeadcount(event.target.value)} />
+                                <span className="text-xs text-muted-foreground">Expected: {scannedBooking.group_size}</span>
+                              </div>
+                              <label className="flex cursor-pointer items-start gap-2 text-xs"><Checkbox checked={checkOutVerified} onCheckedChange={(checked) => setCheckOutVerified(checked === true)} /><span>All hikers are accounted for and payment has been reviewed.</span></label>
+                              <Button size="sm" variant="outline" className="w-full" onClick={() => void completeGroupHike()} disabled={lifecycleSaving}>End hike and request guide review</Button>
+                            </div>
                           )}
                         </div>
                       ) : scannedBooking.status !== 'confirmed' ? (
@@ -1894,7 +2098,7 @@ export default function AdminDashboard() {
                           Booking is not confirmed yet. Confirm booking first before starting the hike.
                         </div>
                       ) : (
-                        <Button className="w-full gap-2" onClick={handleStartHike} disabled={startingHike}>
+                        <Button className="w-full gap-2" onClick={handleStartHike} disabled={startingHike || !checkInVerified || Number(checkInHeadcount) !== Number(scannedBooking.group_size)}>
                           {startingHike ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
                           Confirm Onsite Start — Begin Hike
                         </Button>
@@ -2391,6 +2595,12 @@ export default function AdminDashboard() {
           onDone={() => { void loadAllTabBookings(); }}
         />
       )}
+      <EditBookingDialog
+        booking={editingBooking}
+        open={!!editingBooking}
+        onClose={() => setEditingBooking(null)}
+        onDone={() => void loadAllTabBookings()}
+      />
     </div>
   );
 }

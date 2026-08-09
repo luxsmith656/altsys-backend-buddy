@@ -270,6 +270,7 @@ export default function BookingPage() {
   const [startLocationId, setStartLocationId] = useState<string>('');
   const [dbGuides, setDbGuides] = useState<Array<{ id: string; full_name: string; location_id: string; per_trip_fee: number }>>([]);
   const [preferredGuideId, setPreferredGuideId] = useState<string>('');
+  const referralGuideId = searchParams.get('guide') || String(user?.user_metadata?.referral_guide_id || '');
 
   // ── Guide dropdown options ──
   const [guideOptions, setGuideOptions] = useState<string[]>([]);
@@ -403,6 +404,15 @@ export default function BookingPage() {
     () => dbGuides.filter((g) => g.location_id === startLocationId),
     [dbGuides, startLocationId],
   );
+
+  useEffect(() => {
+    if (!referralGuideId || preferredGuideId || !dbGuides.length) return;
+    const referredGuide = dbGuides.find((guide) => guide.id === referralGuideId);
+    if (!referredGuide) return;
+    if (referredGuide.location_id && referredGuide.location_id !== startLocationId) setStartLocationId(referredGuide.location_id);
+    setPreferredGuideId(referredGuide.id);
+    setPreferredGuide(referredGuide.full_name);
+  }, [dbGuides, preferredGuideId, referralGuideId, startLocationId]);
 
 
   /* ── Capacity fetching ── */

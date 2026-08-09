@@ -11,7 +11,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import {
-  CalendarCheck, Users, Mountain, Phone, ShieldAlert, Loader2, CheckCircle2, Clock, MapPin, XCircle, Inbox, Activity,
+  CalendarCheck, Users, Mountain, Phone, ShieldAlert, Loader2, CheckCircle2, Clock, MapPin, XCircle, Inbox, Activity, Copy, ImageUp, Share2,
 } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { parseMeta } from '@/lib/bookingMeta';
@@ -19,6 +19,7 @@ import { format } from 'date-fns';
 import { toast } from 'sonner';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { GuideOffDutyForm } from '@/components/booking/OffDutyManager';
+import { isFirebaseConfigured, uploadGuideProfilePhoto } from '@/lib/firebase-storage';
 
 const QUOTA_PER_GUIDE_PER_DAY = 5;
 
@@ -28,7 +29,7 @@ interface AssignmentRow {
   id: string;
   status: AssignmentStatus;
   decided_at: string | null;
-  decline_reason: string;
+  decline_reason?: string | null;
   created_at: string;
   guide_id: string;
   location_id: string;
@@ -46,6 +47,7 @@ export default function GuideDashboard() {
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<'all' | AssignmentStatus>('all');
   const [detailOpen, setDetailOpen] = useState<AssignmentRow | null>(null);
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
 
   useEffect(() => {
     if (!user) return;
@@ -182,17 +184,52 @@ export default function GuideDashboard() {
     }
     const { error } = await supabase
       .from('booking_assignments' as any)
-      .update({
-        status: decision,
-        decided_at: new Date().toISOString(),
-        decline_reason: reason,
-      } as any)
+      .update({ status: decision, decided_at: new Date().toISOString() } as any)
       .eq('id', a.id);
     if (error) {
       toast.error(error.message);
       return;
     }
+    if (decision === 'declined' && reason.trim()) {
+      await supabase.from('booking_messages' as any).insert({
+        booking_id: (a as any).booking_id,
+        sender_id: user.id,
+        sender_role: 'guide',
+        kind: 'system',
+        content: `Guide declined this assignment. Reason: ${reason.trim()}`,
+      } as any);
+    }
     toast.success(decision === 'accepted' ? 'Assignment accepted' : decision === 'completed' ? 'Marked complete' : 'Declined');
+  };
+
+  const copyGuideLink = async (kind: 'profile' | 'booking') => {
+    if (!guideRow) return;
+    const url = `${window.location.origin}/${kind === 'profile' ? `guide/${guideRow.id}` : `register?guide=${guideRow.id}`}`;
+    try {
+      await navigator.clipboard.writeText(url);
+      toast.success(kind === 'profile' ? 'Guide profile link copied' : 'Registration referral link copied');
+    } catch {
+      window.prompt('Copy this link:', url);
+    }
+  };
+
+  const handlePhotoUpload = async (file?: File) => {
+    if (!file || !guideRow) return;
+    if (!file.type.startsWith('image/')) { toast.error('Please choose an image file.'); return; }
+    if (!isFirebaseConfigured()) { toast.error('Photo upload needs Firebase Storage configuration.'); return; }
+    setUploadingPhoto(true);
+    try {
+      const upload = await uploadGuideProfilePhoto(file, guideRow.id);
+      if (!upload) throw new Error('Photo storage is unavailable.');
+      const { error } = await supabase.from('guides' as any).update({ photo_url: upload.url } as any).eq('id', guideRow.id);
+      if (error) throw error;
+      setGuideRow((current: any) => ({ ...current, photo_url: upload.url }));
+      toast.success('Guide photo updated.');
+    } catch (error: any) {
+      toast.error(error?.message || 'Could not upload guide photo.');
+    } finally {
+      setUploadingPhoto(false);
+    }
   };
 
   if (!user) {
@@ -241,6 +278,33 @@ export default function GuideDashboard() {
             Hi {guideRow.full_name}. Manage your booking assignments and see peer guides at this trailhead.
           </p>
         </motion.div>
+
+        <Card className="glass-card mb-6">
+          <CardContent className="p-4 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-center gap-3 min-w-0">
+              {guideRow.photo_url ? (
+                <img src={guideRow.photo_url} alt={guideRow.full_name} className="h-14 w-14 shrink-0 rounded-full object-cover border border-border/40" />
+              ) : (
+                <div className="h-14 w-14 shrink-0 rounded-full bg-primary/15 text-primary grid place-items-center font-bold text-lg">
+                  {guideRow.full_name?.slice(0, 1)?.toUpperCase() || 'G'}
+                </div>
+              )}
+              <div className="min-w-0">
+                <p className="font-semibold">Promote your guide profile</p>
+                <p className="text-xs text-muted-foreground">Share your reviews and a booking link that makes you the default guide.</p>
+              </div>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <label className="inline-flex h-9 cursor-pointer items-center justify-center gap-1.5 rounded-md border border-input bg-background px-3 text-sm font-medium hover:bg-accent">
+                {uploadingPhoto ? <Loader2 className="h-4 w-4 animate-spin" /> : <ImageUp className="h-4 w-4" />}
+                Photo
+                <input className="sr-only" type="file" accept="image/*" disabled={uploadingPhoto} onChange={(event) => void handlePhotoUpload(event.target.files?.[0])} />
+              </label>
+              <Button size="sm" variant="outline" className="gap-1.5" onClick={() => void copyGuideLink('profile')}><Share2 className="h-4 w-4" /> Profile</Button>
+              <Button size="sm" className="gap-1.5" onClick={() => void copyGuideLink('booking')}><Copy className="h-4 w-4" /> Invite</Button>
+            </div>
+          </CardContent>
+        </Card>
 
         {/* Stats */}
         <div className="mb-6 grid grid-cols-1 gap-3 min-[360px]:grid-cols-2 md:grid-cols-5">

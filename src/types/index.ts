@@ -14,6 +14,16 @@ export interface CompanionDetail {
 export interface BookingMeta {
   userNotes?: string;
   assignedGuide?: string;       // Guide name assigned by admin
+  assignedGuideId?: string;
+  guideChangeReason?: string;
+  guideChangedAt?: string;
+  bookingChange?: {
+    changedAt: string;
+    reason: string;
+    before: { groupSize: number; leadName: string; companions: string[] };
+    after: { groupSize: number; leadName: string; companions: string[] };
+  };
+  bookingChangeAcknowledgedAt?: string;
   assignedTrailZoneId?: string; // Official route assigned by admin or auto-assigned
   assignedTrailName?: string;
   assignedTrailAuto?: boolean;
@@ -48,6 +58,7 @@ export interface BookingMeta {
   entryFee?: number;
   guideFee?: number;
   envFee?: number;
+  peakExtensionFee?: number;
   totalFee?: number;
   actualGroupSize?: number;
   refundAmount?: number;
@@ -56,6 +67,25 @@ export interface BookingMeta {
   onsiteStartConfirmed?: boolean;
   onsiteStartTime?: string;
   hikerSessionId?: string;
+  /** Trailhead verification captured before staff authorise live tracking. */
+  checkinHeadcount?: number;
+  checkinVerifiedAt?: string;
+  /** One group lifecycle shared by its hiker and guide sessions. */
+  groupPhase?: 'ascent' | 'peak' | 'descent' | 'completed';
+  peakReachedAt?: string;
+  peakDeadlineAt?: string;
+  peakExtensionHours?: number;
+  descentStartedAt?: string;
+  hikeCompletedAt?: string;
+  hikeCompletedBy?: string;
+  /** Stored with the booking so cancellation is auditable. */
+  cancellationReason?: string;
+  cancellationConfirmedAt?: string;
+  /** Lets the booking owner be prompted to rate the guide after closeout. */
+  guideReviewRequestedAt?: string;
+  guideReviewRating?: number;
+  guideReviewComment?: string;
+  guideReviewSource?: 'hiker' | 'admin';
 }
 
 export interface Profile {

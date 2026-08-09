@@ -21,6 +21,7 @@ import HikerDashboard from "./pages/HikerDashboard";
 import ProfilePage from "./pages/ProfilePage";
 import DashboardRedirect from "./pages/DashboardRedirect";
 import GuideDashboard from "./pages/GuideDashboard";
+import GuideProfilePage from "./pages/GuideProfilePage";
 import CentralDashboard from "./pages/CentralDashboard";
 import NotificationsPage from "./pages/NotificationsPage";
 import Onboarding from "./pages/Onboarding";
@@ -69,6 +70,7 @@ const App = () => (
                 <Route path="/ranger" element={<RoleRoute allowedRoles={['ranger']}><RangerDashboard /></RoleRoute>} />
                 <Route path="/hiker" element={<RoleRoute allowedRoles={['hiker']}><HikerDashboard /></RoleRoute>} />
                 <Route path="/guide" element={<RoleRoute allowedRoles={['guide']}><GuideDashboard /></RoleRoute>} />
+                <Route path="/guide/:guideId" element={<GuideProfilePage />} />
                 <Route path="/profile" element={<ProfilePage />} />
                 <Route path="/dashboard" element={<DashboardRedirect />} />
                 <Route path="/notifications" element={<NotificationsPage />} />

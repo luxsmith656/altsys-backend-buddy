@@ -6,6 +6,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Loader2, UserCog } from 'lucide-react';
 import { toast } from 'sonner';
+import { encodeMeta, parseMeta } from '@/lib/bookingMeta';
 
 interface Props {
   bookingId: string;
@@ -44,24 +45,50 @@ export default function ReassignGuideDialog({
     setSaving(true);
     const newGuide = guides.find((g) => g.id === newGuideId);
     try {
-      // Mark old assignment(s) as reassigned
+      const changedAt = new Date().toISOString();
+      // Keep the assignment schema-compatible: the live database only stores
+      // status and decided_at. The reason is retained in booking metadata/messages.
       if (currentGuideId) {
-        await supabase.from('booking_assignments' as any)
-          .update({ status: 'reassigned', reassignment_reason: reason, replaced_by: newGuideId, decided_at: new Date().toISOString() } as any)
+        const { error } = await supabase.from('booking_assignments' as any)
+          .update({ status: 'declined', decided_at: changedAt } as any)
           .eq('booking_id', bookingId)
           .eq('guide_id', currentGuideId);
+        if (error) throw error;
       }
-      // New assignment row
-      const { data: existingOld } = await supabase.from('booking_assignments' as any)
-        .select('id').eq('booking_id', bookingId).eq('guide_id', currentGuideId ?? '').maybeSingle();
-      await supabase.from('booking_assignments' as any).insert({
-        booking_id: bookingId,
-        guide_id: newGuideId,
-        location_id: locationId,
-        status: 'pending',
-        replaces: (existingOld as any)?.id ?? null,
-        reassignment_reason: reason,
-      } as any);
+      const { data: existing, error: existingError } = await supabase.from('booking_assignments' as any)
+        .select('id').eq('booking_id', bookingId).eq('guide_id', newGuideId).maybeSingle();
+      if (existingError) throw existingError;
+      if ((existing as any)?.id) {
+        const { error } = await supabase.from('booking_assignments' as any)
+          .update({ status: 'pending', decided_at: null } as any)
+          .eq('id', (existing as any).id);
+        if (error) throw error;
+      } else {
+        const { error } = await supabase.from('booking_assignments' as any).insert({
+          booking_id: bookingId,
+          guide_id: newGuideId,
+          location_id: locationId,
+          status: 'pending',
+        } as any);
+        if (error) throw error;
+      }
+
+      const { data: booking, error: bookingError } = await supabase
+        .from('bookings')
+        .select('notes')
+        .eq('id', bookingId)
+        .single();
+      if (bookingError) throw bookingError;
+      const { error: metaError } = await supabase.from('bookings').update({
+        notes: encodeMeta({
+          ...parseMeta(booking.notes),
+          assignedGuide: newGuide?.full_name ?? '',
+          assignedGuideId: newGuideId,
+          guideChangeReason: reason.trim(),
+          guideChangedAt: changedAt,
+        }),
+      } as any).eq('id', bookingId);
+      if (metaError) throw metaError;
 
       // System messages — visible to admin/hiker, plus the new guide sees their own
       const msgs = [
