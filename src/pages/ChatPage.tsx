@@ -6,7 +6,7 @@ import { motion } from 'framer-motion';
 import ReactMarkdown from 'react-markdown';
 import type { ChatMessage } from '@/types';
 import { getOfflineAnswer, learnFromResponse, getCacheSize } from '@/lib/trail-offline-kb';
-import logo from '@/assets/logo.svg';
+import logo from '@/assets/logo.png';
 
 const CHAT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/trail-chat`;
 const QUICK_QUESTIONS = [

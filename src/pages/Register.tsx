@@ -6,7 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Loader2, Phone, Mail, MessageSquare, ShieldCheck, RefreshCw, ChevronLeft } from 'lucide-react';
 import { toast } from 'sonner';
-import logo from '@/assets/logo.svg';
+import logo from '@/assets/logo.png';
 import { sendSms, sendOtpEmail } from '@/lib/notification-service';
 import { signInWithFirebaseGoogle } from '@/lib/firebase-auth';
 import { isFirebaseConfigured } from '@/lib/firebase';

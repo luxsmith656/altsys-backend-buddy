@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Mountain, Map, MessageSquare, CalendarCheck, LayoutDashboard, LogOut, Menu, X, Moon, Sun, Bell, User } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import logo from '@/assets/logo.svg';
+import logo from '@/assets/logo.png';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { loadAnnouncements } from '@/lib/announcements';
 import { loadRemovedNotificationIds, loadSeenNotificationIds } from '@/lib/notifications';
