@@ -625,6 +625,42 @@ export type Database = {
           },
         ]
       }
+      kb_chunks: {
+        Row: {
+          category: string
+          content: string
+          content_hash: string
+          created_at: string
+          embedding: string | null
+          id: string
+          source: string
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          category?: string
+          content: string
+          content_hash: string
+          created_at?: string
+          embedding?: string | null
+          id?: string
+          source?: string
+          title?: string
+          updated_at?: string
+        }
+        Update: {
+          category?: string
+          content?: string
+          content_hash?: string
+          created_at?: string
+          embedding?: string | null
+          id?: string
+          source?: string
+          title?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       locations: {
         Row: {
           address: string
@@ -1045,6 +1081,20 @@ export type Database = {
           _user_id: string
         }
         Returns: boolean
+      }
+      match_kb_chunks: {
+        Args: {
+          match_count?: number
+          min_similarity?: number
+          query_embedding: string
+        }
+        Returns: {
+          category: string
+          content: string
+          id: string
+          similarity: number
+          title: string
+        }[]
       }
     }
     Enums: {

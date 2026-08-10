@@ -23,14 +23,14 @@ export default function GuideProfilePage() {
         .eq('id', guideId)
         .eq('is_active', true)
         .maybeSingle();
-      setGuide((guideData as Guide | null) ?? null);
+      setGuide((guideData as unknown as Guide | null) ?? null);
       const { data: reviewData } = await supabase.from('guide_reviews' as any)
         .select('id,reviewer_name,rating,comment,created_at')
         .eq('guide_id', guideId)
         .eq('is_approved', true)
         .order('created_at', { ascending: false })
         .limit(12);
-      setReviews((reviewData as Review[] | null) ?? []);
+      setReviews((reviewData as unknown as Review[] | null) ?? []);
       setLoading(false);
     };
     void load();

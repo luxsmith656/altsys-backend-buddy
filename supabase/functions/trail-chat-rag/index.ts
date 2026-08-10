@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.48.0";
+import { embed } from "../_shared/kb.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -19,6 +20,9 @@ const QUOTE_RE =
   /\b(how much|cost|costs|price|prices|pricing|fee|fees|rate|rates|budget|pay|payable|magkano)\b/i;
 const DATA_INTENT_RE =
   /\b(how many|how much|number of|count|hiker|hikers|climber|climbers|book(?:ed|ing|ings)?|reserv\w*|slot|slots|capacity|full|busy|crowded|available|availability|attendance|checked[- ]in|check[- ]in|no[- ]show|turnout|schedule[d]?|today|tomorrow|tonight|this week|next week|weekend|this month)\b/i;
+
+const TRAIL_INTENT_RE =
+  /\b(trail|trails|route|routes|summit|ridge|river|condition|conditions|closed|closure|open|status|muddy|slippery|landslide)\b/i;
 
 const FEE_SCHEDULE = `PUBLISHED FEE SCHEDULE (Mount Kalisungan, Philippine Peso):
 - Registration/entry fee: ₱50 per person
@@ -60,10 +64,39 @@ const TOOLS = [
   { type: "function", function: { name: "get_booking_summary", description: "Aggregate booking counts (confirmed/pending/cancelled), total hikers booked, capacity and remaining slots for a date range in Asia/Manila.", parameters: rangeParams } },
   { type: "function", function: { name: "get_capacity_summary", description: "Capacity and remaining slots for a date range.", parameters: rangeParams } },
   { type: "function", function: { name: "get_attendance_summary", description: "Expected, checked-in, completed and no-show hiker totals for a date range.", parameters: rangeParams } },
+  {
+    type: "function",
+    function: {
+      name: "get_trail_conditions",
+      description: "Current status of the official trails plus the most recent ranger condition reports. Use when asked about trail status, closures, difficulty or how a trail is right now.",
+      parameters: { type: "object", properties: {}, required: [], additionalProperties: false },
+    },
+  },
 ];
 const ALLOWED_TOOLS = new Set(TOOLS.map((t) => t.function.name));
 
+async function getTrailConditions(db: any) {
+  const [{ data: zones }, { data: reports }] = await Promise.all([
+    db.from("trail_zones").select("id, name, difficulty, elevation_meters, max_capacity, status").eq("status", "active").limit(12),
+    db.from("trail_reports").select("zone_id, condition, description, created_at").order("created_at", { ascending: false }).limit(5),
+  ]);
+  return {
+    trails: (zones ?? []).map((z: any) => ({
+      name: z.name, status: z.status, difficulty: z.difficulty,
+      elevation_m: z.elevation_meters, max_capacity: z.max_capacity,
+    })),
+    recent_reports: (reports ?? []).map((r: any) => ({
+      trail: (zones ?? []).find((z: any) => z.id === r.zone_id)?.name ?? "Unknown trail",
+      condition: r.condition, note: r.description, reported_at: r.created_at,
+    })),
+  };
+}
+
 async function runTool(db: any, name: string, args: any) {
+  if (name === "get_trail_conditions") {
+    try { return await getTrailConditions(db); }
+    catch { return { error: "Unable to retrieve trail conditions right now." }; }
+  }
   const r = validateRange(args?.start_date, args?.end_date);
   if ("error" in r) return { error: r.error };
   const fn = name === "get_attendance_summary" ? "ai_attendance_summary" : "ai_booking_summary";
@@ -96,7 +129,7 @@ function aiConfig() {
 
 async function gatherLiveData(messages: any[]): Promise<string | null> {
   const lastUser = [...messages].reverse().find((m) => m?.role === "user")?.content ?? "";
-  if (typeof lastUser !== "string" || !DATA_INTENT_RE.test(lastUser)) return null;
+  if (typeof lastUser !== "string" || !(DATA_INTENT_RE.test(lastUser) || TRAIL_INTENT_RE.test(lastUser))) return null;
   if (!SUPABASE_URL || !SERVICE_ROLE) return null;
 
   const { key, url, model } = aiConfig();
@@ -137,37 +170,33 @@ async function gatherLiveData(messages: any[]): Promise<string | null> {
   return facts.length ? facts.join("\n") : null;
 }
 
-/* ── RAG: trail zones + latest condition reports ── */
-async function buildRagContext(): Promise<string> {
+/* ── RAG: semantic search over the curated knowledge base (kb_chunks) ── */
+async function buildRagContext(question: string): Promise<string> {
   if (!SUPABASE_URL || !SERVICE_ROLE) return "";
-  const db = createClient(SUPABASE_URL, SERVICE_ROLE, { auth: { persistSession: false } });
+  const q = (question ?? "").trim();
+  if (q.length < 3) return "";
+  const { key, url } = aiConfig();
+  if (!key) return "";
 
-  const { data: zones } = await db
-    .from("trail_zones")
-    .select("id, name, description, difficulty, elevation_meters, max_capacity, status")
-    .limit(20);
-  const { data: reports } = await db
-    .from("trail_reports")
-    .select("zone_id, condition, description, created_at")
-    .order("created_at", { ascending: false })
-    .limit(10);
-
-  if (!zones || zones.length === 0) return "";
-
-  const zoneLines = zones.map((z: any) =>
-    `- ${z.name} [status=${z.status}, difficulty=${z.difficulty}, elevation=${z.elevation_meters}m, max_capacity=${z.max_capacity}]: ${z.description ?? ""}`.trim(),
-  );
-
-  let context = "Trail zones (from database):\n" + zoneLines.join("\n");
-  if (reports && reports.length > 0) {
-    const reportLines = reports.map((r: any) => {
-      const zone = zones.find((z: any) => z.id === r.zone_id);
-      return `- [${new Date(r.created_at as string).toISOString()}] ${zone?.name ?? "Unknown zone"}: condition=${r.condition} — ${r.description ?? ""}`;
+  try {
+    const [vector] = await embed([q.slice(0, 4000)], key, url);
+    if (!vector) return "";
+    const db = createClient(SUPABASE_URL, SERVICE_ROLE, { auth: { persistSession: false } });
+    const { data, error } = await db.rpc("match_kb_chunks", {
+      query_embedding: JSON.stringify(vector),
+      match_count: 5,
+      min_similarity: 0.15,
     });
-    context += "\n\nLatest trail condition reports:\n" + reportLines.join("\n");
+    if (error) { console.error("[trail-chat-rag] kb search error", error.message); return ""; }
+    const rows = (data ?? []) as { title: string; category: string; content: string }[];
+    if (!rows.length) return "";
+    return rows.map((r) => `- [${r.category}] ${r.title}: ${r.content}`).join("\n");
+  } catch (e) {
+    console.error("[trail-chat-rag] rag error", e);
+    return "";
   }
-  return context;
 }
+
 
 /* ── Personal context: the signed-in hiker's own profile + own bookings only ── */
 async function buildUserContext(authHeader: string | null): Promise<string> {
@@ -241,13 +270,19 @@ LIVE OPERATIONAL DATA:
 - If a figure is not in the LIVE DATA block, say it isn't available — never invent a number.
 
 BOOKING ASSISTANCE (IMPORTANT):
-- You are embedded inside the "Book a Hike" form. A "BOOKING FORM STATE" block tells you what the hiker has currently selected.
-- Talk like a real booking officer: ask one friendly question at a time, confirm understanding, and make concrete recommendations (date, start time, group size, day vs night).
-- Whenever you recommend concrete form values, END your reply with a single machine line, on its own last line, in this exact format:
+- You can help from any page of the app. A "BOOKING FORM STATE" block tells you what the hiker currently has selected (it may be empty outside the booking page).
+- Talk like a real booking officer: ask one friendly question at a time (date → start time → group size → day or night), confirm what you heard, and make concrete recommendations. If the hiker gives everything at once, accept it all and confirm it back in one go.
+- Whenever you recommend or agree on concrete form values, END your reply with a single machine line, on its own last line, in this exact format:
   [[APPLY {"date":"YYYY-MM-DD","hikeTime":"06:00 AM","groupSize":4,"hikeType":"day","label":"Apply: Aug 12, 6:00 AM, 4 pax"}]]
   Include ONLY the fields you are actually recommending, plus a short "label". Never output more than one APPLY line, never output it when you are not recommending changes, and never explain or mention the line in your prose.
 - Dates must be today or later in Asia/Manila. hikeTime must be 12-hour like "05:30 AM". hikeType is "day" or "night". groupSize is 1–30.
+- Add "submit": true to the APPLY line ONLY when the hiker has clearly asked you to go ahead and book, and date, start time, group size and hike type are all settled. Otherwise omit it. You never confirm a booking yourself — the app still asks the hiker to review the details and accept the safety reminders, sworn declaration and agreements before anything is submitted. Say so plainly when you hand off.
+- Missing details the app requires (emergency contact, city/municipality, group composition) must be filled in on the booking form; tell the hiker what is still needed instead of inventing values.
 
+ANSWER STYLE:
+- Short, clear, friendly answers for ordinary hikers — no technical wording, no internal table or system names.
+- Prefer knowledge-base and live-data facts over memory. If something is not in the provided context, say it isn't available and suggest asking staff — never guess.
+- Lead with safety when discussing weather, trail conditions, emergencies or risky plans.
 Keep responses warm, concise, and safety-focused. For emergencies, tell them to contact local authorities immediately.`;
 
 serve(async (req) => {
@@ -270,7 +305,7 @@ serve(async (req) => {
     const askedQuote = typeof lastUser === "string" && QUOTE_RE.test(lastUser);
 
     const [ragContext, userContext, liveData] = await Promise.all([
-      buildRagContext().catch(() => ""),
+      buildRagContext(typeof lastUser === "string" ? lastUser : "").catch(() => ""),
       buildUserContext(req.headers.get("Authorization")).catch(() => ""),
       gatherLiveData(messages).catch((e) => { console.error("[trail-chat-rag] live data error", e); return null; }),
     ]);
@@ -282,7 +317,7 @@ serve(async (req) => {
     if (ragContext) {
       systemMessages.push({
         role: "system",
-        content: "Fresh structured context from the Mount Kalisungan database — ground truth for trails, elevation, difficulty, capacity and conditions:\n\n" + ragContext,
+        content: "KNOWLEDGE BASE (most relevant curated entries for this question — treat as ground truth):\n\n" + ragContext,
       });
     }
     if (userContext) {

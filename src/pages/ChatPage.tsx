@@ -7,8 +7,9 @@ import ReactMarkdown from 'react-markdown';
 import type { ChatMessage } from '@/types';
 import { getOfflineAnswer, learnFromResponse, getCacheSize } from '@/lib/trail-offline-kb';
 import logo from '@/assets/logo.png';
+import { supabase } from '@/integrations/supabase/client';
 
-const CHAT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/trail-chat`;
+const CHAT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/trail-chat-rag`;
 const QUICK_QUESTIONS = [
   'What trails are available on Mt. Kalisungan?',
   'What should I bring for a day hike?',
@@ -49,6 +50,9 @@ export default function ChatPage() {
       return;
     }
 
+    const { data: { session } } = await supabase.auth.getSession();
+    const accessToken = session?.access_token;
+
     let assistantSoFar = '';
     const upsert = (chunk: string) => {
       assistantSoFar += chunk;
@@ -66,9 +70,9 @@ export default function ChatPage() {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+          Authorization: `Bearer ${accessToken ?? import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
         },
-        body: JSON.stringify({ messages: [...messages, userMsg] }),
+        body: JSON.stringify({ messages: [...messages, userMsg], page_context: 'Trail Chat' }),
       });
 
       if (!resp.ok) {

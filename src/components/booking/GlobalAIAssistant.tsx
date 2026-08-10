@@ -49,6 +49,7 @@ export default function GlobalAIAssistant() {
     if (s.hikeTime) params.set('time', s.hikeTime);
     if (s.groupSize) params.set('pax', String(s.groupSize));
     if (s.hikeType) params.set('type', s.hikeType);
+    if (s.submit) params.set('ready', '1');
     toast.success('Taking you to Book a Hike with these details');
     navigate(`/booking?${params.toString()}`);
   };

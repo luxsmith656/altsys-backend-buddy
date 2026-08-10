@@ -239,6 +239,10 @@ export default function BookingPage() {
     if (pax && Number(pax) >= 1) { setGroupSize(Math.min(30, Number(pax))); applied.push(`${pax} pax`); }
     if (type === 'day' || type === 'night') { setHikeType(type); applied.push(type === 'night' ? 'Night hike' : 'Day hike'); }
     if (applied.length) toast.success(`Assistant applied: ${applied.join(' · ')}`);
+    if (searchParams.get('ready') === '1') {
+      setStep(2);
+      toast.info('Review your details, then accept the reminders and agreements to finish.');
+    }
     setSearchParams({}, { replace: true });
   }, [searchParams, setSearchParams]);
   const [customTimeInput, setCustomTimeInput] = useState('');
@@ -1955,6 +1959,10 @@ export default function BookingPage() {
           if (s.hikeTime) { setHikeTime(s.hikeTime); setUseCustomTime(true); applied.push(s.hikeTime); }
           if (typeof s.groupSize === 'number') { setGroupSize(s.groupSize); applied.push(`${s.groupSize} pax`); }
           if (applied.length) toast.success(`Applied: ${applied.join(' · ')}`);
+          if (s.submit) {
+            setStep(2);
+            toast.info('Review your details, then accept the reminders and agreements to finish.');
+          }
         }}
       />
 

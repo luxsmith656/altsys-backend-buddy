@@ -43,5 +43,5 @@ export async function completeActiveHikeTracker() {
   activeTracker = null;
   activeStart = null;
   activeKey = null;
-  if (tracker) await tracker.complete();
+  if (tracker) await tracker.stop();
 }
