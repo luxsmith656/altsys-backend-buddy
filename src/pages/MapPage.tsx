@@ -170,7 +170,7 @@ export default function MapPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const availableTrails: MapTrail[] = dbTrails;
   // A local fallback is used only for the staff simulation canvas; it is never rendered as an official route.
-  const currentTrail = availableTrails[selectedTrail] || TRAILS[0];
+  const currentTrail: MapTrail = availableTrails[selectedTrail] || (TRAILS[0] as MapTrail);
   const currentRouteDistanceKm = currentTrail.path.reduce((total, point, index) => {
     if (index === 0) return total;
     const previous = currentTrail.path[index - 1];
