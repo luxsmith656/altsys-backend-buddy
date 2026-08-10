@@ -60,10 +60,39 @@ const TOOLS = [
   { type: "function", function: { name: "get_booking_summary", description: "Aggregate booking counts (confirmed/pending/cancelled), total hikers booked, capacity and remaining slots for a date range in Asia/Manila.", parameters: rangeParams } },
   { type: "function", function: { name: "get_capacity_summary", description: "Capacity and remaining slots for a date range.", parameters: rangeParams } },
   { type: "function", function: { name: "get_attendance_summary", description: "Expected, checked-in, completed and no-show hiker totals for a date range.", parameters: rangeParams } },
+  {
+    type: "function",
+    function: {
+      name: "get_trail_conditions",
+      description: "Current status of the official trails plus the most recent ranger condition reports. Use when asked about trail status, closures, difficulty or how a trail is right now.",
+      parameters: { type: "object", properties: {}, required: [], additionalProperties: false },
+    },
+  },
 ];
 const ALLOWED_TOOLS = new Set(TOOLS.map((t) => t.function.name));
 
+async function getTrailConditions(db: any) {
+  const [{ data: zones }, { data: reports }] = await Promise.all([
+    db.from("trail_zones").select("id, name, difficulty, elevation_meters, max_capacity, status").eq("status", "active").limit(12),
+    db.from("trail_reports").select("zone_id, condition, description, created_at").order("created_at", { ascending: false }).limit(5),
+  ]);
+  return {
+    trails: (zones ?? []).map((z: any) => ({
+      name: z.name, status: z.status, difficulty: z.difficulty,
+      elevation_m: z.elevation_meters, max_capacity: z.max_capacity,
+    })),
+    recent_reports: (reports ?? []).map((r: any) => ({
+      trail: (zones ?? []).find((z: any) => z.id === r.zone_id)?.name ?? "Unknown trail",
+      condition: r.condition, note: r.description, reported_at: r.created_at,
+    })),
+  };
+}
+
 async function runTool(db: any, name: string, args: any) {
+  if (name === "get_trail_conditions") {
+    try { return await getTrailConditions(db); }
+    catch { return { error: "Unable to retrieve trail conditions right now." }; }
+  }
   const r = validateRange(args?.start_date, args?.end_date);
   if ("error" in r) return { error: r.error };
   const fn = name === "get_attendance_summary" ? "ai_attendance_summary" : "ai_booking_summary";
