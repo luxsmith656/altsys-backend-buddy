@@ -27,6 +27,8 @@ export interface BookingSuggestion {
   groupSize?: number;
   hikeType?: HikeType;
   label?: string;
+  /** AI believes the hiker asked to go ahead — the form still requires review + agreements. */
+  submit?: boolean;
 }
 
 interface ChatMsg {
@@ -79,6 +81,7 @@ function extractSuggestion(text: string): { clean: string; suggestion?: BookingS
     }
     if (raw.hikeType === 'day' || raw.hikeType === 'night') suggestion.hikeType = raw.hikeType;
     if (typeof raw.label === 'string') suggestion.label = raw.label.slice(0, 80);
+    if (raw.submit === true) suggestion.submit = true;
     const hasValue = suggestion.date || suggestion.hikeTime || suggestion.groupSize || suggestion.hikeType;
     return hasValue ? { clean, suggestion } : { clean };
   } catch {
