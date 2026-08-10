@@ -166,37 +166,33 @@ async function gatherLiveData(messages: any[]): Promise<string | null> {
   return facts.length ? facts.join("\n") : null;
 }
 
-/* ── RAG: trail zones + latest condition reports ── */
-async function buildRagContext(): Promise<string> {
+/* ── RAG: semantic search over the curated knowledge base (kb_chunks) ── */
+async function buildRagContext(question: string): Promise<string> {
   if (!SUPABASE_URL || !SERVICE_ROLE) return "";
-  const db = createClient(SUPABASE_URL, SERVICE_ROLE, { auth: { persistSession: false } });
+  const q = (question ?? "").trim();
+  if (q.length < 3) return "";
+  const { key, url } = aiConfig();
+  if (!key) return "";
 
-  const { data: zones } = await db
-    .from("trail_zones")
-    .select("id, name, description, difficulty, elevation_meters, max_capacity, status")
-    .limit(20);
-  const { data: reports } = await db
-    .from("trail_reports")
-    .select("zone_id, condition, description, created_at")
-    .order("created_at", { ascending: false })
-    .limit(10);
-
-  if (!zones || zones.length === 0) return "";
-
-  const zoneLines = zones.map((z: any) =>
-    `- ${z.name} [status=${z.status}, difficulty=${z.difficulty}, elevation=${z.elevation_meters}m, max_capacity=${z.max_capacity}]: ${z.description ?? ""}`.trim(),
-  );
-
-  let context = "Trail zones (from database):\n" + zoneLines.join("\n");
-  if (reports && reports.length > 0) {
-    const reportLines = reports.map((r: any) => {
-      const zone = zones.find((z: any) => z.id === r.zone_id);
-      return `- [${new Date(r.created_at as string).toISOString()}] ${zone?.name ?? "Unknown zone"}: condition=${r.condition} — ${r.description ?? ""}`;
+  try {
+    const [vector] = await embed([q.slice(0, 4000)], key, url);
+    if (!vector) return "";
+    const db = createClient(SUPABASE_URL, SERVICE_ROLE, { auth: { persistSession: false } });
+    const { data, error } = await db.rpc("match_kb_chunks", {
+      query_embedding: JSON.stringify(vector),
+      match_count: 5,
+      min_similarity: 0.15,
     });
-    context += "\n\nLatest trail condition reports:\n" + reportLines.join("\n");
+    if (error) { console.error("[trail-chat-rag] kb search error", error.message); return ""; }
+    const rows = (data ?? []) as { title: string; category: string; content: string }[];
+    if (!rows.length) return "";
+    return rows.map((r) => `- [${r.category}] ${r.title}: ${r.content}`).join("\n");
+  } catch (e) {
+    console.error("[trail-chat-rag] rag error", e);
+    return "";
   }
-  return context;
 }
+
 
 /* ── Personal context: the signed-in hiker's own profile + own bookings only ── */
 async function buildUserContext(authHeader: string | null): Promise<string> {
