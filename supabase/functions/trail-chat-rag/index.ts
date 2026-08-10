@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.48.0";
+import { embed } from "../_shared/kb.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -19,6 +20,9 @@ const QUOTE_RE =
   /\b(how much|cost|costs|price|prices|pricing|fee|fees|rate|rates|budget|pay|payable|magkano)\b/i;
 const DATA_INTENT_RE =
   /\b(how many|how much|number of|count|hiker|hikers|climber|climbers|book(?:ed|ing|ings)?|reserv\w*|slot|slots|capacity|full|busy|crowded|available|availability|attendance|checked[- ]in|check[- ]in|no[- ]show|turnout|schedule[d]?|today|tomorrow|tonight|this week|next week|weekend|this month)\b/i;
+
+const TRAIL_INTENT_RE =
+  /\b(trail|trails|route|routes|summit|ridge|river|condition|conditions|closed|closure|open|status|muddy|slippery|landslide)\b/i;
 
 const FEE_SCHEDULE = `PUBLISHED FEE SCHEDULE (Mount Kalisungan, Philippine Peso):
 - Registration/entry fee: ₱50 per person
@@ -125,7 +129,7 @@ function aiConfig() {
 
 async function gatherLiveData(messages: any[]): Promise<string | null> {
   const lastUser = [...messages].reverse().find((m) => m?.role === "user")?.content ?? "";
-  if (typeof lastUser !== "string" || !DATA_INTENT_RE.test(lastUser)) return null;
+  if (typeof lastUser !== "string" || !(DATA_INTENT_RE.test(lastUser) || TRAIL_INTENT_RE.test(lastUser))) return null;
   if (!SUPABASE_URL || !SERVICE_ROLE) return null;
 
   const { key, url, model } = aiConfig();
@@ -295,7 +299,7 @@ serve(async (req) => {
     const askedQuote = typeof lastUser === "string" && QUOTE_RE.test(lastUser);
 
     const [ragContext, userContext, liveData] = await Promise.all([
-      buildRagContext().catch(() => ""),
+      buildRagContext(typeof lastUser === "string" ? lastUser : "").catch(() => ""),
       buildUserContext(req.headers.get("Authorization")).catch(() => ""),
       gatherLiveData(messages).catch((e) => { console.error("[trail-chat-rag] live data error", e); return null; }),
     ]);
@@ -307,7 +311,7 @@ serve(async (req) => {
     if (ragContext) {
       systemMessages.push({
         role: "system",
-        content: "Fresh structured context from the Mount Kalisungan database — ground truth for trails, elevation, difficulty, capacity and conditions:\n\n" + ragContext,
+        content: "KNOWLEDGE BASE (most relevant curated entries for this question — treat as ground truth):\n\n" + ragContext,
       });
     }
     if (userContext) {
