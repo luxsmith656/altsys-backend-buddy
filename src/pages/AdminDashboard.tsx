@@ -100,6 +100,7 @@ import QRCameraScanner from '@/components/admin/QRCameraScanner';
 import DemographicsTab from '@/components/admin/DemographicsTab';
 import OverviewDashboard from '@/components/admin/OverviewDashboard';
 import PaymentSummaryTab from '@/components/admin/PaymentSummaryTab';
+import ForecastingTab from '@/components/admin/forecasting/ForecastingTab';
 import AppDownloadButton from '@/components/AppDownloadButton';
 import { Calendar } from '@/components/ui/calendar';
 import { format } from 'date-fns';
@@ -2130,6 +2131,7 @@ export default function AdminDashboard() {
                   <TabsTrigger value="guides">Guide Roster</TabsTrigger>
                   <TabsTrigger value="announcements">Announcements</TabsTrigger>
                   <TabsTrigger value="capacity">Daily Capacity</TabsTrigger>
+                  <TabsTrigger value="forecasting">Prophet Forecasting</TabsTrigger>
                 </TabsList>
               </div>
               <TabsContent value="guides" className="space-y-6 mt-0">
@@ -2491,6 +2493,9 @@ export default function AdminDashboard() {
                 </div>
               </CardContent>
             </Card>
+          </TabsContent>
+          <TabsContent value="forecasting" className="space-y-6 mt-0">
+            <ForecastingTab locationId={activeLocationId} />
           </TabsContent>
             </Tabs>
           </TabsContent>
