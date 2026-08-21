@@ -214,11 +214,11 @@ Afternoon thunderstorms can occur year-round.`,
     answer: `**Registration & Fees:**
 
 - Registration is **required** at the barangay hall / trailhead
-- Registration fee applies (typically ₱50–100 per person)
-- Guide fee may be required for Summit Trail
-- Environmental fee may apply
+- Registration fee: ₱30 per person
+- Environmental fee: ₱20 per person
+- Mandatory Tour Guide fee: ₱800 per guide (1 guide per 8 hikers; groups over 8 require an additional guide)
 - Groups should register together
-- Bring exact change — card payments not available at trailhead
+- Bring exact cash, GCash, or pre-book through the app
 
 💡 Book through the app to pre-register and skip the queue!`,
   },

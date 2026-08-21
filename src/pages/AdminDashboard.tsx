@@ -101,6 +101,8 @@ import DemographicsTab from '@/components/admin/DemographicsTab';
 import OverviewDashboard from '@/components/admin/OverviewDashboard';
 import PaymentSummaryTab from '@/components/admin/PaymentSummaryTab';
 import ForecastingTab from '@/components/admin/forecasting/ForecastingTab';
+import AdminWalkInRegistrationDialog from '@/components/admin/AdminWalkInRegistrationDialog';
+import EditPaymentDialog from '@/components/booking/EditPaymentDialog';
 import AppDownloadButton from '@/components/AppDownloadButton';
 import { Calendar } from '@/components/ui/calendar';
 import { format } from 'date-fns';
@@ -176,6 +178,8 @@ export default function AdminDashboard() {
   const [chatBooking, setChatBooking] = useState<{ id: string; date: string } | null>(null);
   const [reassignFor, setReassignFor] = useState<{ bookingId: string; guideName: string | null; guideId: string | null; locationId: string | null } | null>(null);
   const [editingBooking, setEditingBooking] = useState<any | null>(null);
+  const [editingPaymentBooking, setEditingPaymentBooking] = useState<any | null>(null);
+  const [walkInOpen, setWalkInOpen] = useState(false);
 
   useEffect(() => {
     const tab = searchParams.get('tab');
@@ -449,9 +453,16 @@ export default function AdminDashboard() {
   };
 
   /* ── QR Scan: lookup booking ── */
-  const handleQrLookup = async () => {
-    const q = qrInput.trim();
-    if (!q) { toast.error('Enter QR code data, booking ID, or hiker name.'); return; }
+  const handleQrLookup = async (overrideValue?: string) => {
+    const raw = (typeof overrideValue === 'string' ? overrideValue : qrInput).trim();
+    if (!raw) { toast.error('Enter QR code data, booking ID, or hiker name.'); return; }
+    let q = raw;
+    try {
+      const parsed = JSON.parse(raw);
+      if (parsed?.bookingId) q = parsed.bookingId;
+      else if (parsed?.id) q = parsed.id;
+    } catch {}
+
     setScanLoading(true);
     setScannedBooking(null);
     setHikeStarted(false);
@@ -460,7 +471,7 @@ export default function AdminDashboard() {
     let exactQuery = supabase
       .from('bookings')
       .select('*')
-      .or(`qr_code_data.eq.${q},id.eq.${q}`)
+      .or(`qr_code_data.eq.${raw},qr_code_data.eq.${q},id.eq.${q}`)
       .limit(1);
     if (activeLocationId) exactQuery = exactQuery.eq('location_id', activeLocationId) as typeof exactQuery;
     const { data: exactData } = await exactQuery.maybeSingle();
@@ -1536,10 +1547,20 @@ export default function AdminDashboard() {
                 <h2 className="text-lg font-semibold">All Bookings</h2>
                 <p className="text-sm text-muted-foreground">View and manage all booking records by status.</p>
               </div>
-              <Button variant="outline" size="sm" onClick={() => { void loadAllTabBookings(); void loadPendingBookings(); }} disabled={allTabLoading} className="gap-1.5">
-                {allTabLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Activity className="h-3.5 w-3.5" />}
-                Refresh
-              </Button>
+              <div className="flex items-center gap-2">
+                <Button
+                  size="sm"
+                  onClick={() => setWalkInOpen(true)}
+                  className="gap-1.5 bg-primary text-primary-foreground text-xs shadow-sm"
+                >
+                  <UserPlus className="h-4 w-4" />
+                  + Register Walk-In Hiker
+                </Button>
+                <Button variant="outline" size="sm" onClick={() => { void loadAllTabBookings(); void loadPendingBookings(); }} disabled={allTabLoading} className="gap-1.5 text-xs">
+                  {allTabLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Activity className="h-3.5 w-3.5" />}
+                  Refresh
+                </Button>
+              </div>
             </div>
 
             {/* Search */}
@@ -1646,10 +1667,46 @@ export default function AdminDashboard() {
                                   <p className="font-semibold text-primary">{meta.adjustedDate}</p>
                                 </div>
                               )}
+                              <div>
+                                <p className="text-xs text-muted-foreground">Total Fee</p>
+                                <p className="font-bold text-emerald-600 dark:text-emerald-400">
+                                  {formatPeso(Number(b.total_amount || 0))}
+                                  {meta.paymentStatus && (
+                                    <span className="ml-1 text-[10px] uppercase font-semibold text-muted-foreground">
+                                      ({meta.paymentStatus})
+                                    </span>
+                                  )}
+                                </p>
+                              </div>
+                              {meta.peakExtensionHours && meta.peakExtensionHours > 0 ? (
+                                <div>
+                                  <p className="text-xs text-muted-foreground">Peak Stay Extension</p>
+                                  <p className="font-semibold text-primary">+{meta.peakExtensionHours}h ({formatPeso(meta.peakExtensionFee || meta.peakExtensionHours * 100)})</p>
+                                </div>
+                              ) : null}
+                              {meta.emergencyHorseCount && meta.emergencyHorseCount > 0 ? (
+                                <div>
+                                  <p className="text-xs text-muted-foreground">Emergency Service</p>
+                                  <p className="font-semibold text-amber-600 dark:text-amber-400">🐎 {meta.emergencyHorseCount} Horse ({formatPeso(meta.emergencyHorseFee || meta.emergencyHorseCount * 500)})</p>
+                                </div>
+                              ) : null}
                               {meta.userNotes && (
                                 <div className="col-span-2">
                                   <p className="text-xs text-muted-foreground">Notes</p>
                                   <p className="font-semibold truncate">{meta.userNotes}</p>
+                                </div>
+                              )}
+                              {meta.priceAdjustments && meta.priceAdjustments.length > 0 && (
+                                <div className="col-span-full rounded-xl bg-secondary/30 border border-border/30 p-2.5 space-y-1 text-xs mt-1">
+                                  <p className="font-semibold text-foreground flex items-center gap-1.5">
+                                    <DollarSign className="h-3.5 w-3.5 text-emerald-500" />
+                                    Price Adjustments Audit ({meta.priceAdjustments.length}):
+                                  </p>
+                                  {meta.priceAdjustments.slice(-2).map((adj: any, i: number) => (
+                                    <p key={i} className="text-[11px] text-muted-foreground">
+                                      • <strong>{formatPeso(adj.previousAmount)} ➔ {formatPeso(adj.newAmount)}</strong> by {adj.changedByName || 'Admin'} on {new Date(adj.changedAt).toLocaleDateString()}: <em>"{adj.reason}"</em>
+                                    </p>
+                                  ))}
                                 </div>
                               )}
                             </div>
@@ -1698,6 +1755,9 @@ export default function AdminDashboard() {
                               <>
                                 <Button size="sm" variant="outline" className="gap-1.5" onClick={() => setEditingBooking(b)}>
                                   <FileText className="h-3.5 w-3.5" /> Edit details
+                                </Button>
+                                <Button size="sm" variant="outline" className="gap-1.5 border-emerald-500/40 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/10" onClick={() => setEditingPaymentBooking(b)}>
+                                  <DollarSign className="h-3.5 w-3.5" /> Edit Price / Services
                                 </Button>
                                 {meta.assignedGuide && (
                                   <Button size="sm" variant="outline" className="gap-1.5 border-amber-500/40 text-amber-600 dark:text-amber-400 hover:bg-amber-500/10"
@@ -1864,10 +1924,10 @@ export default function AdminDashboard() {
               </CardHeader>
               <CardContent className="space-y-4">
                 <QRCameraScanner
-                  onScan={(value) => { setQrInput(value); void handleQrLookup(); }}
+                  onScan={(value) => { setQrInput(value); void handleQrLookup(value); }}
                   manualInput={qrInput}
                   onManualInputChange={setQrInput}
-                  onManualSubmit={handleQrLookup}
+                  onManualSubmit={() => void handleQrLookup()}
                   loading={scanLoading}
                 />
 
@@ -2613,6 +2673,22 @@ export default function AdminDashboard() {
         open={!!editingBooking}
         onClose={() => setEditingBooking(null)}
         onDone={() => void loadAllTabBookings()}
+      />
+      <EditPaymentDialog
+        booking={editingPaymentBooking}
+        open={!!editingPaymentBooking}
+        onClose={() => setEditingPaymentBooking(null)}
+        onDone={() => void loadAllTabBookings()}
+      />
+      <AdminWalkInRegistrationDialog
+        open={walkInOpen}
+        onClose={() => setWalkInOpen(false)}
+        locationId={activeLocationId}
+        onSuccess={() => {
+          void loadAllTabBookings();
+          void loadPendingBookings();
+          void loadUpcomingCapacities();
+        }}
       />
     </div>
   );

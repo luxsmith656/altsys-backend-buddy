@@ -100,12 +100,20 @@ export default function RangerDashboard() {
     if (!qrInput.trim()) return;
     setQrLoading(true);
 
-    // Look up the booking by QR code
+    let parsedId = qrInput.trim();
+    try {
+      const parsed = JSON.parse(qrInput.trim());
+      if (parsed?.bookingId) parsedId = parsed.bookingId;
+      else if (parsed?.id) parsedId = parsed.id;
+    } catch {}
+
+    // Look up the booking by QR code or ID
     const { data: booking, error } = await supabase
       .from('bookings')
       .select('id, qr_code_data, group_size, emergency_contact_name, status')
-      .eq('qr_code_data', qrInput.trim())
-      .single();
+      .or(`qr_code_data.eq.${qrInput.trim()},id.eq.${parsedId}`)
+      .limit(1)
+      .maybeSingle();
 
     if (error || !booking) {
       toast.error('QR code not found. Check the code and try again.');

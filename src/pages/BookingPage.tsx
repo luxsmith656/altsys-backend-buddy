@@ -42,6 +42,7 @@ import {
   X,
   Globe,
   MapPin,
+  UserPlus,
 } from 'lucide-react';
 import { calculateFees, formatPeso, GCASH_DETAILS, BANK_DETAILS } from '@/lib/payments';
 import { QRCodeSVG } from 'qrcode.react';
@@ -59,6 +60,7 @@ import { createUserNotification } from '@/lib/firebase-firestore';
 import type { CompanionDetail } from '@/types';
 import { useLocations } from '@/hooks/useLocations';
 import LocationPreview from '@/components/booking/LocationPreview';
+import AdminWalkInRegistrationDialog from '@/components/admin/AdminWalkInRegistrationDialog';
 
 /* ── Weather code → human-readable label (Open-Meteo) ── */
 function weatherCodeToLabel(code: number): string {
@@ -210,9 +212,10 @@ function dayDifference(target: Date): number {
 
 /* ─── Component ─── */
 export default function BookingPage() {
-  const { user } = useAuth();
+  const { user, role } = useAuth();
   const navigate = useNavigate();
   const [step, setStep] = useState(1);
+  const [adminWalkInOpen, setAdminWalkInOpen] = useState(false);
 
   // ── Step 1: Schedule
   const [date, setDate] = useState<Date | undefined>();
@@ -930,6 +933,41 @@ export default function BookingPage() {
           </p>
         </motion.div>
 
+        {/* ─── Admin Walk-In Mode Banner ─── */}
+        {(role === 'admin' || role === 'super_admin') && (
+          <div className="mb-8 p-4 sm:p-5 rounded-2xl bg-primary/10 border border-primary/30 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-md backdrop-blur-sm">
+            <div className="flex items-center gap-3.5">
+              <div className="h-11 w-11 rounded-2xl bg-primary/20 text-primary grid place-items-center shrink-0 border border-primary/30">
+                <UserPlus className="h-6 w-6" />
+              </div>
+              <div>
+                <p className="font-bold text-sm text-foreground flex items-center gap-2">
+                  Admin On-Site Walk-In Mode Active
+                  <Badge className="bg-primary text-white text-[10px] py-0">Trailhead Counter</Badge>
+                </p>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Registering a walk-in hiker group on-site without prior reservation? Open the fast-track walk-in desk for instant fee collection and QR check-in pass.
+                </p>
+              </div>
+            </div>
+            <Button
+              size="sm"
+              onClick={() => setAdminWalkInOpen(true)}
+              className="gap-2 text-xs bg-primary hover:bg-primary/90 text-primary-foreground shrink-0 shadow-md font-semibold h-10 px-4 rounded-xl"
+            >
+              <UserPlus className="h-4 w-4" />
+              Open Express Walk-In Desk
+            </Button>
+          </div>
+        )}
+
+        <AdminWalkInRegistrationDialog
+          open={adminWalkInOpen}
+          onClose={() => setAdminWalkInOpen(false)}
+          locationId={startLocationId || null}
+          onSuccess={() => navigate('/admin?tab=requests')}
+        />
+
         {/* ─── Step Indicator ─── */}
         <div className="mb-8 md:mb-12 pb-1">
           <div className="grid grid-cols-4 items-start gap-1 sm:gap-2">
@@ -1071,7 +1109,7 @@ export default function BookingPage() {
                         <Users className="h-4 w-4 text-muted-foreground" />
                         <div>
                           <p className="text-sm font-semibold leading-tight">Group Size</p>
-                          <p className="text-[11px] text-muted-foreground">1–30 people per booking</p>
+                          <p className="text-[11px] text-muted-foreground">1–30 hikers (1 guide per 8 pax · ₱800/guide)</p>
                         </div>
                       </div>
                       <div className="flex items-center gap-2">
@@ -1099,6 +1137,15 @@ export default function BookingPage() {
                         )}
                       </div>
                     </div>
+
+                    {groupSize > 8 && (
+                      <div className="flex items-center gap-2 p-2.5 rounded-xl bg-primary/10 border border-primary/20 text-xs text-primary">
+                        <Users className="h-4 w-4 shrink-0" />
+                        <span>
+                          Groups over 8 hikers require <strong>{Math.ceil(groupSize / 8)} tour guides</strong> (₱800 per guide) for trail safety.
+                        </span>
+                      </div>
+                    )}
 
                     {/* Start Time */}
                     <div className="space-y-2.5">
@@ -1716,15 +1763,17 @@ export default function BookingPage() {
                       </h3>
                       <div className="space-y-2 text-sm">
                         <div className="flex justify-between">
-                          <span className="text-muted-foreground">Entry Fee (₱{50} × {groupSize} pax)</span>
+                          <span className="text-muted-foreground">Registration / Entry Fee (₱30 × {groupSize} pax)</span>
                           <span className="font-semibold">{formatPeso(entryFee)}</span>
                         </div>
                         <div className="flex justify-between">
-                          <span className="text-muted-foreground">Environmental/DSPA Fee (₱{20} × {groupSize} pax)</span>
+                          <span className="text-muted-foreground">Environmental / DSPA Fee (₱20 × {groupSize} pax)</span>
                           <span className="font-semibold">{formatPeso(envFee)}</span>
                         </div>
                         <div className="flex justify-between">
-                          <span className="text-muted-foreground">Guide Fee (per group)</span>
+                          <span className="text-muted-foreground">
+                            Tour Guide Fee (₱800 / guide · {Math.max(1, Math.ceil(groupSize / 8))} {Math.max(1, Math.ceil(groupSize / 8)) > 1 ? 'guides' : 'guide'})
+                          </span>
                           <span className="font-semibold">{formatPeso(guideFee)}</span>
                         </div>
                         <div className="flex justify-between pt-2 border-t border-border/20 text-base font-bold">

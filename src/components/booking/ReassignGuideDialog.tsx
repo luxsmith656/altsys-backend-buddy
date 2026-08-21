@@ -1,12 +1,25 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Loader2, UserCog } from 'lucide-react';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { Loader2, UserCog, AlertCircle, ArrowRight } from 'lucide-react';
 import { toast } from 'sonner';
-import { encodeMeta, parseMeta } from '@/lib/bookingMeta';
+import { reassignGuideByAdmin } from '@/lib/guideAssignmentService';
 
 interface Props {
   bookingId: string;
@@ -19,17 +32,28 @@ interface Props {
 }
 
 export default function ReassignGuideDialog({
-  bookingId, currentGuideId, currentGuideName, locationId, open, onClose, onDone,
+  bookingId,
+  currentGuideId,
+  currentGuideName,
+  locationId,
+  open,
+  onClose,
+  onDone,
 }: Props) {
   const [guides, setGuides] = useState<any[]>([]);
   const [newGuideId, setNewGuideId] = useState('');
   const [reason, setReason] = useState('');
   const [saving, setSaving] = useState(false);
+  const [bookingInfo, setBookingInfo] = useState<any | null>(null);
+  const [currentGuideRow, setCurrentGuideRow] = useState<any | null>(null);
 
   useEffect(() => {
     if (!open) return;
-    let q: any = supabase.from('guides')
-      .select('id, full_name, status, location_id, user_id')
+
+    // Load available guides
+    let q: any = supabase
+      .from('guides')
+      .select('id, full_name, status, location_id, user_id, phone, specialty')
       .eq('is_active', true)
       .neq('status', 'off_duty');
     if (locationId) q = q.eq('location_id', locationId);
@@ -37,78 +61,64 @@ export default function ReassignGuideDialog({
       const list = (data || []).filter((g: any) => g.id !== currentGuideId);
       setGuides(list);
     });
-  }, [open, locationId, currentGuideId]);
+
+    // Load current booking info
+    supabase
+      .from('bookings')
+      .select('id, user_id, booking_date, location_id, group_size')
+      .eq('id', bookingId)
+      .single()
+      .then(({ data }) => setBookingInfo(data));
+
+    // Load current guide user_id
+    if (currentGuideId) {
+      supabase
+        .from('guides')
+        .select('id, full_name, user_id, phone')
+        .eq('id', currentGuideId)
+        .single()
+        .then(({ data }) => setCurrentGuideRow(data));
+    }
+  }, [open, locationId, currentGuideId, bookingId]);
 
   const handleSubmit = async () => {
-    if (!newGuideId) { toast.error('Pick a replacement guide'); return; }
-    if (!reason.trim()) { toast.error('Reason is required'); return; }
+    if (!newGuideId) {
+      toast.error('Pick a replacement guide from the list.');
+      return;
+    }
+    if (!reason.trim()) {
+      toast.error('Please enter a reason for the guide reassignment.');
+      return;
+    }
+
     setSaving(true);
     const newGuide = guides.find((g) => g.id === newGuideId);
+
     try {
-      const changedAt = new Date().toISOString();
-      // Keep the assignment schema-compatible: the live database only stores
-      // status and decided_at. The reason is retained in booking metadata/messages.
-      if (currentGuideId) {
-        const { error } = await supabase.from('booking_assignments' as any)
-          .update({ status: 'declined', decided_at: changedAt } as any)
-          .eq('booking_id', bookingId)
-          .eq('guide_id', currentGuideId);
-        if (error) throw error;
-      }
-      const { data: existing, error: existingError } = await supabase.from('booking_assignments' as any)
-        .select('id').eq('booking_id', bookingId).eq('guide_id', newGuideId).maybeSingle();
-      if (existingError) throw existingError;
-      if ((existing as any)?.id) {
-        const { error } = await supabase.from('booking_assignments' as any)
-          .update({ status: 'pending', decided_at: null } as any)
-          .eq('id', (existing as any).id);
-        if (error) throw error;
+      const res = await reassignGuideByAdmin({
+        bookingId,
+        currentGuideId: currentGuideId || null,
+        currentGuideName: currentGuideName || currentGuideRow?.full_name || null,
+        currentGuideUserId: currentGuideRow?.user_id || null,
+        newGuideId,
+        newGuideName: newGuide?.full_name || 'Replacement Guide',
+        newGuideUserId: newGuide?.user_id || null,
+        newGuidePhone: newGuide?.phone || null,
+        reason: reason.trim(),
+        hikerUserId: bookingInfo?.user_id || null,
+        bookingDate: bookingInfo?.booking_date,
+        locationId: locationId || bookingInfo?.location_id,
+      });
+
+      if (res.success) {
+        toast.success(
+          `Guide reassigned to ${newGuide?.full_name}. Previous guide, replacement guide, and hiker have all been notified.`
+        );
+        onDone?.();
+        onClose();
       } else {
-        const { error } = await supabase.from('booking_assignments' as any).insert({
-          booking_id: bookingId,
-          guide_id: newGuideId,
-          location_id: locationId,
-          status: 'pending',
-        } as any);
-        if (error) throw error;
+        toast.error(res.error || 'Failed to reassign guide.');
       }
-
-      const { data: booking, error: bookingError } = await supabase
-        .from('bookings')
-        .select('notes')
-        .eq('id', bookingId)
-        .single();
-      if (bookingError) throw bookingError;
-      const { error: metaError } = await supabase.from('bookings').update({
-        notes: encodeMeta({
-          ...parseMeta(booking.notes),
-          assignedGuide: newGuide?.full_name ?? '',
-          assignedGuideId: newGuideId,
-          guideChangeReason: reason.trim(),
-          guideChangedAt: changedAt,
-        }),
-      } as any).eq('id', bookingId);
-      if (metaError) throw metaError;
-
-      // System messages — visible to admin/hiker, plus the new guide sees their own
-      const msgs = [
-        `Guide reassigned: ${currentGuideName ?? 'previous guide'} removed. Reason: ${reason}`,
-        `New guide assigned: ${newGuide?.full_name}. Awaiting confirmation.`,
-        `Hiker notification: your guide has been changed to ${newGuide?.full_name}.`,
-      ];
-      for (const content of msgs) {
-        await supabase.from('booking_messages' as any).insert({
-          booking_id: bookingId, sender_role: 'system', kind: 'system', content,
-        } as any);
-      }
-      // Free the old guide back to available (only if not on_duty)
-      if (currentGuideId) {
-        await supabase.from('guides').update({ status: 'available' } as any)
-          .eq('id', currentGuideId).neq('status', 'on_duty');
-      }
-      toast.success('Guide reassigned and everyone notified.');
-      onDone?.();
-      onClose();
     } catch (e: any) {
       toast.error(`Reassign failed: ${e.message}`);
     } finally {
@@ -120,45 +130,72 @@ export default function ReassignGuideDialog({
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="max-w-md">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <UserCog className="h-5 w-5 text-primary" /> Reassign guide
+          <DialogTitle className="flex items-center gap-2 text-primary">
+            <UserCog className="h-5 w-5" /> Reassign Tour Guide
           </DialogTitle>
-          <DialogDescription>
-            Replace {currentGuideName ?? 'the current guide'} with another available guide. Both guides and the hiker will be notified with your reason.
+          <DialogDescription className="text-xs">
+            Replace {currentGuideName ?? 'the currently assigned guide'} with another active guide. Both guides and the hiker will be automatically notified with your stated reason.
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-3">
+        <div className="space-y-3 pt-1 text-xs sm:text-sm">
           <div>
-            <label className="text-xs text-muted-foreground mb-1 block">Replacement guide</label>
+            <label className="text-xs font-semibold text-foreground mb-1 block">
+              Replacement Guide
+            </label>
             <Select value={newGuideId} onValueChange={setNewGuideId}>
-              <SelectTrigger><SelectValue placeholder="Pick a guide…" /></SelectTrigger>
+              <SelectTrigger className="text-xs h-9">
+                <SelectValue placeholder="Select an active guide…" />
+              </SelectTrigger>
               <SelectContent>
                 {guides.map((g) => (
-                  <SelectItem key={g.id} value={g.id}>
-                    {g.full_name} <span className="text-muted-foreground">· {g.status}</span>
+                  <SelectItem key={g.id} value={g.id} className="text-xs">
+                    {g.full_name} <span className="text-muted-foreground">· {g.specialty || g.status}</span>
                   </SelectItem>
                 ))}
-                {guides.length === 0 && <div className="text-xs text-muted-foreground p-2">No other guides available.</div>}
+                {guides.length === 0 && (
+                  <div className="text-xs text-muted-foreground p-2">
+                    No other active guides available for this trailhead.
+                  </div>
+                )}
               </SelectContent>
             </Select>
           </div>
+
           <div>
-            <label className="text-xs text-muted-foreground mb-1 block">Reason (required)</label>
+            <label className="text-xs font-semibold text-foreground mb-1 block">
+              Reason for Change (Required)
+            </label>
             <Textarea
               value={reason}
               onChange={(e) => setReason(e.target.value)}
-              placeholder="e.g. previous guide had a family emergency"
-              rows={3}
+              placeholder="e.g., Previous guide reported feeling unwell, reassigned for safety..."
+              className="text-xs min-h-[75px] resize-none"
             />
           </div>
         </div>
 
-        <DialogFooter>
-          <Button variant="outline" onClick={onClose} disabled={saving}>Cancel</Button>
-          <Button onClick={handleSubmit} disabled={saving || !newGuideId || !reason.trim()}>
-            {saving ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : null}
-            Reassign & notify
+        <DialogFooter className="flex flex-row justify-end gap-2 pt-2 border-t border-border/20">
+          <Button variant="outline" size="sm" onClick={onClose} disabled={saving} className="text-xs">
+            Cancel
+          </Button>
+          <Button
+            size="sm"
+            onClick={handleSubmit}
+            disabled={saving || !newGuideId || !reason.trim()}
+            className="text-xs gap-1.5"
+          >
+            {saving ? (
+              <>
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                Reassigning…
+              </>
+            ) : (
+              <>
+                <ArrowRight className="h-3.5 w-3.5" />
+                Reassign & Notify All
+              </>
+            )}
           </Button>
         </DialogFooter>
       </DialogContent>

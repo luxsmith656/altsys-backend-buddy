@@ -48,6 +48,7 @@ import SOSPanel from '@/components/core/SOSPanel';
 import { encodeMeta, parseMeta } from '@/lib/bookingMeta';
 import { loadAnnouncements, type AdminAnnouncement } from '@/lib/announcements';
 import { addGuideRating } from '@/lib/guideRatings';
+import { formatPeso } from '@/lib/payments';
 import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -133,12 +134,11 @@ export default function HikerDashboard() {
     setBookings(b || []);
     setSessions(s || []);
     setImportantAnnouncements(loadAnnouncements().filter((a) => a.isImportant));
-    if ((s || []).some(
+    const active = (s || []).find(
       (session) => session.status === 'active' &&
-        String(session.client_session_id ?? '').startsWith(ADMIN_CHECKIN_TOKEN_PREFIX),
-    )) {
-      navigate('/map?auto=1', { replace: true });
-    }
+        String(session.client_session_id ?? '').startsWith(ADMIN_CHECKIN_TOKEN_PREFIX)
+    );
+    setActiveHikeSession(active || null);
   };
 
   const totalDistance = sessions.reduce((sum, s) => sum + Number(s.total_distance_km || 0), 0);
@@ -299,6 +299,40 @@ export default function HikerDashboard() {
             <p className="text-muted-foreground">Your hiking journey on Mount Kalisungan.</p>
           </div>
         </motion.div>
+
+        {/* Active Hike Session Notification Banner */}
+        {activeSession && (
+          <motion.div
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="mb-6 p-4 rounded-2xl bg-emerald-500/15 border border-emerald-500/30 backdrop-blur-md flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-lg"
+          >
+            <div className="flex items-center gap-3">
+              <div className="h-10 w-10 rounded-xl bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 grid place-items-center shrink-0">
+                <Radio className="h-5 w-5 animate-pulse text-emerald-500" />
+              </div>
+              <div>
+                <p className="font-semibold text-sm text-foreground flex items-center gap-1.5">
+                  Live Hike Session Active
+                  <Badge className="bg-emerald-500 text-white text-[10px] py-0">GPS Tracking On</Badge>
+                </p>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Your hike check-in is currently running on Mount Kalisungan with live checkpoint tracking.
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2 shrink-0">
+              <Button
+                size="sm"
+                className="gap-1.5 text-xs bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm"
+                onClick={() => navigate('/map?auto=1')}
+              >
+                <Mountain className="h-3.5 w-3.5" />
+                Open Live GPS Map
+              </Button>
+            </div>
+          </motion.div>
+        )}
 
         {/* ── ACTION REQUIRED: Adjustment notifications ── */}
         <AnimatePresence>
@@ -679,9 +713,31 @@ export default function HikerDashboard() {
                         )}
                         <p className="text-xs text-muted-foreground">{b.group_size} pax</p>
                         {meta.assignedGuide && (
-                          <div className="flex items-center justify-center gap-1 text-xs text-primary">
-                            <UserCheck className="h-3 w-3" />
-                            Guide: {meta.assignedGuide}
+                          <div className="space-y-0.5 pt-0.5">
+                            <div className="flex items-center justify-center gap-1 text-xs text-primary font-medium">
+                              <UserCheck className="h-3.5 w-3.5" />
+                              Guide: {meta.assignedGuide}
+                            </div>
+                            <div className="flex items-center justify-center gap-1">
+                              {meta.guideStatus === 'accepted' ? (
+                                <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-semibold bg-emerald-500/10 px-2 py-0.5 rounded-md">
+                                  ✓ Guide Confirmed
+                                </span>
+                              ) : meta.guideStatus === 'reassigned_pending' ? (
+                                <span className="text-[10px] text-amber-600 dark:text-amber-400 font-semibold bg-amber-500/10 px-2 py-0.5 rounded-md">
+                                  🔄 Guide Updated (Awaiting Confirmation)
+                                </span>
+                              ) : (
+                                <span className="text-[10px] text-sky-600 dark:text-sky-400 font-medium bg-sky-500/10 px-2 py-0.5 rounded-md">
+                                  Assigned
+                                </span>
+                              )}
+                            </div>
+                            {meta.guideChangeReason && (
+                              <p className="text-[10px] text-muted-foreground italic">
+                                Note: {meta.guideChangeReason}
+                              </p>
+                            )}
                           </div>
                         )}
                         <span
@@ -689,6 +745,37 @@ export default function HikerDashboard() {
                         >
                           {STATUS_LABELS[b.status] ?? b.status}
                         </span>
+
+                        <div className="pt-1 text-center">
+                          <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400">
+                            {formatPeso(Number(b.total_amount || 0))}
+                          </span>
+                          {meta.paymentStatus && (
+                            <span className="text-[10px] text-muted-foreground ml-1 font-medium uppercase">
+                              ({meta.paymentStatus})
+                            </span>
+                          )}
+                        </div>
+                        {meta.peakExtensionHours && meta.peakExtensionHours > 0 ? (
+                          <p className="text-[10px] text-primary font-medium">
+                            ⏱️ +{meta.peakExtensionHours}h Peak Stay ({formatPeso(meta.peakExtensionFee || meta.peakExtensionHours * 100)})
+                          </p>
+                        ) : null}
+                        {meta.emergencyHorseCount && meta.emergencyHorseCount > 0 ? (
+                          <p className="text-[10px] text-amber-600 dark:text-amber-400 font-medium">
+                            🐎 {meta.emergencyHorseCount} Emergency Horse Rescue ({formatPeso(meta.emergencyHorseFee || meta.emergencyHorseCount * 500)})
+                          </p>
+                        ) : null}
+                        {meta.priceAdjustments && meta.priceAdjustments.length > 0 && (
+                          <div className="mt-1.5 p-2 rounded-lg bg-secondary/40 border border-border/20 text-left text-[10px] space-y-0.5">
+                            <p className="font-semibold text-foreground">Price Adjustment Notice:</p>
+                            {meta.priceAdjustments.slice(-1).map((adj: any, i: number) => (
+                              <p key={i} className="text-muted-foreground">
+                                Adjusted to <strong>{formatPeso(adj.newAmount)}</strong> (prev {formatPeso(adj.previousAmount)}) by {adj.changedByName || 'Admin'}: <em>"{adj.reason}"</em>
+                              </p>
+                            ))}
+                          </div>
+                        )}
                       </div>
 
                       {/* Adjustment action buttons — inline mini version */}

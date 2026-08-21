@@ -77,7 +77,24 @@ export interface BookingMeta {
   peakExtensionHours?: number;
   descentStartedAt?: string;
   hikeCompletedAt?: string;
-  hikeCompletedBy?: string;
+  emergencyHorseCount?: number;
+  emergencyHorseFee?: number;
+  priceAdjustments?: {
+    changedAt: string;
+    changedBy: string;
+    changedByName?: string;
+    previousAmount: number;
+    newAmount: number;
+    reason: string;
+    breakdown?: {
+      entryFee: number;
+      envFee: number;
+      guideFee: number;
+      peakExtensionFee?: number;
+      emergencyHorseFee?: number;
+      customAdjustment?: number;
+    };
+  }[];
   /** Stored with the booking so cancellation is auditable. */
   cancellationReason?: string;
   cancellationConfirmedAt?: string;

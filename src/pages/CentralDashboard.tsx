@@ -7,9 +7,10 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { motion } from 'framer-motion';
-import { Building2, Users, DollarSign, TrendingUp, MapPin, Loader2, AlertTriangle, RefreshCw } from 'lucide-react';
+import { Building2, Users, DollarSign, TrendingUp, MapPin, Loader2, AlertTriangle, RefreshCw, UserPlus } from 'lucide-react';
 import LocationSwitcher from '@/components/layout/LocationSwitcher';
 import RealtimeMonitorMap from '@/components/admin/RealtimeMonitorMap';
+import AdminWalkInRegistrationDialog from '@/components/admin/AdminWalkInRegistrationDialog';
 import { format, subDays, startOfMonth } from 'date-fns';
 
 interface LocStats {
@@ -26,6 +27,7 @@ export default function CentralDashboard() {
   const { locations, activeLocationId } = useLocations();
   const [stats, setStats] = useState<LocStats[]>([]);
   const [loading, setLoading] = useState(true);
+  const [walkInOpen, setWalkInOpen] = useState(false);
 
   const loadStats = async () => {
     setLoading(true);
@@ -89,6 +91,14 @@ export default function CentralDashboard() {
               </p>
             </div>
             <div className="flex items-center gap-2">
+              <Button
+                size="sm"
+                onClick={() => setWalkInOpen(true)}
+                className="gap-1.5 bg-primary text-primary-foreground text-xs font-semibold shadow-sm"
+              >
+                <UserPlus className="h-4 w-4" />
+                + Register Walk-In
+              </Button>
               <LocationSwitcher allowAll />
               <Button variant="outline" size="icon" onClick={loadStats} aria-label="Refresh">
                 {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
@@ -160,6 +170,13 @@ export default function CentralDashboard() {
             <RealtimeMonitorMap locationId={activeLocationId} canAddCheckpoints />
           </TabsContent>
         </Tabs>
+
+        <AdminWalkInRegistrationDialog
+          open={walkInOpen}
+          onClose={() => setWalkInOpen(false)}
+          locationId={activeLocationId}
+          onSuccess={() => void loadStats()}
+        />
       </div>
     </div>
   );

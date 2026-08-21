@@ -6,12 +6,32 @@ import {
   ADMIN_CHECKIN_TOKEN_PREFIX,
   isAdminAuthorizedSession,
 } from '@/lib/tracking/sessionAuthorization';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import {
-  CalendarCheck, Users, Mountain, Phone, ShieldAlert, Loader2, CheckCircle2, Clock, MapPin, XCircle, Inbox, Activity, Copy, ImageUp, Share2,
+  CalendarCheck,
+  Users,
+  Mountain,
+  Phone,
+  ShieldAlert,
+  Loader2,
+  CheckCircle2,
+  Clock,
+  MapPin,
+  XCircle,
+  Inbox,
+  Activity,
+  Copy,
+  ImageUp,
+  Share2,
+  Radio,
+  Sparkles,
+  ArrowRight,
+  HeartPulse,
+  FileText,
+  AlertTriangle,
 } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { parseMeta } from '@/lib/bookingMeta';
@@ -20,6 +40,8 @@ import { toast } from 'sonner';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { GuideOffDutyForm } from '@/components/booking/OffDutyManager';
 import { isFirebaseConfigured, uploadGuideProfilePhoto } from '@/lib/firebase-storage';
+import GuideDeclineModal from '@/components/booking/GuideDeclineModal';
+import { acceptGuideAssignment } from '@/lib/guideAssignmentService';
 
 const QUOTA_PER_GUIDE_PER_DAY = 5;
 
@@ -27,6 +49,7 @@ type AssignmentStatus = 'pending' | 'accepted' | 'declined' | 'completed';
 
 interface AssignmentRow {
   id: string;
+  booking_id: string;
   status: AssignmentStatus;
   decided_at: string | null;
   decline_reason?: string | null;
@@ -47,108 +70,134 @@ export default function GuideDashboard() {
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<'all' | AssignmentStatus>('all');
   const [detailOpen, setDetailOpen] = useState<AssignmentRow | null>(null);
+  const [declineOpen, setDeclineOpen] = useState<AssignmentRow | null>(null);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  const [activeSession, setActiveSession] = useState<any | null>(null);
+  const [acceptingId, setAcceptingId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!user) return;
     void load();
+
+    // Listen for realtime booking assignment changes and check-ins
     const ch = supabase
-      .channel('guide-assignments')
+      .channel('guide-assignments-realtime')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'booking_assignments' }, () => void load())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'bookings' }, () => void load())
       .on(
         'postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'hiker_sessions', filter: `user_id=eq.${user.id}` },
         (payload) => {
           const session = payload.new as { status?: string; client_session_id?: string | null };
           if (session.status === 'active' && isAdminAuthorizedSession(session.client_session_id)) {
-            toast.success('Group check-in confirmed. Opening your live tracker...');
-            navigate('/map?auto=1');
+            setActiveSession(session);
+            toast.success('Group check-in confirmed! Live GPS tracker is ready.');
+          }
+        },
+      )
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'hiker_sessions', filter: `user_id=eq.${user.id}` },
+        (payload) => {
+          const session = payload.new as { status?: string };
+          if (session.status !== 'active') {
+            setActiveSession(null);
           }
         },
       )
       .subscribe();
-    return () => { supabase.removeChannel(ch); };
+
+    return () => {
+      supabase.removeChannel(ch);
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user]);
 
   const load = async () => {
     setLoading(true);
-    // Find this user's guide row
-    const { data: guides } = await supabase
-      .from('guides' as any)
-      .select('*')
-      .eq('user_id', user!.id)
-      .limit(1);
-    const me = (guides as any[] | null)?.[0] ?? null;
-    setGuideRow(me);
-
-    if (!me) {
-      setLoading(false);
-      return;
-    }
-
-    const { data: activeSession } = await supabase
-      .from('hiker_sessions')
-      .select('id')
-      .eq('user_id', user!.id)
-      .eq('status', 'active')
-      .like('client_session_id', `${ADMIN_CHECKIN_TOKEN_PREFIX}%`)
-      .order('start_time', { ascending: false })
-      .limit(1)
-      .maybeSingle();
-    if (activeSession) {
-      navigate('/map?auto=1', { replace: true });
-      return;
-    }
-
-    // Fetch assignments for me + peer guides at same location
-    const [{ data: mineRaw }, { data: peers }] = await Promise.all([
-      supabase
-        .from('booking_assignments' as any)
-        .select('*')
-        .eq('guide_id', me.id)
-        .order('created_at', { ascending: false }),
-      supabase
+    try {
+      // 1. Find this user's guide row
+      const { data: guides } = await supabase
         .from('guides' as any)
-        .select('id,full_name,is_active,specialty')
-        .eq('location_id', me.location_id)
-        .eq('is_active', true),
-    ]);
-
-    const mineList = ((mineRaw as any[]) ?? []) as AssignmentRow[];
-
-    // Pull bookings for the assignments
-    const bookingIds = Array.from(new Set(mineList.map((a: any) => a.booking_id))).filter(Boolean);
-    let bookingMap: Record<string, any> = {};
-    if (bookingIds.length > 0) {
-      const { data: bks } = await supabase
-        .from('bookings')
         .select('*')
-        .in('id', bookingIds);
-      (bks ?? []).forEach((b: any) => { bookingMap[b.id] = b; });
-    }
-    mineList.forEach((a: any) => { a.booking = bookingMap[a.booking_id]; });
-    setAssignments(mineList);
+        .eq('user_id', user!.id)
+        .limit(1);
+      const me = (guides as any[] | null)?.[0] ?? null;
+      setGuideRow(me);
 
-    // Peer guide stats: active + total assignments at this location
-    const peersList = ((peers as any[]) ?? []);
-    setPeerGuides(peersList);
-    if (peersList.length > 0) {
-      const peerIds = peersList.map((g: any) => g.id);
-      const { data: allAss } = await supabase
-        .from('booking_assignments' as any)
-        .select('guide_id,status')
-        .in('guide_id', peerIds);
-      const counts: Record<string, { active: number; total: number }> = {};
-      ((allAss as any[]) ?? []).forEach((row: any) => {
-        const c = (counts[row.guide_id] ??= { active: 0, total: 0 });
-        c.total += 1;
-        if (row.status === 'accepted') c.active += 1;
+      if (!me) {
+        setLoading(false);
+        return;
+      }
+
+      // 2. Check for active hike session without forceful redirect
+      const { data: session } = await supabase
+        .from('hiker_sessions')
+        .select('id, client_session_id, start_time, status')
+        .eq('user_id', user!.id)
+        .eq('status', 'active')
+        .like('client_session_id', `${ADMIN_CHECKIN_TOKEN_PREFIX}%`)
+        .order('start_time', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      setActiveSession(session || null);
+
+      // 3. Fetch assignments for me + peer guides at same location
+      const [{ data: mineRaw }, { data: peers }] = await Promise.all([
+        supabase
+          .from('booking_assignments' as any)
+          .select('*')
+          .eq('guide_id', me.id)
+          .order('created_at', { ascending: false }),
+        supabase
+          .from('guides' as any)
+          .select('id, full_name, is_active, specialty, phone, user_id, location_id, status')
+          .eq('location_id', me.location_id)
+          .eq('is_active', true),
+      ]);
+
+      const mineList = ((mineRaw as any[]) ?? []) as AssignmentRow[];
+
+      // 4. Pull full bookings data for the assignments
+      const bookingIds = Array.from(new Set(mineList.map((a: any) => a.booking_id))).filter(Boolean);
+      let bookingMap: Record<string, any> = {};
+      if (bookingIds.length > 0) {
+        const { data: bks } = await supabase
+          .from('bookings')
+          .select('*')
+          .in('id', bookingIds);
+        (bks ?? []).forEach((b: any) => {
+          bookingMap[b.id] = b;
+        });
+      }
+      mineList.forEach((a: any) => {
+        a.booking = bookingMap[a.booking_id];
       });
-      setPeerCounts(counts);
-    }
+      setAssignments(mineList);
 
-    setLoading(false);
+      // 5. Peer guide stats
+      const peersList = (peers as any[]) ?? [];
+      setPeerGuides(peersList);
+      if (peersList.length > 0) {
+        const peerIds = peersList.map((g: any) => g.id);
+        const { data: allAss } = await supabase
+          .from('booking_assignments' as any)
+          .select('guide_id, status')
+          .in('guide_id', peerIds);
+        const counts: Record<string, { active: number; total: number }> = {};
+        ((allAss as any[]) ?? []).forEach((row: any) => {
+          const c = (counts[row.guide_id] ??= { active: 0, total: 0 });
+          c.total += 1;
+          if (row.status === 'accepted') c.active += 1;
+        });
+        setPeerCounts(counts);
+      }
+    } catch (err: any) {
+      console.error('Failed to load guide dashboard data:', err);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const counts = useMemo(() => {
@@ -158,56 +207,80 @@ export default function GuideDashboard() {
       accepted: assignments.filter((a) => a.status === 'accepted').length,
       completed: assignments.filter((a) => a.status === 'completed').length,
       declined: assignments.filter((a) => a.status === 'declined').length,
-      todayAccepted: assignments.filter((a) => a.status === 'accepted' && a.booking?.booking_date === today).length,
+      todayAccepted: assignments.filter(
+        (a) => a.status === 'accepted' && a.booking?.booking_date === today
+      ).length,
     };
   }, [assignments]);
 
   const filtered = filter === 'all' ? assignments : assignments.filter((a) => a.status === filter);
 
-  const handleDecision = async (a: AssignmentRow, decision: 'accepted' | 'declined' | 'completed') => {
-    if (decision === 'accepted' && a.booking?.booking_date) {
-      // Quota check: max QUOTA_PER_GUIDE_PER_DAY accepted on a single date for this guide
+  /* ── Accept assignment ── */
+  const handleAccept = async (a: AssignmentRow) => {
+    if (a.booking?.booking_date) {
+      // Check quota limit
       const sameDay = assignments.filter(
-        (x) => x.status === 'accepted' && x.booking?.booking_date === a.booking.booking_date,
+        (x) => x.status === 'accepted' && x.booking?.booking_date === a.booking.booking_date
       ).length;
       if (sameDay >= QUOTA_PER_GUIDE_PER_DAY) {
         toast.error(
-          `Quota reached for ${a.booking.booking_date}: ${QUOTA_PER_GUIDE_PER_DAY} bookings per guide/day.`,
+          `Daily Quota reached for ${a.booking.booking_date}: Maximum ${QUOTA_PER_GUIDE_PER_DAY} bookings per guide/day.`
         );
         return;
       }
     }
-    let reason = '';
-    if (decision === 'declined') {
-      const r = window.prompt('Optional reason for declining:');
-      reason = r ?? '';
+
+    setAcceptingId(a.id);
+    try {
+      const res = await acceptGuideAssignment({
+        assignmentId: a.id,
+        bookingId: a.booking_id || a.booking?.id,
+        guideId: guideRow.id,
+        guideName: guideRow.full_name,
+        guideUserId: user?.id,
+        hikerUserId: a.booking?.user_id,
+        bookingDate: a.booking?.booking_date,
+      });
+
+      if (res.success) {
+        toast.success(`✅ Booking accepted! Hiker and admin have been notified.`);
+        void load();
+      } else {
+        toast.error(res.error || 'Failed to accept booking');
+      }
+    } catch (err: any) {
+      toast.error(err?.message || 'Error accepting booking');
+    } finally {
+      setAcceptingId(null);
     }
-    const { error } = await supabase
-      .from('booking_assignments' as any)
-      .update({ status: decision, decided_at: new Date().toISOString() } as any)
-      .eq('id', a.id);
-    if (error) {
-      toast.error(error.message);
-      return;
+  };
+
+  /* ── Mark complete ── */
+  const handleMarkComplete = async (a: AssignmentRow) => {
+    try {
+      const { error } = await supabase
+        .from('booking_assignments' as any)
+        .update({ status: 'completed', decided_at: new Date().toISOString() } as any)
+        .eq('id', a.id);
+
+      if (error) throw error;
+      toast.success('Hike marked as completed. Great job!');
+      void load();
+    } catch (err: any) {
+      toast.error(err?.message || 'Failed to update assignment');
     }
-    if (decision === 'declined' && reason.trim()) {
-      await supabase.from('booking_messages' as any).insert({
-        booking_id: (a as any).booking_id,
-        sender_id: user.id,
-        sender_role: 'guide',
-        kind: 'system',
-        content: `Guide declined this assignment. Reason: ${reason.trim()}`,
-      } as any);
-    }
-    toast.success(decision === 'accepted' ? 'Assignment accepted' : decision === 'completed' ? 'Marked complete' : 'Declined');
   };
 
   const copyGuideLink = async (kind: 'profile' | 'booking') => {
     if (!guideRow) return;
-    const url = `${window.location.origin}/${kind === 'profile' ? `guide/${guideRow.id}` : `register?guide=${guideRow.id}`}`;
+    const url = `${window.location.origin}/${
+      kind === 'profile' ? `guide/${guideRow.id}` : `register?guide=${guideRow.id}`
+    }`;
     try {
       await navigator.clipboard.writeText(url);
-      toast.success(kind === 'profile' ? 'Guide profile link copied' : 'Registration referral link copied');
+      toast.success(
+        kind === 'profile' ? 'Guide profile link copied' : 'Registration referral link copied'
+      );
     } catch {
       window.prompt('Copy this link:', url);
     }
@@ -215,13 +288,22 @@ export default function GuideDashboard() {
 
   const handlePhotoUpload = async (file?: File) => {
     if (!file || !guideRow) return;
-    if (!file.type.startsWith('image/')) { toast.error('Please choose an image file.'); return; }
-    if (!isFirebaseConfigured()) { toast.error('Photo upload needs Firebase Storage configuration.'); return; }
+    if (!file.type.startsWith('image/')) {
+      toast.error('Please choose an image file.');
+      return;
+    }
+    if (!isFirebaseConfigured()) {
+      toast.error('Photo upload needs Firebase Storage configuration.');
+      return;
+    }
     setUploadingPhoto(true);
     try {
       const upload = await uploadGuideProfilePhoto(file, guideRow.id);
       if (!upload) throw new Error('Photo storage is unavailable.');
-      const { error } = await supabase.from('guides' as any).update({ photo_url: upload.url } as any).eq('id', guideRow.id);
+      const { error } = await supabase
+        .from('guides' as any)
+        .update({ photo_url: upload.url } as any)
+        .eq('id', guideRow.id);
       if (error) throw error;
       setGuideRow((current: any) => ({ ...current, photo_url: upload.url }));
       toast.success('Guide photo updated.');
@@ -254,13 +336,12 @@ export default function GuideDashboard() {
         <Card className="glass-card border-orange-500/30">
           <CardContent className="p-6 text-center space-y-3">
             <ShieldAlert className="h-10 w-10 mx-auto text-orange-500" />
-            <h2 className="text-xl font-bold">Guide profile not linked</h2>
+            <h2 className="text-xl font-bold">Guide Profile Not Linked</h2>
             <p className="text-sm text-muted-foreground">
-              Your account has the <strong>guide</strong> role but isn't linked to a guide profile yet. The LGU admin
-              needs to create a guide entry for your user account, or open the Central Dashboard and use the seed
-              accounts utility.
+              Your account has the <strong>guide</strong> role but is not linked to a guide record yet. The LGU admin
+              can link your account under Admin Management $\rightarrow$ Guide Roster.
             </p>
-            <p className="text-xs text-muted-foreground">User ID: {user.id}</p>
+            <p className="text-xs text-muted-foreground font-mono">User ID: {user.id}</p>
           </CardContent>
         </Card>
       </div>
@@ -269,137 +350,368 @@ export default function GuideDashboard() {
 
   return (
     <div className="min-h-screen px-3 pb-12 pt-20 sm:px-4">
-      <div className="container max-w-6xl mx-auto">
-        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="mb-6">
-          <h1 className="text-2xl font-bold sm:text-3xl">
-            Guide <span className="text-gradient">Dashboard</span>
-          </h1>
-          <p className="text-muted-foreground text-sm mt-1">
-            Hi {guideRow.full_name}. Manage your booking assignments and see peer guides at this trailhead.
-          </p>
+      <div className="container max-w-6xl mx-auto space-y-6">
+        {/* Active Hike Session Notification Banner */}
+        {activeSession && (
+          <motion.div
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="p-4 rounded-2xl bg-emerald-500/15 border border-emerald-500/30 backdrop-blur-md flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-lg"
+          >
+            <div className="flex items-center gap-3">
+              <div className="h-10 w-10 rounded-xl bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 grid place-items-center shrink-0">
+                <Radio className="h-5 w-5 animate-pulse text-emerald-500" />
+              </div>
+              <div>
+                <p className="font-semibold text-sm text-foreground flex items-center gap-1.5">
+                  Live Hike Session Active
+                  <Badge className="bg-emerald-500 text-white text-[10px] py-0">GPS Tracking On</Badge>
+                </p>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Your guided group check-in is currently running on Mount Kalisungan.
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2 shrink-0">
+              <Button
+                size="sm"
+                className="gap-1.5 text-xs bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm"
+                onClick={() => navigate('/map?auto=1')}
+              >
+                <Mountain className="h-3.5 w-3.5" />
+                Open Live GPS Map
+              </Button>
+            </div>
+          </motion.div>
+        )}
+
+        {/* Dashboard Header */}
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div>
+            <h1 className="text-2xl font-bold sm:text-3xl flex items-center gap-2">
+              Tour Guide <span className="text-gradient">Portal</span>
+            </h1>
+            <p className="text-muted-foreground text-sm mt-1">
+              Welcome, <strong>{guideRow.full_name}</strong>. Manage your bookings, accept new assignments, and collaborate with peer guides.
+            </p>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => navigate('/map')}
+              className="gap-1.5 text-xs rounded-xl"
+            >
+              <Mountain className="h-3.5 w-3.5 text-primary" />
+              Explore Trail Map
+            </Button>
+          </div>
         </motion.div>
 
-        <Card className="glass-card mb-6">
+        {/* Guide Profile Quick Bar */}
+        <Card className="glass-card">
           <CardContent className="p-4 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-            <div className="flex items-center gap-3 min-w-0">
+            <div className="flex items-center gap-3.5 min-w-0">
               {guideRow.photo_url ? (
-                <img src={guideRow.photo_url} alt={guideRow.full_name} className="h-14 w-14 shrink-0 rounded-full object-cover border border-border/40" />
+                <img
+                  src={guideRow.photo_url}
+                  alt={guideRow.full_name}
+                  className="h-14 w-14 shrink-0 rounded-2xl object-cover border border-border/40 shadow-sm"
+                />
               ) : (
-                <div className="h-14 w-14 shrink-0 rounded-full bg-primary/15 text-primary grid place-items-center font-bold text-lg">
+                <div className="h-14 w-14 shrink-0 rounded-2xl bg-primary/15 text-primary grid place-items-center font-bold text-xl border border-primary/20">
                   {guideRow.full_name?.slice(0, 1)?.toUpperCase() || 'G'}
                 </div>
               )}
               <div className="min-w-0">
-                <p className="font-semibold">Promote your guide profile</p>
-                <p className="text-xs text-muted-foreground">Share your reviews and a booking link that makes you the default guide.</p>
+                <div className="flex items-center gap-2">
+                  <p className="font-bold text-foreground text-base truncate">{guideRow.full_name}</p>
+                  <Badge variant="outline" className="text-[10px] text-primary border-primary/30">
+                    Official Guide
+                  </Badge>
+                </div>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  {guideRow.specialty || 'Mount Kalisungan Eco-Guide'} • {guideRow.phone || 'Phone on file'}
+                </p>
               </div>
             </div>
-            <div className="flex flex-wrap gap-2">
-              <label className="inline-flex h-9 cursor-pointer items-center justify-center gap-1.5 rounded-md border border-input bg-background px-3 text-sm font-medium hover:bg-accent">
-                {uploadingPhoto ? <Loader2 className="h-4 w-4 animate-spin" /> : <ImageUp className="h-4 w-4" />}
-                Photo
-                <input className="sr-only" type="file" accept="image/*" disabled={uploadingPhoto} onChange={(event) => void handlePhotoUpload(event.target.files?.[0])} />
+
+            <div className="flex flex-wrap items-center gap-2">
+              <label className="inline-flex h-9 cursor-pointer items-center justify-center gap-1.5 rounded-xl border border-input bg-background px-3 text-xs font-medium hover:bg-accent transition-all">
+                {uploadingPhoto ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ImageUp className="h-3.5 w-3.5" />}
+                Update Photo
+                <input
+                  className="sr-only"
+                  type="file"
+                  accept="image/*"
+                  disabled={uploadingPhoto}
+                  onChange={(event) => void handlePhotoUpload(event.target.files?.[0])}
+                />
               </label>
-              <Button size="sm" variant="outline" className="gap-1.5" onClick={() => void copyGuideLink('profile')}><Share2 className="h-4 w-4" /> Profile</Button>
-              <Button size="sm" className="gap-1.5" onClick={() => void copyGuideLink('booking')}><Copy className="h-4 w-4" /> Invite</Button>
+              <Button size="sm" variant="outline" className="gap-1.5 text-xs rounded-xl" onClick={() => void copyGuideLink('profile')}>
+                <Share2 className="h-3.5 w-3.5" /> Share Profile
+              </Button>
+              <Button size="sm" className="gap-1.5 text-xs rounded-xl" onClick={() => void copyGuideLink('booking')}>
+                <Copy className="h-3.5 w-3.5" /> Referral Link
+              </Button>
             </div>
           </CardContent>
         </Card>
 
-        {/* Stats */}
-        <div className="mb-6 grid grid-cols-1 gap-3 min-[360px]:grid-cols-2 md:grid-cols-5">
+        {/* Quick Stats Grid */}
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3">
           {[
-            { label: 'Pending', value: counts.pending, icon: Inbox, color: 'text-amber-500' },
-            { label: 'Accepted', value: counts.accepted, icon: CheckCircle2, color: 'text-primary' },
-            { label: 'Today', value: `${counts.todayAccepted}/${QUOTA_PER_GUIDE_PER_DAY}`, icon: Activity, color: counts.todayAccepted >= QUOTA_PER_GUIDE_PER_DAY ? 'text-destructive' : 'text-emerald-500' },
+            { label: 'Pending Acceptance', value: counts.pending, icon: Inbox, color: 'text-amber-500', alert: counts.pending > 0 },
+            { label: 'Confirmed Hikes', value: counts.accepted, icon: CheckCircle2, color: 'text-primary' },
+            {
+              label: "Today's Limit",
+              value: `${counts.todayAccepted}/${QUOTA_PER_GUIDE_PER_DAY}`,
+              icon: Activity,
+              color: counts.todayAccepted >= QUOTA_PER_GUIDE_PER_DAY ? 'text-destructive' : 'text-emerald-500',
+            },
             { label: 'Completed', value: counts.completed, icon: Mountain, color: 'text-sky-500' },
-            { label: 'Declined', value: counts.declined, icon: XCircle, color: 'text-muted-foreground' },
+            { label: 'Declined / Passed', value: counts.declined, icon: XCircle, color: 'text-muted-foreground' },
           ].map((s) => (
-            <Card key={s.label} className="glass-card">
-              <CardContent className="p-3 flex items-center gap-2">
-                <s.icon className={`h-5 w-5 ${s.color} opacity-70`} />
+            <Card
+              key={s.label}
+              className={`glass-card transition-all ${
+                s.alert ? 'border-amber-500/40 bg-amber-500/5' : ''
+              }`}
+            >
+              <CardContent className="p-3.5 flex items-center gap-2.5">
+                <div className={`p-2 rounded-xl bg-secondary/50 ${s.color}`}>
+                  <s.icon className="h-4 w-4" />
+                </div>
                 <div>
-                  <p className="text-[10px] uppercase tracking-wide text-muted-foreground">{s.label}</p>
-                  <p className="text-base font-bold">{s.value}</p>
+                  <p className="text-[10px] uppercase tracking-wider font-semibold text-muted-foreground">
+                    {s.label}
+                  </p>
+                  <p className="text-base font-bold text-foreground mt-0.5">{s.value}</p>
                 </div>
               </CardContent>
             </Card>
           ))}
         </div>
 
-        <Tabs defaultValue="my">
-          <div className="-mx-1 overflow-x-auto px-1 pb-2 custom-scrollbar">
-            <TabsList className="glass-card min-w-max">
-              <TabsTrigger value="my">My Assignments</TabsTrigger>
-              <TabsTrigger value="peers">Peer Guides ({peerGuides.length})</TabsTrigger>
-              <TabsTrigger value="off">Off-Duty</TabsTrigger>
+        {/* Main Tabs */}
+        <Tabs defaultValue="my" className="space-y-4">
+          <div className="flex items-center justify-between flex-wrap gap-3">
+            <TabsList className="glass-card">
+              <TabsTrigger value="my" className="gap-1.5 text-xs">
+                <Inbox className="h-3.5 w-3.5" />
+                My Hiker Assignments
+                {counts.pending > 0 && (
+                  <span className="ml-1 px-1.5 py-0.2 rounded-full bg-amber-500 text-white font-bold text-[10px]">
+                    {counts.pending}
+                  </span>
+                )}
+              </TabsTrigger>
+              <TabsTrigger value="peers" className="gap-1.5 text-xs">
+                <Users className="h-3.5 w-3.5" />
+                Peer Guides ({peerGuides.length})
+              </TabsTrigger>
+              <TabsTrigger value="off" className="gap-1.5 text-xs">
+                <Clock className="h-3.5 w-3.5" />
+                Schedule & Off-Duty
+              </TabsTrigger>
             </TabsList>
           </div>
 
-          <TabsContent value="off" className="mt-4">
-            {guideRow ? <GuideOffDutyForm guideId={guideRow.id} onChange={load} /> : <p className="text-sm text-muted-foreground">Loading guide profile…</p>}
-          </TabsContent>
-
-          <TabsContent value="my" className="mt-4">
-            <div className="flex gap-2 flex-wrap mb-4">
+          {/* Tab 1: My Assignments */}
+          <TabsContent value="my" className="space-y-4 mt-0">
+            {/* Filter Pills */}
+            <div className="flex gap-1.5 flex-wrap">
               {(['all', 'pending', 'accepted', 'completed', 'declined'] as const).map((f) => (
                 <Button
                   key={f}
                   size="sm"
                   variant={filter === f ? 'default' : 'outline'}
                   onClick={() => setFilter(f)}
-                  className="capitalize"
+                  className="capitalize text-xs h-8 rounded-xl"
                 >
-                  {f}
+                  {f === 'pending'
+                    ? `Pending Confirmation (${counts.pending})`
+                    : f === 'accepted'
+                    ? `Confirmed (${counts.accepted})`
+                    : f}
                 </Button>
               ))}
             </div>
 
             {filtered.length === 0 ? (
               <Card className="glass-card">
-                <CardContent className="text-center py-12 text-muted-foreground text-sm">
-                  <Inbox className="h-10 w-10 mx-auto opacity-30 mb-3" />
-                  No assignments in this category.
+                <CardContent className="text-center py-14 text-muted-foreground text-sm space-y-2">
+                  <Inbox className="h-10 w-10 mx-auto opacity-30" />
+                  <p className="font-semibold text-foreground">No bookings found in this view</p>
+                  <p className="text-xs text-muted-foreground">
+                    When hikers book Mount Kalisungan and you are assigned, they will appear here in real-time.
+                  </p>
                 </CardContent>
               </Card>
             ) : (
-              <div className="space-y-3">
+              <div className="grid gap-3.5">
                 {filtered.map((a) => {
-                  const meta = parseMeta(a.booking?.notes);
+                  const booking = a.booking;
+                  const meta = parseMeta(booking?.notes);
+                  const isPending = a.status === 'pending';
+                  const isAccepted = a.status === 'accepted';
+                  const isDeclined = a.status === 'declined';
+                  const isCompleted = a.status === 'completed';
+
                   return (
-                    <Card key={a.id} className="glass-card">
-                      <CardContent className="p-4">
-                        <div className="flex items-start justify-between gap-3 flex-wrap">
-                          <div className="flex-1 min-w-0 space-y-2">
-                            <div className="flex items-center gap-2 flex-wrap">
-                              <Badge className={
-                                a.status === 'pending' ? 'bg-amber-500/20 text-amber-600 border-amber-500/30' :
-                                a.status === 'accepted' ? 'bg-primary/20 text-primary border-primary/30' :
-                                a.status === 'completed' ? 'bg-sky-500/20 text-sky-600 border-sky-500/30' :
-                                'bg-muted text-muted-foreground'
-                              }>{a.status}</Badge>
+                    <Card
+                      key={a.id}
+                      className={`glass-card transition-all ${
+                        isPending
+                          ? 'border-amber-500/40 bg-amber-500/5 shadow-md'
+                          : isAccepted
+                          ? 'border-primary/30'
+                          : ''
+                      }`}
+                    >
+                      <CardContent className="p-4 sm:p-5">
+                        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+                          <div className="flex-1 min-w-0 space-y-3">
+                            {/* Header row with status & date */}
+                            <div className="flex items-center gap-2.5 flex-wrap">
+                              <Badge
+                                className={
+                                  isPending
+                                    ? 'bg-amber-500/20 text-amber-600 dark:text-amber-400 border-amber-500/30'
+                                    : isAccepted
+                                    ? 'bg-primary/20 text-primary border-primary/30'
+                                    : isCompleted
+                                    ? 'bg-sky-500/20 text-sky-600 dark:text-sky-400 border-sky-500/30'
+                                    : 'bg-muted text-muted-foreground'
+                                }
+                              >
+                                {isPending
+                                  ? '⏳ Action Required: Pending Your Acceptance'
+                                  : isAccepted
+                                  ? '✅ Confirmed & Assigned to You'
+                                  : isCompleted
+                                  ? '🏁 Hike Completed'
+                                  : '❌ Declined'}
+                              </Badge>
                               <span className="text-xs text-muted-foreground">
-                                #{a.id.slice(0, 8)} • assigned {format(new Date(a.created_at), 'MMM d, h:mm a')}
+                                Booking #{a.booking_id ? a.booking_id.slice(0, 8) : a.id.slice(0, 8)}
                               </span>
+                              {a.created_at && (
+                                <span className="text-xs text-muted-foreground">
+                                  • Assigned {format(new Date(a.created_at), 'MMM d, h:mm a')}
+                                </span>
+                              )}
                             </div>
-                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm">
-                              <Field icon={CalendarCheck} label="Date" value={a.booking?.booking_date ?? '—'} />
-                              <Field icon={Users} label="Group" value={`${a.booking?.group_size ?? 0} pax`} />
-                              <Field icon={MapPin} label="Start" value={meta.hikeTime || '—'} />
-                              <Field icon={Phone} label="Contact" value={a.booking?.emergency_contact_phone ?? '—'} />
+
+                            {/* Hiker Details Grid */}
+                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+                              <Field
+                                icon={CalendarCheck}
+                                label="Hike Date"
+                                value={booking?.booking_date ?? 'Not set'}
+                                highlight
+                              />
+                              <Field
+                                icon={Users}
+                                label="Lead Hiker & Group"
+                                value={`${meta.fullName || 'Hiker'} (${booking?.group_size ?? 1} pax)`}
+                              />
+                              <Field
+                                icon={MapPin}
+                                label="Trail / Start Time"
+                                value={meta.hikeTime || 'Morning'}
+                              />
+                              <Field
+                                icon={Phone}
+                                label="Contact Phone"
+                                value={meta.phoneNumber || booking?.emergency_contact_phone || '—'}
+                              />
                             </div>
+
+                            {/* Special notes & medical alerts */}
+                            {(meta.medicalNotes || meta.userNotes || a.decline_reason) && (
+                              <div className="flex flex-wrap gap-2 pt-1 text-xs">
+                                {meta.medicalNotes && (
+                                  <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-destructive/10 text-destructive border border-destructive/20 font-medium">
+                                    <HeartPulse className="h-3 w-3" />
+                                    Medical: {meta.medicalNotes}
+                                  </span>
+                                )}
+                                {meta.userNotes && (
+                                  <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-secondary/80 text-muted-foreground">
+                                    <FileText className="h-3 w-3" />
+                                    Note: {meta.userNotes}
+                                  </span>
+                                )}
+                                {a.decline_reason && (
+                                  <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-muted text-muted-foreground italic">
+                                    Decline Reason: {a.decline_reason}
+                                  </span>
+                                )}
+                              </div>
+                            )}
                           </div>
-                          <div className="flex flex-col gap-2 min-w-[140px]">
-                            {a.status === 'pending' && (
+
+                          {/* Action Buttons */}
+                          <div className="flex flex-row lg:flex-col gap-2 shrink-0 justify-end pt-2 lg:pt-0 border-t lg:border-t-0 border-border/20">
+                            {isPending && (
                               <>
-                                <Button size="sm" onClick={() => handleDecision(a, 'accepted')}>Accept</Button>
-                                <Button size="sm" variant="outline" onClick={() => handleDecision(a, 'declined')}>Decline</Button>
+                                <Button
+                                  size="sm"
+                                  onClick={() => handleAccept(a)}
+                                  disabled={acceptingId === a.id}
+                                  className="text-xs h-9 gap-1.5 bg-primary shadow-sm"
+                                >
+                                  {acceptingId === a.id ? (
+                                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                  ) : (
+                                    <CheckCircle2 className="h-3.5 w-3.5" />
+                                  )}
+                                  Accept Hike
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => setDeclineOpen(a)}
+                                  className="text-xs h-9 gap-1.5 text-destructive hover:bg-destructive/10"
+                                >
+                                  <XCircle className="h-3.5 w-3.5" />
+                                  Decline / Pass
+                                </Button>
                               </>
                             )}
-                            {a.status === 'accepted' && (
-                              <Button size="sm" variant="outline" onClick={() => handleDecision(a, 'completed')}>Mark complete</Button>
+
+                            {isAccepted && (
+                              <>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => handleMarkComplete(a)}
+                                  className="text-xs h-9 gap-1.5 text-emerald-600 dark:text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/10"
+                                >
+                                  <CheckCircle2 className="h-3.5 w-3.5" />
+                                  Mark Complete
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  onClick={() => setDeclineOpen(a)}
+                                  className="text-xs h-8 text-muted-foreground hover:text-destructive"
+                                >
+                                  Reassign to Peer
+                                </Button>
+                              </>
                             )}
-                            <Button size="sm" variant="ghost" onClick={() => setDetailOpen(a)}>View details</Button>
+
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => setDetailOpen(a)}
+                              className="text-xs h-8 text-muted-foreground"
+                            >
+                              View Details
+                            </Button>
                           </div>
                         </div>
                       </CardContent>
@@ -410,23 +722,57 @@ export default function GuideDashboard() {
             )}
           </TabsContent>
 
-          <TabsContent value="peers" className="mt-4">
+          {/* Tab 2: Peer Guides Transparency Board */}
+          <TabsContent value="peers" className="mt-0">
             <Card className="glass-card">
-              <CardHeader><CardTitle className="text-base">Guide transparency board (this trailhead)</CardTitle></CardHeader>
-              <CardContent className="space-y-2">
+              <CardHeader className="p-4 sm:p-6 pb-2">
+                <CardTitle className="text-base sm:text-lg flex items-center gap-2">
+                  <Users className="h-5 w-5 text-primary" />
+                  Trailhead Guide Transparency Board
+                </CardTitle>
+                <CardDescription className="text-xs sm:text-sm">
+                  Active guides registered at Mount Kalisungan and their current assignment distribution.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="p-4 sm:p-6 pt-3 space-y-2.5">
                 {peerGuides.map((g: any) => {
                   const c = peerCounts[g.id] ?? { active: 0, total: 0 };
                   const isMe = g.id === guideRow.id;
                   return (
-                    <div key={g.id} className={`flex flex-col items-start gap-2 rounded-lg border p-3 text-sm sm:flex-row sm:items-center sm:justify-between ${isMe ? 'border-primary/40 bg-primary/5' : 'border-border/20 bg-secondary/20'}`}>
-                      <div className="flex min-w-0 items-center gap-2">
-                        <span className="break-words font-medium">{g.full_name}</span>
-                        {isMe && <Badge variant="outline" className="text-[10px]">You</Badge>}
-                        {g.specialty && <span className="text-xs text-muted-foreground">• {g.specialty}</span>}
+                    <div
+                      key={g.id}
+                      className={`flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3.5 rounded-xl border transition-all ${
+                        isMe
+                          ? 'border-primary/40 bg-primary/5 shadow-sm'
+                          : 'border-border/20 bg-secondary/20'
+                      }`}
+                    >
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div
+                          className={`h-9 w-9 rounded-xl grid place-items-center font-bold text-sm shrink-0 ${
+                            isMe ? 'bg-primary text-primary-foreground' : 'bg-secondary text-foreground'
+                          }`}
+                        >
+                          {g.full_name?.slice(0, 1)?.toUpperCase() || 'G'}
+                        </div>
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2">
+                            <span className="font-semibold text-sm text-foreground truncate">
+                              {g.full_name}
+                            </span>
+                            {isMe && <Badge className="text-[10px] py-0">You</Badge>}
+                          </div>
+                          <p className="text-xs text-muted-foreground truncate">
+                            {g.specialty || 'General Trail Guide'} • {g.phone || 'Phone on file'}
+                          </p>
+                        </div>
                       </div>
-                      <div className="flex items-center gap-4 text-xs">
-                        <span><strong className="text-primary">{c.active}</strong> active</span>
-                        <span className="text-muted-foreground">{c.total} all-time</span>
+
+                      <div className="flex items-center gap-4 text-xs shrink-0">
+                        <span className="px-2.5 py-1 rounded-lg bg-primary/10 text-primary font-semibold">
+                          {c.active} active hikes
+                        </span>
+                        <span className="text-muted-foreground">{c.total} total completed</span>
                       </div>
                     </div>
                   );
@@ -434,43 +780,96 @@ export default function GuideDashboard() {
               </CardContent>
             </Card>
           </TabsContent>
+
+          {/* Tab 3: Off-Duty Schedule Manager */}
+          <TabsContent value="off" className="mt-0">
+            {guideRow ? (
+              <GuideOffDutyForm guideId={guideRow.id} onChange={load} />
+            ) : (
+              <p className="text-sm text-muted-foreground">Loading guide profile…</p>
+            )}
+          </TabsContent>
         </Tabs>
 
+        {/* View Details Dialog */}
         <Dialog open={!!detailOpen} onOpenChange={(o) => !o && setDetailOpen(null)}>
           <DialogContent className="z-[3100] max-w-lg">
             <DialogHeader>
-              <DialogTitle>Booking #{detailOpen?.id.slice(0, 8)}</DialogTitle>
+              <DialogTitle className="flex items-center gap-2">
+                <Mountain className="h-5 w-5 text-primary" />
+                Booking #{detailOpen?.booking_id?.slice(0, 8) || detailOpen?.id.slice(0, 8)}
+              </DialogTitle>
             </DialogHeader>
             {detailOpen && (() => {
-              const meta = parseMeta(detailOpen.booking?.notes);
+              const booking = detailOpen.booking;
+              const meta = parseMeta(booking?.notes);
               return (
-                <div className="space-y-3 text-sm">
-                  <Row k="Status" v={<Badge>{detailOpen.status}</Badge>} />
-                  <Row k="Date" v={detailOpen.booking?.booking_date} />
-                  <Row k="Group size" v={detailOpen.booking?.group_size} />
-                  <Row k="Lead hiker" v={meta.fullName ?? '—'} />
-                  <Row k="Contact" v={meta.phoneNumber ?? '—'} />
-                  <Row k="Emergency" v={`${detailOpen.booking?.emergency_contact_name ?? '—'} / ${detailOpen.booking?.emergency_contact_phone ?? '—'}`} />
-                  <Row k="Medical" v={meta.medicalNotes ?? '—'} />
-                  <Row k="Notes" v={meta.userNotes ?? '—'} />
-                  {detailOpen.decline_reason && <Row k="Decline reason" v={detailOpen.decline_reason} />}
+                <div className="space-y-3 text-xs sm:text-sm divide-y divide-border/20">
+                  <div className="pb-2 space-y-1">
+                    <Row k="Status" v={<Badge>{detailOpen.status}</Badge>} />
+                    <Row k="Hike Date" v={booking?.booking_date} />
+                    <Row k="Start Time" v={meta.hikeTime || 'Morning'} />
+                    <Row k="Group Size" v={`${booking?.group_size ?? 1} hikers`} />
+                  </div>
+                  <div className="py-2 space-y-1">
+                    <Row k="Lead Hiker" v={meta.fullName ?? '—'} />
+                    <Row k="Contact Phone" v={meta.phoneNumber ?? '—'} />
+                    <Row k="Email" v={meta.emailAddress ?? '—'} />
+                    <Row
+                      k="Emergency Contact"
+                      v={`${booking?.emergency_contact_name ?? '—'} (${booking?.emergency_contact_phone ?? '—'})`}
+                    />
+                  </div>
+                  <div className="py-2 space-y-1">
+                    <Row k="Trail / Route" v={meta.assignedTrail || 'Standard Kalisungan Route'} />
+                    <Row k="Medical Notes" v={meta.medicalNotes ?? 'None specified'} />
+                    <Row k="Hiker Notes" v={meta.userNotes ?? 'None'} />
+                    {detailOpen.decline_reason && (
+                      <Row k="Decline Reason" v={detailOpen.decline_reason} />
+                    )}
+                    {meta.guideChangeReason && (
+                      <Row k="Reassignment Note" v={meta.guideChangeReason} />
+                    )}
+                  </div>
                 </div>
               );
             })()}
           </DialogContent>
         </Dialog>
+
+        {/* Decline & Reassign Modal */}
+        <GuideDeclineModal
+          open={!!declineOpen}
+          onClose={() => setDeclineOpen(null)}
+          assignment={declineOpen}
+          currentGuide={guideRow}
+          peerGuides={peerGuides}
+          onSuccess={load}
+        />
       </div>
     </div>
   );
 }
 
-function Field({ icon: Icon, label, value }: { icon: any; label: string; value: React.ReactNode }) {
+function Field({
+  icon: Icon,
+  label,
+  value,
+  highlight,
+}: {
+  icon: any;
+  label: string;
+  value: React.ReactNode;
+  highlight?: boolean;
+}) {
   return (
-    <div className="flex items-start gap-2">
-      <Icon className="h-4 w-4 text-primary mt-0.5 flex-shrink-0" />
+    <div className="flex items-start gap-2 min-w-0">
+      <Icon className={`h-4 w-4 mt-0.5 shrink-0 ${highlight ? 'text-primary' : 'text-muted-foreground'}`} />
       <div className="min-w-0">
-        <p className="text-[10px] text-muted-foreground uppercase">{label}</p>
-        <p className="font-medium truncate">{value}</p>
+        <p className="text-[10px] text-muted-foreground uppercase font-semibold">{label}</p>
+        <p className={`font-medium truncate ${highlight ? 'text-primary font-bold' : 'text-foreground'}`}>
+          {value}
+        </p>
       </div>
     </div>
   );
@@ -478,9 +877,9 @@ function Field({ icon: Icon, label, value }: { icon: any; label: string; value: 
 
 function Row({ k, v }: { k: string; v: React.ReactNode }) {
   return (
-    <div className="flex justify-between gap-3 py-1.5 border-b border-border/15 last:border-0">
-      <span className="text-xs text-muted-foreground">{k}</span>
-      <span className="text-right break-words max-w-[60%]">{v}</span>
+    <div className="flex justify-between gap-3 py-1 text-xs">
+      <span className="text-muted-foreground">{k}:</span>
+      <span className="text-right font-medium text-foreground break-words max-w-[60%]">{v}</span>
     </div>
   );
 }
