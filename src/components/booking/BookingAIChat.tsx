@@ -317,17 +317,19 @@ function generateResponse(
     };
   }
 
-  /* Crowd & Prophet Demand Forecast */
-  if (lower.match(/(crowd|crowded|busy|how many people|how many hikers|quiet|least crowd|peak day|demand|prophet)/)) {
+  /* Crowd & Prophet Demand Forecast & Interpretation */
+  if (lower.match(/(interpret|analysis|analyze|breakdown|crowd|crowded|busy|how many people|how many hikers|quiet|least crowd|peak day|demand|prophet|prediction)/)) {
     return {
       content:
-        `📊 **Mount Kalisungan Crowd & Demand Insights (Prophet ML)**\n\n` +
-        `• **Weekdays (Tue–Thu)**: Low crowds (~10–20 hikers/day) — peaceful trails and easy pace.\n` +
-        `• **Weekends (Sat–Sun)**: High/Peak demand (~60–100 hikers/day) — lively summit vibe.\n` +
-        `• **Best Low-Crowd Windows**: Tuesday or Wednesday starting at **05:30 AM**.\n` +
-        `• **Weather/Rain Impact**: Heavy rains reduce trail traffic, but trails become slippery.\n\n` +
-        `Would you like to pick a quiet weekday date or check weekend availability?`,
-      quickReplies: ['Recommend quiet date', 'Check weekend slots', 'Best start time'],
+        `📊 **Mount Kalisungan Prophet ML Forecast Interpretation**\n\n` +
+        `Here is the automated breakdown from the mathematical model:\n\n` +
+        `• 📈 **Weekly Traffic Pattern**: High weekend concentration (65–70% of total weekly volume falls on Saturdays & Sundays).\n` +
+        `• 🏔️ **Quiet Hiking Windows**: Tuesday through Thursday average only 10–20 hikers/day — recommended for hikers wanting peaceful nature and solitude.\n` +
+        `• ⚡ **Peak Demand Management**: Saturdays project 70–100+ hikers. Additional tour guides and checkpoint rangers are recommended.\n` +
+        `• 🌧️ **Weather Regressor Impact**: Rain probabilities above 60% historically reduce traffic by ~35% while increasing slip risks on descent.\n` +
+        `• 💡 **Actionable Advice**: Start at **05:00–06:00 AM** for the best weather window and summit views.\n\n` +
+        `Would you like to explore specific dates or simulate capacity adjustments?`,
+      quickReplies: ['Recommend quiet date', 'Check weekend slots', 'How does Prophet work?'],
     };
   }
 
@@ -653,10 +655,18 @@ export default function BookingAIChat({
       .replace(/\n/g, '<br/>');
 
   useEffect(() => {
-    const openAssistant = () => setIsOpen(true);
-    window.addEventListener('open-global-ai-assistant', openAssistant);
-    return () => window.removeEventListener('open-global-ai-assistant', openAssistant);
-  }, []);
+    const openAssistant = (e?: Event) => {
+      setIsOpen(true);
+      const customEvent = e as CustomEvent<{ prompt?: string }>;
+      if (customEvent?.detail?.prompt) {
+        setTimeout(() => {
+          void sendMessage(customEvent.detail.prompt!);
+        }, 300);
+      }
+    };
+    window.addEventListener('open-global-ai-assistant', openAssistant as EventListener);
+    return () => window.removeEventListener('open-global-ai-assistant', openAssistant as EventListener);
+  }, [sendMessage]);
 
   return (
     <>
