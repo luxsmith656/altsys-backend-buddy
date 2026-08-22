@@ -62,6 +62,7 @@ import type { CompanionDetail } from '@/types';
 import { useLocations } from '@/hooks/useLocations';
 import LocationPreview from '@/components/booking/LocationPreview';
 import AdminWalkInRegistrationDialog from '@/components/admin/AdminWalkInRegistrationDialog';
+import AdminWalkInDesk from '@/components/admin/AdminWalkInDesk';
 
 /* ── Weather code → human-readable label (Open-Meteo) ── */
 function weatherCodeToLabel(code: number): string {
@@ -217,6 +218,7 @@ export default function BookingPage() {
   const navigate = useNavigate();
   const [step, setStep] = useState(1);
   const [adminWalkInOpen, setAdminWalkInOpen] = useState(false);
+  const [forceHikerView, setForceHikerView] = useState(false);
 
   // ── Step 1: Schedule
   const [date, setDate] = useState<Date | undefined>();
@@ -921,10 +923,37 @@ export default function BookingPage() {
     );
   }
 
-  /* ─────────────── BOOKING FORM ─────────────── */
+  /* ─────────────── ADMIN ON-SITE WALK-IN COUNTER ─────────────── */
+  if ((role === 'admin' || role === 'super_admin') && !forceHikerView) {
+    return (
+      <AdminWalkInDesk
+        locationId={startLocationId || null}
+        onToggleHikerView={() => setForceHikerView(true)}
+      />
+    );
+  }
+
+  /* ─────────────── HIKER ONLINE BOOKING FORM ─────────────── */
   return (
     <div className="min-h-screen pt-20 pb-24 md:pb-12 px-2 sm:px-4">
       <div className="container max-w-5xl mx-auto">
+        {/* Admin Preview Mode Banner */}
+        {forceHikerView && (
+          <div className="mb-6 p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs shadow-sm">
+            <span className="font-semibold text-amber-600 dark:text-amber-400">
+              👁️ Admin Preview Mode: Viewing public online hiker booking wizard.
+            </span>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => setForceHikerView(false)}
+              className="text-xs h-8 gap-1.5 border-amber-500/40 text-amber-600 dark:text-amber-400 hover:bg-amber-500/10"
+            >
+              Return to Trailhead Walk-In Desk
+            </Button>
+          </div>
+        )}
+
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="text-center mb-10">
           <h1 className="text-3xl font-bold mb-2">
             Book Your <span className="text-gradient">Hike</span>
@@ -933,41 +962,6 @@ export default function BookingPage() {
             Complete the {STEPS.length}-step process to secure your slot at Mount Kalisungan.
           </p>
         </motion.div>
-
-        {/* ─── Admin Walk-In Mode Banner ─── */}
-        {(role === 'admin' || role === 'super_admin') && (
-          <div className="mb-8 p-4 sm:p-5 rounded-2xl bg-primary/10 border border-primary/30 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-md backdrop-blur-sm">
-            <div className="flex items-center gap-3.5">
-              <div className="h-11 w-11 rounded-2xl bg-primary/20 text-primary grid place-items-center shrink-0 border border-primary/30">
-                <UserPlus className="h-6 w-6" />
-              </div>
-              <div>
-                <p className="font-bold text-sm text-foreground flex items-center gap-2">
-                  Admin On-Site Walk-In Mode Active
-                  <Badge className="bg-primary text-white text-[10px] py-0">Trailhead Counter</Badge>
-                </p>
-                <p className="text-xs text-muted-foreground mt-0.5">
-                  Registering a walk-in hiker group on-site without prior reservation? Open the fast-track walk-in desk for instant fee collection and QR check-in pass.
-                </p>
-              </div>
-            </div>
-            <Button
-              size="sm"
-              onClick={() => setAdminWalkInOpen(true)}
-              className="gap-2 text-xs bg-primary hover:bg-primary/90 text-primary-foreground shrink-0 shadow-md font-semibold h-10 px-4 rounded-xl"
-            >
-              <UserPlus className="h-4 w-4" />
-              Open Express Walk-In Desk
-            </Button>
-          </div>
-        )}
-
-        <AdminWalkInRegistrationDialog
-          open={adminWalkInOpen}
-          onClose={() => setAdminWalkInOpen(false)}
-          locationId={startLocationId || null}
-          onSuccess={() => navigate('/admin?tab=requests')}
-        />
 
         {/* ─── Step Indicator ─── */}
         <div className="mb-8 md:mb-12 pb-1">
