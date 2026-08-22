@@ -39,6 +39,8 @@ import {
   Star,
   Send,
   MessageCircle,
+  Play,
+  Radio,
 } from 'lucide-react';
 import BookingChat from '@/components/booking/BookingChat';
 import { QRCodeSVG } from 'qrcode.react';
@@ -72,6 +74,7 @@ export default function HikerDashboard() {
   const navigate = useNavigate();
   const [bookings, setBookings] = useState<any[]>([]);
   const [sessions, setSessions] = useState<any[]>([]);
+  const [activeHikeSession, setActiveHikeSession] = useState<any | null>(null);
   const [cancellingId, setCancellingId] = useState<string | null>(null);
   const [cancelReason, setCancelReason] = useState('');
   const [cancelConfirmation, setCancelConfirmation] = useState('');

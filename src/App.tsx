@@ -27,6 +27,7 @@ import NotificationsPage from "./pages/NotificationsPage";
 import Onboarding from "./pages/Onboarding";
 import NotFound from "./pages/NotFound";
 import RoleRoute from "@/components/auth/RoleRoute";
+import ErrorBoundary from "@/components/common/ErrorBoundary";
 import { useEffect } from "react";
 import { startSyncEngine } from "@/lib/tracking/syncEngine";
 
@@ -57,26 +58,28 @@ const App = () => (
             <LocationsProvider>
               <OfflineSyncBoot />
               <Navbar />
-              <Routes>
-                <Route path="/" element={<Index />} />
-                <Route path="/login" element={<Login />} />
-                <Route path="/register" element={<Register />} />
-                <Route path="/map" element={<MapPage />} />
-                <Route path="/chat" element={<ChatPage />} />
-                <Route path="/booking" element={<BookingPage />} />
-                <Route path="/ops-ai" element={<RoleRoute allowedRoles={['admin','super_admin','ranger','guide']}><OpsAIPage /></RoleRoute>} />
-                <Route path="/admin" element={<RoleRoute allowedRoles={['admin', 'super_admin']}><AdminDashboard /></RoleRoute>} />
-                <Route path="/central" element={<RoleRoute allowedRoles={['super_admin']}><CentralDashboard /></RoleRoute>} />
-                <Route path="/ranger" element={<RoleRoute allowedRoles={['ranger']}><RangerDashboard /></RoleRoute>} />
-                <Route path="/hiker" element={<RoleRoute allowedRoles={['hiker']}><HikerDashboard /></RoleRoute>} />
-                <Route path="/guide" element={<RoleRoute allowedRoles={['guide']}><GuideDashboard /></RoleRoute>} />
-                <Route path="/guide/:guideId" element={<GuideProfilePage />} />
-                <Route path="/profile" element={<ProfilePage />} />
-                <Route path="/dashboard" element={<DashboardRedirect />} />
-                <Route path="/notifications" element={<NotificationsPage />} />
-                <Route path="/onboarding" element={<Onboarding />} />
-                <Route path="*" element={<NotFound />} />
-              </Routes>
+              <ErrorBoundary>
+                <Routes>
+                  <Route path="/" element={<Index />} />
+                  <Route path="/login" element={<Login />} />
+                  <Route path="/register" element={<Register />} />
+                  <Route path="/map" element={<MapPage />} />
+                  <Route path="/chat" element={<ChatPage />} />
+                  <Route path="/booking" element={<BookingPage />} />
+                  <Route path="/ops-ai" element={<RoleRoute allowedRoles={['admin','super_admin','ranger','guide']}><OpsAIPage /></RoleRoute>} />
+                  <Route path="/admin" element={<RoleRoute allowedRoles={['admin', 'super_admin']}><AdminDashboard /></RoleRoute>} />
+                  <Route path="/central" element={<RoleRoute allowedRoles={['super_admin']}><CentralDashboard /></RoleRoute>} />
+                  <Route path="/ranger" element={<RoleRoute allowedRoles={['ranger']}><RangerDashboard /></RoleRoute>} />
+                  <Route path="/hiker" element={<RoleRoute allowedRoles={['hiker']}><HikerDashboard /></RoleRoute>} />
+                  <Route path="/guide" element={<RoleRoute allowedRoles={['guide']}><GuideDashboard /></RoleRoute>} />
+                  <Route path="/guide/:guideId" element={<GuideProfilePage />} />
+                  <Route path="/profile" element={<ProfilePage />} />
+                  <Route path="/dashboard" element={<DashboardRedirect />} />
+                  <Route path="/notifications" element={<NotificationsPage />} />
+                  <Route path="/onboarding" element={<Onboarding />} />
+                  <Route path="*" element={<NotFound />} />
+                </Routes>
+              </ErrorBoundary>
               <GlobalAIAssistant />
             </LocationsProvider>
           </AuthProvider>
