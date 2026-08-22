@@ -5,6 +5,7 @@ import { MessageSquare, X, Send, Sparkles, Users, Calendar, Mountain } from 'luc
 import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
 import { supabase } from '@/integrations/supabase/client';
+import { getProphetAIForecastContext } from '@/lib/ml/prophetDataService';
 
 type HikeType = 'day' | 'night';
 
@@ -316,6 +317,20 @@ function generateResponse(
     };
   }
 
+  /* Crowd & Prophet Demand Forecast */
+  if (lower.match(/(crowd|crowded|busy|how many people|how many hikers|quiet|least crowd|peak day|demand|prophet)/)) {
+    return {
+      content:
+        `📊 **Mount Kalisungan Crowd & Demand Insights (Prophet ML)**\n\n` +
+        `• **Weekdays (Tue–Thu)**: Low crowds (~10–20 hikers/day) — peaceful trails and easy pace.\n` +
+        `• **Weekends (Sat–Sun)**: High/Peak demand (~60–100 hikers/day) — lively summit vibe.\n` +
+        `• **Best Low-Crowd Windows**: Tuesday or Wednesday starting at **05:30 AM**.\n` +
+        `• **Weather/Rain Impact**: Heavy rains reduce trail traffic, but trails become slippery.\n\n` +
+        `Would you like to pick a quiet weekday date or check weekend availability?`,
+      quickReplies: ['Recommend quiet date', 'Check weekend slots', 'Best start time'],
+    };
+  }
+
   /* Weather */
   if (lower.match(/(weather|rain|cold|hot|temperature|forecast|wet|dry|sunny|cloudy)/)) {
     if (weatherInsight) {
@@ -538,6 +553,7 @@ export default function BookingAIChat({
         ...messages.map((m) => ({ role: m.role, content: m.content })),
         { role: 'user' as const, content: text },
       ];
+      const forecastContext = await getProphetAIForecastContext().catch(() => null);
       const resp = await fetch(CHAT_URL, {
         method: 'POST',
         headers: {
@@ -555,6 +571,14 @@ export default function BookingAIChat({
             hike_type: hikeType,
             group_composition: groupComposition ?? null,
             weather_forecast: weatherInsight ?? null,
+            forecasting: forecastContext ? {
+              summary: forecastContext.summaryText,
+              next7Days: forecastContext.next7Days,
+              quietestDay: forecastContext.quietestDayNext7Days,
+              busiestDay: forecastContext.busiestDayNext7Days,
+              weeklyTotal: forecastContext.weeklySummary.expectedTotalHikers,
+              monthlyTotal: forecastContext.monthlySummary.expectedTotalHikers,
+            } : null,
           },
         }),
       });

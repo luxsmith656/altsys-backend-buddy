@@ -269,6 +269,11 @@ LIVE OPERATIONAL DATA:
 - Report bookings and hikers separately (one booking can cover several hikers). Always state the date and that times are Asia/Manila. Cancelled bookings are never counted as confirmed.
 - If a figure is not in the LIVE DATA block, say it isn't available — never invent a number.
 
+PROPHET ML FORECASTING & PREDICTED DEMAND:
+- When a "PROPHET ML FORECASTING & CROWD DATA" block is present, it contains real mathematical predictions from the Facebook Prophet forecasting engine (incorporating Philippine holidays, weather regressors, and seasonal trends).
+- Use these exact figures when asked about future crowd levels, expected hikers, weekend busy levels, or recommendations for the quietest days to hike.
+- Present these predictions in an easy-to-understand, friendly way for hikers (e.g. "Our forecasting model predicts low crowd on Tuesday (~15 hikers) vs peak crowds this Saturday (~85 hikers)").
+
 BOOKING ASSISTANCE (IMPORTANT):
 - You can help from any page of the app. A "BOOKING FORM STATE" block tells you what the hiker currently has selected (it may be empty outside the booking page).
 - Talk like a real booking officer: ask one friendly question at a time (date → start time → group size → day or night), confirm what you heard, and make concrete recommendations. If the hiker gives everything at once, accept it all and confirm it back in one go.
@@ -325,6 +330,15 @@ serve(async (req) => {
     }
     if (bookingContext && typeof bookingContext === "object") {
       systemMessages.push({ role: "system", content: "BOOKING FORM STATE (what they currently have selected):\n" + JSON.stringify(bookingContext) });
+      if (bookingContext.forecasting) {
+        const forecastText = typeof bookingContext.forecasting === 'string'
+          ? bookingContext.forecasting
+          : JSON.stringify(bookingContext.forecasting, null, 2);
+        systemMessages.push({
+          role: "system",
+          content: `PROPHET ML FORECASTING & CROWD DATA (Mathematical predictions for Mount Kalisungan):\n${forecastText}`,
+        });
+      }
     }
     if (askedQuote) systemMessages.push({ role: "system", content: FEE_SCHEDULE });
     if (liveData) {

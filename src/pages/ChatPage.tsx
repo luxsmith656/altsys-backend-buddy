@@ -6,15 +6,17 @@ import { motion } from 'framer-motion';
 import ReactMarkdown from 'react-markdown';
 import type { ChatMessage } from '@/types';
 import { getOfflineAnswer, learnFromResponse, getCacheSize } from '@/lib/trail-offline-kb';
+import { getProphetAIForecastContext } from '@/lib/ml/prophetDataService';
 import logo from '@/assets/logo.png';
 import { supabase } from '@/integrations/supabase/client';
 
 const CHAT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/trail-chat-rag`;
 const QUICK_QUESTIONS = [
   'What trails are available on Mt. Kalisungan?',
+  'How crowded will it be this weekend? (Prophet forecast)',
+  'Which days have the least crowd and best weather?',
   'What should I bring for a day hike?',
   'Is it safe to hike during rainy season?',
-  'What wildlife can I expect to see?',
   'Where are the nearest emergency services?',
 ];
 
@@ -66,13 +68,28 @@ export default function ChatPage() {
     };
 
     try {
+      const forecastContext = await getProphetAIForecastContext().catch(() => null);
       const resp = await fetch(CHAT_URL, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${accessToken ?? import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
         },
-        body: JSON.stringify({ messages: [...messages, userMsg], page_context: 'Trail Chat' }),
+        body: JSON.stringify({
+          messages: [...messages, userMsg],
+          page_context: 'Trail Chat',
+          booking_context: {
+            current_page: 'Trail Chat',
+            forecasting: forecastContext ? {
+              summary: forecastContext.summaryText,
+              next7Days: forecastContext.next7Days,
+              quietestDay: forecastContext.quietestDayNext7Days,
+              busiestDay: forecastContext.busiestDayNext7Days,
+              weeklyTotal: forecastContext.weeklySummary.expectedTotalHikers,
+              monthlyTotal: forecastContext.monthlySummary.expectedTotalHikers,
+            } : null,
+          },
+        }),
       });
 
       if (!resp.ok) {

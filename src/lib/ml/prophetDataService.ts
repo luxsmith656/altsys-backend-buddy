@@ -600,3 +600,96 @@ function aggregateMonthly(daily: ProphetForecastPoint[]): AggregatedForecastPoin
       };
     });
 }
+
+export interface ProphetAIForecastContext {
+  summaryText: string;
+  next7Days: Array<{
+    date: string;
+    dayOfWeek: string;
+    expectedHikers: number;
+    range: string;
+    crowdLevel: 'Low' | 'Moderate' | 'High' | 'Peak';
+    weatherSummary?: string;
+    holiday?: string;
+  }>;
+  quietestDayNext7Days: { date: string; dayOfWeek: string; expectedHikers: number };
+  busiestDayNext7Days: { date: string; dayOfWeek: string; expectedHikers: number };
+  weeklySummary: { expectedTotalHikers: number; peakDate: string };
+  monthlySummary: { monthLabel: string; expectedTotalHikers: number };
+}
+
+let cachedForecastContext: { timestamp: number; data: ProphetAIForecastContext } | null = null;
+
+/**
+ * Feeds Facebook Prophet forecast results directly to the AI Assistant and Chat models
+ */
+export async function getProphetAIForecastContext(locationId: string | null = null): Promise<ProphetAIForecastContext> {
+  const now = Date.now();
+  if (cachedForecastContext && now - cachedForecastContext.timestamp < 5 * 60 * 1000) {
+    return cachedForecastContext.data;
+  }
+
+  const { dailyForecast, weeklyForecast, monthlyForecast } = await runProphetForecastPipeline({
+    locationId,
+    forecastDays: 30,
+  });
+
+  const todayStr = format(new Date(), 'yyyy-MM-dd');
+  const futurePoints = dailyForecast.filter((p) => p.ds >= todayStr).slice(0, 14);
+
+  const next7Days = futurePoints.slice(0, 7).map((p) => {
+    const d = parseISO(p.ds);
+    const dayOfWeek = format(d, 'EEEE');
+    const expected = Math.max(0, Math.round(p.yhat));
+    const lower = Math.max(0, Math.round(p.yhat_lower));
+    const upper = Math.max(expected, Math.round(p.yhat_upper));
+    const crowdLevel: 'Low' | 'Moderate' | 'High' | 'Peak' =
+      expected > 80 ? 'Peak' : expected > 50 ? 'High' : expected > 20 ? 'Moderate' : 'Low';
+
+    return {
+      date: p.ds,
+      dayOfWeek,
+      expectedHikers: expected,
+      range: `${lower}–${upper} hikers`,
+      crowdLevel,
+      weatherSummary:
+        p.weatherReg !== undefined
+          ? `Weather Effect: ${p.weatherEffect >= 0 ? '+' : ''}${Math.round(p.weatherEffect)} pax`
+          : undefined,
+      holiday: p.holidayName,
+    };
+  });
+
+  const sorted7 = [...next7Days].sort((a, b) => a.expectedHikers - b.expectedHikers);
+  const quietest = sorted7[0] || { date: todayStr, dayOfWeek: 'Today', expectedHikers: 10 };
+  const busiest = sorted7[sorted7.length - 1] || { date: todayStr, dayOfWeek: 'Today', expectedHikers: 50 };
+
+  const currentWeek = weeklyForecast[0] || { yhatTotal: 0, peakDayDate: todayStr };
+  const currentMonth = monthlyForecast[0] || { periodLabel: format(new Date(), 'MMMM yyyy'), yhatTotal: 0 };
+
+  const summaryLines = [
+    `📊 PROPHET ML FORECAST INSIGHTS (Mount Kalisungan):`,
+    `• Today (${format(new Date(), 'MMM d, yyyy')}): ~${next7Days[0]?.expectedHikers ?? 0} expected hikers (${next7Days[0]?.crowdLevel ?? 'Moderate'} crowd level).`,
+    `• Upcoming 7-Day Demand Forecast:`,
+    ...next7Days.map(
+      (d) =>
+        `  - ${d.date} (${d.dayOfWeek}): ~${d.expectedHikers} hikers [${d.crowdLevel}]${d.holiday ? ` 🎉 Holiday: ${d.holiday}` : ''}`
+    ),
+    `• Best Date with Smallest Crowd: ${quietest.date} (${quietest.dayOfWeek}) with ~${quietest.expectedHikers} hikers.`,
+    `• Peak Demand Date: ${busiest.date} (${busiest.dayOfWeek}) with ~${busiest.expectedHikers} hikers.`,
+    `• Current Week Total Expected: ~${currentWeek.yhatTotal} hikers (Peak: ${currentWeek.peakDayDate}).`,
+    `• Monthly Total Expected (${currentMonth.periodLabel}): ~${currentMonth.yhatTotal} hikers.`,
+  ];
+
+  const result: ProphetAIForecastContext = {
+    summaryText: summaryLines.join('\n'),
+    next7Days,
+    quietestDayNext7Days: { date: quietest.date, dayOfWeek: quietest.dayOfWeek, expectedHikers: quietest.expectedHikers },
+    busiestDayNext7Days: { date: busiest.date, dayOfWeek: busiest.dayOfWeek, expectedHikers: busiest.expectedHikers },
+    weeklySummary: { expectedTotalHikers: currentWeek.yhatTotal, peakDate: currentWeek.peakDayDate },
+    monthlySummary: { monthLabel: currentMonth.periodLabel, expectedTotalHikers: currentMonth.yhatTotal },
+  };
+
+  cachedForecastContext = { timestamp: now, data: result };
+  return result;
+}
