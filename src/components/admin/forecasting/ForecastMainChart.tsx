@@ -1,15 +1,17 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   ResponsiveContainer,
   ComposedChart,
   Area,
   Line,
+  Bar,
   XAxis,
   YAxis,
   CartesianGrid,
   Tooltip,
   Legend,
   ReferenceLine,
+  Cell,
 } from 'recharts';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -28,6 +30,8 @@ import {
   CheckCircle2,
   Sparkles,
   Info,
+  BarChart3,
+  LineChart as LineChartIcon,
 } from 'lucide-react';
 
 interface ForecastMainChartProps {
@@ -49,7 +53,6 @@ function CustomProphetTooltip({ active, payload, granularity }: any) {
   if (!data) return null;
 
   const isDaily = granularity === 'daily';
-  const isWeekly = granularity === 'weekly';
 
   const yhat = Number(isDaily ? data.yhat : data.yhatTotal) || 0;
   const lower = Number(isDaily ? data.yhat_lower : data.yhatLowerTotal) || 0;
@@ -60,82 +63,79 @@ function CustomProphetTooltip({ active, payload, granularity }: any) {
   const slotsRemaining = Math.max(0, capacity - Math.round(yhat));
 
   return (
-    <div className="rounded-2xl border border-border/60 bg-popover/95 p-4 shadow-2xl backdrop-blur-md text-xs space-y-2.5 min-w-[240px] max-w-[300px]">
+    <div className="rounded-2xl border border-border/60 bg-popover/95 p-3 sm:p-4 shadow-2xl backdrop-blur-md text-xs space-y-2 max-w-[280px] sm:max-w-[320px]">
       <div className="flex items-center justify-between border-b border-border/30 pb-2">
         <div>
-          <p className="font-bold text-foreground text-sm">
+          <p className="font-bold text-foreground text-xs sm:text-sm">
             {isDaily ? `${data.ds}` : data.periodLabel}
           </p>
-          {isDaily && <p className="text-[11px] text-muted-foreground">{data.dayOfWeek}</p>}
+          {isDaily && <p className="text-[10px] text-muted-foreground">{data.dayOfWeek}</p>}
         </div>
         {isOverCap ? (
-          <Badge variant="destructive" className="text-[10px] px-2 py-0.5">
+          <Badge variant="destructive" className="text-[10px] px-1.5 py-0.5">
             Over Capacity
           </Badge>
         ) : (
           <Badge variant="outline" className="text-[10px] text-emerald-600 dark:text-emerald-400 border-emerald-500/30">
-            {slotsRemaining} slots left
+            {slotsRemaining} open slots
           </Badge>
         )}
       </div>
 
-      <div className="space-y-2 pt-0.5">
+      <div className="space-y-1.5 pt-0.5">
         <div className="flex justify-between items-center bg-primary/10 p-2 rounded-lg">
-          <span className="text-foreground font-semibold flex items-center gap-1.5">
-            👥 Expected Hikers:
+          <span className="text-foreground font-semibold flex items-center gap-1 text-[11px] sm:text-xs">
+            👥 Expected:
           </span>
-          <span className="font-extrabold text-primary text-base">
+          <span className="font-extrabold text-primary text-sm sm:text-base">
             {Math.round(yhat)} hikers
           </span>
         </div>
 
-        <div className="flex justify-between items-center text-muted-foreground px-1">
-          <span>Likely Range (Min to Max):</span>
+        <div className="flex justify-between items-center text-muted-foreground px-1 text-[11px]">
+          <span>Likely Range (CI):</span>
           <span className="font-semibold text-foreground">
             {Math.round(lower)} – {Math.round(upper)}
           </span>
         </div>
 
-        <div className="flex justify-between items-center text-muted-foreground px-1">
-          <span>Daily Limit:</span>
+        <div className="flex justify-between items-center text-muted-foreground px-1 text-[11px]">
+          <span>Daily Trail Limit:</span>
           <span className={`font-semibold ${isOverCap ? 'text-destructive font-bold' : 'text-foreground'}`}>
-            {capacity} hikers
+            {capacity} pax
           </span>
         </div>
 
         {actual !== undefined && actual > 0 && (
-          <div className="flex justify-between items-center text-emerald-600 dark:text-emerald-400 px-1">
-            <span>Past Actual:</span>
-            <span className="font-bold">{actual} hikers</span>
+          <div className="flex justify-between items-center text-emerald-600 dark:text-emerald-400 px-1 text-[11px]">
+            <span>Past Recorded:</span>
+            <span className="font-bold">{actual} pax</span>
           </div>
         )}
       </div>
 
       {/* Weather & Calamity Factors */}
       {isDaily && data.factors && (
-        <div className="border-t border-border/30 pt-2 space-y-1.5">
-          <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">
-            Weather & Conditions
-          </p>
-          <div className="flex flex-wrap gap-1.5">
-            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-secondary/80 text-[10px] text-muted-foreground">
-              <CloudRain className="h-3 w-3 text-sky-500" />
-              {data.factors.rainProb}% rain chance
+        <div className="border-t border-border/30 pt-1.5 space-y-1">
+          <div className="flex flex-wrap gap-1">
+            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-secondary/80 text-[10px] text-muted-foreground">
+              <CloudRain className="h-2.5 w-2.5 text-sky-500" />
+              {data.factors.rainProb}% rain
             </span>
             {data.factors.tempMax && (
-              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-secondary/80 text-[10px] text-muted-foreground">
-                <Sun className="h-3 w-3 text-amber-500" />
+              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-secondary/80 text-[10px] text-muted-foreground">
+                <Sun className="h-2.5 w-2.5 text-amber-500" />
                 {data.factors.tempMax}°C
               </span>
             )}
             {data.factors.typhoonSignal > 0 && (
-              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-destructive/15 text-destructive font-bold text-[10px]">
-                <ShieldAlert className="h-3 w-3" />
-                Typhoon Signal #{data.factors.typhoonSignal}
+              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-destructive/15 text-destructive font-bold text-[10px]">
+                <ShieldAlert className="h-2.5 w-2.5" />
+                Signal #{data.factors.typhoonSignal}
               </span>
             )}
             {data.factors.holiday && (
-              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-amber-500/15 text-amber-600 dark:text-amber-400 text-[10px] font-medium">
+              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-amber-500/15 text-amber-600 dark:text-amber-400 text-[10px] font-medium truncate max-w-full">
                 🎉 {data.factors.holiday}
               </span>
             )}
@@ -156,6 +156,8 @@ export default function ForecastMainChart({
   onHorizonChange,
   scenarioParams,
 }: ForecastMainChartProps) {
+  const [chartType, setChartType] = useState<'line' | 'bar'>('line');
+
   let chartData: any[] = [];
   if (granularity === 'daily') {
     chartData = dailyForecast;
@@ -172,15 +174,38 @@ export default function ForecastMainChart({
     scenarioParams.extremeRainBoost > 0 ||
     scenarioParams.growthMultiplier !== 1.0;
 
-  // Calculate high demand insight
-  let highestPoint = chartData[0];
-  chartData.forEach((pt) => {
-    const val = granularity === 'daily' ? pt.yhat : pt.yhatTotal;
-    const maxVal = granularity === 'daily' ? highestPoint?.yhat : highestPoint?.yhatTotal;
-    if (!highestPoint || val > maxVal) {
-      highestPoint = pt;
+  // Check if there are past recorded data points in current view
+  const hasPastActuals = chartData.some(
+    (pt) => Number(granularity === 'daily' ? pt.y : pt.actualTotal) > 0
+  );
+
+  // Dynamic clean tick interval based on horizon and data size
+  const getTickInterval = () => {
+    if (granularity !== 'daily') return 0;
+    if (horizonDays <= 7) return 0;
+    if (horizonDays <= 14) return 1; // every 2 days
+    if (horizonDays <= 30) return 4; // every 5 days (~6 ticks)
+    if (horizonDays <= 60) return 7; // every 8 days (~7 ticks)
+    return 10;
+  };
+
+  // Clean date formatter for X-Axis ticks: "Aug 24"
+  const formatTick = (val: string) => {
+    if (!val) return '';
+    if (val.includes('-') && val.length >= 10) {
+      const parts = val.split('-');
+      if (parts.length === 3) {
+        const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+        const mIdx = parseInt(parts[1], 10) - 1;
+        const day = parseInt(parts[2], 10);
+        return `${monthNames[mIdx] || parts[1]} ${day}`;
+      }
     }
-  });
+    if (val.includes('(')) {
+      return val.split(' ')[0] || val;
+    }
+    return val;
+  };
 
   return (
     <Card className="glass-card">
@@ -203,8 +228,36 @@ export default function ForecastMainChart({
             </CardDescription>
           </div>
 
-          {/* Granularity & Horizon Controls */}
+          {/* Controls toolbar */}
           <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
+            {/* Chart Style Switch (Line vs Bar) */}
+            <div className="flex items-center rounded-xl border border-border/40 bg-secondary/40 p-0.5 text-xs">
+              <button
+                type="button"
+                onClick={() => setChartType('line')}
+                className={`p-1.5 rounded-lg text-xs transition-all ${
+                  chartType === 'line'
+                    ? 'bg-primary text-primary-foreground shadow-sm'
+                    : 'text-muted-foreground hover:text-foreground'
+                }`}
+                title="Line Trend Chart"
+              >
+                <LineChartIcon className="h-3.5 w-3.5" />
+              </button>
+              <button
+                type="button"
+                onClick={() => setChartType('bar')}
+                className={`p-1.5 rounded-lg text-xs transition-all ${
+                  chartType === 'bar'
+                    ? 'bg-primary text-primary-foreground shadow-sm'
+                    : 'text-muted-foreground hover:text-foreground'
+                }`}
+                title="Daily Volume Bars"
+              >
+                <BarChart3 className="h-3.5 w-3.5" />
+              </button>
+            </div>
+
             {/* Granularity Switch */}
             <div className="flex items-center rounded-xl border border-border/40 bg-secondary/40 p-0.5 text-xs">
               {(['daily', 'weekly', 'monthly'] as const).map((g) => (
@@ -258,7 +311,7 @@ export default function ForecastMainChart({
           <p className="leading-relaxed">
             {granularity === 'daily' ? (
               <>
-                <strong className="text-foreground">Daily Flow:</strong> The solid blue line shows expected hikers, the shaded band is the 80% confidence range, and the red dashed line is daily capacity limit.
+                <strong className="text-foreground">Daily Flow:</strong> The blue line indicates projected hiker demand, the shaded range marks the 80% confidence interval, and the dashed red line is daily capacity limit (100 pax).
               </>
             ) : granularity === 'weekly' ? (
               <>
@@ -274,39 +327,38 @@ export default function ForecastMainChart({
       </CardHeader>
 
       <CardContent className="p-2 sm:p-6 pt-0">
-        <div className="h-[340px] sm:h-[380px] w-full mt-2">
+        <div className="h-[280px] sm:h-[340px] md:h-[380px] w-full mt-2">
           <ResponsiveContainer width="100%" height="100%">
             <ComposedChart
               data={chartData}
-              margin={{ top: 20, right: 20, left: -10, bottom: 20 }}
+              margin={{ top: 15, right: 15, left: -20, bottom: 5 }}
             >
               <defs>
                 <linearGradient id="prophetAreaGradient" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="hsl(var(--primary))" stopOpacity={0.3} />
-                  <stop offset="95%" stopColor="hsl(var(--primary))" stopOpacity={0.05} />
+                  <stop offset="5%" stopColor="hsl(var(--primary))" stopOpacity={0.35} />
+                  <stop offset="95%" stopColor="hsl(var(--primary))" stopOpacity={0.03} />
+                </linearGradient>
+                <linearGradient id="barGradient" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="hsl(var(--primary))" stopOpacity={0.9} />
+                  <stop offset="100%" stopColor="hsl(var(--primary))" stopOpacity={0.5} />
                 </linearGradient>
               </defs>
 
               <CartesianGrid strokeDasharray="3 3" opacity={0.15} vertical={false} />
 
               <XAxis
-                dataKey={
-                  granularity === 'daily'
-                    ? 'displayLabel'
-                    : granularity === 'weekly'
-                    ? 'periodLabel'
-                    : 'periodLabel'
-                }
-                tick={{ fontSize: 11, fill: 'currentColor' }}
-                opacity={0.6}
-                interval={granularity === 'daily' && horizonDays > 30 ? Math.floor(horizonDays / 10) : 0}
-                angle={granularity === 'daily' && horizonDays > 14 ? -35 : 0}
-                textAnchor={granularity === 'daily' && horizonDays > 14 ? 'end' : 'middle'}
-                height={50}
+                dataKey={granularity === 'daily' ? 'ds' : 'periodLabel'}
+                tickFormatter={formatTick}
+                tick={{ fontSize: 10, fill: 'currentColor' }}
+                opacity={0.7}
+                interval={getTickInterval()}
+                angle={0}
+                textAnchor="middle"
+                height={28}
               />
 
               <YAxis
-                tick={{ fontSize: 11, fill: 'currentColor' }}
+                tick={{ fontSize: 10, fill: 'currentColor' }}
                 opacity={0.6}
                 domain={[0, 'auto']}
                 unit=" pax"
@@ -316,56 +368,80 @@ export default function ForecastMainChart({
                 content={<CustomProphetTooltip granularity={granularity} />}
               />
 
-              <Legend
-                verticalAlign="top"
-                align="right"
-                wrapperStyle={{ paddingBottom: '12px', fontSize: '12px' }}
-              />
+              {/* Bar view */}
+              {chartType === 'bar' && (
+                <Bar
+                  dataKey={granularity === 'daily' ? 'yhat' : 'yhatTotal'}
+                  name="Expected Hikers"
+                  radius={[4, 4, 0, 0]}
+                  fill="url(#barGradient)"
+                >
+                  {chartData.map((entry, index) => {
+                    const y = Number(granularity === 'daily' ? entry.yhat : entry.yhatTotal) || 0;
+                    const cap = Number(granularity === 'daily' ? entry.capacityLimit : entry.maxCapacityTotal) || 100;
+                    const isOver = y > cap;
+                    return (
+                      <Cell
+                        key={`bar-${index}`}
+                        fill={isOver ? '#ef4444' : 'hsl(var(--primary))'}
+                        opacity={0.85}
+                      />
+                    );
+                  })}
+                </Bar>
+              )}
 
-              {/* Shaded Likely Upper Bound Area */}
-              <Area
-                type="monotone"
-                dataKey={granularity === 'daily' ? 'yhat_upper' : 'yhatUpperTotal'}
-                name="Likely Upper Bound"
-                stroke="none"
-                fill="url(#prophetAreaGradient)"
-                opacity={0.4}
-              />
+              {/* Line view */}
+              {chartType === 'line' && (
+                <>
+                  {/* Shaded Likely Upper Bound Area */}
+                  <Area
+                    type="monotone"
+                    dataKey={granularity === 'daily' ? 'yhat_upper' : 'yhatUpperTotal'}
+                    name="Likely Upper Bound"
+                    stroke="none"
+                    fill="url(#prophetAreaGradient)"
+                    opacity={0.5}
+                  />
 
-              {/* Shaded Likely Lower Bound Line */}
-              <Line
-                type="monotone"
-                dataKey={granularity === 'daily' ? 'yhat_lower' : 'yhatLowerTotal'}
-                name="Likely Lower Bound"
-                stroke="#60a5fa"
-                strokeDasharray="2 2"
-                strokeWidth={1.5}
-                dot={false}
-                opacity={0.7}
-              />
+                  {/* Shaded Likely Lower Bound Line */}
+                  <Line
+                    type="monotone"
+                    dataKey={granularity === 'daily' ? 'yhat_lower' : 'yhatLowerTotal'}
+                    name="Likely Lower Bound"
+                    stroke="#60a5fa"
+                    strokeDasharray="2 2"
+                    strokeWidth={1.5}
+                    dot={false}
+                    opacity={0.7}
+                  />
 
-              {/* Main Predicted Line */}
-              <Line
-                type="monotone"
-                dataKey={granularity === 'daily' ? 'yhat' : 'yhatTotal'}
-                name="Expected Hikers"
-                stroke="hsl(var(--primary))"
-                strokeWidth={3}
-                dot={granularity !== 'daily' || horizonDays <= 14 ? { r: 4, fill: 'hsl(var(--primary))' } : false}
-                activeDot={{ r: 6, stroke: 'hsl(var(--background))', strokeWidth: 2 }}
-              />
+                  {/* Main Predicted Line */}
+                  <Line
+                    type="monotone"
+                    dataKey={granularity === 'daily' ? 'yhat' : 'yhatTotal'}
+                    name="Expected Hikers"
+                    stroke="hsl(var(--primary))"
+                    strokeWidth={2.5}
+                    dot={horizonDays <= 7}
+                    activeDot={{ r: 5, stroke: 'hsl(var(--background))', strokeWidth: 2 }}
+                  />
+                </>
+              )}
 
-              {/* Actuals Line (if available) */}
-              <Line
-                type="monotone"
-                dataKey={granularity === 'daily' ? 'y' : 'actualTotal'}
-                name="Past Recorded Hikers"
-                stroke="#10b981"
-                strokeWidth={2}
-                strokeDasharray="4 4"
-                dot={{ r: 3, fill: '#10b981' }}
-                connectNulls={false}
-              />
+              {/* Actuals Line (only rendered if non-zero past data exists) */}
+              {hasPastActuals && (
+                <Line
+                  type="monotone"
+                  dataKey={granularity === 'daily' ? 'y' : 'actualTotal'}
+                  name="Past Recorded"
+                  stroke="#10b981"
+                  strokeWidth={2}
+                  strokeDasharray="4 4"
+                  dot={{ r: 3, fill: '#10b981' }}
+                  connectNulls={false}
+                />
+              )}
 
               {/* Reference Capacity Line */}
               {granularity === 'daily' && (
@@ -374,10 +450,10 @@ export default function ForecastMainChart({
                   stroke="#ef4444"
                   strokeDasharray="5 5"
                   label={{
-                    value: `Daily Trail Limit (${chartData[0]?.capacityLimit || 100} hikers)`,
+                    value: `Trail Limit (${chartData[0]?.capacityLimit || 100} pax)`,
                     position: 'top',
                     fill: '#ef4444',
-                    fontSize: 11,
+                    fontSize: 10,
                   }}
                 />
               )}
@@ -386,24 +462,24 @@ export default function ForecastMainChart({
         </div>
 
         {/* Legend Explanations */}
-        <div className="mt-3 flex flex-wrap items-center justify-between gap-3 border-t border-border/20 pt-3 text-xs text-muted-foreground">
-          <div className="flex flex-wrap items-center gap-4">
+        <div className="mt-2.5 flex flex-wrap items-center justify-between gap-2 border-t border-border/20 pt-2.5 text-[11px] text-muted-foreground">
+          <div className="flex flex-wrap items-center gap-3">
             <span className="flex items-center gap-1.5">
-              <span className="w-3 h-1 bg-primary rounded-full inline-block" />
-              <strong>Solid Line:</strong> Expected Hikers
+              <span className="w-2.5 h-1 bg-primary rounded-full inline-block" />
+              <strong>Line:</strong> Expected Hikers
             </span>
             <span className="flex items-center gap-1.5">
-              <span className="w-3 h-2 bg-primary/20 rounded-sm inline-block" />
-              <strong>Shaded Area:</strong> Normal Expected Range
+              <span className="w-2.5 h-2 bg-primary/25 rounded-sm inline-block" />
+              <strong>Shading:</strong> 80% CI Range
             </span>
             <span className="flex items-center gap-1.5">
-              <span className="w-3 h-0.5 bg-destructive border-dashed border-t inline-block" />
-              <strong>Red Line:</strong> Daily Trail Limit
+              <span className="w-2.5 h-0.5 bg-destructive border-dashed border-t inline-block" />
+              <strong>Red:</strong> Daily Limit (100 pax)
             </span>
           </div>
-          <div className="flex items-center gap-1 text-[11px] text-muted-foreground">
-            <Info className="h-3.5 w-3.5 text-primary" />
-            Hover over any date to see exact hiker counts and weather forecast
+          <div className="flex items-center gap-1 text-[10px] text-muted-foreground">
+            <Info className="h-3 w-3 text-primary" />
+            Tap any point to inspect weather &amp; slots
           </div>
         </div>
       </CardContent>

@@ -1438,7 +1438,7 @@ export default function AdminDashboard() {
   );
 
   return (
-    <div className="min-h-screen px-3 pb-12 pt-20 sm:px-4">
+    <div className="min-h-screen px-3 pb-24 md:pb-12 pt-20 sm:px-4">
       <div className="container max-w-7xl mx-auto">
         <motion.div
           initial={{ opacity: 0, y: 20 }}
@@ -1492,24 +1492,27 @@ export default function AdminDashboard() {
           }}
           className="flex w-full flex-col gap-6 md:flex-row"
         >
-          <div className="w-full md:w-64 shrink-0 md:sticky md:top-24 h-max">
-            <TabsList className="glass-card flex flex-row md:flex-col p-2 gap-1 h-auto w-full items-stretch justify-start overflow-x-auto overflow-y-hidden md:overflow-visible custom-scrollbar">
+          <div className="w-full md:w-64 shrink-0 md:sticky md:top-24 h-max hidden md:block">
+            <TabsList className="glass-card flex flex-col p-2 gap-1 h-auto w-full items-stretch justify-start">
               <TabsTrigger value="overview" className="justify-start gap-2.5 px-3 py-2.5 data-[state=active]:bg-primary/20 data-[state=active]:text-primary whitespace-nowrap">
-                <LayoutDashboard className="h-4 w-4 shrink-0" /> <span className="hidden md:inline">Overview</span>
+                <LayoutDashboard className="h-4 w-4 shrink-0" /> <span>Overview</span>
               </TabsTrigger>
               <TabsTrigger value="operations" className="justify-start gap-2.5 px-3 py-2.5 data-[state=active]:bg-primary/20 data-[state=active]:text-primary whitespace-nowrap relative">
-                <ClipboardList className="h-4 w-4 shrink-0" /> <span className="hidden md:inline">Operations</span>
+                <ClipboardList className="h-4 w-4 shrink-0" /> <span>Operations</span>
                 {pendingCount > 0 && (
-                  <span className="md:relative absolute top-0 right-0 md:top-auto md:right-auto md:ml-auto h-5 w-5 rounded-full bg-destructive text-white text-[10px] flex items-center justify-center font-bold shadow-sm">
+                  <span className="ml-auto h-5 min-w-5 px-1 rounded-full bg-destructive text-white text-[10px] flex items-center justify-center font-bold shadow-sm">
                     {pendingCount}
                   </span>
                 )}
               </TabsTrigger>
+              <TabsTrigger value="forecasting" className="justify-start gap-2.5 px-3 py-2.5 data-[state=active]:bg-primary/20 data-[state=active]:text-primary whitespace-nowrap">
+                <TrendingUp className="h-4 w-4 shrink-0 text-primary" /> <span>Forecasting</span>
+              </TabsTrigger>
               <TabsTrigger value="management" className="justify-start gap-2.5 px-3 py-2.5 data-[state=active]:bg-primary/20 data-[state=active]:text-primary whitespace-nowrap">
-                <UserCog className="h-4 w-4 shrink-0" /> <span className="hidden md:inline">Management</span>
+                <UserCog className="h-4 w-4 shrink-0" /> <span>Management</span>
               </TabsTrigger>
               <TabsTrigger value="finance" className="justify-start gap-2.5 px-3 py-2.5 data-[state=active]:bg-primary/20 data-[state=active]:text-primary whitespace-nowrap">
-                <DollarSign className="h-4 w-4 shrink-0" /> <span className="hidden md:inline">Finance</span>
+                <DollarSign className="h-4 w-4 shrink-0" /> <span>Finance</span>
               </TabsTrigger>
             </TabsList>
           </div>
@@ -2690,6 +2693,119 @@ export default function AdminDashboard() {
           void loadUpcomingCapacities();
         }}
       />
+
+      {/* ── Fixed Mobile Bottom Navigation Bar (App-style) ── */}
+      <nav aria-label="Admin Navigation Bar" className="md:hidden fixed bottom-0 left-0 right-0 z-50 border-t border-border/40 bg-background/95 backdrop-blur-xl shadow-2xl pb-[env(safe-area-inset-bottom)]">
+        <div className="grid grid-cols-5 h-15 items-center px-1">
+          {/* 1. Overview */}
+          <button
+            type="button"
+            onClick={() => {
+              setActiveTab('overview');
+              const next = new URLSearchParams(searchParams);
+              next.set('tab', 'overview');
+              next.delete('routeDraft');
+              setSearchParams(next, { replace: true });
+            }}
+            className={`flex flex-col items-center justify-center gap-1 py-1.5 px-1 rounded-xl transition-all ${
+              activeTab === 'overview'
+                ? 'text-primary font-bold'
+                : 'text-muted-foreground hover:text-foreground'
+            }`}
+          >
+            <LayoutDashboard className="h-5 w-5 shrink-0" />
+            <span className="text-[10px] leading-none">Overview</span>
+          </button>
+
+          {/* 2. Operations */}
+          <button
+            type="button"
+            onClick={() => {
+              setActiveTab('operations');
+              setOperationsTab('requests');
+              const next = new URLSearchParams(searchParams);
+              next.set('tab', 'requests');
+              next.delete('routeDraft');
+              setSearchParams(next, { replace: true });
+            }}
+            className={`flex flex-col items-center justify-center gap-1 py-1.5 px-1 rounded-xl transition-all relative ${
+              activeTab === 'operations'
+                ? 'text-primary font-bold'
+                : 'text-muted-foreground hover:text-foreground'
+            }`}
+          >
+            <div className="relative">
+              <ClipboardList className="h-5 w-5 shrink-0" />
+              {pendingCount > 0 && (
+                <span className="absolute -top-1.5 -right-2.5 h-4 min-w-4 px-1 rounded-full bg-destructive text-white text-[9px] flex items-center justify-center font-bold">
+                  {pendingCount}
+                </span>
+              )}
+            </div>
+            <span className="text-[10px] leading-none">Operations</span>
+          </button>
+
+          {/* 3. Forecasting (Direct Access) */}
+          <button
+            type="button"
+            onClick={() => {
+              setActiveTab('forecasting');
+              const next = new URLSearchParams(searchParams);
+              next.set('tab', 'forecasting');
+              next.delete('routeDraft');
+              setSearchParams(next, { replace: true });
+            }}
+            className={`flex flex-col items-center justify-center gap-1 py-1.5 px-1 rounded-xl transition-all ${
+              activeTab === 'forecasting'
+                ? 'text-primary font-bold'
+                : 'text-muted-foreground hover:text-foreground'
+            }`}
+          >
+            <TrendingUp className="h-5 w-5 shrink-0" />
+            <span className="text-[10px] leading-none">Forecast</span>
+          </button>
+
+          {/* 4. Management */}
+          <button
+            type="button"
+            onClick={() => {
+              setActiveTab('management');
+              const next = new URLSearchParams(searchParams);
+              next.set('tab', 'management');
+              next.delete('routeDraft');
+              setSearchParams(next, { replace: true });
+            }}
+            className={`flex flex-col items-center justify-center gap-1 py-1.5 px-1 rounded-xl transition-all ${
+              activeTab === 'management'
+                ? 'text-primary font-bold'
+                : 'text-muted-foreground hover:text-foreground'
+            }`}
+          >
+            <UserCog className="h-5 w-5 shrink-0" />
+            <span className="text-[10px] leading-none">Manage</span>
+          </button>
+
+          {/* 5. Finance */}
+          <button
+            type="button"
+            onClick={() => {
+              setActiveTab('finance');
+              const next = new URLSearchParams(searchParams);
+              next.set('tab', 'finance');
+              next.delete('routeDraft');
+              setSearchParams(next, { replace: true });
+            }}
+            className={`flex flex-col items-center justify-center gap-1 py-1.5 px-1 rounded-xl transition-all ${
+              activeTab === 'finance'
+                ? 'text-primary font-bold'
+                : 'text-muted-foreground hover:text-foreground'
+            }`}
+          >
+            <DollarSign className="h-5 w-5 shrink-0" />
+            <span className="text-[10px] leading-none">Finance</span>
+          </button>
+        </div>
+      </nav>
     </div>
   );
 }
