@@ -95,32 +95,32 @@ export default function ForecastingTab({ locationId }: ForecastingTabProps) {
       : Math.round(monthlyForecast.reduce((acc, curr) => acc + (curr.yhatTotal || 0), 0));
 
   return (
-    <div className="space-y-6 mt-0">
+    <div className="space-y-4 sm:space-y-6 mt-0">
       {/* Header Toolbar */}
-      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 sm:gap-4">
         <div>
-          <div className="flex items-center gap-2">
-            <h2 className="text-xl font-bold flex items-center gap-2">
-              <TrendingUp className="h-6 w-6 text-primary" />
-              Visitor Traffic & Booking Forecasting
+          <div className="flex items-center gap-2 flex-wrap">
+            <h2 className="text-lg sm:text-xl font-bold flex items-center gap-2">
+              <TrendingUp className="h-5 w-5 sm:h-6 sm:w-6 text-primary shrink-0" />
+              Visitor Forecasting
             </h2>
-            <Badge variant="outline" className="text-primary border-primary/30 text-xs gap-1 hidden sm:inline-flex">
+            <Badge variant="outline" className="text-primary border-primary/30 text-[11px] py-0 gap-1">
               <Sparkles className="h-3 w-3" />
-              AI Prophet Powered
+              Prophet ML
             </Badge>
           </div>
-          <p className="text-xs sm:text-sm text-muted-foreground mt-0.5">
-            Automatic time-series projections of confirmed bookings, peak trail dates, and weather impact.
+          <p className="text-xs text-muted-foreground mt-0.5">
+            Time-series projections for bookings, peak dates, and weather impact.
           </p>
         </div>
 
         {/* Action Buttons */}
         <div className="flex flex-wrap items-center gap-2">
-          {/* Baseline Augmentation Switch */}
-          <div className="flex items-center gap-2 rounded-xl border border-border/30 bg-secondary/20 px-3 py-1.5 text-xs">
-            <Database className="h-3.5 w-3.5 text-muted-foreground" />
-            <Label htmlFor="baseline-toggle" className="cursor-pointer text-muted-foreground">
-              Include Seasonal Baseline
+          {/* Baseline Switch */}
+          <div className="flex items-center gap-2 rounded-xl border border-border/30 bg-secondary/20 px-2.5 py-1.5 text-xs">
+            <Database className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+            <Label htmlFor="baseline-toggle" className="cursor-pointer text-[11px] text-muted-foreground whitespace-nowrap">
+              Seasonal Baseline
             </Label>
             <Switch
               id="baseline-toggle"
@@ -133,62 +133,62 @@ export default function ForecastingTab({ locationId }: ForecastingTabProps) {
             variant="outline"
             size="sm"
             onClick={() => setCapacitySyncOpen(true)}
-            className="gap-1.5 text-xs h-9 rounded-xl"
+            className="gap-1 text-xs h-8 sm:h-9 px-2.5 sm:px-3 rounded-xl"
           >
-            <SlidersHorizontal className="h-3.5 w-3.5 text-primary" />
-            Sync Capacity Limits
+            <SlidersHorizontal className="h-3.5 w-3.5 text-primary shrink-0" />
+            Sync Capacity
           </Button>
 
           <Button
             variant="outline"
             size="sm"
             onClick={() => setExportOpen(true)}
-            className="gap-1.5 text-xs h-9 rounded-xl"
+            className="gap-1 text-xs h-8 sm:h-9 px-2.5 sm:px-3 rounded-xl"
           >
-            <FileSpreadsheet className="h-3.5 w-3.5" />
-            Export to Excel
+            <FileSpreadsheet className="h-3.5 w-3.5 shrink-0" />
+            Export
           </Button>
 
           <Button
             size="sm"
             onClick={loadForecast}
             disabled={loading}
-            className="gap-1.5 text-xs h-9 rounded-xl"
+            className="gap-1 text-xs h-8 sm:h-9 px-3 rounded-xl bg-primary hover:bg-primary/90 text-primary-foreground font-semibold"
           >
             {loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
-            Refresh Forecast
+            Refresh
           </Button>
         </div>
       </div>
 
       {/* Model Metadata Status Bar */}
-      <div className="flex flex-wrap items-center justify-between gap-3 p-3 rounded-2xl bg-secondary/20 border border-border/20 text-xs">
-        <div className="flex flex-wrap items-center gap-3 text-muted-foreground">
-          <span className="flex items-center gap-1.5">
-            <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" />
-            Status: <strong className="text-foreground">Live & Up to Date</strong>
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-2.5 sm:p-3 rounded-2xl bg-secondary/20 border border-border/20 text-xs">
+        <div className="flex flex-wrap items-center gap-2 sm:gap-3 text-muted-foreground text-[11px] sm:text-xs">
+          <span className="flex items-center gap-1.5 font-medium text-foreground">
+            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse shrink-0" />
+            Live &amp; Synchronized
           </span>
-          <span>•</span>
+          <span className="hidden sm:inline">•</span>
           <span>
-            Training Data: <strong className="text-foreground">{trainingCount} Days</strong> ({liveBookingsCount} live bookings)
+            Data: <strong className="text-foreground">{trainingCount} Days</strong> ({liveBookingsCount} bookings)
           </span>
-          <span>•</span>
+          <span className="hidden sm:inline">•</span>
           <span>
-            Live Factors: <strong className="text-foreground">14-Day Open-Meteo Weather, Typhoon Alerts, Philippine Holidays</strong>
+            Inputs: <strong className="text-foreground">Open-Meteo Weather &amp; PH Holidays</strong>
           </span>
         </div>
-        <div className="flex items-center gap-1 text-xs text-emerald-600 dark:text-emerald-400 font-medium">
-          <ShieldCheck className="h-4 w-4" />
-          AI Accuracy: <strong>{evaluation ? `${evaluation.coverage}%` : '94%'} Reliable</strong>
+        <div className="flex items-center gap-1 text-[11px] sm:text-xs text-emerald-600 dark:text-emerald-400 font-semibold shrink-0">
+          <ShieldCheck className="h-3.5 w-3.5 shrink-0" />
+          {evaluation ? `${evaluation.coverage}% 80% CI` : '94% Coverage'} (MAE ±{evaluation ? evaluation.mae : 3.8} pax)
         </div>
       </div>
 
       {loading ? (
-        <div className="p-16 text-center space-y-3 glass-card rounded-2xl">
-          <Loader2 className="h-10 w-10 animate-spin text-primary mx-auto" />
-          <p className="font-semibold text-sm">Calculating visitor projections…</p>
+        <div className="p-12 sm:p-16 text-center space-y-3 glass-card rounded-2xl">
+          <Loader2 className="h-8 w-8 sm:h-10 sm:w-10 animate-spin text-primary mx-auto" />
+          <p className="font-semibold text-sm">Computing visitor projections…</p>
           <p className="text-xs text-muted-foreground max-w-sm mx-auto">
-            Analyzing weekend surges, summer climate patterns, and live weather forecasts for Mount Kalisungan.
+            Analyzing weekend surges, seasonality, and live weather factors.
           </p>
         </div>
       ) : (
@@ -203,21 +203,21 @@ export default function ForecastingTab({ locationId }: ForecastingTabProps) {
           />
 
           {/* AI Automated Interpretation & Recommendation Banner */}
-          <div className="p-4 sm:p-5 rounded-2xl bg-gradient-to-r from-primary/10 via-emerald-500/10 to-sky-500/10 border border-primary/25 shadow-sm space-y-3">
+          <div className="p-3.5 sm:p-5 rounded-2xl bg-gradient-to-r from-primary/10 via-emerald-500/10 to-sky-500/10 border border-primary/25 shadow-sm space-y-3">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-              <div className="flex items-center gap-3">
-                <div className="p-2.5 rounded-xl bg-primary/20 text-primary shrink-0 shadow-inner">
-                  <Sparkles className="h-5 w-5" />
+              <div className="flex items-center gap-2.5 sm:gap-3">
+                <div className="p-2 sm:p-2.5 rounded-xl bg-primary/20 text-primary shrink-0 shadow-inner">
+                  <Sparkles className="h-4 w-4 sm:h-5 sm:w-5" />
                 </div>
                 <div>
-                  <h3 className="font-bold text-sm text-foreground flex items-center gap-2">
-                    AI Forecast Interpretation &amp; Decision Assistant
-                    <Badge className="bg-primary/20 text-primary border-primary/30 text-[10px] py-0">
+                  <h3 className="font-bold text-xs sm:text-sm text-foreground flex items-center gap-2 flex-wrap">
+                    AI Forecast Analyst
+                    <Badge className="bg-primary/20 text-primary border-primary/30 text-[10px] py-0 font-normal">
                       Zero Screenshot Needed
                     </Badge>
                   </h3>
-                  <p className="text-xs text-muted-foreground mt-0.5">
-                    Ask Kali to analyze these Prophet predictions, pinpoint peak risk dates, plan guide staffing, and find quiet hike dates.
+                  <p className="text-[11px] sm:text-xs text-muted-foreground mt-0.5">
+                    Ask Kali to analyze predictions, find peak risk dates, and plan guide allocations.
                   </p>
                 </div>
               </div>
@@ -232,43 +232,49 @@ export default function ForecastingTab({ locationId }: ForecastingTabProps) {
                     })
                   );
                 }}
-                className="gap-2 text-xs bg-primary hover:bg-primary/90 text-primary-foreground font-semibold shrink-0 h-9 px-4 rounded-xl shadow-md"
+                className="gap-1.5 text-xs bg-primary hover:bg-primary/90 text-primary-foreground font-semibold shrink-0 h-8 sm:h-9 px-3 sm:px-4 rounded-xl shadow-md w-full sm:w-auto"
               >
-                <Sparkles className="h-4 w-4" />
-                Ask AI to Interpret Forecast
+                <Sparkles className="h-3.5 w-3.5 shrink-0" />
+                Interpret Forecast
               </Button>
             </div>
 
             {/* Quick Automated Highlights Grid */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 pt-1 text-xs">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 pt-0.5 text-xs">
               <div className="p-2.5 rounded-xl bg-background/60 border border-border/20 space-y-0.5">
-                <span className="text-[11px] text-muted-foreground block font-medium">⚡ Peak Surge Alert</span>
-                <span className="font-bold text-foreground">
+                <span className="text-[10px] uppercase tracking-wider text-muted-foreground block font-semibold">
+                  ⚡ Peak Demand
+                </span>
+                <span className="font-bold text-foreground text-xs sm:text-sm truncate block">
                   {dailyForecast.length > 0
                     ? (() => {
                         const top = [...dailyForecast].sort((a, b) => (b.yhat || 0) - (a.yhat || 0))[0];
-                        return `${top?.ds || 'Weekend'}: ~${Math.round(top?.yhat || 0)} hikers (${top?.holidayName || 'Weekend Rush'})`;
+                        return `${top?.ds || 'Weekend'}: ~${Math.round(top?.yhat || 0)} hikers (${top?.holidayName || 'Peak'})`;
                       })()
                     : 'Weekend peak demand'}
                 </span>
               </div>
 
               <div className="p-2.5 rounded-xl bg-background/60 border border-border/20 space-y-0.5">
-                <span className="text-[11px] text-muted-foreground block font-medium">🌿 Quietest Hike Window</span>
-                <span className="font-bold text-foreground">
+                <span className="text-[10px] uppercase tracking-wider text-muted-foreground block font-semibold">
+                  🌿 Quiet Window
+                </span>
+                <span className="font-bold text-foreground text-xs sm:text-sm truncate block">
                   {dailyForecast.length > 0
                     ? (() => {
                         const bottom = [...dailyForecast].filter((p) => (p.yhat || 0) > 0).sort((a, b) => (a.yhat || 0) - (b.yhat || 0))[0];
-                        return `${bottom?.ds || 'Midweek'}: ~${Math.round(bottom?.yhat || 0)} hikers (Ideal for Low Crowds)`;
+                        return `${bottom?.ds || 'Midweek'}: ~${Math.round(bottom?.yhat || 0)} hikers (Low Crowd)`;
                       })()
                     : 'Midweek (Tue–Wed)'}
                 </span>
               </div>
 
               <div className="p-2.5 rounded-xl bg-background/60 border border-border/20 space-y-0.5">
-                <span className="text-[11px] text-muted-foreground block font-medium">🎯 Model Confidence</span>
-                <span className="font-bold text-emerald-600 dark:text-emerald-400">
-                  {evaluation ? `${evaluation.coverage}% 80% CI Coverage` : '94% Prediction Confidence'} (MAE ±{evaluation ? evaluation.mae : 3.8} pax)
+                <span className="text-[10px] uppercase tracking-wider text-muted-foreground block font-semibold">
+                  🎯 Model Reliability
+                </span>
+                <span className="font-bold text-emerald-600 dark:text-emerald-400 text-xs sm:text-sm truncate block">
+                  {evaluation ? `${evaluation.coverage}% Coverage` : '94% Coverage'} (MAE ±{evaluation ? evaluation.mae : 3.8})
                 </span>
               </div>
             </div>

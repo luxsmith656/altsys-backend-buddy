@@ -47,48 +47,56 @@ export default function ProphetComponentsChart({
         onValueChange={(v) => setActiveTab(v as any)}
         className="w-full"
       >
-        <CardHeader className="p-4 sm:p-6 pb-2">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <CardHeader className="p-3 sm:p-6 pb-2">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
             <div>
-              <CardTitle className="text-base sm:text-lg flex items-center gap-2">
-                <Layers className="h-5 w-5 text-primary" />
-                Hiker Demand Insights & Patterns
+              <CardTitle className="text-sm sm:text-lg flex items-center gap-2">
+                <Layers className="h-4 w-4 sm:h-5 sm:w-5 text-primary shrink-0" />
+                Hiker Demand Insights &amp; Patterns
               </CardTitle>
-              <CardDescription className="text-xs sm:text-sm mt-0.5">
-                Understand what drives visitor traffic: days of the week, weather seasons, and local events.
+              <CardDescription className="text-xs mt-0.5">
+                Breakdown of weekly cycles, annual seasons, and weather factors.
               </CardDescription>
             </div>
 
-            <TabsList className="glass-card text-xs">
-              <TabsTrigger value="weekly">🗓️ Days of the Week</TabsTrigger>
-              <TabsTrigger value="yearly">🌦️ Months / Seasons</TabsTrigger>
-              <TabsTrigger value="trend">📈 Trail Growth</TabsTrigger>
-              <TabsTrigger value="regressors">⚡ Weather & Events</TabsTrigger>
+            <TabsList className="grid grid-cols-2 sm:flex sm:w-auto h-auto p-1 gap-1 text-xs glass-card">
+              <TabsTrigger value="weekly" className="text-xs px-2.5 py-1.5">
+                🗓️ Days of Week
+              </TabsTrigger>
+              <TabsTrigger value="yearly" className="text-xs px-2.5 py-1.5">
+                🌦️ Seasonality
+              </TabsTrigger>
+              <TabsTrigger value="trend" className="text-xs px-2.5 py-1.5">
+                📈 Growth Trend
+              </TabsTrigger>
+              <TabsTrigger value="regressors" className="text-xs px-2.5 py-1.5">
+                ⚡ Factors
+              </TabsTrigger>
             </TabsList>
           </div>
         </CardHeader>
 
-        <CardContent className="p-4 sm:p-6 pt-3">
+        <CardContent className="p-3 sm:p-6 pt-2 sm:pt-3">
           {/* 1. Weekly Pattern */}
-          <TabsContent value="weekly" className="space-y-4 mt-0">
+          <TabsContent value="weekly" className="space-y-3 sm:space-y-4 mt-0">
             <div className="flex items-center justify-between">
               <p className="text-xs text-muted-foreground">
-                How much each day of the week increases or decreases normal visitor traffic:
+                Average day-of-week impact on visitor volume:
               </p>
-              <Badge variant="outline" className="text-xs text-primary border-primary/30">
-                Weekly Pattern
+              <Badge variant="outline" className="text-[10px] sm:text-xs text-primary border-primary/30">
+                Weekly Cycle
               </Badge>
             </div>
 
-            <div className="h-[250px] w-full">
+            <div className="h-[200px] sm:h-[250px] w-full">
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={decomposition.weeklyProfile} margin={{ top: 10, right: 10, left: -15, bottom: 0 }}>
+                <BarChart data={decomposition.weeklyProfile} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
                   <CartesianGrid strokeDasharray="3 3" opacity={0.15} vertical={false} />
-                  <XAxis dataKey="day" tick={{ fontSize: 12, fill: 'currentColor' }} opacity={0.7} />
-                  <YAxis tick={{ fontSize: 11, fill: 'currentColor' }} opacity={0.6} unit=" pax" />
+                  <XAxis dataKey="day" tick={{ fontSize: 11, fill: 'currentColor' }} opacity={0.7} />
+                  <YAxis tick={{ fontSize: 10, fill: 'currentColor' }} opacity={0.6} unit=" pax" />
                   <Tooltip
                     formatter={(val: any) => [
-                      `${val > 0 ? `+${val} more hikers than average` : `${val} fewer hikers than average`}`,
+                      `${val > 0 ? `+${val} hikers vs avg` : `${val} hikers vs avg`}`,
                       'Day Effect',
                     ]}
                     contentStyle={{
@@ -115,32 +123,32 @@ export default function ProphetComponentsChart({
               </ResponsiveContainer>
             </div>
 
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-2 border-t border-border/20 text-xs">
-              <div className="p-3 rounded-xl bg-primary/10 border border-primary/20">
-                <span className="font-semibold text-primary block">Saturday Surge</span>
-                <p className="text-lg font-bold text-foreground mt-0.5">
-                  +{decomposition.weeklyProfile.find((w) => w.day === 'Saturday')?.deltaHikers || 0} hikers
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3 pt-1 border-t border-border/20 text-xs">
+              <div className="p-2.5 sm:p-3 rounded-xl bg-primary/10 border border-primary/20">
+                <span className="font-semibold text-primary block text-[11px] sm:text-xs">Saturday Peak</span>
+                <p className="text-base sm:text-lg font-bold text-foreground mt-0.5">
+                  +{decomposition.weeklyProfile.find((w) => w.day === 'Saturday')?.deltaHikers || 0} pax
                 </p>
-                <p className="text-[11px] text-muted-foreground mt-1">Busiest day of the week</p>
+                <p className="text-[10px] sm:text-[11px] text-muted-foreground mt-0.5">Busiest day</p>
               </div>
-              <div className="p-3 rounded-xl bg-primary/10 border border-primary/20">
-                <span className="font-semibold text-primary block">Sunday Surge</span>
-                <p className="text-lg font-bold text-foreground mt-0.5">
-                  +{decomposition.weeklyProfile.find((w) => w.day === 'Sunday')?.deltaHikers || 0} hikers
+              <div className="p-2.5 sm:p-3 rounded-xl bg-primary/10 border border-primary/20">
+                <span className="font-semibold text-primary block text-[11px] sm:text-xs">Sunday Surge</span>
+                <p className="text-base sm:text-lg font-bold text-foreground mt-0.5">
+                  +{decomposition.weeklyProfile.find((w) => w.day === 'Sunday')?.deltaHikers || 0} pax
                 </p>
-                <p className="text-[11px] text-muted-foreground mt-1">Second busiest day</p>
+                <p className="text-[10px] sm:text-[11px] text-muted-foreground mt-0.5">High weekend load</p>
               </div>
-              <div className="p-3 rounded-xl bg-secondary/30 border border-border/30">
-                <span className="font-semibold text-muted-foreground block">Mid-Week Low (Wed)</span>
-                <p className="text-lg font-bold text-muted-foreground mt-0.5">
-                  {decomposition.weeklyProfile.find((w) => w.day === 'Wednesday')?.deltaHikers || 0} hikers
+              <div className="p-2.5 sm:p-3 rounded-xl bg-secondary/30 border border-border/30">
+                <span className="font-semibold text-muted-foreground block text-[11px] sm:text-xs">Mid-Week (Wed)</span>
+                <p className="text-base sm:text-lg font-bold text-muted-foreground mt-0.5">
+                  {decomposition.weeklyProfile.find((w) => w.day === 'Wednesday')?.deltaHikers || 0} pax
                 </p>
-                <p className="text-[11px] text-muted-foreground mt-1">Quietest trail days</p>
+                <p className="text-[10px] sm:text-[11px] text-muted-foreground mt-0.5">Quietest day</p>
               </div>
-              <div className="p-3 rounded-xl bg-secondary/30 border border-border/30">
-                <span className="font-semibold text-foreground block">Weekend Ratio</span>
-                <p className="text-lg font-bold text-foreground mt-0.5">~3.2x</p>
-                <p className="text-[11px] text-muted-foreground mt-1">More hikers on weekends</p>
+              <div className="p-2.5 sm:p-3 rounded-xl bg-secondary/30 border border-border/30">
+                <span className="font-semibold text-foreground block text-[11px] sm:text-xs">Weekend Ratio</span>
+                <p className="text-base sm:text-lg font-bold text-foreground mt-0.5">~3.2x</p>
+                <p className="text-[10px] sm:text-[11px] text-muted-foreground mt-0.5">Weekend multiplier</p>
               </div>
             </div>
           </TabsContent>

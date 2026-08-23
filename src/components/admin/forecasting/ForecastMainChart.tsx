@@ -184,85 +184,67 @@ export default function ForecastMainChart({
 
   return (
     <Card className="glass-card">
-      <CardHeader className="p-4 sm:p-6 pb-3">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <CardHeader className="p-3 sm:p-6 pb-2 sm:pb-3">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 sm:gap-4">
           <div>
-            <div className="flex items-center gap-2">
-              <CardTitle className="text-base sm:text-lg flex items-center gap-2">
-                <TrendingUp className="h-5 w-5 text-primary" />
-                Projected Visitor Traffic & Demand
+            <div className="flex items-center gap-2 flex-wrap">
+              <CardTitle className="text-sm sm:text-lg flex items-center gap-2">
+                <TrendingUp className="h-4 w-4 sm:h-5 sm:w-5 text-primary shrink-0" />
+                Projected Visitor Demand
               </CardTitle>
               {isScenarioActive && (
-                <Badge className="bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-500/30 text-xs">
-                  What-If Scenario Active
+                <Badge className="bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-500/30 text-[10px] py-0">
+                  Simulation Active
                 </Badge>
               )}
             </div>
-            <CardDescription className="text-xs sm:text-sm mt-0.5">
-              Forecast of confirmed hiker bookings with likely range and trail capacity limits.
+            <CardDescription className="text-xs mt-0.5">
+              Hiker volume projections with confidence interval and trail limits.
             </CardDescription>
           </div>
 
           {/* Granularity & Horizon Controls */}
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
             {/* Granularity Switch */}
-            <div className="flex items-center rounded-lg border border-border/40 bg-secondary/40 p-0.5 text-xs">
-              <button
-                type="button"
-                onClick={() => onGranularityChange('daily')}
-                className={`px-3 py-1.5 rounded-md font-medium transition-all ${
-                  granularity === 'daily'
-                    ? 'bg-primary text-primary-foreground shadow-sm'
-                    : 'text-muted-foreground hover:text-foreground'
-                }`}
-              >
-                Daily
-              </button>
-              <button
-                type="button"
-                onClick={() => onGranularityChange('weekly')}
-                className={`px-3 py-1.5 rounded-md font-medium transition-all ${
-                  granularity === 'weekly'
-                    ? 'bg-primary text-primary-foreground shadow-sm'
-                    : 'text-muted-foreground hover:text-foreground'
-                }`}
-              >
-                Weekly
-              </button>
-              <button
-                type="button"
-                onClick={() => onGranularityChange('monthly')}
-                className={`px-3 py-1.5 rounded-md font-medium transition-all ${
-                  granularity === 'monthly'
-                    ? 'bg-primary text-primary-foreground shadow-sm'
-                    : 'text-muted-foreground hover:text-foreground'
-                }`}
-              >
-                Monthly
-              </button>
+            <div className="flex items-center rounded-xl border border-border/40 bg-secondary/40 p-0.5 text-xs">
+              {(['daily', 'weekly', 'monthly'] as const).map((g) => (
+                <button
+                  key={g}
+                  type="button"
+                  onClick={() => onGranularityChange(g)}
+                  className={`px-2.5 sm:px-3 py-1 rounded-lg font-medium capitalize text-xs transition-all ${
+                    granularity === g
+                      ? 'bg-primary text-primary-foreground shadow-sm'
+                      : 'text-muted-foreground hover:text-foreground'
+                  }`}
+                >
+                  {g}
+                </button>
+              ))}
             </div>
 
             {/* Horizon Switch */}
             {granularity === 'daily' && (
-              <div className="flex items-center rounded-lg border border-border/40 bg-secondary/40 p-0.5 text-xs">
+              <div className="flex items-center rounded-xl border border-border/40 bg-secondary/40 p-0.5 text-xs">
                 {[
-                  { label: 'Next 7 Days', days: 7 },
-                  { label: '14 Days', days: 14 },
-                  { label: '30 Days', days: 30 },
-                  { label: '60 Days', days: 60 },
-                  { label: '90 Days', days: 90 },
+                  { label: '7d', fullLabel: '7 Days', days: 7 },
+                  { label: '14d', fullLabel: '14 Days', days: 14 },
+                  { label: '30d', fullLabel: '30 Days', days: 30 },
+                  { label: '60d', fullLabel: '60 Days', days: 60 },
+                  { label: '90d', fullLabel: '90 Days', days: 90 },
                 ].map((h) => (
                   <button
                     key={h.days}
                     type="button"
                     onClick={() => onHorizonChange(h.days)}
-                    className={`px-2.5 py-1.5 rounded-md font-medium transition-all ${
+                    className={`px-2 sm:px-2.5 py-1 rounded-lg font-medium text-xs transition-all ${
                       horizonDays === h.days
-                        ? 'bg-card text-foreground shadow-sm'
+                        ? 'bg-card text-foreground shadow-sm font-bold'
                         : 'text-muted-foreground hover:text-foreground'
                     }`}
                   >
-                    {h.label}
+                    <span className="sm:hidden">{h.label}</span>
+                    <span className="hidden sm:inline">{h.fullLabel}</span>
                   </button>
                 ))}
               </div>
@@ -270,22 +252,21 @@ export default function ForecastMainChart({
           </div>
         </div>
 
-        {/* Friendly User Takeaway Box */}
-        <div className="mt-3 p-3 rounded-xl bg-secondary/30 border border-border/30 flex items-start gap-2.5 text-xs text-muted-foreground">
-          <Sparkles className="h-4 w-4 text-primary shrink-0 mt-0.5" />
+        {/* Concise User Takeaway Box */}
+        <div className="mt-2.5 p-2.5 sm:p-3 rounded-xl bg-secondary/30 border border-border/30 flex items-start gap-2 text-[11px] sm:text-xs text-muted-foreground">
+          <Sparkles className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-primary shrink-0 mt-0.5" />
           <p className="leading-relaxed">
-            <strong className="text-foreground">💡 Plain-Language Summary:</strong>{' '}
             {granularity === 'daily' ? (
               <>
-                Weekend peaks typically happen on <strong>Saturdays & Sundays</strong>. The <strong>blue line</strong> represents expected hikers, while the <strong>shaded blue area</strong> shows the expected minimum and maximum range. The <strong>red dashed line</strong> marks your trail capacity limit.
+                <strong className="text-foreground">Daily Flow:</strong> The solid blue line shows expected hikers, the shaded band is the 80% confidence range, and the red dashed line is daily capacity limit.
               </>
             ) : granularity === 'weekly' ? (
               <>
-                Weekly totals show visitor volume for each 7-day period. Use this to prepare guide schedules and supplies for upcoming high-traffic weeks.
+                <strong className="text-foreground">Weekly Overview:</strong> Aggregate visitor count per 7-day period for guide staffing and operations.
               </>
             ) : (
               <>
-                Monthly projections show overall seasonal visitor volume. Peak summer hiking months (December to May) generate the highest total visitors.
+                <strong className="text-foreground">Monthly Horizon:</strong> Seasonal visitor totals for long-term trail planning.
               </>
             )}
           </p>

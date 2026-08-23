@@ -83,22 +83,22 @@ export default function ScenarioSimulatorPanel({
 
   return (
     <Card className="glass-card border-primary/20 bg-card/70">
-      <CardHeader className="p-4 sm:p-6 pb-2">
+      <CardHeader className="p-3 sm:p-6 pb-2">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div>
-            <div className="flex items-center gap-2">
-              <CardTitle className="text-base sm:text-lg flex items-center gap-2">
-                <SlidersHorizontal className="h-5 w-5 text-primary" />
+            <div className="flex items-center gap-2 flex-wrap">
+              <CardTitle className="text-sm sm:text-lg flex items-center gap-2">
+                <SlidersHorizontal className="h-4 w-4 sm:h-5 sm:w-5 text-primary shrink-0" />
                 "What-If" Scenario Simulator
               </CardTitle>
               {isModified && (
-                <Badge className="bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-500/30 text-xs">
-                  Active Simulation
+                <Badge className="bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-500/30 text-[10px] py-0">
+                  Simulation Active
                 </Badge>
               )}
             </div>
-            <CardDescription className="text-xs sm:text-sm mt-0.5">
-              Test how upcoming typhoons, severe weather, or local festivals would change your bookings.
+            <CardDescription className="text-xs mt-0.5">
+              Simulate typhoons, weather shifts, or promos to see projected demand changes.
             </CardDescription>
           </div>
 
@@ -108,56 +108,56 @@ export default function ScenarioSimulatorPanel({
                 variant="outline"
                 size="sm"
                 onClick={onReset}
-                className="gap-1.5 text-xs h-8 text-muted-foreground hover:text-foreground"
+                className="gap-1.5 text-xs h-8 text-muted-foreground hover:text-foreground rounded-xl"
               >
-                <RotateCcw className="h-3.5 w-3.5" />
-                Reset to Normal
+                <RotateCcw className="h-3 w-3" />
+                Reset Scenario
               </Button>
             )}
           </div>
         </div>
 
         {/* Quick Scenario One-Click Buttons */}
-        <div className="flex flex-wrap items-center gap-2 pt-3">
-          <span className="text-xs text-muted-foreground font-semibold">Try a Scenario:</span>
+        <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 pt-2.5">
+          <span className="text-[11px] text-muted-foreground font-semibold">Presets:</span>
           <button
             type="button"
             onClick={applyPresetTyphoon}
-            className="text-xs px-3 py-1.5 rounded-xl border border-destructive/30 bg-destructive/10 text-destructive hover:bg-destructive/20 transition-all font-medium flex items-center gap-1.5"
+            className="text-[11px] sm:text-xs px-2.5 py-1 rounded-xl border border-destructive/30 bg-destructive/10 text-destructive hover:bg-destructive/20 transition-all font-medium flex items-center gap-1"
           >
-            <ShieldAlert className="h-3.5 w-3.5" />
-            🌪️ Typhoon Signal #2 (Weekend)
+            <ShieldAlert className="h-3 w-3 shrink-0" />
+            🌪️ Storm Signal #2
           </button>
           <button
             type="button"
             onClick={applyPresetFestival}
-            className="text-xs px-3 py-1.5 rounded-xl border border-primary/30 bg-primary/10 text-primary hover:bg-primary/20 transition-all font-medium flex items-center gap-1.5"
+            className="text-[11px] sm:text-xs px-2.5 py-1 rounded-xl border border-primary/30 bg-primary/10 text-primary hover:bg-primary/20 transition-all font-medium flex items-center gap-1"
           >
-            <Zap className="h-3.5 w-3.5" />
-            🎉 LGU Eco-Tourism Promo (+35%)
+            <Zap className="h-3 w-3 shrink-0" />
+            🎉 Eco-Promo (+35%)
           </button>
           <button
             type="button"
             onClick={applyPresetMaintenance}
-            className="text-xs px-3 py-1.5 rounded-xl border border-amber-500/30 bg-amber-500/10 text-amber-600 dark:text-amber-400 hover:bg-amber-500/20 transition-all font-medium flex items-center gap-1.5"
+            className="text-[11px] sm:text-xs px-2.5 py-1 rounded-xl border border-amber-500/30 bg-amber-500/10 text-amber-600 dark:text-amber-400 hover:bg-amber-500/20 transition-all font-medium flex items-center gap-1"
           >
-            <Megaphone className="h-3.5 w-3.5" />
-            🚫 Trail Maintenance (-60%)
+            <Megaphone className="h-3 w-3 shrink-0" />
+            🚫 Trail Repairs (-60%)
           </button>
         </div>
 
         {/* Active Scenario Impact Feedback Box */}
         {isModified && (
-          <div className="mt-3 p-3 rounded-xl bg-amber-500/10 border border-amber-500/20 text-xs flex items-start gap-2 text-amber-700 dark:text-amber-300">
-            <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
-            <div>
-              <strong>Simulation Active:</strong> The charts above are currently showing the projected results of this scenario. Click "Reset to Normal" above at any time to return to real-world forecasts.
-            </div>
+          <div className="mt-2.5 p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/20 text-xs flex items-center gap-2 text-amber-700 dark:text-amber-300">
+            <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+            <span>
+              Simulation active. Charts above reflect this scenario. Click "Reset Scenario" to return to normal.
+            </span>
           </div>
         )}
       </CardHeader>
 
-      <CardContent className="p-4 sm:p-6 pt-3 grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+      <CardContent className="p-3 sm:p-6 pt-2 sm:pt-3 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
         {/* 1. Natural Calamity / Typhoon Signal */}
         <div className="rounded-2xl border border-border/30 bg-secondary/20 p-4 space-y-3">
           <div className="flex items-center justify-between">
