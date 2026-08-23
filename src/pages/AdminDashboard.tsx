@@ -2687,8 +2687,8 @@ export default function AdminDashboard() {
       />
 
       {/* ── Sleek Floating Pill Bottom Navigation Bar (Mobile) ── */}
-      <nav aria-label="Admin Mobile Navigation" className="md:hidden fixed bottom-3 inset-x-3 sm:inset-x-6 z-50 rounded-full border border-border/60 bg-card/95 backdrop-blur-2xl shadow-2xl shadow-black/25 px-2 py-1.5 transition-all">
-        <div className="grid grid-cols-5 items-center">
+      <nav aria-label="Admin Mobile Navigation" className="md:hidden fixed bottom-3 inset-x-2 sm:inset-x-4 z-50 rounded-2xl sm:rounded-full border border-border/70 bg-card/95 backdrop-blur-2xl shadow-2xl shadow-black/30 px-1.5 py-2 transition-all">
+        <div className="grid grid-cols-5 items-center gap-0.5">
           {/* 1. Overview */}
           <button
             type="button"
@@ -2699,14 +2699,14 @@ export default function AdminDashboard() {
               next.delete('routeDraft');
               setSearchParams(next, { replace: true });
             }}
-            className={`flex flex-col items-center justify-center gap-0.5 py-1 px-1 rounded-full transition-all ${
+            className={`flex flex-col items-center justify-center gap-1 py-1 px-0.5 rounded-xl transition-all ${
               activeTab === 'overview'
                 ? 'bg-primary/20 text-primary font-bold shadow-sm'
                 : 'text-muted-foreground hover:text-foreground'
             }`}
           >
-            <LayoutDashboard className="h-4.5 w-4.5 shrink-0" />
-            <span className="text-[9px] leading-tight">Overview</span>
+            <LayoutDashboard className="h-5 w-5 shrink-0" />
+            <span className="text-[10px] font-medium leading-none truncate">Overview</span>
           </button>
 
           {/* 2. Operations */}
@@ -2720,44 +2720,24 @@ export default function AdminDashboard() {
               next.delete('routeDraft');
               setSearchParams(next, { replace: true });
             }}
-            className={`flex flex-col items-center justify-center gap-0.5 py-1 px-1 rounded-full transition-all relative ${
+            className={`flex flex-col items-center justify-center gap-1 py-1 px-0.5 rounded-xl transition-all relative ${
               activeTab === 'operations'
                 ? 'bg-primary/20 text-primary font-bold shadow-sm'
                 : 'text-muted-foreground hover:text-foreground'
             }`}
           >
             <div className="relative">
-              <ClipboardList className="h-4.5 w-4.5 shrink-0" />
+              <ClipboardList className="h-5 w-5 shrink-0" />
               {pendingCount > 0 && (
-                <span className="absolute -top-1.5 -right-2 h-3.5 min-w-3.5 px-1 rounded-full bg-destructive text-white text-[8px] flex items-center justify-center font-bold">
+                <span className="absolute -top-1.5 -right-2.5 h-4 min-w-4 px-1 rounded-full bg-destructive text-white text-[9px] flex items-center justify-center font-bold">
                   {pendingCount}
                 </span>
               )}
             </div>
-            <span className="text-[9px] leading-tight">Ops</span>
+            <span className="text-[10px] font-medium leading-none truncate">Operations</span>
           </button>
 
-          {/* 3. Forecasting (Direct Access) */}
-          <button
-            type="button"
-            onClick={() => {
-              setActiveTab('forecasting');
-              const next = new URLSearchParams(searchParams);
-              next.set('tab', 'forecasting');
-              next.delete('routeDraft');
-              setSearchParams(next, { replace: true });
-            }}
-            className={`flex flex-col items-center justify-center gap-0.5 py-1 px-1 rounded-full transition-all ${
-              activeTab === 'forecasting'
-                ? 'bg-primary/20 text-primary font-bold shadow-sm'
-                : 'text-muted-foreground hover:text-foreground'
-            }`}
-          >
-            <TrendingUp className="h-4.5 w-4.5 shrink-0" />
-            <span className="text-[9px] leading-tight">Forecast</span>
-          </button>
-
-          {/* 4. Management */}
+          {/* 3. Management */}
           <button
             type="button"
             onClick={() => {
@@ -2767,30 +2747,50 @@ export default function AdminDashboard() {
               next.delete('routeDraft');
               setSearchParams(next, { replace: true });
             }}
-            className={`flex flex-col items-center justify-center gap-0.5 py-1 px-1 rounded-full transition-all ${
+            className={`flex flex-col items-center justify-center gap-1 py-1 px-0.5 rounded-xl transition-all ${
               activeTab === 'management'
                 ? 'bg-primary/20 text-primary font-bold shadow-sm'
                 : 'text-muted-foreground hover:text-foreground'
             }`}
           >
-            <UserCog className="h-4.5 w-4.5 shrink-0" />
-            <span className="text-[9px] leading-tight">Manage</span>
+            <UserCog className="h-5 w-5 shrink-0" />
+            <span className="text-[10px] font-medium leading-none truncate">Management</span>
+          </button>
+
+          {/* 4. Finance */}
+          <button
+            type="button"
+            onClick={() => {
+              setActiveTab('finance');
+              const next = new URLSearchParams(searchParams);
+              next.set('tab', 'finance');
+              next.delete('routeDraft');
+              setSearchParams(next, { replace: true });
+            }}
+            className={`flex flex-col items-center justify-center gap-1 py-1 px-0.5 rounded-xl transition-all ${
+              activeTab === 'finance'
+                ? 'bg-primary/20 text-primary font-bold shadow-sm'
+                : 'text-muted-foreground hover:text-foreground'
+            }`}
+          >
+            <DollarSign className="h-5 w-5 shrink-0" />
+            <span className="text-[10px] font-medium leading-none truncate">Finance</span>
           </button>
 
           {/* 5. Profile / Menu Popout */}
           <button
             type="button"
             onClick={() => setMobileProfileOpen((open) => !open)}
-            className={`flex flex-col items-center justify-center gap-0.5 py-1 px-1 rounded-full transition-all ${
+            className={`flex flex-col items-center justify-center gap-1 py-1 px-0.5 rounded-xl transition-all ${
               mobileProfileOpen
                 ? 'bg-primary/20 text-primary font-bold shadow-sm'
                 : 'text-muted-foreground hover:text-foreground'
             }`}
           >
-            <div className="h-4.5 w-4.5 rounded-full bg-primary/20 text-primary grid place-items-center text-[9px] font-bold border border-primary/30">
+            <div className="h-5.5 w-5.5 rounded-full aspect-square bg-primary/25 text-primary flex items-center justify-center text-[10px] font-extrabold border border-primary/40 shrink-0">
               {adminUser?.email?.[0]?.toUpperCase() || 'A'}
             </div>
-            <span className="text-[9px] leading-tight">Profile</span>
+            <span className="text-[10px] font-medium leading-none truncate">Profile</span>
           </button>
         </div>
       </nav>
@@ -2802,10 +2802,10 @@ export default function AdminDashboard() {
             className="md:hidden fixed inset-0 z-[60] bg-background/80 backdrop-blur-sm animate-in fade-in"
             onClick={() => setMobileProfileOpen(false)}
           />
-          <div className="md:hidden fixed bottom-18 inset-x-4 z-[70] rounded-3xl border border-border/60 bg-card/95 p-5 shadow-2xl backdrop-blur-2xl animate-in slide-in-from-bottom-5 duration-200 space-y-4">
+          <div className="md:hidden fixed bottom-20 inset-x-3 sm:inset-x-6 z-[70] rounded-3xl border border-border/70 bg-card/95 p-5 shadow-2xl backdrop-blur-2xl animate-in slide-in-from-bottom-5 duration-200 space-y-4">
             <div className="flex items-center justify-between border-b border-border/40 pb-3">
               <div className="flex items-center gap-3">
-                <div className="h-10 w-10 rounded-full bg-primary/20 text-primary grid place-items-center text-sm font-bold border border-primary/30">
+                <div className="h-12 w-12 rounded-full aspect-square shrink-0 bg-primary/20 text-primary flex items-center justify-center text-lg font-bold border-2 border-primary/40">
                   {adminUser?.email?.[0]?.toUpperCase() || 'A'}
                 </div>
                 <div className="min-w-0">
@@ -2820,21 +2820,21 @@ export default function AdminDashboard() {
               </Badge>
             </div>
 
-            <div className="grid grid-cols-2 gap-2 text-xs">
+            <div className="grid grid-cols-2 gap-2.5 text-xs">
               <button
                 type="button"
                 onClick={() => {
                   setMobileProfileOpen(false);
-                  setActiveTab('finance');
+                  setActiveTab('forecasting');
                   const next = new URLSearchParams(searchParams);
-                  next.set('tab', 'finance');
+                  next.set('tab', 'forecasting');
                   next.delete('routeDraft');
                   setSearchParams(next, { replace: true });
                 }}
-                className="flex items-center gap-2 p-3 rounded-2xl border border-border/40 bg-secondary/30 hover:bg-secondary/60 text-foreground font-semibold transition-all"
+                className="flex items-center gap-2.5 p-3 rounded-2xl border border-border/40 bg-secondary/30 hover:bg-secondary/60 text-foreground font-semibold transition-all"
               >
-                <DollarSign className="h-4 w-4 text-emerald-500 shrink-0" />
-                <span>Finance Hub</span>
+                <TrendingUp className="h-4 w-4 text-primary shrink-0" />
+                <span>Forecasting</span>
               </button>
 
               <button
@@ -2843,7 +2843,7 @@ export default function AdminDashboard() {
                   setMobileProfileOpen(false);
                   navigate('/notifications');
                 }}
-                className="flex items-center gap-2 p-3 rounded-2xl border border-border/40 bg-secondary/30 hover:bg-secondary/60 text-foreground font-semibold transition-all"
+                className="flex items-center gap-2.5 p-3 rounded-2xl border border-border/40 bg-secondary/30 hover:bg-secondary/60 text-foreground font-semibold transition-all"
               >
                 <Bell className="h-4 w-4 text-amber-500 shrink-0" />
                 <span>Notifications</span>
@@ -2855,7 +2855,7 @@ export default function AdminDashboard() {
                   setMobileProfileOpen(false);
                   navigate('/profile');
                 }}
-                className="flex items-center gap-2 p-3 rounded-2xl border border-border/40 bg-secondary/30 hover:bg-secondary/60 text-foreground font-semibold transition-all"
+                className="flex items-center gap-2.5 p-3 rounded-2xl border border-border/40 bg-secondary/30 hover:bg-secondary/60 text-foreground font-semibold transition-all"
               >
                 <User className="h-4 w-4 text-sky-500 shrink-0" />
                 <span>My Profile</span>
@@ -2864,7 +2864,7 @@ export default function AdminDashboard() {
               <button
                 type="button"
                 onClick={toggleTheme}
-                className="flex items-center gap-2 p-3 rounded-2xl border border-border/40 bg-secondary/30 hover:bg-secondary/60 text-foreground font-semibold transition-all"
+                className="flex items-center gap-2.5 p-3 rounded-2xl border border-border/40 bg-secondary/30 hover:bg-secondary/60 text-foreground font-semibold transition-all"
               >
                 {theme === 'dark' ? <Sun className="h-4 w-4 text-amber-400 shrink-0" /> : <Moon className="h-4 w-4 text-indigo-400 shrink-0" />}
                 <span>{theme === 'dark' ? 'Light Mode' : 'Dark Mode'}</span>
