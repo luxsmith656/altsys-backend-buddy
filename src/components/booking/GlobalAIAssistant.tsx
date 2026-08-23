@@ -62,10 +62,10 @@ export default function GlobalAIAssistant() {
 
   return (
     <>
-      <div className="fixed bottom-[calc(env(safe-area-inset-bottom)+5.5rem)] md:bottom-[calc(env(safe-area-inset-bottom)+1.2rem)] left-3 z-[2050] flex flex-col items-center gap-2">
+      <div className="fixed bottom-[calc(env(safe-area-inset-bottom)+5.5rem)] md:bottom-[calc(env(safe-area-inset-bottom)+1.2rem)] left-3 z-[2050] flex flex-col items-start gap-2">
         {actionsOpen && (
-          <div className="flex flex-col-reverse items-center gap-2 animate-in fade-in slide-in-from-bottom-3 duration-200">
-            {/* 1. Quick Check-In / QR Permit Circle */}
+          <div className="flex flex-col-reverse items-start gap-2.5 animate-in fade-in slide-in-from-bottom-3 duration-200">
+            {/* Quick Check-In / QR Permit */}
             <button
               type="button"
               onClick={() => {
@@ -76,36 +76,39 @@ export default function GlobalAIAssistant() {
                   navigate('/hiker');
                 }
               }}
-              title={isAdmin ? 'QR Check-in Scanner' : 'My QR Permit'}
-              aria-label={isAdmin ? 'QR Check-in Scanner' : 'My QR Permit'}
-              className="grid h-11 w-11 place-items-center rounded-full border border-amber-500/40 bg-card/95 text-amber-600 dark:text-amber-400 shadow-xl backdrop-blur-md hover:scale-110 active:scale-95 transition-all"
+              className="flex items-center gap-2.5 px-3.5 py-2 rounded-2xl border border-border/40 bg-card/95 text-foreground shadow-2xl backdrop-blur-md hover:bg-secondary/60 transition-all text-xs font-semibold"
             >
-              <QrCode className="h-5 w-5" />
+              <div className="grid h-8 w-8 place-items-center rounded-xl bg-amber-500/15 text-amber-600 dark:text-amber-400 shrink-0">
+                <QrCode className="h-4 w-4" />
+              </div>
+              <span className="whitespace-nowrap">{isAdmin ? 'QR Check-in Scanner' : 'My QR Permit'}</span>
             </button>
 
-            {/* 2. Book a Hike / Walk-in Circle */}
+            {/* Book a Hike / Walk-in */}
             <button
               type="button"
               onClick={() => {
                 setActionsOpen(false);
                 navigate('/booking');
               }}
-              title={isAdmin ? 'Trailhead Walk-In Desk' : 'Book a Hike'}
-              aria-label={isAdmin ? 'Trailhead Walk-In Desk' : 'Book a Hike'}
-              className="grid h-11 w-11 place-items-center rounded-full border border-emerald-500/40 bg-card/95 text-emerald-600 dark:text-emerald-400 shadow-xl backdrop-blur-md hover:scale-110 active:scale-95 transition-all"
+              className="flex items-center gap-2.5 px-3.5 py-2 rounded-2xl border border-border/40 bg-card/95 text-foreground shadow-2xl backdrop-blur-md hover:bg-secondary/60 transition-all text-xs font-semibold"
             >
-              <CalendarCheck className="h-5 w-5" />
+              <div className="grid h-8 w-8 place-items-center rounded-xl bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 shrink-0">
+                <CalendarCheck className="h-4 w-4" />
+              </div>
+              <span className="whitespace-nowrap">{isAdmin ? 'Walk-In Desk' : 'Book a Hike'}</span>
             </button>
 
-            {/* 3. Ask Kali AI Circle */}
+            {/* Ask Kali AI */}
             <button
               type="button"
               onClick={openAssistant}
-              title="Ask Kali AI Assistant"
-              aria-label="Ask Kali AI Assistant"
-              className="grid h-11 w-11 place-items-center rounded-full border border-primary/40 bg-card/95 text-primary shadow-xl backdrop-blur-md hover:scale-110 active:scale-95 transition-all"
+              className="flex items-center gap-2.5 px-3.5 py-2 rounded-2xl border border-primary/30 bg-primary text-primary-foreground shadow-2xl hover:bg-primary/90 transition-all text-xs font-semibold"
             >
-              <Bot className="h-5 w-5" />
+              <div className="grid h-8 w-8 place-items-center rounded-xl bg-white/20 text-white shrink-0">
+                <Bot className="h-4 w-4" />
+              </div>
+              <span className="whitespace-nowrap">Ask Kali AI</span>
             </button>
           </div>
         )}
@@ -116,9 +119,9 @@ export default function GlobalAIAssistant() {
           aria-label={actionsOpen ? 'Close quick actions' : 'Open quick actions'}
           title={actionsOpen ? 'Close quick actions' : 'Open quick actions'}
           aria-expanded={actionsOpen}
-          className="grid h-12 w-12 place-items-center rounded-full bg-primary text-primary-foreground shadow-xl shadow-primary/30 transition-transform active:scale-95 border-2 border-primary-foreground/20"
+          className="grid h-13 w-13 p-3.5 place-items-center rounded-full bg-primary text-primary-foreground shadow-xl shadow-primary/30 transition-transform active:scale-95 border-2 border-primary-foreground/20"
         >
-          {actionsOpen ? <X className="h-5 w-5" /> : <Bot className="h-5 w-5" />}
+          {actionsOpen ? <X className="h-6 w-6" /> : <Bot className="h-6 w-6" />}
         </button>
       </div>
     <BookingAIChat
