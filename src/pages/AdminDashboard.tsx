@@ -70,6 +70,7 @@ import {
   ChevronDown,
   ChevronUp,
   MessageCircle,
+  TrendingUp,
 } from 'lucide-react';
 import BookingChat from '@/components/booking/BookingChat';
 import ReassignGuideDialog from '@/components/booking/ReassignGuideDialog';
