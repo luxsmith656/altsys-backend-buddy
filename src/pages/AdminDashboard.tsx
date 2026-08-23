@@ -111,6 +111,8 @@ import ForecastingTab from '@/components/admin/forecasting/ForecastingTab';
 import AdminWalkInRegistrationDialog from '@/components/admin/AdminWalkInRegistrationDialog';
 import EditPaymentDialog from '@/components/booking/EditPaymentDialog';
 import AppDownloadButton from '@/components/AppDownloadButton';
+import { usePullToRefresh } from '@/hooks/usePullToRefresh';
+import PullToRefreshIndicator from '@/components/common/PullToRefreshIndicator';
 import { Calendar } from '@/components/ui/calendar';
 import { format } from 'date-fns';
 
@@ -1447,8 +1449,28 @@ export default function AdminDashboard() {
     [allTabBookings, selectedDateKey],
   );
 
+  const handlePageRefresh = useCallback(async () => {
+    try {
+      await Promise.all([
+        loadAllTabBookings(),
+        loadPendingBookings(),
+        loadUpcomingCapacities(),
+        loadAllCapacities(),
+        loadGuides(),
+      ]);
+      toast.success('Dashboard refreshed');
+    } catch {
+      // safe fallback
+    }
+  }, [activeLocationId]);
+
+  const { pullDistance, isRefreshing: isPullRefreshing } = usePullToRefresh({
+    onRefresh: handlePageRefresh,
+  });
+
   return (
     <div className="min-h-screen px-3 pb-24 md:pb-12 pt-20 sm:px-4">
+      <PullToRefreshIndicator pullDistance={pullDistance} isRefreshing={isPullRefreshing} />
       <div className="container max-w-7xl mx-auto">
         <motion.div
           initial={{ opacity: 0, y: 20 }}
@@ -1541,20 +1563,6 @@ export default function AdminDashboard() {
               <div>
                 <h2 className="text-lg font-semibold">All Bookings</h2>
                 <p className="text-sm text-muted-foreground">View and manage all booking records by status.</p>
-              </div>
-              <div className="flex items-center gap-2">
-                <Button
-                  size="sm"
-                  onClick={() => setWalkInOpen(true)}
-                  className="gap-1.5 bg-primary text-primary-foreground text-xs shadow-sm"
-                >
-                  <UserPlus className="h-4 w-4" />
-                  + Register Walk-In Hiker
-                </Button>
-                <Button variant="outline" size="sm" onClick={() => { void loadAllTabBookings(); void loadPendingBookings(); }} disabled={allTabLoading} className="gap-1.5 text-xs">
-                  {allTabLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Activity className="h-3.5 w-3.5" />}
-                  Refresh
-                </Button>
               </div>
             </div>
 
@@ -2687,8 +2695,8 @@ export default function AdminDashboard() {
       />
 
       {/* ── Sleek Floating Pill Bottom Navigation Bar (Mobile) ── */}
-      <nav aria-label="Admin Mobile Navigation" className="md:hidden fixed bottom-3 inset-x-2 sm:inset-x-4 z-50 rounded-2xl sm:rounded-full border border-border/70 bg-card/95 backdrop-blur-2xl shadow-2xl shadow-black/30 px-1.5 py-2 transition-all">
-        <div className="grid grid-cols-5 items-center gap-0.5">
+      <nav aria-label="Admin Mobile Navigation" className="md:hidden fixed bottom-3 inset-x-3 sm:inset-x-6 z-50 rounded-2xl sm:rounded-full border border-border/70 bg-card/95 backdrop-blur-2xl shadow-2xl shadow-black/30 px-2 py-2 transition-all">
+        <div className="grid grid-cols-4 items-center gap-1">
           {/* 1. Overview */}
           <button
             type="button"
@@ -2699,14 +2707,14 @@ export default function AdminDashboard() {
               next.delete('routeDraft');
               setSearchParams(next, { replace: true });
             }}
-            className={`flex flex-col items-center justify-center gap-1 py-1 px-0.5 rounded-xl transition-all ${
+            className={`flex flex-col items-center justify-center gap-1 py-1.5 px-1 rounded-xl transition-all ${
               activeTab === 'overview'
                 ? 'bg-primary/20 text-primary font-bold shadow-sm'
                 : 'text-muted-foreground hover:text-foreground'
             }`}
           >
             <LayoutDashboard className="h-5 w-5 shrink-0" />
-            <span className="text-[10px] font-medium leading-none truncate">Overview</span>
+            <span className="text-[11px] font-medium leading-none">Overview</span>
           </button>
 
           {/* 2. Operations */}
@@ -2720,7 +2728,7 @@ export default function AdminDashboard() {
               next.delete('routeDraft');
               setSearchParams(next, { replace: true });
             }}
-            className={`flex flex-col items-center justify-center gap-1 py-1 px-0.5 rounded-xl transition-all relative ${
+            className={`flex flex-col items-center justify-center gap-1 py-1.5 px-1 rounded-xl transition-all relative ${
               activeTab === 'operations'
                 ? 'bg-primary/20 text-primary font-bold shadow-sm'
                 : 'text-muted-foreground hover:text-foreground'
@@ -2734,7 +2742,7 @@ export default function AdminDashboard() {
                 </span>
               )}
             </div>
-            <span className="text-[10px] font-medium leading-none truncate">Operations</span>
+            <span className="text-[11px] font-medium leading-none">Operations</span>
           </button>
 
           {/* 3. Management */}
@@ -2747,14 +2755,14 @@ export default function AdminDashboard() {
               next.delete('routeDraft');
               setSearchParams(next, { replace: true });
             }}
-            className={`flex flex-col items-center justify-center gap-1 py-1 px-0.5 rounded-xl transition-all ${
+            className={`flex flex-col items-center justify-center gap-1 py-1.5 px-1 rounded-xl transition-all ${
               activeTab === 'management'
                 ? 'bg-primary/20 text-primary font-bold shadow-sm'
                 : 'text-muted-foreground hover:text-foreground'
             }`}
           >
             <UserCog className="h-5 w-5 shrink-0" />
-            <span className="text-[10px] font-medium leading-none truncate">Management</span>
+            <span className="text-[11px] font-medium leading-none">Management</span>
           </button>
 
           {/* 4. Finance */}
@@ -2767,136 +2775,17 @@ export default function AdminDashboard() {
               next.delete('routeDraft');
               setSearchParams(next, { replace: true });
             }}
-            className={`flex flex-col items-center justify-center gap-1 py-1 px-0.5 rounded-xl transition-all ${
+            className={`flex flex-col items-center justify-center gap-1 py-1.5 px-1 rounded-xl transition-all ${
               activeTab === 'finance'
                 ? 'bg-primary/20 text-primary font-bold shadow-sm'
                 : 'text-muted-foreground hover:text-foreground'
             }`}
           >
             <DollarSign className="h-5 w-5 shrink-0" />
-            <span className="text-[10px] font-medium leading-none truncate">Finance</span>
-          </button>
-
-          {/* 5. Profile / Menu Popout */}
-          <button
-            type="button"
-            onClick={() => setMobileProfileOpen((open) => !open)}
-            className={`flex flex-col items-center justify-center gap-1 py-1 px-0.5 rounded-xl transition-all ${
-              mobileProfileOpen
-                ? 'bg-primary/20 text-primary font-bold shadow-sm'
-                : 'text-muted-foreground hover:text-foreground'
-            }`}
-          >
-            <div className="h-5.5 w-5.5 rounded-full aspect-square bg-primary/25 text-primary flex items-center justify-center text-[10px] font-extrabold border border-primary/40 shrink-0">
-              {adminUser?.email?.[0]?.toUpperCase() || 'A'}
-            </div>
-            <span className="text-[10px] font-medium leading-none truncate">Profile</span>
+            <span className="text-[11px] font-medium leading-none">Finance</span>
           </button>
         </div>
       </nav>
-
-      {/* Profile & Menu Popout Drawer */}
-      {mobileProfileOpen && (
-        <>
-          <div
-            className="md:hidden fixed inset-0 z-[60] bg-background/80 backdrop-blur-sm animate-in fade-in"
-            onClick={() => setMobileProfileOpen(false)}
-          />
-          <div className="md:hidden fixed bottom-20 inset-x-3 sm:inset-x-6 z-[70] rounded-3xl border border-border/70 bg-card/95 p-5 shadow-2xl backdrop-blur-2xl animate-in slide-in-from-bottom-5 duration-200 space-y-4">
-            <div className="flex items-center justify-between border-b border-border/40 pb-3">
-              <div className="flex items-center gap-3">
-                <div className="h-12 w-12 rounded-full aspect-square shrink-0 bg-primary/20 text-primary flex items-center justify-center text-lg font-bold border-2 border-primary/40">
-                  {adminUser?.email?.[0]?.toUpperCase() || 'A'}
-                </div>
-                <div className="min-w-0">
-                  <p className="font-bold text-foreground text-sm truncate">
-                    {(adminUser?.user_metadata?.full_name as string) || adminUser?.email?.split('@')[0] || 'Administrator'}
-                  </p>
-                  <p className="text-xs text-muted-foreground truncate max-w-[180px]">{adminUser?.email}</p>
-                </div>
-              </div>
-              <Badge className="bg-primary/15 text-primary border-primary/30 text-[10px] capitalize">
-                {role || 'Admin'}
-              </Badge>
-            </div>
-
-            <div className="grid grid-cols-2 gap-2.5 text-xs">
-              <button
-                type="button"
-                onClick={() => {
-                  setMobileProfileOpen(false);
-                  setActiveTab('forecasting');
-                  const next = new URLSearchParams(searchParams);
-                  next.set('tab', 'forecasting');
-                  next.delete('routeDraft');
-                  setSearchParams(next, { replace: true });
-                }}
-                className="flex items-center gap-2.5 p-3 rounded-2xl border border-border/40 bg-secondary/30 hover:bg-secondary/60 text-foreground font-semibold transition-all"
-              >
-                <TrendingUp className="h-4 w-4 text-primary shrink-0" />
-                <span>Forecasting</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => {
-                  setMobileProfileOpen(false);
-                  navigate('/notifications');
-                }}
-                className="flex items-center gap-2.5 p-3 rounded-2xl border border-border/40 bg-secondary/30 hover:bg-secondary/60 text-foreground font-semibold transition-all"
-              >
-                <Bell className="h-4 w-4 text-amber-500 shrink-0" />
-                <span>Notifications</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => {
-                  setMobileProfileOpen(false);
-                  navigate('/profile');
-                }}
-                className="flex items-center gap-2.5 p-3 rounded-2xl border border-border/40 bg-secondary/30 hover:bg-secondary/60 text-foreground font-semibold transition-all"
-              >
-                <User className="h-4 w-4 text-sky-500 shrink-0" />
-                <span>My Profile</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={toggleTheme}
-                className="flex items-center gap-2.5 p-3 rounded-2xl border border-border/40 bg-secondary/30 hover:bg-secondary/60 text-foreground font-semibold transition-all"
-              >
-                {theme === 'dark' ? <Sun className="h-4 w-4 text-amber-400 shrink-0" /> : <Moon className="h-4 w-4 text-indigo-400 shrink-0" />}
-                <span>{theme === 'dark' ? 'Light Mode' : 'Dark Mode'}</span>
-              </button>
-            </div>
-
-            <div className="pt-2 border-t border-border/40 flex gap-2">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => setMobileProfileOpen(false)}
-                className="flex-1 rounded-2xl text-xs"
-              >
-                Close
-              </Button>
-              <Button
-                type="button"
-                variant="destructive"
-                onClick={async () => {
-                  setMobileProfileOpen(false);
-                  await signOut();
-                  navigate('/login');
-                }}
-                className="flex-1 rounded-2xl text-xs gap-1.5"
-              >
-                <LogOut className="h-3.5 w-3.5" />
-                Sign Out
-              </Button>
-            </div>
-          </div>
-        </>
-      )}
     </div>
   );
 }

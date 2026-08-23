@@ -119,28 +119,6 @@ export default function OverviewDashboard({ locationId }: { locationId: string |
 
   return (
     <div className="space-y-6">
-      {/* Header Area */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-        <div>
-          <h1 className="flex items-center gap-2 text-2xl font-bold tracking-tight sm:text-3xl">
-            Admin <span className="text-primary">Dashboard</span>
-          </h1>
-          <p className="text-sm text-muted-foreground mt-1">
-            Monitor real-time hiker activity and comprehensive trail metrics.
-          </p>
-        </div>
-        <div className="flex items-center gap-3">
-          <Button variant="outline" size="sm" onClick={load} disabled={loading} className="gap-2 bg-transparent border-border/50 hover:bg-secondary/40">
-            <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
-            Refresh Data
-          </Button>
-          <Button size="sm" variant="outline" className="gap-2 border-emerald-900/50 text-primary hover:text-emerald-300 hover:bg-emerald-950/30">
-            <FileDown className="h-4 w-4" />
-            Export Report
-          </Button>
-        </div>
-      </div>
-
       {/* KPI Cards */}
       <div className="grid grid-cols-1 gap-3 min-[360px]:grid-cols-2 lg:grid-cols-4 lg:gap-4">
         <Card className="glass-card">
