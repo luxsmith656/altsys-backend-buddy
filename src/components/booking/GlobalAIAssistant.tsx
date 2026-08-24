@@ -62,7 +62,7 @@ export default function GlobalAIAssistant() {
 
   return (
     <>
-      <div className="md:hidden fixed bottom-[calc(env(safe-area-inset-bottom)+5.5rem)] left-3 z-[2050] flex flex-col items-start gap-2">
+      <div className="fixed bottom-[calc(env(safe-area-inset-bottom)+5.5rem)] md:bottom-6 left-3 md:left-6 z-[2050] flex flex-col items-start gap-2">
         {actionsOpen && (
           <div className="flex flex-col-reverse items-start gap-2.5 animate-in fade-in slide-in-from-bottom-3 duration-200">
             {/* Quick Check-In / QR Permit */}
