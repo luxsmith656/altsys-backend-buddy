@@ -1519,9 +1519,6 @@ export default function AdminDashboard() {
                   </span>
                 )}
               </TabsTrigger>
-              <TabsTrigger value="forecasting" className="justify-start gap-2.5 px-3 py-2.5 data-[state=active]:bg-primary/20 data-[state=active]:text-primary whitespace-nowrap">
-                <TrendingUp className="h-4 w-4 shrink-0 text-primary" /> <span>Forecasting</span>
-              </TabsTrigger>
               <TabsTrigger value="management" className="justify-start gap-2.5 px-3 py-2.5 data-[state=active]:bg-primary/20 data-[state=active]:text-primary whitespace-nowrap">
                 <UserCog className="h-4 w-4 shrink-0" /> <span>Management</span>
               </TabsTrigger>

@@ -500,7 +500,7 @@ export default function BookingAIChat({
   pageContext,
   greeting,
   applyLabel,
-  showLauncher = true,
+  showLauncher = false,
 }: BookingAIChatProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [messages, setMessages] = useState<ChatMsg[]>([]);
@@ -680,7 +680,7 @@ export default function BookingAIChat({
         <motion.button
           onClick={() => setIsOpen(true)}
           className={cn(
-            'fixed bottom-6 left-6 z-50 hidden items-center gap-2 rounded-2xl px-4 py-3 text-sm font-semibold shadow-2xl transition-colors duration-200 sm:flex',
+            'fixed bottom-6 left-6 z-50 md:hidden flex items-center gap-2 rounded-2xl px-4 py-3 text-sm font-semibold shadow-2xl transition-colors duration-200',
             'bg-primary text-primary-foreground hover:bg-primary/90',
           )}
           whileHover={{ scale: 1.04 }}
