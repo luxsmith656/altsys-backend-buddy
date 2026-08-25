@@ -52,8 +52,11 @@ export interface BookingMeta {
   paymentScreenshotPath?: string; // Firebase storage path (for deletion)
   // Payment tracking
   paymentStatus?: 'unpaid' | 'partial' | 'paid';
-  paymentMethod?: 'onsite' | 'gcash' | 'bank_transfer';
   amountPaid?: number;
+  cashTendered?: number;
+  changeReturned?: number;
+  paymentSettledAt?: string;
+  paymentSettledBy?: string;
   transactionId?: string;
   entryFee?: number;
   guideFee?: number;

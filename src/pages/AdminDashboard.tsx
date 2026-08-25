@@ -110,6 +110,7 @@ import PaymentSummaryTab from '@/components/admin/PaymentSummaryTab';
 import ForecastingTab from '@/components/admin/forecasting/ForecastingTab';
 import AdminWalkInRegistrationDialog from '@/components/admin/AdminWalkInRegistrationDialog';
 import EditPaymentDialog from '@/components/booking/EditPaymentDialog';
+import EndHikeSettlementDialog from '@/components/admin/EndHikeSettlementDialog';
 import AppDownloadButton from '@/components/AppDownloadButton';
 import { usePullToRefresh } from '@/hooks/usePullToRefresh';
 import PullToRefreshIndicator from '@/components/common/PullToRefreshIndicator';
@@ -191,6 +192,7 @@ export default function AdminDashboard() {
   const [reassignFor, setReassignFor] = useState<{ bookingId: string; guideName: string | null; guideId: string | null; locationId: string | null } | null>(null);
   const [editingBooking, setEditingBooking] = useState<any | null>(null);
   const [editingPaymentBooking, setEditingPaymentBooking] = useState<any | null>(null);
+  const [endHikeBooking, setEndHikeBooking] = useState<any | null>(null);
   const [walkInOpen, setWalkInOpen] = useState(false);
 
   useEffect(() => {
@@ -1792,6 +1794,28 @@ export default function AdminDashboard() {
                                 </AlertDialog>
                               </>
                             )}
+                            {displayStatus === 'started' && (
+                              <>
+                                <Button
+                                  size="sm"
+                                  className="gap-1.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-bold shadow-md text-xs"
+                                  onClick={() => setEndHikeBooking(b)}
+                                >
+                                  <CheckCircle2 className="h-3.5 w-3.5" /> End Hike & Settle
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  className="gap-1.5 border-emerald-500/40 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/10 text-xs"
+                                  onClick={() => {
+                                    setScannedBooking(b);
+                                    setOperationsTab('scan');
+                                  }}
+                                >
+                                  <ScanLine className="h-3.5 w-3.5" /> Open QR / Simulation
+                                </Button>
+                              </>
+                            )}
                             <Button size="sm" variant="outline" className="gap-1.5"
                               onClick={() => setChatBooking({ id: b.id, date: b.booking_date })}>
                               <MessageCircle className="h-3.5 w-3.5" /> Chat
@@ -2128,38 +2152,110 @@ export default function AdminDashboard() {
                         )}
                       </div>
 
-                      {/* Start Hike button */}
+                      {/* Active Hike Simulation & Progress Tracker */}
                       {meta.onsiteStartConfirmed || hikeStarted ? (
-                        <div className="space-y-3 rounded-xl border border-primary/30 bg-primary/5 p-4">
-                          <div className="flex items-center gap-2 text-sm font-semibold text-primary">
-                            <CheckCircle2 className="h-5 w-5" />
-                            Group status: {meta.groupPhase ?? 'ascent'}.
-                            {meta.onsiteStartTime && <span className="ml-auto text-xs font-normal text-muted-foreground">{new Date(meta.onsiteStartTime).toLocaleTimeString('en-PH', { timeZone: 'Asia/Manila', hour: '2-digit', minute: '2-digit' })} PHT</span>}
+                        <div className="space-y-4 rounded-2xl border-2 border-emerald-500/40 bg-gradient-to-b from-emerald-500/10 to-transparent p-5">
+                          {/* Live Status Header */}
+                          <div className="flex items-center justify-between flex-wrap gap-2">
+                            <div className="flex items-center gap-2">
+                              <span className="relative flex h-3 w-3">
+                                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                                <span className="relative inline-flex rounded-full h-3 w-3 bg-emerald-500"></span>
+                              </span>
+                              <span className="font-bold text-sm text-foreground">
+                                Active Hike Session in Progress
+                              </span>
+                            </div>
+                            {meta.onsiteStartTime && (
+                              <Badge variant="outline" className="text-xs bg-background/80 border-border/40 font-mono">
+                                Started: {new Date(meta.onsiteStartTime).toLocaleTimeString('en-PH', { timeZone: 'Asia/Manila', hour: '2-digit', minute: '2-digit' })} PHT
+                              </Badge>
+                            )}
                           </div>
-                          {meta.groupPhase === 'peak' && meta.peakDeadlineAt && (
-                            <div className="rounded-lg bg-amber-500/10 p-3 text-xs text-amber-800 dark:text-amber-300">
-                              Peak stay ends {new Date(meta.peakDeadlineAt).toLocaleTimeString('en-PH', { timeZone: 'Asia/Manila', hour: '2-digit', minute: '2-digit' })} PHT. Extension: {meta.peakExtensionHours ?? 0} hour(s), {formatPeso(calculatePeakExtensionFee(meta.peakExtensionHours))}.
+
+                          {/* 4-Step Visual Progress Stepper */}
+                          <div className="grid grid-cols-4 gap-1.5 p-2 rounded-xl bg-background/60 border border-border/30 text-center">
+                            <div className={`p-2 rounded-lg transition-all ${
+                              (meta.groupPhase ?? 'ascent') === 'ascent'
+                                ? 'bg-primary text-primary-foreground font-bold shadow-sm'
+                                : 'text-muted-foreground opacity-70'
+                            }`}>
+                              <p className="text-xs">🧗 1. Going Up</p>
+                              <p className="text-[10px] opacity-80">(Ascent)</p>
                             </div>
-                          )}
-                          {(meta.groupPhase ?? 'ascent') === 'ascent' && <Button size="sm" className="w-full" onClick={() => void updateGroupPhase('peak')} disabled={lifecycleSaving}>Simulation: mark group at peak</Button>}
-                          {meta.groupPhase === 'peak' && (
-                            <div className="grid gap-2 min-[460px]:grid-cols-2">
-                              <Button size="sm" variant="outline" onClick={() => void extendPeakStay()} disabled={lifecycleSaving}>Add 1 hour (+P100)</Button>
-                              <Button size="sm" onClick={() => void updateGroupPhase('descent')} disabled={lifecycleSaving}>Guide starts descent</Button>
+                            <div className={`p-2 rounded-lg transition-all ${
+                              meta.groupPhase === 'peak'
+                                ? 'bg-amber-500 text-white font-bold shadow-sm'
+                                : 'text-muted-foreground opacity-70'
+                            }`}>
+                              <p className="text-xs">🏔️ 2. Summit</p>
+                              <p className="text-[10px] opacity-80">(Peak Stay)</p>
                             </div>
-                          )}
-                          {meta.groupPhase === 'descent' && (
-                            <div className="space-y-3 rounded-lg border border-border/40 bg-background/50 p-3">
-                              <p className="text-xs font-semibold">Trailhead closeout</p>
-                              <div className="flex flex-col gap-2 min-[440px]:flex-row min-[440px]:items-center">
-                                <Label className="shrink-0 text-xs">Returned headcount</Label>
-                                <Input className="min-[440px]:w-28" type="number" min="1" value={checkOutHeadcount} onChange={(event) => setCheckOutHeadcount(event.target.value)} />
-                                <span className="text-xs text-muted-foreground">Expected: {scannedBooking.group_size}</span>
+                            <div className={`p-2 rounded-lg transition-all ${
+                              meta.groupPhase === 'descent'
+                                ? 'bg-sky-500 text-white font-bold shadow-sm'
+                                : 'text-muted-foreground opacity-70'
+                            }`}>
+                              <p className="text-xs">🥾 3. Going Down</p>
+                              <p className="text-[10px] opacity-80">(Descent)</p>
+                            </div>
+                            <div className="p-2 rounded-lg text-muted-foreground opacity-70">
+                              <p className="text-xs">🏁 4. Base</p>
+                              <p className="text-[10px] opacity-80">(Complete)</p>
+                            </div>
+                          </div>
+
+                          {/* Simulation & Action Controls */}
+                          <div className="space-y-2.5">
+                            {meta.groupPhase === 'peak' && meta.peakDeadlineAt && (
+                              <div className="rounded-xl bg-amber-500/15 border border-amber-500/30 p-3 text-xs text-amber-800 dark:text-amber-300 flex items-center justify-between flex-wrap gap-2">
+                                <div>
+                                  <p className="font-bold">🏔️ Group is at the Summit</p>
+                                  <p className="text-[11px] opacity-90">
+                                    Peak stay ends: {new Date(meta.peakDeadlineAt).toLocaleTimeString('en-PH', { timeZone: 'Asia/Manila', hour: '2-digit', minute: '2-digit' })} PHT
+                                    {meta.peakExtensionHours ? ` (+${meta.peakExtensionHours}h extension)` : ''}
+                                  </p>
+                                </div>
+                                <Button size="sm" variant="outline" onClick={() => void extendPeakStay()} disabled={lifecycleSaving} className="border-amber-500/40 text-xs h-8">
+                                  +1 Hour Stay (+₱100)
+                                </Button>
                               </div>
-                              <label className="flex cursor-pointer items-start gap-2 text-xs"><Checkbox checked={checkOutVerified} onCheckedChange={(checked) => setCheckOutVerified(checked === true)} /><span>All hikers are accounted for and payment has been reviewed.</span></label>
-                              <Button size="sm" variant="outline" className="w-full" onClick={() => void completeGroupHike()} disabled={lifecycleSaving}>End hike and request guide review</Button>
+                            )}
+
+                            {/* Simulation buttons depending on phase */}
+                            <div className="grid sm:grid-cols-2 gap-2">
+                              {(meta.groupPhase ?? 'ascent') === 'ascent' && (
+                                <Button
+                                  size="sm"
+                                  variant="secondary"
+                                  onClick={() => void updateGroupPhase('peak')}
+                                  disabled={lifecycleSaving}
+                                  className="w-full text-xs font-semibold gap-1.5"
+                                >
+                                  🏔️ Simulate: Mark Group at Peak
+                                </Button>
+                              )}
+                              {meta.groupPhase === 'peak' && (
+                                <Button
+                                  size="sm"
+                                  variant="secondary"
+                                  onClick={() => void updateGroupPhase('descent')}
+                                  disabled={lifecycleSaving}
+                                  className="w-full text-xs font-semibold gap-1.5"
+                                >
+                                  🥾 Simulate: Start Descent
+                                </Button>
+                              )}
+                              <Button
+                                size="sm"
+                                onClick={() => setEndHikeBooking(scannedBooking)}
+                                className="w-full sm:col-span-full gap-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-bold py-2.5 shadow-lg text-xs rounded-xl"
+                              >
+                                <CheckCircle2 className="h-4 w-4" />
+                                🏁 End Hike & Settle Payment (Complete Session)
+                              </Button>
                             </div>
-                          )}
+                          </div>
                         </div>
                       ) : scannedBooking.status !== 'confirmed' ? (
                         <div className="flex items-start gap-2 rounded-xl border border-warning/30 bg-warning/5 p-3 text-xs text-warning">
@@ -2679,6 +2775,18 @@ export default function AdminDashboard() {
         open={!!editingPaymentBooking}
         onClose={() => setEditingPaymentBooking(null)}
         onDone={() => void loadAllTabBookings()}
+      />
+      <EndHikeSettlementDialog
+        open={!!endHikeBooking}
+        booking={endHikeBooking}
+        onClose={() => setEndHikeBooking(null)}
+        onHikeEnded={() => {
+          void loadAllTabBookings();
+          void loadPendingBookings();
+          void loadUpcomingCapacities();
+          void loadAllCapacities();
+        }}
+        adminUser={adminUser}
       />
       <AdminWalkInRegistrationDialog
         open={walkInOpen}

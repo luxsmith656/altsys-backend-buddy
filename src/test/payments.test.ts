@@ -98,5 +98,34 @@ describe('Payment and Fee Calculation Logic', () => {
   it('formats peso string properly', () => {
     expect(formatPeso(1000)).toBe('₱1,000');
     expect(formatPeso(2050)).toBe('₱2,050');
+    expect(formatPeso(0)).toBe('₱0');
+  });
+
+  it('calculates accurate checkout cash change and remaining balance', () => {
+    const totalDue = 1000;
+    const paidOnline = 1000;
+    const remainingOnline = Math.max(0, totalDue - paidOnline);
+    expect(remainingOnline).toBe(0); // Zero balance for online payment
+
+    // Onsite payment with exact cash
+    const cashExact = 1000;
+    const changeExact = cashExact - totalDue;
+    expect(changeExact).toBe(0);
+
+    // Onsite payment with surplus cash
+    const cashSurplus = 1500;
+    const changeSurplus = cashSurplus - totalDue;
+    expect(changeSurplus).toBe(500);
+
+    // Onsite payment with ₱2000 bill
+    const cash2000 = 2000;
+    const change2000 = cash2000 - totalDue;
+    expect(change2000).toBe(1000);
+
+    // Onsite payment with shortage
+    const cashShort = 800;
+    const isSufficient = cashShort >= totalDue;
+    expect(isSufficient).toBe(false);
+    expect(totalDue - cashShort).toBe(200); // ₱200 shortage
   });
 });
