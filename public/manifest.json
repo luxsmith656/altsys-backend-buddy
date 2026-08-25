@@ -1,0 +1,23 @@
+{
+  "short_name": "Mt. Kalisungan",
+  "name": "Mount Kalisungan Tourist Tracking System",
+  "icons": [
+    {
+      "src": "/lspu-logo.png",
+      "type": "image/png",
+      "sizes": "192x192",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/lspu-logo.png",
+      "type": "image/png",
+      "sizes": "512x512",
+      "purpose": "any maskable"
+    }
+  ],
+  "start_url": "/",
+  "background_color": "#064e3b",
+  "theme_color": "#064e3b",
+  "display": "standalone",
+  "orientation": "portrait"
+}
