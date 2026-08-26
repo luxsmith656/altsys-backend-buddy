@@ -76,6 +76,9 @@ export default function EditBookingDialog({ booking, open, onClose, onDone }: Pr
         </div>
         <div className="space-y-1.5"><Label>Companions, one name per line</Label><Textarea value={companions} onChange={(event) => setCompanions(event.target.value)} rows={4} /></div>
         <div className="space-y-1.5"><Label>Reason for this change</Label><Textarea value={reason} onChange={(event) => setReason(event.target.value)} rows={3} placeholder="Explain what changed and why" /></div>
+        <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-800 dark:text-amber-300">
+          ⚠️ <strong>Notice:</strong> Date changes or cancellations should be requested at least 1 to 3 days prior to the hike date to safeguard guide assignments.
+        </div>
       </div>
       <DialogFooter><Button variant="outline" onClick={onClose} disabled={saving}>Cancel</Button><Button onClick={() => void save()} disabled={saving || !reason.trim()}>{saving && <Loader2 className="mr-1 h-4 w-4 animate-spin" />}Send for confirmation</Button></DialogFooter>
     </DialogContent>

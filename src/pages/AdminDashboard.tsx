@@ -116,6 +116,7 @@ import { usePullToRefresh } from '@/hooks/usePullToRefresh';
 import PullToRefreshIndicator from '@/components/common/PullToRefreshIndicator';
 import { Calendar } from '@/components/ui/calendar';
 import { format } from 'date-fns';
+import { QRCodeSVG } from 'qrcode.react';
 
 const COLORS = ['#22c55e', '#3b82f6', '#f59e0b', '#ef4444', '#a855f7'];
 
@@ -193,6 +194,7 @@ export default function AdminDashboard() {
   const [editingBooking, setEditingBooking] = useState<any | null>(null);
   const [editingPaymentBooking, setEditingPaymentBooking] = useState<any | null>(null);
   const [endHikeBooking, setEndHikeBooking] = useState<any | null>(null);
+  const [companionQROpen, setCompanionQROpen] = useState(false);
   const [walkInOpen, setWalkInOpen] = useState(false);
 
   useEffect(() => {
@@ -291,6 +293,8 @@ export default function AdminDashboard() {
   /* ── Capacity Management state ── */
   const [capDate, setCapDate] = useState('');
   const [capMax, setCapMax] = useState(100);
+  const [capDayMax, setCapDayMax] = useState(70);
+  const [capNightMax, setCapNightMax] = useState(30);
   const [capRangeStart, setCapRangeStart] = useState('');
   const [capRangeEnd, setCapRangeEnd] = useState('');
   const [capSaving, setCapSaving] = useState(false);
@@ -916,13 +920,17 @@ export default function AdminDashboard() {
     setCapSaving(true);
     const { error } = await supabase
       .from('daily_capacity')
-      .upsert({ date: capDate, max_capacity: capMax }, { onConflict: 'date' });
+      .upsert({
+        date: capDate,
+        max_capacity: capMax,
+        day_max_capacity: capDayMax,
+        night_max_capacity: capNightMax,
+      } as any, { onConflict: 'date' });
     if (error) {
       toast.error('Failed to save: ' + error.message);
     } else {
-      toast.success(`✅ Capacity for ${capDate} set to ${capMax} hikers.`);
+      toast.success(`✅ Capacity for ${capDate} set to ${capMax} total (${capDayMax} Day / ${capNightMax} Night).`);
       setCapDate('');
-      setCapMax(100);
       loadUpcomingCapacities();
     }
     setCapSaving(false);
@@ -935,18 +943,23 @@ export default function AdminDashboard() {
     const end = new Date(`${capRangeEnd}T00:00:00`);
     if (end < start) { toast.error('End date must be after start date.'); return; }
 
-    const rows: Array<{ date: string; max_capacity: number }> = [];
+    const rows: Array<{ date: string; max_capacity: number; day_max_capacity?: number; night_max_capacity?: number }> = [];
     const cursor = new Date(start);
     while (cursor <= end) {
-      rows.push({ date: format(cursor, 'yyyy-MM-dd'), max_capacity: capMax });
+      rows.push({
+        date: format(cursor, 'yyyy-MM-dd'),
+        max_capacity: capMax,
+        day_max_capacity: capDayMax,
+        night_max_capacity: capNightMax,
+      });
       cursor.setDate(cursor.getDate() + 1);
     }
     setCapSaving(true);
-    const { error } = await supabase.from('daily_capacity').upsert(rows, { onConflict: 'date' });
+    const { error } = await supabase.from('daily_capacity').upsert(rows as any, { onConflict: 'date' });
     if (error) {
       toast.error('Failed bulk update: ' + error.message);
     } else {
-      toast.success(`Updated ${rows.length} day(s) to ${capMax} hikers/day.`);
+      toast.success(`Updated ${rows.length} day(s) to ${capMax} hikers/day (${capDayMax} Day / ${capNightMax} Night).`);
       setCapRangeStart('');
       setCapRangeEnd('');
       loadUpcomingCapacities();
@@ -2248,6 +2261,15 @@ export default function AdminDashboard() {
                               )}
                               <Button
                                 size="sm"
+                                variant="outline"
+                                onClick={() => setCompanionQROpen(true)}
+                                className="w-full sm:col-span-full gap-2 border-primary/40 text-primary hover:bg-primary/10 font-bold py-2 text-xs rounded-xl"
+                              >
+                                <Users className="h-4 w-4" />
+                                📱 Show Group Companion Join QR (For All {scannedBooking.group_size} Pax)
+                              </Button>
+                              <Button
+                                size="sm"
                                 onClick={() => setEndHikeBooking(scannedBooking)}
                                 className="w-full sm:col-span-full gap-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-bold py-2.5 shadow-lg text-xs rounded-xl"
                               >
@@ -2567,14 +2589,56 @@ export default function AdminDashboard() {
                     <Label htmlFor="capDate">Date</Label>
                     <Input id="capDate" type="date" value={capDate} onChange={(e) => setCapDate(e.target.value)} min={format(new Date(), 'yyyy-MM-dd')} />
                   </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="capMax">Max Hikers Per Day</Label>
-                    <Input id="capMax" type="number" min={1} max={500} value={capMax} onChange={(e) => setCapMax(Math.max(1, parseInt(e.target.value) || 1))} placeholder="100" className="font-bold text-lg h-12" />
-                    <p className="text-xs text-muted-foreground">Setting a lower number restricts new bookings once the count is reached.</p>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                    <div className="space-y-1 sm:col-span-3">
+                      <Label htmlFor="capMax">Total Max Hikers</Label>
+                      <Input
+                        id="capMax"
+                        type="number"
+                        min={1}
+                        max={500}
+                        value={capMax}
+                        onChange={(e) => {
+                          const val = Math.max(1, parseInt(e.target.value) || 1);
+                          setCapMax(val);
+                          setCapDayMax(Math.round(val * 0.7));
+                          setCapNightMax(Math.max(1, val - Math.round(val * 0.7)));
+                        }}
+                        placeholder="100"
+                        className="font-bold text-base h-10"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label htmlFor="capDayMax" className="text-xs text-amber-600 dark:text-amber-400">☀️ Day Hike Slots</Label>
+                      <Input
+                        id="capDayMax"
+                        type="number"
+                        min={1}
+                        max={capMax}
+                        value={capDayMax}
+                        onChange={(e) => setCapDayMax(Math.max(1, parseInt(e.target.value) || 1))}
+                        className="font-bold text-sm h-9"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label htmlFor="capNightMax" className="text-xs text-sky-600 dark:text-sky-400">🌙 Night Hike Slots</Label>
+                      <Input
+                        id="capNightMax"
+                        type="number"
+                        min={1}
+                        max={capMax}
+                        value={capNightMax}
+                        onChange={(e) => setCapNightMax(Math.max(1, parseInt(e.target.value) || 1))}
+                        className="font-bold text-sm h-9"
+                      />
+                    </div>
+                    <div className="flex items-end text-xs text-muted-foreground pb-1">
+                      <span>Sum: {capDayMax + capNightMax} slots</span>
+                    </div>
                   </div>
                   <Button className="w-full gap-2" onClick={saveCapacity} disabled={capSaving || !capDate}>
                     {capSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <CalendarCheck className="h-4 w-4" />}
-                    Save Capacity Limit
+                    Save Day &amp; Night Capacity Limit
                   </Button>
                   <div className="h-px bg-border/30 my-2" />
                   <p className="text-sm font-semibold">Bulk date-range update</p>
@@ -2606,6 +2670,8 @@ export default function AdminDashboard() {
                   ) : (
                     <div className="space-y-2 max-h-[380px] overflow-y-auto pr-1">
                       {upcomingCapacities.map((cap) => {
+                        const dayMax = cap.day_max_capacity ?? Math.round(cap.max_capacity * 0.65);
+                        const nightMax = cap.night_max_capacity ?? Math.max(1, cap.max_capacity - dayMax);
                         const available = Math.max(0, cap.max_capacity - cap.current_count);
                         const ratio = cap.max_capacity > 0 ? available / cap.max_capacity : 0;
                         const statusColor = available === 0
@@ -2614,11 +2680,16 @@ export default function AdminDashboard() {
                           : 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400';
                         return (
                           <div key={cap.id} className="flex items-center justify-between p-3 rounded-xl border border-border/20 bg-secondary/20">
-                            <div className="space-y-0.5">
+                            <div className="space-y-1">
                               <p className="text-sm font-semibold">{cap.date}</p>
-                              <div className="flex items-center gap-2">
+                              <div className="flex items-center gap-2 flex-wrap">
                                 <span className="text-xs text-muted-foreground">Booked: <strong>{cap.current_count}</strong> / {cap.max_capacity}</span>
                                 <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${statusColor}`}>{available === 0 ? 'Full' : `${available} left`}</span>
+                              </div>
+                              <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
+                                <span className="text-amber-600 dark:text-amber-400 font-medium">☀️ Day: {dayMax}</span>
+                                <span>•</span>
+                                <span className="text-sky-600 dark:text-sky-400 font-medium">🌙 Night: {nightMax}</span>
                               </div>
                             </div>
                             <div className="flex items-center gap-2">
@@ -2798,6 +2869,51 @@ export default function AdminDashboard() {
           void loadUpcomingCapacities();
         }}
       />
+
+      {/* ── Group Companion Join QR Modal ── */}
+      <Dialog open={companionQROpen} onOpenChange={setCompanionQROpen}>
+        <DialogContent className="sm:max-w-md rounded-3xl p-6 text-center">
+          <DialogHeader className="space-y-2">
+            <DialogTitle className="text-lg font-bold flex items-center justify-center gap-2">
+              <Users className="h-5 w-5 text-primary" /> Group Companion QR Permit
+            </DialogTitle>
+            <p className="text-xs text-muted-foreground">
+              Let companions (up to {scannedBooking?.group_size || 8} pax) scan this code on their phones to join the live GPS session without creating an account.
+            </p>
+          </DialogHeader>
+          <div className="flex flex-col items-center justify-center p-6 bg-white rounded-2xl border border-border/40 shadow-inner my-2">
+            {scannedBooking && (
+              <QRCodeSVG
+                value={`${window.location.origin}/join-hike?bookingId=${scannedBooking.id}`}
+                size={220}
+                level="H"
+                includeMargin
+              />
+            )}
+            <p className="text-[11px] text-muted-foreground font-mono mt-3">
+              Permit ID: {scannedBooking?.id?.slice(0, 12)}…
+            </p>
+          </div>
+          <div className="flex gap-2">
+            <Button
+              variant="outline"
+              className="w-full text-xs"
+              onClick={() => {
+                if (scannedBooking) {
+                  const url = `${window.location.origin}/join-hike?bookingId=${scannedBooking.id}`;
+                  navigator.clipboard.writeText(url);
+                  toast.success('Join link copied to clipboard!');
+                }
+              }}
+            >
+              Copy Join Link
+            </Button>
+            <Button className="w-full text-xs" onClick={() => setCompanionQROpen(false)}>
+              Done
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* ── Sleek Floating Pill Bottom Navigation Bar (Mobile) ── */}
       <nav aria-label="Admin Mobile Navigation" className="md:hidden fixed bottom-3 inset-x-3 sm:inset-x-6 z-50 rounded-2xl sm:rounded-full border border-border/70 bg-card/95 backdrop-blur-2xl shadow-2xl shadow-black/30 px-2 py-2 transition-all">

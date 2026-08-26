@@ -25,6 +25,7 @@ import GuideProfilePage from "./pages/GuideProfilePage";
 import CentralDashboard from "./pages/CentralDashboard";
 import NotificationsPage from "./pages/NotificationsPage";
 import Onboarding from "./pages/Onboarding";
+import JoinHikeGuestPage from "./pages/JoinHikeGuestPage";
 import NotFound from "./pages/NotFound";
 import RoleRoute from "@/components/auth/RoleRoute";
 import ErrorBoundary from "@/components/common/ErrorBoundary";
@@ -66,6 +67,8 @@ const App = () => (
                   <Route path="/map" element={<MapPage />} />
                   <Route path="/chat" element={<ChatPage />} />
                   <Route path="/booking" element={<BookingPage />} />
+                  <Route path="/join-hike" element={<JoinHikeGuestPage />} />
+                  <Route path="/join" element={<JoinHikeGuestPage />} />
                   <Route path="/ops-ai" element={<RoleRoute allowedRoles={['admin','super_admin','ranger','guide']}><OpsAIPage /></RoleRoute>} />
                   <Route path="/admin" element={<RoleRoute allowedRoles={['admin', 'super_admin']}><AdminDashboard /></RoleRoute>} />
                   <Route path="/central" element={<RoleRoute allowedRoles={['super_admin']}><CentralDashboard /></RoleRoute>} />

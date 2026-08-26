@@ -524,15 +524,22 @@ export default function BookingPage() {
     }
   }, []);
 
-  /* ── Derived slot count for selected date ── */
+  /* ── Derived slot count for selected date (Day vs Night Split) ── */
   const slotsForDate = useMemo(() => {
     if (!date) return null;
     const dateStr = format(date, 'yyyy-MM-dd');
     const cap = monthCapacity[dateStr];
-    const max = cap?.max_capacity ?? DEFAULT_MAX_CAPACITY;
-    const current = cap?.current_count ?? 0;
-    return Math.max(0, max - current);
-  }, [date, monthCapacity]);
+    const totalMax = cap?.max_capacity ?? DEFAULT_MAX_CAPACITY;
+    if (hikeType === 'night' || hikeType === 'overnight') {
+      const max = cap?.night_max_capacity ?? Math.max(15, Math.round(totalMax * 0.35));
+      const current = cap?.night_current_count ?? 0;
+      return Math.max(0, max - current);
+    } else {
+      const max = cap?.day_max_capacity ?? Math.max(25, Math.round(totalMax * 0.65));
+      const current = cap?.day_current_count ?? 0;
+      return Math.max(0, max - current);
+    }
+  }, [date, monthCapacity, hikeType]);
 
   const fetchSmartWeather = useCallback(async (selectedDate: Date) => {
     const weatherApiKey = import.meta.env.VITE_WEATHERAPI_KEY as string | undefined;
@@ -1067,6 +1074,7 @@ export default function BookingPage() {
                         onSelect={setDate}
                         groupSize={groupSize}
                         monthCapacity={monthCapacity}
+                        hikeType={hikeType}
                         onMonthChange={fetchMonthCapacity}
                       />
                     </div>
@@ -1650,9 +1658,11 @@ export default function BookingPage() {
                       <p>By booking and participating in this activity, the hiker fully acknowledges that hiking involves inherent risks including but not limited to: physical injury, accidents, loss or damage of property, and adverse weather conditions. <strong>The Mt. Kalisungan community, the Local Government Unit (LGU) of Calauan, Barangay Lamot II, the Barangay Council, and any affiliated organization, corporation, or association are NOT liable and shall bear NO responsibility</strong> for any injury, accident, illness, death, loss of personal belongings, or damage to property occurring before, during, or after the hiking activity. ALL LIABILITY rests solely with the hiker and their group. Participation is entirely at the hiker's own risk.</p>
                       <p>9. For minors, the parent or guardian assumes full liability and responsibility. Failure to present required parental consent documents will result in denial of entry.</p>
                       <p>10. Payment of fees does not constitute insurance coverage. Hikers are strongly advised to secure their own personal accident and travel insurance.</p>
+                      <p className="mt-3 font-semibold text-amber-600 dark:text-amber-400">11. DATE CHANGES &amp; CANCELLATION NOTICE POLICY (MANDATORY)</p>
+                      <p className="text-amber-900 dark:text-amber-200 font-medium">To protect guide livelihoods and maintain daily trail capacity limits, <strong>any request for date adjustments, rescheduling, or booking cancellations must be submitted at least 1 to 3 days prior to your confirmed hike date</strong>. Same-day cancellations or no-shows are strictly non-refundable and forfeit assigned guide slots.</p>
                     </div>
                     {!hasScrolledRulesToEnd && (
-                      <p className="text-xs text-amber-600 font-medium">Please scroll to the end of the rules to enable agreement.</p>
+                      <p className="text-xs text-amber-600 font-medium">Please scroll to the end of the rules (including 1–3 days cancellation policy) to enable agreement.</p>
                     )}
                     <div className="space-y-4">
                       {hasScrolledRulesToEnd && (
@@ -1907,6 +1917,17 @@ export default function BookingPage() {
                           <span>You chose to pay onsite. Please prepare {formatPeso(totalFee)} in cash at the trailhead on your booking date.</span>
                         </div>
                       )}
+
+                      {/* Prominent 1-3 Days Date Change / Cancellation Notice */}
+                      <div className="rounded-2xl border border-amber-500/40 bg-amber-500/10 p-4 text-xs space-y-1.5 animate-in fade-in">
+                        <div className="flex items-center gap-2 font-bold text-amber-800 dark:text-amber-300">
+                          <AlertTriangle className="h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" />
+                          <span>Important: 1–3 Days Notice for Date Changes or Cancellation</span>
+                        </div>
+                        <p className="text-amber-900 dark:text-amber-200 leading-relaxed">
+                          To protect assigned tour guide schedules and environmental carrying capacities, any <strong>schedule adjustment, date change, or booking cancellation must be communicated at least 1 to 3 days before your confirmed hike date</strong>.
+                        </p>
+                      </div>
                     </div>
                   </div>
                   );

@@ -190,4 +190,20 @@ export interface DailyCapacity {
   date: string;
   max_capacity: number;
   current_count: number;
+  day_max_capacity?: number;
+  night_max_capacity?: number;
+  day_current_count?: number;
+  night_current_count?: number;
 }
+
+export interface GuestHikerSession {
+  guestSessionId: string;
+  bookingId: string;
+  guestName: string;
+  leadHikerName: string;
+  hikeDate: string;
+  assignedGuide?: string;
+  assignedTrail?: string;
+  joinedAt: string;
+}
+

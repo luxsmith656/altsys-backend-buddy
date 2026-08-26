@@ -41,6 +41,8 @@ import {
   MessageCircle,
   Play,
   Radio,
+  Users,
+  AlertTriangle,
 } from 'lucide-react';
 import BookingChat from '@/components/booking/BookingChat';
 import { QRCodeSVG } from 'qrcode.react';
@@ -92,6 +94,7 @@ export default function HikerDashboard() {
   });
   const [submittingReview, setSubmittingReview] = useState(false);
   const [chatBooking, setChatBooking] = useState<{ id: string; date: string } | null>(null);
+  const [companionQrBooking, setCompanionQrBooking] = useState<any | null>(null);
 
   useEffect(() => {
     if (!user) return;
@@ -669,6 +672,19 @@ export default function HikerDashboard() {
           </Card>
         )}
 
+        {/* ── 1-3 Days Date Change & Cancellation Policy Banner ── */}
+        <div className="mb-6 rounded-2xl border border-amber-500/30 bg-amber-500/10 p-4 flex items-start gap-3 text-xs">
+          <AlertTriangle className="h-5 w-5 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+          <div className="space-y-1">
+            <p className="font-bold text-amber-900 dark:text-amber-200">
+              Important Policy: 1–3 Days Notice for Date Changes &amp; Cancellations
+            </p>
+            <p className="text-amber-800 dark:text-amber-300 leading-relaxed">
+              To respect assigned local tour guides and protected area capacity quotas, all rescheduling or cancellation requests must be made at least <strong>1 to 3 days before your scheduled hike date</strong>.
+            </p>
+          </div>
+        </div>
+
         {/* Bookings list */}
         <Card className="glass-card">
           <CardHeader>
@@ -859,6 +875,18 @@ export default function HikerDashboard() {
                           </AlertDialog>
                         )}
 
+                      {/* Share Companion Join QR (if group size > 1) */}
+                      {b.group_size > 1 && b.status !== 'cancelled' && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="w-full gap-1 px-2 text-[11px] border-primary/30 text-primary hover:bg-primary/10 font-medium"
+                          onClick={() => setCompanionQrBooking(b)}
+                        >
+                          <Users className="h-3.5 w-3.5" /> Share Companion QR
+                        </Button>
+                      )}
+
                       {/* Reschedule / message admin */}
                       <Button
                         size="sm"
@@ -875,6 +903,51 @@ export default function HikerDashboard() {
             )}
           </CardContent>
         </Card>
+
+        {/* ── Group Companion Join QR Modal for Hikers ── */}
+        <Dialog open={!!companionQrBooking} onOpenChange={(open) => !open && setCompanionQrBooking(null)}>
+          <DialogContent className="sm:max-w-md rounded-3xl p-6 text-center">
+            <DialogHeader className="space-y-2">
+              <DialogTitle className="text-lg font-bold flex items-center justify-center gap-2">
+                <Users className="h-5 w-5 text-primary" /> Group Companion QR Permit
+              </DialogTitle>
+              <p className="text-xs text-muted-foreground">
+                Let your {companionQrBooking?.group_size || 8} companions scan this QR on their phones. They only need to type their name to get live GPS tracking!
+              </p>
+            </DialogHeader>
+            <div className="flex flex-col items-center justify-center p-6 bg-white rounded-2xl border border-border/40 shadow-inner my-2">
+              {companionQrBooking && (
+                <QRCodeSVG
+                  value={`${window.location.origin}/join-hike?bookingId=${companionQrBooking.id}`}
+                  size={200}
+                  level="H"
+                  includeMargin
+                />
+              )}
+              <p className="text-[11px] text-muted-foreground font-mono mt-3">
+                Booking Ref: {companionQrBooking?.id?.slice(0, 8)}
+              </p>
+            </div>
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                className="w-full text-xs"
+                onClick={() => {
+                  if (companionQrBooking) {
+                    const url = `${window.location.origin}/join-hike?bookingId=${companionQrBooking.id}`;
+                    navigator.clipboard.writeText(url);
+                    toast.success('Companion invite link copied to clipboard!');
+                  }
+                }}
+              >
+                Copy Link
+              </Button>
+              <Button className="w-full text-xs" onClick={() => setCompanionQrBooking(null)}>
+                Close
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
       </div>
 
       {chatBooking && (

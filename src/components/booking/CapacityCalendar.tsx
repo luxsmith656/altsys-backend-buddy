@@ -20,6 +20,10 @@ import { cn } from '@/lib/utils';
 export interface DayCapacity {
   max_capacity: number;
   current_count: number;
+  day_max_capacity?: number;
+  night_max_capacity?: number;
+  day_current_count?: number;
+  night_current_count?: number;
 }
 
 export type DayCapacityMap = Record<string, DayCapacity>;
@@ -30,6 +34,7 @@ interface CapacityCalendarProps {
   groupSize: number;
   monthCapacity: DayCapacityMap;
   defaultMaxCapacity?: number;
+  hikeType?: 'day' | 'night' | 'overnight' | string;
   onMonthChange: (year: number, month: number) => void;
 }
 
@@ -42,6 +47,7 @@ export function CapacityCalendar({
   groupSize,
   monthCapacity,
   defaultMaxCapacity = DEFAULT_MAX,
+  hikeType = 'day',
   onMonthChange,
 }: CapacityCalendarProps) {
   const [currentMonth, setCurrentMonth] = React.useState(() => {
@@ -69,8 +75,19 @@ export function CapacityCalendar({
   const getSlotInfo = (date: Date) => {
     const dateStr = format(date, 'yyyy-MM-dd');
     const cap = monthCapacity[dateStr];
-    const max = cap?.max_capacity ?? defaultMaxCapacity;
-    const current = cap?.current_count ?? 0;
+    const totalMax = cap?.max_capacity ?? defaultMaxCapacity;
+
+    let max: number;
+    let current: number;
+
+    if (hikeType === 'night' || hikeType === 'overnight') {
+      max = cap?.night_max_capacity ?? Math.max(15, Math.round(totalMax * 0.35));
+      current = cap?.night_current_count ?? 0;
+    } else {
+      max = cap?.day_max_capacity ?? Math.max(25, Math.round(totalMax * 0.65));
+      current = cap?.day_current_count ?? 0;
+    }
+
     const available = Math.max(0, max - current);
     return { available, max };
   };
