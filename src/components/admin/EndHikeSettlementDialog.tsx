@@ -120,55 +120,76 @@ export default function EndHikeSettlementDialog({
       });
 
       // 1. Update Hiker Sessions to completed
-      await supabase
-        .from('hiker_sessions')
-        .update({
-          status: 'completed',
-          tracking_phase: 'completed',
-          end_time: now,
-        } as any)
-        .eq('booking_id', booking.id)
-        .eq('status', 'active');
+      try {
+        await supabase
+          .from('hiker_sessions')
+          .update({
+            status: 'completed',
+            tracking_phase: 'completed',
+            end_time: now,
+          } as any)
+          .eq('booking_id', booking.id)
+          .eq('status', 'active');
+      } catch (e) {
+        console.warn('Non-fatal: hiker session update warning', e);
+      }
 
-      // 2. Update Booking Status & Notes
+      // 2. Update Booking Status & Notes (payment_status is embedded in notes metadata)
       const { error: bookingError } = await supabase
         .from('bookings')
         .update({
           status: 'completed',
-          payment_status: 'paid',
           notes: updatedNotes,
         } as any)
         .eq('id', booking.id);
 
       if (bookingError) throw bookingError;
 
-      // 3. If guide assigned, update guide roster assignment
-      if (meta.assignedGuideId || meta.assignedGuide) {
-        let guideQuery = supabase.from('guides' as any).update({ status: 'available' });
-        if (meta.assignedGuideId) {
-          guideQuery = guideQuery.eq('id', meta.assignedGuideId);
-        } else if (meta.assignedGuide) {
-          guideQuery = guideQuery.ilike('full_name', meta.assignedGuide);
-        }
-        await guideQuery;
+      // 3. Complete Guide Assignment if one exists
+      try {
+        await supabase
+          .from('booking_assignments' as any)
+          .update({ status: 'completed', decided_at: now } as any)
+          .eq('booking_id', booking.id);
+      } catch (e) {
+        console.warn('Non-fatal: booking assignment update warning', e);
       }
 
-      // 4. Log Audit Activity
-      await supabase.from('activity_logs').insert({
-        action: 'hike_completed',
-        entity_type: 'booking',
-        entity_id: booking.id,
-        user_id: adminUser?.id || null,
-        details: {
-          bookingId: booking.id,
-          completedAt: now,
-          totalAmount: totalAmountDue,
-          paidOnline: isOnlinePayment,
-          cashTendered: parsedCash,
-          changeReturned: Math.max(0, changeDue),
-          hikerName: meta.fullName || booking.emergency_contact_name,
-        },
-      } as any);
+      // 4. If guide assigned, update guide roster availability
+      try {
+        if (meta.assignedGuideId || meta.assignedGuide) {
+          let guideQuery = supabase.from('guides' as any).update({ status: 'available' });
+          if (meta.assignedGuideId) {
+            guideQuery = guideQuery.eq('id', meta.assignedGuideId);
+          } else if (meta.assignedGuide) {
+            guideQuery = guideQuery.ilike('full_name', meta.assignedGuide);
+          }
+          await guideQuery;
+        }
+      } catch (e) {
+        console.warn('Non-fatal: guide roster update warning', e);
+      }
+
+      // 5. Log Audit Activity
+      try {
+        await supabase.from('activity_logs').insert({
+          action: 'hike_completed',
+          entity_type: 'booking',
+          entity_id: booking.id,
+          user_id: adminUser?.id || null,
+          details: {
+            bookingId: booking.id,
+            completedAt: now,
+            totalAmount: totalAmountDue,
+            paidOnline: isOnlinePayment,
+            cashTendered: parsedCash,
+            changeReturned: Math.max(0, changeDue),
+            hikerName: meta.fullName || booking.emergency_contact_name,
+          },
+        } as any);
+      } catch (e) {
+        console.warn('Non-fatal: activity log insert warning', e);
+      }
 
       toast.success(`🎉 Hike ended for ${meta.fullName || 'group'}! Session marked completed.`);
       onHikeEnded();

@@ -2887,6 +2887,11 @@ export default function AdminDashboard() {
           void loadPendingBookings();
           void loadUpcomingCapacities();
           void loadAllCapacities();
+          setEndHikeBooking(null);
+          setScannedBooking(null);
+          setHikeStarted(false);
+          setCheckInVerified(false);
+          setCheckOutVerified(false);
         }}
         adminUser={adminUser}
       />

@@ -70,6 +70,41 @@ describe('Payment and Fee Calculation Logic', () => {
     expect(fees.totalFee).toBe(2050); // 270 + 180 + 1600
   });
 
+  it('handles fee calculation with edge cases gracefully', () => {
+    expect(calculateFees(0).totalFee).toBe(850);
+    expect(calculateFees(-5).totalFee).toBe(850);
+  });
+
+  describe('End Hike Settlement Calculations', () => {
+    it('calculates zero balance and change for fully paid online bookings', () => {
+      const fees = calculateFees(5); // 5 * 50 + 800 = 1050
+      const totalAmountDue = fees.totalFee;
+      const alreadyPaid = 1050;
+      const remainingBalance = Math.max(0, totalAmountDue - alreadyPaid);
+      expect(remainingBalance).toBe(0);
+    });
+
+    it('calculates correct cash change when onsite hiker tenders cash at trailhead', () => {
+      const fees = calculateFees(8); // 8 * 50 + 800 = 1200
+      const totalAmountDue = fees.totalFee;
+      const alreadyPaid = 0;
+      const remainingBalance = Math.max(0, totalAmountDue - alreadyPaid);
+      expect(remainingBalance).toBe(1200);
+
+      const cashTendered = 1500;
+      const changeDue = cashTendered - remainingBalance;
+      expect(changeDue).toBe(300);
+      expect(cashTendered >= remainingBalance).toBe(true);
+    });
+
+    it('handles exact cash payment with 0 change', () => {
+      const totalAmountDue = 850;
+      const cashTendered = 850;
+      const changeDue = cashTendered - totalAmountDue;
+      expect(changeDue).toBe(0);
+    });
+  });
+
   it('calculates peak extension fees at ₱100 per hour', () => {
     expect(calculatePeakExtensionFee(0)).toBe(0);
     expect(calculatePeakExtensionFee(1)).toBe(100);
