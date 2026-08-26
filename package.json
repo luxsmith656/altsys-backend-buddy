@@ -12,7 +12,9 @@
     "lint": "eslint .",
     "preview": "vite preview",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "verify": "vitest run && vite build",
+    "prepush": "npm run verify"
   },
   "dependencies": {
     "@emailjs/browser": "^4.4.1",

@@ -111,6 +111,7 @@ import ForecastingTab from '@/components/admin/forecasting/ForecastingTab';
 import AdminWalkInRegistrationDialog from '@/components/admin/AdminWalkInRegistrationDialog';
 import EditPaymentDialog from '@/components/booking/EditPaymentDialog';
 import EndHikeSettlementDialog from '@/components/admin/EndHikeSettlementDialog';
+import SystemHealthMonitor from '@/components/admin/SystemHealthMonitor';
 import AppDownloadButton from '@/components/AppDownloadButton';
 import { usePullToRefresh } from '@/hooks/usePullToRefresh';
 import PullToRefreshIndicator from '@/components/common/PullToRefreshIndicator';
@@ -2310,6 +2311,7 @@ export default function AdminDashboard() {
                   <TabsTrigger value="announcements">Announcements</TabsTrigger>
                   <TabsTrigger value="capacity">Daily Capacity</TabsTrigger>
                   <TabsTrigger value="forecasting">Prophet Forecasting</TabsTrigger>
+                  <TabsTrigger value="system-health">System Health</TabsTrigger>
                 </TabsList>
               </div>
               <TabsContent value="guides" className="space-y-6 mt-0">
@@ -2723,6 +2725,9 @@ export default function AdminDashboard() {
           </TabsContent>
           <TabsContent value="forecasting" className="space-y-6 mt-0">
             <ForecastingTab locationId={activeLocationId} />
+          </TabsContent>
+          <TabsContent value="system-health" className="space-y-6 mt-0">
+            <SystemHealthMonitor />
           </TabsContent>
             </Tabs>
           </TabsContent>
