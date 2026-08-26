@@ -149,3 +149,29 @@ describe('System Integrity: Full Diagnostic Suite Runner', () => {
     expect(report.items.length).toBe(report.totalCount);
   });
 });
+
+describe('System Integrity: Page Component Module Resolution & No Missing Variables', () => {
+  it('imports all dashboard and core page modules cleanly without ReferenceError', async () => {
+    const pages = [
+      import('@/pages/HikerDashboard'),
+      import('@/pages/AdminDashboard'),
+      import('@/pages/GuideDashboard'),
+      import('@/pages/RangerDashboard'),
+      import('@/pages/CentralDashboard'),
+      import('@/pages/BookingPage'),
+      import('@/pages/MapPage'),
+      import('@/pages/JoinHikeGuestPage'),
+      import('@/pages/OpsAIPage'),
+      import('@/pages/ProfilePage'),
+      import('@/pages/Onboarding'),
+      import('@/pages/DashboardRedirect'),
+    ];
+
+    const results = await Promise.all(pages);
+    expect(results.length).toBe(12);
+    results.forEach((mod) => {
+      expect(mod.default).toBeDefined();
+      expect(typeof mod.default).toBe('function');
+    });
+  }, 20000);
+});
