@@ -125,26 +125,31 @@ export default function HikerDashboard() {
   }, [user, navigate]);
 
   const loadData = async () => {
-    const [{ data: b }, { data: s }] = await Promise.all([
-      supabase
-        .from('bookings')
-        .select('*')
-        .eq('user_id', user!.id)
-        .order('booking_date', { ascending: false }),
-      supabase
-        .from('hiker_sessions')
-        .select('*')
-        .eq('user_id', user!.id)
-        .order('start_time', { ascending: false }),
-    ]);
-    setBookings(b || []);
-    setSessions(s || []);
-    setImportantAnnouncements(loadAnnouncements().filter((a) => a.isImportant));
-    const active = (s || []).find(
-      (session) => session.status === 'active' &&
-        String(session.client_session_id ?? '').startsWith(ADMIN_CHECKIN_TOKEN_PREFIX)
-    );
-    setActiveHikeSession(active || null);
+    if (!user) return;
+    try {
+      const [{ data: b }, { data: s }] = await Promise.all([
+        supabase
+          .from('bookings')
+          .select('*')
+          .eq('user_id', user.id)
+          .order('booking_date', { ascending: false }),
+        supabase
+          .from('hiker_sessions')
+          .select('*')
+          .eq('user_id', user.id)
+          .order('start_time', { ascending: false }),
+      ]);
+      setBookings(b || []);
+      setSessions(s || []);
+      setImportantAnnouncements(loadAnnouncements().filter((a) => a.isImportant));
+      const active = (s || []).find(
+        (session) => session.status === 'active' &&
+          String(session.client_session_id ?? '').startsWith(ADMIN_CHECKIN_TOKEN_PREFIX)
+      );
+      setActiveHikeSession(active || null);
+    } catch (err) {
+      console.warn('Could not load hiker dashboard data:', err);
+    }
   };
 
   const totalDistance = sessions.reduce((sum, s) => sum + Number(s.total_distance_km || 0), 0);

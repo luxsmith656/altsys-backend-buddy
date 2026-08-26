@@ -33,7 +33,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     if (error) {
       console.warn('Role fetch warning:', error.message);
-      setRole(null);
+      setRole('hiker');
       return;
     }
 
@@ -54,7 +54,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       await fetchRole(session.user.id);
     } catch (err) {
       console.error('Session sync error:', err);
-      setRole(null);
+      setRole('hiker');
     } finally {
       setLoading(false);
     }

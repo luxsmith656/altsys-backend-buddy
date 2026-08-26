@@ -153,7 +153,7 @@ const ANNOUNCEMENT_TYPE_STYLES: Record<string, string> = {
 const getMappedTab = (tab: string) => {
   if (['overview', 'demographics'].includes(tab)) return 'overview';
   if (['operations', 'requests', 'scan', 'live-map'].includes(tab)) return 'operations';
-  if (['management', 'guides', 'announcements', 'capacity'].includes(tab)) return 'management';
+  if (['management', 'guides', 'announcements', 'capacity', 'forecasting', 'system-health'].includes(tab)) return 'management';
   if (['finance', 'payment-summary'].includes(tab)) return 'finance';
   return 'overview';
 };
@@ -165,6 +165,12 @@ export default function AdminDashboard() {
   const [operationsTab, setOperationsTab] = useState<'requests' | 'scan' | 'live-map'>(() => {
     const initialTab = searchParams.get('tab');
     return initialTab === 'scan' || initialTab === 'live-map' ? initialTab : 'requests';
+  });
+  const [managementTab, setManagementTab] = useState<string>(() => {
+    const initialTab = searchParams.get('tab');
+    return ['guides', 'announcements', 'capacity', 'forecasting', 'system-health'].includes(initialTab || '')
+      ? initialTab!
+      : 'guides';
   });
   /* ── Overview state ── */
   const [stats, setStats] = useState({ totalBookings: 0, activeHikers: 0, totalZones: 5, todayVisitors: 0 });
@@ -205,7 +211,10 @@ export default function AdminDashboard() {
     if (tab === 'requests' || tab === 'scan' || tab === 'live-map') {
       if (tab !== operationsTab) setOperationsTab(tab);
     }
-  }, [activeTab, operationsTab, searchParams]);
+    if (['guides', 'announcements', 'capacity', 'forecasting', 'system-health'].includes(tab || '')) {
+      if (tab !== managementTab) setManagementTab(tab!);
+    }
+  }, [activeTab, operationsTab, managementTab, searchParams]);
 
   useEffect(() => {
     const openCalendar = () => setCalendarFloatingOpen(true);
@@ -2304,7 +2313,16 @@ export default function AdminDashboard() {
           </TabsContent>
 
           <TabsContent value="management" className="mt-0">
-            <Tabs defaultValue="guides" className="space-y-4">
+            <Tabs
+              value={managementTab}
+              onValueChange={(val) => {
+                setManagementTab(val);
+                const next = new URLSearchParams(searchParams);
+                next.set('tab', val);
+                setSearchParams(next, { replace: true });
+              }}
+              className="space-y-4"
+            >
               <div className="mb-4 overflow-x-auto pb-2">
                 <TabsList className="glass-card">
                   <TabsTrigger value="guides">Guide Roster</TabsTrigger>

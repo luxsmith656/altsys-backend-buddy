@@ -20,7 +20,16 @@ export default function RoleRoute({ children, allowedRoles }: RoleRouteProps) {
   }
 
   if (!user) return <Navigate to="/login" replace />;
-  if (!role || !allowedRoles.includes(role)) return <Navigate to="/dashboard" replace />;
+
+  if (!role || !allowedRoles.includes(role)) {
+    const target =
+      role === 'super_admin' ? '/central' :
+      role === 'admin' ? '/admin' :
+      role === 'ranger' ? '/ranger' :
+      role === 'guide' ? '/guide' :
+      '/hiker';
+    return <Navigate to={target} replace />;
+  }
 
   return <>{children}</>;
 }
