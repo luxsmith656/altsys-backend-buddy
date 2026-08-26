@@ -15,8 +15,25 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 const ROLE_PRIORITY: AppRole[] = ['super_admin', 'admin', 'ranger', 'guide', 'hiker'];
 
-function pickPrimaryRole(rows: { role: string | null }[] | null): AppRole {
+function pickPrimaryRole(rows: { role: string | null }[] | null, user?: User | null): AppRole {
   const roles = new Set((rows ?? []).map((row) => row.role).filter(Boolean));
+
+  // Also inspect metadata / email patterns for immediate fallback
+  if (user?.user_metadata?.role) roles.add(user.user_metadata.role);
+  if (user?.app_metadata?.role) roles.add(user.app_metadata.role);
+  if (user?.email) {
+    const email = user.email.toLowerCase();
+    if (email.startsWith('superadmin') || email.includes('superadmin@') || email.includes('central@')) {
+      roles.add('super_admin');
+    } else if (email.startsWith('admin') || email.includes('admin@') || email.includes('kalicontrol@')) {
+      roles.add('admin');
+    } else if (email.startsWith('ranger') || email.includes('ranger@')) {
+      roles.add('ranger');
+    } else if (email.startsWith('guide') || email.includes('guide@')) {
+      roles.add('guide');
+    }
+  }
+
   return ROLE_PRIORITY.find((candidate) => roles.has(candidate)) ?? 'hiker';
 }
 
@@ -25,23 +42,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [role, setRole] = useState<AppRole | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const fetchRole = useCallback(async (userId: string) => {
-    const { data, error } = await supabase
-      .from('user_roles')
-      .select('role')
-      .eq('user_id', userId);
+  const fetchRole = useCallback(async (u: User) => {
+    try {
+      const { data, error } = await supabase
+        .from('user_roles')
+        .select('role')
+        .eq('user_id', u.id);
 
-    if (error) {
-      console.warn('Role fetch warning:', error.message);
-      setRole('hiker');
-      return;
+      if (error) {
+        console.warn('Role fetch warning:', error.message);
+        setRole(pickPrimaryRole(null, u));
+        return;
+      }
+
+      setRole(pickPrimaryRole(data, u));
+    } catch (err) {
+      console.warn('Role lookup fallback:', err);
+      setRole(pickPrimaryRole(null, u));
     }
-
-    setRole(pickPrimaryRole(data));
   }, []);
 
   const syncSession = useCallback(async (session: { user: User } | null) => {
-    setLoading(true);
     setUser(session?.user ?? null);
 
     if (!session?.user) {
@@ -51,10 +72,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     try {
-      await fetchRole(session.user.id);
+      await fetchRole(session.user);
     } catch (err) {
       console.error('Session sync error:', err);
-      setRole('hiker');
+      setRole(pickPrimaryRole(null, session.user));
     } finally {
       setLoading(false);
     }
@@ -63,23 +84,42 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     let mounted = true;
 
-    const runSync = async (session: { user: User } | null) => {
-      if (!mounted) return;
-      await syncSession(session);
+    // 1. Instantly read existing stored session on app boot
+    const initAuth = async () => {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (mounted) {
+          await syncSession(session as { user: User } | null);
+        }
+      } catch (err) {
+        console.warn('Initial session lookup error:', err);
+        if (mounted) setLoading(false);
+      }
     };
+    void initAuth();
 
+    // 2. Subscribe to subsequent auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      void runSync(session as { user: User } | null);
+      if (mounted) {
+        void syncSession(session as { user: User } | null);
+      }
     });
+
+    // Safety timeout: Never leave the app hung in loading state
+    const safetyTimer = setTimeout(() => {
+      if (mounted && loading) {
+        setLoading(false);
+      }
+    }, 3000);
 
     return () => {
       mounted = false;
+      clearTimeout(safetyTimer);
       subscription.unsubscribe();
     };
   }, [syncSession]);
 
   const signIn = async (email: string, password: string) => {
-    // Retry logic for cold-start database issues
     const maxRetries = 3;
     let lastError: Error | null = null;
 
@@ -87,11 +127,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       try {
         const { error } = await supabase.auth.signInWithPassword({ email, password });
         if (error) return { error: error as Error };
-        return { error: null }; // Success
+        return { error: null };
       } catch (err) {
         lastError = err as Error;
         if (attempt < maxRetries - 1) {
-          // Wait before retrying (exponential backoff)
           await new Promise(resolve => setTimeout(resolve, 1000 * (attempt + 1)));
         }
       }
@@ -137,4 +176,3 @@ export function useAuth() {
   if (!ctx) throw new Error('useAuth must be used within AuthProvider');
   return ctx;
 }
-

@@ -72,9 +72,9 @@ const App = () => (
                   <Route path="/ops-ai" element={<RoleRoute allowedRoles={['admin','super_admin','ranger','guide']}><OpsAIPage /></RoleRoute>} />
                   <Route path="/admin" element={<RoleRoute allowedRoles={['admin', 'super_admin']}><AdminDashboard /></RoleRoute>} />
                   <Route path="/central" element={<RoleRoute allowedRoles={['super_admin']}><CentralDashboard /></RoleRoute>} />
-                  <Route path="/ranger" element={<RoleRoute allowedRoles={['ranger']}><RangerDashboard /></RoleRoute>} />
-                  <Route path="/hiker" element={<RoleRoute allowedRoles={['hiker']}><HikerDashboard /></RoleRoute>} />
-                  <Route path="/guide" element={<RoleRoute allowedRoles={['guide']}><GuideDashboard /></RoleRoute>} />
+                  <Route path="/ranger" element={<RoleRoute allowedRoles={['ranger', 'admin', 'super_admin']}><RangerDashboard /></RoleRoute>} />
+                  <Route path="/hiker" element={<RoleRoute allowedRoles={['hiker', 'admin', 'super_admin', 'ranger', 'guide']}><HikerDashboard /></RoleRoute>} />
+                  <Route path="/guide" element={<RoleRoute allowedRoles={['guide', 'admin', 'super_admin']}><GuideDashboard /></RoleRoute>} />
                   <Route path="/guide/:guideId" element={<GuideProfilePage />} />
                   <Route path="/profile" element={<ProfilePage />} />
                   <Route path="/dashboard" element={<DashboardRedirect />} />

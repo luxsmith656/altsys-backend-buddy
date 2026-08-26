@@ -21,12 +21,22 @@ export default function RoleRoute({ children, allowedRoles }: RoleRouteProps) {
 
   if (!user) return <Navigate to="/login" replace />;
 
-  if (!role || !allowedRoles.includes(role)) {
+  const currentRole = role || 'hiker';
+  const isSuperAdmin = currentRole === 'super_admin';
+  const isAdmin = currentRole === 'admin';
+
+  // Permission hierarchy: super_admin can view everything; admin can view admin, ranger, guide, hiker; etc.
+  const hasAccess =
+    isSuperAdmin ||
+    allowedRoles.includes(currentRole) ||
+    (isAdmin && (allowedRoles.includes('admin') || allowedRoles.includes('ranger') || allowedRoles.includes('guide') || allowedRoles.includes('hiker')));
+
+  if (!hasAccess) {
     const target =
-      role === 'super_admin' ? '/central' :
-      role === 'admin' ? '/admin' :
-      role === 'ranger' ? '/ranger' :
-      role === 'guide' ? '/guide' :
+      currentRole === 'super_admin' ? '/central' :
+      currentRole === 'admin' ? '/admin' :
+      currentRole === 'ranger' ? '/ranger' :
+      currentRole === 'guide' ? '/guide' :
       '/hiker';
     return <Navigate to={target} replace />;
   }
