@@ -350,11 +350,22 @@ export default function AdminDashboard() {
   const filteredTabBookings = useMemo(() => {
     let list = allTabBookings;
     if (bookingTabFilter === 'started') {
-      list = list.filter((b) => { const m = parseMeta(b.notes); return m.onsiteStartConfirmed; });
+      list = list.filter((b) => {
+        const m = parseMeta(b.notes);
+        return m.onsiteStartConfirmed && b.status !== 'completed' && m.groupPhase !== 'completed' && !m.hikeCompletedAt;
+      });
+    } else if (bookingTabFilter === 'completed') {
+      list = list.filter((b) => {
+        const m = parseMeta(b.notes);
+        return b.status === 'completed' || m.groupPhase === 'completed' || Boolean(m.hikeCompletedAt);
+      });
     } else if (bookingTabFilter === 'pending') {
       list = list.filter((b) => b.status === 'pending' || b.status === 'adjustment_pending');
     } else if (bookingTabFilter === 'confirmed') {
-      list = list.filter((b) => b.status === 'confirmed' && !parseMeta(b.notes).onsiteStartConfirmed);
+      list = list.filter((b) => {
+        const m = parseMeta(b.notes);
+        return b.status === 'confirmed' && !m.onsiteStartConfirmed && b.status !== 'completed' && m.groupPhase !== 'completed';
+      });
     } else if (bookingTabFilter === 'cancelled') {
       list = list.filter((b) => b.status === 'cancelled');
     }
@@ -365,7 +376,9 @@ export default function AdminDashboard() {
         return (
           (m.fullName || b.emergency_contact_name || '').toLowerCase().includes(q) ||
           b.id.toLowerCase().includes(q) ||
-          b.booking_date.includes(q)
+          b.booking_date.includes(q) ||
+          (m.phoneNumber || b.emergency_contact_phone || '').includes(q) ||
+          (m.assignedGuide || '').toLowerCase().includes(q)
         );
       });
     }
@@ -374,6 +387,14 @@ export default function AdminDashboard() {
 
   const pendingCount = useMemo(
     () => allTabBookings.filter((b) => b.status === 'pending' || b.status === 'adjustment_pending').length,
+    [allTabBookings],
+  );
+
+  const completedCount = useMemo(
+    () => allTabBookings.filter((b) => {
+      const m = parseMeta(b.notes);
+      return b.status === 'completed' || m.groupPhase === 'completed' || Boolean(m.hikeCompletedAt);
+    }).length,
     [allTabBookings],
   );
 
@@ -388,7 +409,8 @@ export default function AdminDashboard() {
         const m = parseMeta(b.notes);
         return (
           (m.fullName || b.emergency_contact_name || '').toLowerCase().includes(q) ||
-          b.id.toLowerCase().includes(q)
+          b.id.toLowerCase().includes(q) ||
+          (m.phoneNumber || b.emergency_contact_phone || '').includes(q)
         );
       });
     }
@@ -402,11 +424,29 @@ export default function AdminDashboard() {
   }, [guides, guideSearch]);
 
   useEffect(() => {
-    loadData();
-    loadAllTabBookings();
-    loadPendingBookings();
-    loadUpcomingCapacities();
+    void loadData();
+    void loadAllTabBookings();
+    void loadPendingBookings();
+    void loadUpcomingCapacities();
     setAnnouncements(loadAnnouncements());
+
+    // Listen for realtime booking changes & assignments
+    const ch = supabase
+      .channel('admin-bookings-realtime')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'bookings' }, () => {
+        void loadAllTabBookings();
+        void loadPendingBookings();
+        void loadData();
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'booking_assignments' }, () => {
+        void loadAllTabBookings();
+        void loadPendingBookings();
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(ch);
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeLocationId]);
 
@@ -459,8 +499,10 @@ export default function AdminDashboard() {
       .from('bookings')
       .select('*')
       .order('created_at', { ascending: false })
-      .limit(200);
-    if (activeLocationId) q = q.eq('location_id', activeLocationId);
+      .limit(300);
+    if (activeLocationId && !isSuperAdmin) {
+      q = q.or(`location_id.eq.${activeLocationId},location_id.is.null`);
+    }
     const { data } = await q;
     setAllTabBookings(data || []);
     setAllTabLoading(false);
@@ -505,12 +547,14 @@ export default function AdminDashboard() {
     setHikeStarted(false);
     setShowScanPayForm(false);
 
-    let exactQuery = supabase
+    let exactQuery: any = supabase
       .from('bookings')
       .select('*')
       .or(`qr_code_data.eq.${raw},qr_code_data.eq.${q},id.eq.${q}`)
       .limit(1);
-    if (activeLocationId) exactQuery = exactQuery.eq('location_id', activeLocationId) as typeof exactQuery;
+    if (activeLocationId && !isSuperAdmin) {
+      exactQuery = exactQuery.or(`location_id.eq.${activeLocationId},location_id.is.null`);
+    }
     const { data: exactData } = await exactQuery.maybeSingle();
 
     if (exactData) {
@@ -523,14 +567,16 @@ export default function AdminDashboard() {
       return;
     }
 
-    let nameQuery = supabase
+    let nameQuery: any = supabase
       .from('bookings')
       .select('*')
-      .ilike('emergency_contact_name', `%${q}%`)
+      .or(`emergency_contact_name.ilike.%${q}%,notes.ilike.%${q}%,emergency_contact_phone.ilike.%${q}%`)
       .not('status', 'eq', 'cancelled')
       .order('created_at', { ascending: false })
       .limit(1);
-    if (activeLocationId) nameQuery = nameQuery.eq('location_id', activeLocationId) as typeof nameQuery;
+    if (activeLocationId && !isSuperAdmin) {
+      nameQuery = nameQuery.or(`location_id.eq.${activeLocationId},location_id.is.null`);
+    }
     const { data: nameData } = await nameQuery.maybeSingle();
 
     if (nameData) {
@@ -539,9 +585,9 @@ export default function AdminDashboard() {
       setCheckInVerified(false);
       setCheckOutHeadcount(String(nameData.group_size));
       setCheckOutVerified(false);
-      toast.info('Found booking by name match.');
+      toast.info('Found booking record.');
     } else {
-      toast.error('No booking found. Try the QR code, booking ID, or hiker name.');
+      toast.error('No booking found. Try the QR code, booking ID, or hiker name/phone.');
     }
     setScanLoading(false);
   };
@@ -1000,12 +1046,14 @@ export default function AdminDashboard() {
 
   const loadPendingBookings = async () => {
     setPendingLoading(true);
-    let query = supabase
+    let query: any = supabase
       .from('bookings')
       .select('*')
       .in('status', ['pending', 'adjustment_pending'])
       .order('created_at', { ascending: true });
-    if (activeLocationId) query = query.eq('location_id', activeLocationId) as typeof query;
+    if (activeLocationId && !isSuperAdmin) {
+      query = query.or(`location_id.eq.${activeLocationId},location_id.is.null`);
+    }
     const { data } = await query;
     setPendingBookings(data || []);
     setPendingLoading(false);
@@ -1160,14 +1208,17 @@ export default function AdminDashboard() {
 
   const loadData = async () => {
     // Scope to current location when the admin has one selected (super_admin sees all).
-    const scopeBookings = (q: any) => (activeLocationId ? q.eq('location_id', activeLocationId) : q);
+    const scopeBookings = (q: any) =>
+      activeLocationId && !isSuperAdmin
+        ? q.or(`location_id.eq.${activeLocationId},location_id.is.null`)
+        : q;
     let activeHikersQuery = supabase
       .from('hiker_sessions')
       .select('*', { count: 'exact', head: true })
       .eq('status', 'active')
       .like('client_session_id', `${ADMIN_CHECKIN_TOKEN_PREFIX}%`);
-    if (activeLocationId) {
-      activeHikersQuery = activeHikersQuery.eq('location_id', activeLocationId);
+    if (activeLocationId && !isSuperAdmin) {
+      activeHikersQuery = activeHikersQuery.or(`location_id.eq.${activeLocationId},location_id.is.null`);
     }
     const [
       { count: totalBookings },
@@ -1384,6 +1435,9 @@ export default function AdminDashboard() {
   /* ─── Booking display helpers ─── */
   const getDisplayStatus = (b: any) => {
     const meta = parseMeta(b.notes);
+    if (b.status === 'completed' || meta.groupPhase === 'completed' || Boolean(meta.hikeCompletedAt)) {
+      return 'completed';
+    }
     if (meta.onsiteStartConfirmed) return 'started';
     return b.status as string;
   };
@@ -1427,6 +1481,7 @@ export default function AdminDashboard() {
     adjustment_pending: 'bg-sky-500/20 text-sky-600 dark:text-sky-400',
     confirmed: 'bg-primary/20 text-primary',
     started: 'bg-emerald-500/20 text-emerald-600 dark:text-emerald-400',
+    completed: 'bg-teal-500/20 text-teal-700 dark:text-teal-300 border border-teal-500/30 font-semibold',
     cancelled: 'bg-destructive/20 text-destructive',
   };
 
@@ -1434,7 +1489,8 @@ export default function AdminDashboard() {
     pending: '🆕 Pending',
     adjustment_pending: '⏳ Awaiting Hiker Confirmation',
     confirmed: '✅ Confirmed',
-    started: '🥾 Check-in / Started',
+    started: '🥾 Check-in / In Progress',
+    completed: '🏁 Completed & Settled',
     cancelled: '❌ Cancelled',
   };
 
@@ -1454,22 +1510,33 @@ export default function AdminDashboard() {
     () =>
       todaysBookings.filter((b) => {
         const m = parseMeta(b.notes);
-        return b.status !== 'confirmed' || !m.onsiteStartConfirmed;
+        return (
+          (b.status !== 'confirmed' || !m.onsiteStartConfirmed) &&
+          b.status !== 'completed' &&
+          m.groupPhase !== 'completed' &&
+          !m.hikeCompletedAt
+        );
       }),
     [todaysBookings],
   );
 
   const bookingsPerDate = useMemo(() => {
-    const map: Record<string, { total: number; pending: number; confirmed: number; started: number }> = {};
+    const map: Record<string, { total: number; pending: number; confirmed: number; started: number; completed: number }> = {};
     for (const b of allTabBookings) {
       if (b.status === 'cancelled') continue;
       const key = b.booking_date;
-      if (!map[key]) map[key] = { total: 0, pending: 0, confirmed: 0, started: 0 };
+      if (!map[key]) map[key] = { total: 0, pending: 0, confirmed: 0, started: 0, completed: 0 };
       map[key].total += 1;
       const m = parseMeta(b.notes);
-      if (m.onsiteStartConfirmed) map[key].started += 1;
-      else if (b.status === 'confirmed') map[key].confirmed += 1;
-      else map[key].pending += 1;
+      if (b.status === 'completed' || m.groupPhase === 'completed' || Boolean(m.hikeCompletedAt)) {
+        map[key].completed += 1;
+      } else if (m.onsiteStartConfirmed) {
+        map[key].started += 1;
+      } else if (b.status === 'confirmed') {
+        map[key].confirmed += 1;
+      } else {
+        map[key].pending += 1;
+      }
     }
     return map;
   }, [allTabBookings]);
@@ -1619,7 +1686,8 @@ export default function AdminDashboard() {
                 { value: 'all', label: 'All' },
                 { value: 'pending', label: 'Pending', count: pendingCount },
                 { value: 'confirmed', label: 'Confirmed' },
-                { value: 'started', label: 'Check-in / Started' },
+                { value: 'started', label: 'Check-in / In Progress' },
+                { value: 'completed', label: 'Completed & Settled', count: completedCount },
                 { value: 'cancelled', label: 'Cancelled' },
               ].map(({ value, label, count }) => (
                 <button
@@ -1633,7 +1701,9 @@ export default function AdminDashboard() {
                 >
                   {label}
                   {count !== undefined && count > 0 && (
-                    <span className="ml-1.5 px-1.5 py-0.5 rounded-full bg-destructive text-white text-[9px] font-bold">
+                    <span className={`ml-1.5 px-1.5 py-0.5 rounded-full text-[9px] font-bold ${
+                      value === 'pending' ? 'bg-destructive text-white' : 'bg-primary/20 text-primary'
+                    }`}>
                       {count}
                     </span>
                   )}
@@ -1852,6 +1922,19 @@ export default function AdminDashboard() {
                                   <ScanLine className="h-3.5 w-3.5" /> Open QR / Simulation
                                 </Button>
                               </>
+                            )}
+                            {displayStatus === 'completed' && (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="gap-1.5 border-teal-500/40 text-teal-600 dark:text-teal-400 hover:bg-teal-500/10 text-xs"
+                                onClick={() => {
+                                  setScannedBooking(b);
+                                  setOperationsTab('scan');
+                                }}
+                              >
+                                <Receipt className="h-3.5 w-3.5" /> View Settlement
+                              </Button>
                             )}
                             <Button size="sm" variant="outline" className="gap-1.5"
                               onClick={() => setChatBooking({ id: b.id, date: b.booking_date })}>
@@ -2189,8 +2272,73 @@ export default function AdminDashboard() {
                         )}
                       </div>
 
-                      {/* Active Hike Simulation & Progress Tracker */}
-                      {meta.onsiteStartConfirmed || hikeStarted ? (
+                      {/* Active Hike Simulation & Progress Tracker or Completed Hike Summary */}
+                      {scannedBooking.status === 'completed' || meta.groupPhase === 'completed' || Boolean(meta.hikeCompletedAt) ? (
+                        <div className="space-y-4 rounded-2xl border-2 border-teal-500/40 bg-gradient-to-b from-teal-500/10 to-transparent p-5">
+                          <div className="flex items-center justify-between flex-wrap gap-2">
+                            <div className="flex items-center gap-2">
+                              <CheckCircle2 className="h-5 w-5 text-teal-600 dark:text-teal-400" />
+                              <span className="font-bold text-sm text-foreground">
+                                🏁 Hike Completed & Settlement Finalized
+                              </span>
+                            </div>
+                            {meta.hikeCompletedAt && (
+                              <Badge variant="outline" className="text-xs bg-background/80 border-border/40 font-mono">
+                                Ended: {new Date(meta.hikeCompletedAt).toLocaleTimeString('en-PH', { timeZone: 'Asia/Manila', hour: '2-digit', minute: '2-digit' })} PHT
+                              </Badge>
+                            )}
+                          </div>
+
+                          <div className="p-3.5 rounded-xl bg-background/80 border border-teal-500/20 text-xs space-y-1.5">
+                            <div className="flex justify-between items-center text-xs">
+                              <span className="text-muted-foreground">Settlement Status:</span>
+                              <Badge className="bg-teal-500/20 text-teal-700 dark:text-teal-300 font-bold border-teal-500/30">
+                                Fully Settled & Paid
+                              </Badge>
+                            </div>
+                            <div className="flex justify-between items-center text-xs">
+                              <span className="text-muted-foreground">Total Fee Collected:</span>
+                              <span className="font-extrabold text-emerald-600 dark:text-emerald-400">
+                                {formatPeso(meta.amountPaid ?? totalFee)}
+                              </span>
+                            </div>
+                            {meta.paymentMethod && (
+                              <div className="flex justify-between items-center text-xs">
+                                <span className="text-muted-foreground">Payment Method:</span>
+                                <span className="font-medium uppercase">{meta.paymentMethod}</span>
+                              </div>
+                            )}
+                            {meta.assignedGuide && (
+                              <div className="flex justify-between items-center text-xs">
+                                <span className="text-muted-foreground">Assigned Guide:</span>
+                                <span className="font-medium">{meta.assignedGuide}</span>
+                              </div>
+                            )}
+                          </div>
+
+                          <div className="flex gap-2 flex-wrap">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="text-xs gap-1.5"
+                              onClick={() => {
+                                setScannedBooking(null);
+                                setQrInput('');
+                              }}
+                            >
+                              <ScanLine className="h-3.5 w-3.5" /> Check-in Next Hiker
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="text-xs gap-1.5 text-primary border-primary/30"
+                              onClick={() => setChatBooking({ id: scannedBooking.id, date: scannedBooking.booking_date })}
+                            >
+                              <MessageCircle className="h-3.5 w-3.5" /> Chat with Hiker
+                            </Button>
+                          </div>
+                        </div>
+                      ) : meta.onsiteStartConfirmed || hikeStarted ? (
                         <div className="space-y-4 rounded-2xl border-2 border-emerald-500/40 bg-gradient-to-b from-emerald-500/10 to-transparent p-5">
                           {/* Live Status Header */}
                           <div className="flex items-center justify-between flex-wrap gap-2">
