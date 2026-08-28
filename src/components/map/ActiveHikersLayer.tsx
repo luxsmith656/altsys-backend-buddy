@@ -179,6 +179,8 @@ function getProgressDescription(progress: number, stations: SimulationStation[])
   return `Between ${routeStations[lowerIndex].name} and ${routeStations[lowerIndex + 1].name}`;
 }
 
+export type MapHikerFilterMode = 'group' | 'individual' | 'guides';
+
 interface ActiveHikersLayerProps {
   showStations?: boolean;
   routePath?: [number, number][];
@@ -186,6 +188,8 @@ interface ActiveHikersLayerProps {
   routeDistanceKm?: number;
   simulationControlsOpen?: boolean;
   onSimulationControlsOpenChange?: (open: boolean) => void;
+  filterMode?: MapHikerFilterMode;
+  onlyActive?: boolean;
 }
 
 export default function ActiveHikersLayer({
@@ -195,6 +199,8 @@ export default function ActiveHikersLayer({
   routeDistanceKm = 6,
   simulationControlsOpen,
   onSimulationControlsOpenChange,
+  filterMode = 'group',
+  onlyActive = true,
 }: ActiveHikersLayerProps) {
   const simulationPath = routePath && routePath.length >= 2 ? routePath : SUMMIT_TRAIL_PATH;
   const simulationStations = useMemo<SimulationStation[]>(() => {
@@ -443,55 +449,83 @@ export default function ActiveHikersLayer({
     });
   };
 
-  // Dynamic hiker marker icon with halo pulse
-  const hikerMarkerIcon = (h: SimulatedHiker) => {
+  // Dynamic clustered group marker icon
+  const groupMarkerIcon = (h: SimulatedHiker) => {
     let color = '#10b981'; // ascent green
-    let iconLetter = 'H';
-    
-    if (h.phase === 'peak') {
-      color = '#eab308'; // peak gold
-      iconLetter = 'P';
-    } else if (h.phase === 'descent') {
-      color = '#3b82f6'; // descent blue
-      iconLetter = 'D';
-    } else if (h.phase === 'sos') {
-      color = '#dc2626'; // SOS red
-      iconLetter = '🚨';
-    } else if (h.phase === 'completed') {
-      color = '#64748b'; // gray
-      iconLetter = '✓';
-    }
+    let iconLetter = '👥';
+    if (h.phase === 'peak') color = '#eab308';
+    else if (h.phase === 'descent') color = '#3b82f6';
+    else if (h.phase === 'sos') color = '#dc2626';
 
     const glowClass = h.phase === 'sos' ? 'animate-ping' : h.phase === 'peak' ? 'animate-pulse' : '';
 
     return new L.DivIcon({
       html: `
         <div class="relative flex items-center justify-center">
-          <span class="absolute inline-flex h-6 w-6 rounded-full opacity-60 ${glowClass}" style="background-color: ${color};"></span>
+          <span class="absolute inline-flex h-8 w-8 rounded-full opacity-60 ${glowClass}" style="background-color: ${color};"></span>
           <div style="
             position: relative;
             background: ${color};
-            width: 22px;
-            height: 22px;
-            border-radius: 50%;
+            min-width: 32px;
+            height: 24px;
+            padding: 0 5px;
+            border-radius: 12px;
             border: 2px solid white;
             box-shadow: 0 3px 8px rgba(0,0,0,0.35);
             display: flex;
             align-items: center;
             justify-content: center;
+            gap: 2px;
             color: white;
             font-size: 10px;
-            font-weight: bold;
+            font-weight: 800;
           ">
-            ${iconLetter}
+            <span>${iconLetter}</span>
+            <span>${h.groupSize}</span>
           </div>
         </div>
       `,
       className: '',
-      iconSize: [26, 26],
-      iconAnchor: [13, 13],
+      iconSize: [36, 26],
+      iconAnchor: [18, 13],
     });
   };
+
+  // Individual person marker
+  const personMarkerIcon = (name: string, roleType: 'guide' | 'hiker' | 'companion', phase: string) => {
+    const isGuide = roleType === 'guide';
+    const isCompanion = roleType === 'companion';
+    const bg = isGuide ? '#2563eb' : isCompanion ? '#7c3aed' : phase === 'peak' ? '#eab308' : phase === 'descent' ? '#3b82f6' : '#10b981';
+    const icon = isGuide ? '🧭' : isCompanion ? '👤' : '🥾';
+    return new L.DivIcon({
+      html: `
+        <div style="
+          display: flex;
+          align-items: center;
+          gap: 3px;
+          background: ${bg};
+          color: white;
+          padding: 2px 7px;
+          border-radius: 12px;
+          font-size: 10px;
+          font-weight: 700;
+          box-shadow: 0 3px 8px rgba(0,0,0,0.35);
+          border: 2px solid white;
+          white-space: nowrap;
+        ">
+          <span>${icon}</span>
+          <span>${name}</span>
+        </div>
+      `,
+      className: '',
+      iconAnchor: [30, 12],
+    });
+  };
+
+  const displayedHikers = useMemo(() => {
+    if (!onlyActive) return hikers;
+    return hikers.filter((h) => h.phase !== 'completed');
+  }, [hikers, onlyActive]);
 
   return (
     <>
@@ -517,9 +551,8 @@ export default function ActiveHikersLayer({
         </Marker>
       ))}
 
-      {/* 2. Simulated Moving Hikers Layer */}
-      {hikers.map((h) => {
-        if (h.phase === 'completed') return null; // hide finished hikers
+      {/* 2. Simulated Moving Hikers Layer - Group Clustered View */}
+      {filterMode === 'group' && displayedHikers.map((h) => {
         const latLng = interpolatePosition(h.progress, simulationPath);
         const etaText = calculateETA(h);
         
@@ -527,7 +560,7 @@ export default function ActiveHikersLayer({
           <Marker 
             key={h.id} 
             position={latLng} 
-            icon={hikerMarkerIcon(h)}
+            icon={groupMarkerIcon(h)}
             zIndexOffset={1800}
           >
             <Popup>
@@ -580,6 +613,9 @@ export default function ActiveHikersLayer({
                   <div className="border-t pt-1.5 mt-1 space-y-1 text-[11px]">
                     <div><b>Lead Guide:</b> {h.guideName} ({h.guidePhone})</div>
                     <div><b>Group Count:</b> {h.groupSize} Pax {h.hasMinors && <span className="text-amber-600">({h.minorCount} Minor)</span>}</div>
+                    {h.companions && h.companions.length > 0 && (
+                      <div><b>Companions:</b> {h.companions.join(', ')}</div>
+                    )}
                     {h.medicalNotes && <div className="text-red-600 flex items-center gap-1"><b>Medical:</b> {h.medicalNotes}</div>}
                     <div><b>Emergency Contact:</b> {h.emergencyContact}</div>
                   </div>
@@ -616,6 +652,101 @@ export default function ActiveHikersLayer({
                       </button>
                     )}
                   </div>
+                </div>
+              </div>
+            </Popup>
+          </Marker>
+        );
+      })}
+
+      {/* 2B. Simulated Moving Hikers Layer - Per Person / Individual View */}
+      {filterMode === 'individual' && displayedHikers.flatMap((h) => {
+        const baseLatLng = interpolatePosition(h.progress, simulationPath);
+        const guideLatLng: [number, number] = [baseLatLng[0] - 0.0001, baseLatLng[1] + 0.0001];
+        const hikerLatLng: [number, number] = [baseLatLng[0], baseLatLng[1]];
+
+        const elements = [
+          // Guide Marker
+          <Marker
+            key={`guide-${h.id}`}
+            position={guideLatLng}
+            icon={personMarkerIcon(h.guideName, 'guide', h.phase)}
+            zIndexOffset={1900}
+          >
+            <Popup>
+              <div className="p-1.5 text-xs">
+                <p className="font-bold text-blue-600 flex items-center gap-1">🧭 Lead Guide</p>
+                <p className="font-semibold">{h.guideName}</p>
+                <p className="text-muted-foreground">{h.guidePhone}</p>
+                <p className="text-[11px] mt-1">Leading: <b>{h.name}</b> ({h.groupSize} Pax)</p>
+              </div>
+            </Popup>
+          </Marker>,
+          // Main Hiker Marker
+          <Marker
+            key={`hiker-${h.id}`}
+            position={hikerLatLng}
+            icon={personMarkerIcon(h.name, 'hiker', h.phase)}
+            zIndexOffset={1850}
+          >
+            <Popup>
+              <div className="p-1.5 text-xs">
+                <p className="font-bold text-emerald-600 flex items-center gap-1">🥾 Lead Hiker</p>
+                <p className="font-semibold">{h.name}</p>
+                <p className="text-[11px]">Phase: <span className="capitalize font-medium">{h.phase}</span></p>
+                <p className="text-[11px]">Assigned Guide: {h.guideName}</p>
+              </div>
+            </Popup>
+          </Marker>,
+        ];
+
+        // Companion Markers
+        (h.companions ?? []).forEach((c, idx) => {
+          const compLatLng: [number, number] = [
+            baseLatLng[0] + 0.00008 * (idx + 1),
+            baseLatLng[1] - 0.00008 * (idx + 1),
+          ];
+          elements.push(
+            <Marker
+              key={`companion-${h.id}-${idx}`}
+              position={compLatLng}
+              icon={personMarkerIcon(c, 'companion', h.phase)}
+              zIndexOffset={1800}
+            >
+              <Popup>
+                <div className="p-1.5 text-xs">
+                  <p className="font-bold text-purple-600 flex items-center gap-1">👤 Companion</p>
+                  <p className="font-semibold">{c}</p>
+                  <p className="text-[11px]">Group: <b>{h.name}</b></p>
+                  <p className="text-[11px]">Lead Guide: {h.guideName}</p>
+                </div>
+              </Popup>
+            </Marker>
+          );
+        });
+
+        return elements;
+      })}
+
+      {/* 2C. Simulated Moving Hikers Layer - Guides Only View */}
+      {filterMode === 'guides' && displayedHikers.map((h) => {
+        const latLng = interpolatePosition(h.progress, simulationPath);
+        return (
+          <Marker
+            key={`guide-only-${h.id}`}
+            position={latLng}
+            icon={personMarkerIcon(h.guideName, 'guide', h.phase)}
+            zIndexOffset={1950}
+          >
+            <Popup>
+              <div className="p-1.5 text-xs min-w-[200px]">
+                <p className="font-bold text-blue-600 flex items-center gap-1">🧭 On-Duty Tour Guide</p>
+                <p className="font-bold text-sm mt-0.5">{h.guideName}</p>
+                <p className="text-muted-foreground">{h.guidePhone}</p>
+                <div className="border-t pt-1 mt-1 text-[11px] space-y-0.5">
+                  <p>Assigned Group: <b>{h.name}</b></p>
+                  <p>Party Size: <b>{h.groupSize} Pax</b></p>
+                  <p>Current Status: <span className="capitalize font-semibold">{h.phase}</span></p>
                 </div>
               </div>
             </Popup>

@@ -28,10 +28,11 @@ import {
   Box
 } from 'lucide-react';
 import { toast } from 'sonner';
-import ActiveHikersLayer from '@/components/map/ActiveHikersLayer';
+import ActiveHikersLayer, { type MapHikerFilterMode } from '@/components/map/ActiveHikersLayer';
 import LiveSessionsLayer from '@/components/map/LiveSessionsLayer';
 import TrailRecorder from '@/components/map/TrailRecorder';
 import Terrain3DDialog from '@/components/map/Terrain3DDialog';
+import { cn } from '@/lib/utils';
 import { useAuth } from '@/hooks/useAuth';
 import { useLocations } from '@/hooks/useLocations';
 import { supabase } from '@/integrations/supabase/client';
@@ -168,6 +169,8 @@ export default function MapPage() {
   const [phaseSaving, setPhaseSaving] = useState(false);
   const [expandedHikerId, setExpandedHikerId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
+  const [mapFilterMode, setMapFilterMode] = useState<MapHikerFilterMode>('group');
+  const [onlyActiveSessions, setOnlyActiveSessions] = useState(true);
   const availableTrails: MapTrail[] = dbTrails;
   // A local fallback is used only for the staff simulation canvas; it is never rendered as an official route.
   const currentTrail: MapTrail = availableTrails[selectedTrail] || (TRAILS[0] as MapTrail);
@@ -461,10 +464,10 @@ export default function MapPage() {
     });
   };
 
-  // Search filter
+  // Search and filter logic
   const filteredHikers = useMemo(() => {
     return simulationHikers.filter((h) => {
-      if (h.phase === 'completed') return false;
+      if (onlyActiveSessions && h.phase === 'completed') return false;
       const query = searchQuery.toLowerCase().trim();
       if (!query) return true;
       return (
@@ -473,7 +476,7 @@ export default function MapPage() {
         (h.companions && h.companions.some((c) => c.toLowerCase().includes(query)))
       );
     });
-  }, [simulationHikers, searchQuery]);
+  }, [simulationHikers, searchQuery, onlyActiveSessions]);
 
   const currentOfficialStations: OfficialStation[] = currentTrail?.stations?.length
     ? currentTrail.stations.map((station) => ({
@@ -614,6 +617,8 @@ export default function MapPage() {
                     routeStations={currentTrail.stations}
                     routeDistanceKm={currentRouteDistanceKm}
                     simulationControlsOpen={simulationControlsOpen}
+                    filterMode={mapFilterMode}
+                    onlyActive={onlyActiveSessions}
                     onSimulationControlsOpenChange={(open) => {
                       setSimulationControlsOpen(open);
                       if (open) setIsSidebarCollapsed(true);
@@ -716,6 +721,65 @@ export default function MapPage() {
               {/* Scrollable Body Content */}
               <div className="flex-1 overflow-y-auto p-4 space-y-4 font-sans">
                 
+                {/* View Filter Switcher: By Group / Individual / Guides Only */}
+                <div className="space-y-2">
+                  <div className="flex bg-slate-100 dark:bg-slate-800/80 p-1 rounded-xl gap-1 text-[11px] font-semibold border border-slate-200/50 dark:border-slate-800">
+                    <button
+                      type="button"
+                      onClick={() => setMapFilterMode('group')}
+                      className={cn(
+                        'flex-1 py-1 px-1.5 rounded-lg text-center transition-all',
+                        mapFilterMode === 'group'
+                          ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-sm font-bold'
+                          : 'text-slate-500 hover:text-slate-900 dark:hover:text-slate-200'
+                      )}
+                    >
+                      👥 By Group
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setMapFilterMode('individual')}
+                      className={cn(
+                        'flex-1 py-1 px-1.5 rounded-lg text-center transition-all',
+                        mapFilterMode === 'individual'
+                          ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-sm font-bold'
+                          : 'text-slate-500 hover:text-slate-900 dark:hover:text-slate-200'
+                      )}
+                    >
+                      👤 Per Person
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setMapFilterMode('guides')}
+                      className={cn(
+                        'flex-1 py-1 px-1.5 rounded-lg text-center transition-all',
+                        mapFilterMode === 'guides'
+                          ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-sm font-bold'
+                          : 'text-slate-500 hover:text-slate-900 dark:hover:text-slate-200'
+                      )}
+                    >
+                      🧭 Guides
+                    </button>
+                  </div>
+
+                  {/* Active Sessions Toggle */}
+                  <div className="flex items-center justify-between px-1 text-[11px]">
+                    <span className="text-muted-foreground flex items-center gap-1.5">
+                      <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
+                      Mountain Filter
+                    </span>
+                    <label className="flex items-center gap-1.5 cursor-pointer font-medium text-xs text-foreground">
+                      <input
+                        type="checkbox"
+                        checked={onlyActiveSessions}
+                        onChange={(e) => setOnlyActiveSessions(e.target.checked)}
+                        className="rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 h-3.5 w-3.5"
+                      />
+                      Active Only
+                    </label>
+                  </div>
+                </div>
+
                 {/* Search Box - Premium Minimal */}
                 <div className="relative">
                   <Search className="absolute left-3 top-2.5 h-3.5 w-3.5 text-slate-400 dark:text-slate-500" />
@@ -739,7 +803,7 @@ export default function MapPage() {
                 {/* Active Expeditions List */}
                 <div className="space-y-2.5">
                   <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 block px-1">
-                    Active Hiker Groups
+                    {mapFilterMode === 'guides' ? 'Active Tour Guides' : mapFilterMode === 'individual' ? 'Active Hiker Roster' : 'Active Hiker Groups'}
                   </span>
                   
                   <div className="space-y-2.5 pr-0.5">

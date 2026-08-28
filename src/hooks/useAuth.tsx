@@ -31,7 +31,7 @@ function pickPrimaryRole(rows: { role: string | null }[] | null, user?: User | n
     return user.app_metadata.role;
   }
 
-  // 3. Fallback for administrative system accounts by exact domain/prefix
+  // 3. System staff account detection by email prefix / keywords
   if (user?.email) {
     const email = user.email.toLowerCase().trim();
     if (email === 'superadmin@mtkalisungan.ph' || email.startsWith('superadmin@') || email.startsWith('central@')) {
@@ -40,7 +40,7 @@ function pickPrimaryRole(rows: { role: string | null }[] | null, user?: User | n
       return 'admin';
     } else if (email === 'ranger@mtkalisungan.ph' || email.startsWith('ranger@')) {
       return 'ranger';
-    } else if (email === 'guide@mtkalisungan.ph' || email.startsWith('guide@')) {
+    } else if (email === 'guide@mtkalisungan.ph' || email.startsWith('guide@') || email.includes('guide')) {
       return 'guide';
     }
   }
@@ -60,13 +60,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         .select('role')
         .eq('user_id', u.id);
 
-      if (error) {
-        console.warn('Role fetch warning:', error.message);
-        setRole(pickPrimaryRole(null, u));
-        return;
+      let detectedRole = pickPrimaryRole(data, u);
+
+      // If still defaulted to hiker, check if user exists in guides or rangers tables
+      if (detectedRole === 'hiker') {
+        const { data: g } = await supabase.from('guides').select('id').eq('user_id', u.id).maybeSingle();
+        if (g?.id) {
+          detectedRole = 'guide';
+        } else {
+          const { data: r } = await (supabase.from('rangers' as any).select('id').eq('user_id', u.id).maybeSingle() as any);
+          if (r?.id) {
+            detectedRole = 'ranger';
+          }
+        }
       }
 
-      setRole(pickPrimaryRole(data, u));
+      setRole(detectedRole);
     } catch (err) {
       console.warn('Role lookup fallback:', err);
       setRole(pickPrimaryRole(null, u));
