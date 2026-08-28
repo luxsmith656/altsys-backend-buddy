@@ -16,6 +16,7 @@ export interface BookingMeta {
   userNotes?: string;
   assignedGuide?: string;       // Guide name assigned by admin
   assignedGuideId?: string;
+  assignedAt?: string;
   guideAcceptedAt?: string;
   guideChangeReason?: string;
   guideDeclineReason?: string;
