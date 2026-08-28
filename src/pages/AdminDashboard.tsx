@@ -1030,6 +1030,8 @@ export default function AdminDashboard() {
       ...meta,
       assignedGuide: guideName,
       assignedGuideId: guideRow?.id,
+      guideStatus: 'pending',
+      assignedAt: new Date().toISOString(),
       assignedTrailZoneId: routeInfo.route?.id,
       assignedTrailName: routeInfo.route?.name,
       assignedTrailAuto: routeInfo.auto,

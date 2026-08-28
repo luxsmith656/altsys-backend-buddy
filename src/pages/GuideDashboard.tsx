@@ -32,16 +32,33 @@ import {
   HeartPulse,
   FileText,
   AlertTriangle,
+  MessageCircle,
+  DollarSign,
+  Receipt,
+  Star,
+  TrendingUp,
+  Wallet,
+  Calendar,
 } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { parseMeta } from '@/lib/bookingMeta';
 import { format } from 'date-fns';
 import { toast } from 'sonner';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { GuideOffDutyForm } from '@/components/booking/OffDutyManager';
 import { isFirebaseConfigured, uploadGuideProfilePhoto } from '@/lib/firebase-storage';
 import GuideDeclineModal from '@/components/booking/GuideDeclineModal';
+import BookingChat from '@/components/booking/BookingChat';
 import { acceptGuideAssignment } from '@/lib/guideAssignmentService';
+import { calculateGuideEarnings, GuideEarningsSummary } from '@/lib/guideEarnings';
+import { formatPeso } from '@/lib/payments';
 
 const QUOTA_PER_GUIDE_PER_DAY = 5;
 
@@ -67,23 +84,28 @@ export default function GuideDashboard() {
   const [assignments, setAssignments] = useState<AssignmentRow[]>([]);
   const [peerGuides, setPeerGuides] = useState<any[]>([]);
   const [peerCounts, setPeerCounts] = useState<Record<string, { active: number; total: number }>>({});
+  const [reviews, setReviews] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<'all' | AssignmentStatus>('all');
   const [detailOpen, setDetailOpen] = useState<AssignmentRow | null>(null);
   const [declineOpen, setDeclineOpen] = useState<AssignmentRow | null>(null);
+  const [chatBooking, setChatBooking] = useState<{ id: string; date: string } | null>(null);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  const [statusUpdating, setStatusUpdating] = useState(false);
   const [activeSession, setActiveSession] = useState<any | null>(null);
   const [acceptingId, setAcceptingId] = useState<string | null>(null);
+  const [earningsFilter, setEarningsFilter] = useState<'all' | 'completed' | 'pending'>('all');
 
   useEffect(() => {
     if (!user) return;
     void load();
 
-    // Listen for realtime booking assignment changes and check-ins
+    // Listen for realtime booking assignment changes, bookings, and check-ins
     const ch = supabase
       .channel('guide-assignments-realtime')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'booking_assignments' }, () => void load())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'bookings' }, () => void load())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'guide_reviews' }, () => void load())
       .on(
         'postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'hiker_sessions', filter: `user_id=eq.${user.id}` },
@@ -143,8 +165,8 @@ export default function GuideDashboard() {
 
       setActiveSession(session || null);
 
-      // 3. Fetch assignments for me + peer guides at same location
-      const [{ data: mineRaw }, { data: peers }] = await Promise.all([
+      // 3. Fetch assignments for me + peer guides at same location + reviews
+      const [{ data: mineRaw }, { data: peers }, { data: reviewsData }] = await Promise.all([
         supabase
           .from('booking_assignments' as any)
           .select('*')
@@ -152,12 +174,19 @@ export default function GuideDashboard() {
           .order('created_at', { ascending: false }),
         supabase
           .from('guides' as any)
-          .select('id, full_name, is_active, specialty, phone, user_id, location_id, status')
+          .select('id, full_name, is_active, specialty, phone, user_id, location_id, status, per_trip_fee')
           .eq('location_id', me.location_id)
           .eq('is_active', true),
+        supabase
+          .from('guide_reviews' as any)
+          .select('*')
+          .eq('guide_id', me.id)
+          .eq('is_approved', true)
+          .order('created_at', { ascending: false }),
       ]);
 
       const mineList = ((mineRaw as any[]) ?? []) as AssignmentRow[];
+      setReviews((reviewsData as any[]) || []);
 
       // 4. Pull full bookings data for the assignments
       const bookingIds = Array.from(new Set(mineList.map((a: any) => a.booking_id))).filter(Boolean);
@@ -200,6 +229,11 @@ export default function GuideDashboard() {
     }
   };
 
+  // Earnings calculations
+  const earnings: GuideEarningsSummary = useMemo(() => {
+    return calculateGuideEarnings(assignments, guideRow?.per_trip_fee);
+  }, [assignments, guideRow]);
+
   const counts = useMemo(() => {
     const today = format(new Date(), 'yyyy-MM-dd');
     return {
@@ -213,7 +247,40 @@ export default function GuideDashboard() {
     };
   }, [assignments]);
 
-  const filtered = filter === 'all' ? assignments : assignments.filter((a) => a.status === filter);
+  const averageRating = useMemo(() => {
+    if (reviews.length === 0) return null;
+    const sum = reviews.reduce((acc, r) => acc + Number(r.rating || 5), 0);
+    return (sum / reviews.length).toFixed(1);
+  }, [reviews]);
+
+  const filteredAssignments = filter === 'all'
+    ? assignments
+    : assignments.filter((a) => a.status === filter);
+
+  const filteredHikeRecords = earnings.hikeRecords.filter((r) => {
+    if (earningsFilter === 'completed') return r.assignmentStatus === 'completed';
+    if (earningsFilter === 'pending') return r.assignmentStatus === 'accepted' || r.assignmentStatus === 'pending';
+    return true;
+  });
+
+  /* ── Duty Status Toggle ── */
+  const handleDutyStatusChange = async (newStatus: string) => {
+    if (!guideRow) return;
+    setStatusUpdating(true);
+    try {
+      const { error } = await supabase
+        .from('guides' as any)
+        .update({ status: newStatus, updated_at: new Date().toISOString() } as any)
+        .eq('id', guideRow.id);
+      if (error) throw error;
+      setGuideRow((current: any) => ({ ...current, status: newStatus }));
+      toast.success(`Duty status updated to ${newStatus.replace('_', ' ').toUpperCase()}`);
+    } catch (err: any) {
+      toast.error(err?.message || 'Could not update duty status');
+    } finally {
+      setStatusUpdating(false);
+    }
+  };
 
   /* ── Accept assignment ── */
   const handleAccept = async (a: AssignmentRow) => {
@@ -411,33 +478,68 @@ export default function GuideDashboard() {
 
         {/* Guide Profile Quick Bar */}
         <Card className="glass-card">
-          <CardContent className="p-4 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <CardContent className="p-4 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
             <div className="flex items-center gap-3.5 min-w-0">
               {guideRow.photo_url ? (
                 <img
                   src={guideRow.photo_url}
                   alt={guideRow.full_name}
-                  className="h-14 w-14 shrink-0 rounded-2xl object-cover border border-border/40 shadow-sm"
+                  className="h-16 w-16 shrink-0 rounded-2xl object-cover border border-border/40 shadow-sm"
                 />
               ) : (
-                <div className="h-14 w-14 shrink-0 rounded-2xl bg-primary/15 text-primary grid place-items-center font-bold text-xl border border-primary/20">
+                <div className="h-16 w-16 shrink-0 rounded-2xl bg-primary/15 text-primary grid place-items-center font-bold text-2xl border border-primary/20">
                   {guideRow.full_name?.slice(0, 1)?.toUpperCase() || 'G'}
                 </div>
               )}
               <div className="min-w-0">
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 flex-wrap">
                   <p className="font-bold text-foreground text-base truncate">{guideRow.full_name}</p>
                   <Badge variant="outline" className="text-[10px] text-primary border-primary/30">
                     Official Guide
                   </Badge>
+                  {averageRating && (
+                    <Badge className="bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30 text-[10px] gap-1">
+                      <Star className="h-3 w-3 fill-amber-400 text-amber-400" />
+                      {averageRating} ({reviews.length})
+                    </Badge>
+                  )}
                 </div>
                 <p className="text-xs text-muted-foreground mt-0.5">
                   {guideRow.specialty || 'Mount Kalisungan Eco-Guide'} • {guideRow.phone || 'Phone on file'}
                 </p>
+                <p className="text-[11px] text-muted-foreground mt-0.5">
+                  Standard Rate: <strong>₱{guideRow.per_trip_fee || 800}</strong> / group (up to 8 pax)
+                </p>
               </div>
             </div>
 
-            <div className="flex flex-wrap items-center gap-2">
+            {/* Duty Status Selector & Quick Actions */}
+            <div className="flex flex-wrap items-center gap-2.5 pt-2 lg:pt-0 border-t lg:border-t-0 border-border/20">
+              <div className="flex items-center gap-1.5 bg-secondary/40 px-3 py-1.5 rounded-xl border border-border/40">
+                <span className="text-[11px] font-semibold text-muted-foreground uppercase">Duty Status:</span>
+                <Select
+                  value={guideRow.status || 'available'}
+                  onValueChange={(val) => void handleDutyStatusChange(val)}
+                  disabled={statusUpdating}
+                >
+                  <SelectTrigger className="h-7 text-xs font-bold border-none bg-transparent shadow-none px-1.5 focus:ring-0">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="available" className="text-xs font-medium text-emerald-600 dark:text-emerald-400">
+                      🟢 Available (Ready for Dispatches)
+                    </SelectItem>
+                    <SelectItem value="on_duty" className="text-xs font-medium text-primary">
+                      🔵 On Duty (Currently on Trail)
+                    </SelectItem>
+                    <SelectItem value="off_duty" className="text-xs font-medium text-muted-foreground">
+                      ⚪ Off Duty (Not Accepting Hikes)
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
+                {statusUpdating && <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />}
+              </div>
+
               <label className="inline-flex h-9 cursor-pointer items-center justify-center gap-1.5 rounded-xl border border-input bg-background px-3 text-xs font-medium hover:bg-accent transition-all">
                 {uploadingPhoto ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ImageUp className="h-3.5 w-3.5" />}
                 Update Photo
@@ -459,8 +561,8 @@ export default function GuideDashboard() {
           </CardContent>
         </Card>
 
-        {/* Quick Stats Grid */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3">
+        {/* Quick Stats Grid (Including Total Earnings) */}
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
           {[
             { label: 'Pending Acceptance', value: counts.pending, icon: Inbox, color: 'text-amber-500', alert: counts.pending > 0 },
             { label: 'Confirmed Hikes', value: counts.accepted, icon: CheckCircle2, color: 'text-primary' },
@@ -470,24 +572,35 @@ export default function GuideDashboard() {
               icon: Activity,
               color: counts.todayAccepted >= QUOTA_PER_GUIDE_PER_DAY ? 'text-destructive' : 'text-emerald-500',
             },
-            { label: 'Completed', value: counts.completed, icon: Mountain, color: 'text-sky-500' },
-            { label: 'Declined / Passed', value: counts.declined, icon: XCircle, color: 'text-muted-foreground' },
+            { label: 'Completed Hikes', value: counts.completed, icon: Mountain, color: 'text-sky-500' },
+            {
+              label: 'Total Earned',
+              value: formatPeso(earnings.lifetimeEarned),
+              icon: DollarSign,
+              color: 'text-emerald-500 font-extrabold',
+            },
+            {
+              label: 'Pending Payout',
+              value: formatPeso(earnings.pendingEarnings),
+              icon: Wallet,
+              color: 'text-primary font-extrabold',
+            },
           ].map((s) => (
             <Card
               key={s.label}
               className={`glass-card transition-all ${
-                s.alert ? 'border-amber-500/40 bg-amber-500/5' : ''
+                s.alert ? 'border-amber-500/40 bg-amber-500/5 shadow-md' : ''
               }`}
             >
               <CardContent className="p-3.5 flex items-center gap-2.5">
                 <div className={`p-2 rounded-xl bg-secondary/50 ${s.color}`}>
                   <s.icon className="h-4 w-4" />
                 </div>
-                <div>
-                  <p className="text-[10px] uppercase tracking-wider font-semibold text-muted-foreground">
+                <div className="min-w-0">
+                  <p className="text-[10px] uppercase tracking-wider font-semibold text-muted-foreground truncate">
                     {s.label}
                   </p>
-                  <p className="text-base font-bold text-foreground mt-0.5">{s.value}</p>
+                  <p className={`text-base font-bold text-foreground mt-0.5 truncate ${s.color}`}>{s.value}</p>
                 </div>
               </CardContent>
             </Card>
@@ -500,12 +613,20 @@ export default function GuideDashboard() {
             <TabsList className="glass-card">
               <TabsTrigger value="my" className="gap-1.5 text-xs">
                 <Inbox className="h-3.5 w-3.5" />
-                My Hiker Assignments
+                My Assignments
                 {counts.pending > 0 && (
                   <span className="ml-1 px-1.5 py-0.2 rounded-full bg-amber-500 text-white font-bold text-[10px]">
                     {counts.pending}
                   </span>
                 )}
+              </TabsTrigger>
+              <TabsTrigger value="earnings" className="gap-1.5 text-xs">
+                <Receipt className="h-3.5 w-3.5" />
+                Earnings & Hike Ledger
+              </TabsTrigger>
+              <TabsTrigger value="reviews" className="gap-1.5 text-xs">
+                <Star className="h-3.5 w-3.5" />
+                Hiker Reviews ({reviews.length})
               </TabsTrigger>
               <TabsTrigger value="peers" className="gap-1.5 text-xs">
                 <Users className="h-3.5 w-3.5" />
@@ -539,7 +660,7 @@ export default function GuideDashboard() {
               ))}
             </div>
 
-            {filtered.length === 0 ? (
+            {filteredAssignments.length === 0 ? (
               <Card className="glass-card">
                 <CardContent className="text-center py-14 text-muted-foreground text-sm space-y-2">
                   <Inbox className="h-10 w-10 mx-auto opacity-30" />
@@ -551,13 +672,14 @@ export default function GuideDashboard() {
               </Card>
             ) : (
               <div className="grid gap-3.5">
-                {filtered.map((a) => {
+                {filteredAssignments.map((a) => {
                   const booking = a.booking;
                   const meta = parseMeta(booking?.notes);
                   const isPending = a.status === 'pending';
                   const isAccepted = a.status === 'accepted';
                   const isDeclined = a.status === 'declined';
                   const isCompleted = a.status === 'completed';
+                  const feeAmount = meta.guideFee || (guideRow?.per_trip_fee || 800);
 
                   return (
                     <Card
@@ -597,6 +719,9 @@ export default function GuideDashboard() {
                               <span className="text-xs text-muted-foreground">
                                 Booking #{a.booking_id ? a.booking_id.slice(0, 8) : a.id.slice(0, 8)}
                               </span>
+                              <Badge variant="outline" className="text-[11px] font-semibold text-emerald-600 dark:text-emerald-400 border-emerald-500/30">
+                                Fee: {formatPeso(feeAmount)}
+                              </Badge>
                               {a.created_at && (
                                 <span className="text-xs text-muted-foreground">
                                   • Assigned {format(new Date(a.created_at), 'MMM d, h:mm a')}
@@ -620,12 +745,23 @@ export default function GuideDashboard() {
                               <Field
                                 icon={MapPin}
                                 label="Trail / Start Time"
-                                value={meta.hikeTime || 'Morning'}
+                                value={meta.assignedTrailName || meta.hikeTime || 'Morning Standard'}
                               />
                               <Field
                                 icon={Phone}
                                 label="Contact Phone"
-                                value={meta.phoneNumber || booking?.emergency_contact_phone || '—'}
+                                value={
+                                  meta.phoneNumber ? (
+                                    <a
+                                      href={`tel:${meta.phoneNumber}`}
+                                      className="underline hover:text-primary"
+                                    >
+                                      {meta.phoneNumber}
+                                    </a>
+                                  ) : (
+                                    booking?.emergency_contact_phone || '—'
+                                  )
+                                }
                               />
                             </div>
 
@@ -704,6 +840,17 @@ export default function GuideDashboard() {
                               </>
                             )}
 
+                            {/* Direct Hiker Chat Button */}
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => setChatBooking({ id: a.booking_id || a.id, date: booking?.booking_date || 'Upcoming' })}
+                              className="text-xs h-8 gap-1.5 text-primary border-primary/30"
+                            >
+                              <MessageCircle className="h-3.5 w-3.5" />
+                              Chat with Hiker
+                            </Button>
+
                             <Button
                               size="sm"
                               variant="ghost"
@@ -722,7 +869,218 @@ export default function GuideDashboard() {
             )}
           </TabsContent>
 
-          {/* Tab 2: Peer Guides Transparency Board */}
+          {/* Tab 2: Earnings & Hike Settlement Ledger */}
+          <TabsContent value="earnings" className="space-y-4 mt-0">
+            {/* Earnings Summary Banner */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              <Card className="glass-card border-emerald-500/30 bg-emerald-500/5">
+                <CardContent className="p-4 space-y-1">
+                  <div className="flex items-center justify-between text-muted-foreground">
+                    <span className="text-[11px] uppercase font-semibold">Lifetime Earned</span>
+                    <DollarSign className="h-4 w-4 text-emerald-500" />
+                  </div>
+                  <p className="text-xl font-extrabold text-emerald-600 dark:text-emerald-400">
+                    {formatPeso(earnings.lifetimeEarned)}
+                  </p>
+                  <p className="text-[10px] text-muted-foreground">
+                    {earnings.completedHikesCount} completed hikes settled
+                  </p>
+                </CardContent>
+              </Card>
+
+              <Card className="glass-card">
+                <CardContent className="p-4 space-y-1">
+                  <div className="flex items-center justify-between text-muted-foreground">
+                    <span className="text-[11px] uppercase font-semibold">This Month</span>
+                    <TrendingUp className="h-4 w-4 text-primary" />
+                  </div>
+                  <p className="text-xl font-bold text-foreground">
+                    {formatPeso(earnings.thisMonthEarned)}
+                  </p>
+                  <p className="text-[10px] text-muted-foreground">
+                    Current calendar month
+                  </p>
+                </CardContent>
+              </Card>
+
+              <Card className="glass-card">
+                <CardContent className="p-4 space-y-1">
+                  <div className="flex items-center justify-between text-muted-foreground">
+                    <span className="text-[11px] uppercase font-semibold">This Week</span>
+                    <Calendar className="h-4 w-4 text-sky-500" />
+                  </div>
+                  <p className="text-xl font-bold text-foreground">
+                    {formatPeso(earnings.thisWeekEarned)}
+                  </p>
+                  <p className="text-[10px] text-muted-foreground">
+                    Monday to Sunday window
+                  </p>
+                </CardContent>
+              </Card>
+
+              <Card className="glass-card border-primary/30 bg-primary/5">
+                <CardContent className="p-4 space-y-1">
+                  <div className="flex items-center justify-between text-muted-foreground">
+                    <span className="text-[11px] uppercase font-semibold">Pending Payout</span>
+                    <Wallet className="h-4 w-4 text-primary" />
+                  </div>
+                  <p className="text-xl font-bold text-primary">
+                    {formatPeso(earnings.pendingEarnings)}
+                  </p>
+                  <p className="text-[10px] text-muted-foreground">
+                    {earnings.acceptedHikesCount} confirmed upcoming hikes
+                  </p>
+                </CardContent>
+              </Card>
+            </div>
+
+            {/* Hike-by-Hike Settlement Ledger */}
+            <Card className="glass-card">
+              <CardHeader className="p-4 sm:p-6 pb-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div>
+                  <CardTitle className="text-base sm:text-lg flex items-center gap-2">
+                    <Receipt className="h-5 w-5 text-primary" />
+                    Hike Settlement & Earnings Ledger
+                  </CardTitle>
+                  <CardDescription className="text-xs">
+                    Itemized record of all your guided hikes, fee breakdowns, and payment settlement statuses.
+                  </CardDescription>
+                </div>
+
+                <div className="flex items-center gap-1.5">
+                  {(['all', 'completed', 'pending'] as const).map((mode) => (
+                    <Button
+                      key={mode}
+                      size="sm"
+                      variant={earningsFilter === mode ? 'default' : 'outline'}
+                      onClick={() => setEarningsFilter(mode)}
+                      className="capitalize text-xs h-7 rounded-lg"
+                    >
+                      {mode === 'all' ? 'All Hikes' : mode === 'completed' ? 'Settled & Completed' : 'Upcoming / Pending'}
+                    </Button>
+                  ))}
+                </div>
+              </CardHeader>
+
+              <CardContent className="p-4 sm:p-6 pt-0 space-y-3">
+                {filteredHikeRecords.length === 0 ? (
+                  <div className="text-center py-10 text-muted-foreground text-sm space-y-1">
+                    <Receipt className="h-8 w-8 mx-auto opacity-30" />
+                    <p>No hike earnings records found for this filter.</p>
+                  </div>
+                ) : (
+                  <div className="divide-y divide-border/20">
+                    {filteredHikeRecords.map((record) => (
+                      <div
+                        key={record.assignmentId}
+                        className="py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 text-xs"
+                      >
+                        <div className="space-y-1 min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="font-bold text-foreground text-sm">
+                              {record.hikerName}
+                            </span>
+                            <Badge variant="outline" className="text-[10px]">
+                              {record.groupSize} {record.groupSize === 1 ? 'Hiker' : 'Hikers'}
+                            </Badge>
+                            <Badge
+                              className={
+                                record.assignmentStatus === 'completed'
+                                  ? 'bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 border-emerald-500/30 text-[10px]'
+                                  : record.assignmentStatus === 'accepted'
+                                  ? 'bg-primary/20 text-primary border-primary/30 text-[10px]'
+                                  : 'bg-muted text-muted-foreground text-[10px]'
+                              }
+                            >
+                              {record.assignmentStatus === 'completed'
+                                ? 'Completed & Settled'
+                                : record.assignmentStatus === 'accepted'
+                                ? 'Upcoming Confirmed'
+                                : 'Pending'}
+                            </Badge>
+                          </div>
+                          <p className="text-muted-foreground">
+                            Date: <strong>{record.hikeDate || 'Scheduled'}</strong> • Ref #{record.bookingId.slice(0, 8)} • Payment: {record.paymentMethod}
+                          </p>
+                        </div>
+
+                        <div className="flex sm:flex-col items-center sm:items-end justify-between gap-1 shrink-0">
+                          <span className="text-base font-extrabold text-emerald-600 dark:text-emerald-400">
+                            +{formatPeso(record.guideFee)}
+                          </span>
+                          <span className="text-[10px] text-muted-foreground">
+                            {record.assignmentStatus === 'completed' ? 'Settled in Account' : 'Expected upon completion'}
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          {/* Tab 3: Hiker Reviews & Ratings */}
+          <TabsContent value="reviews" className="space-y-4 mt-0">
+            <Card className="glass-card">
+              <CardHeader className="p-4 sm:p-6 pb-2">
+                <div className="flex items-center justify-between flex-wrap gap-2">
+                  <div>
+                    <CardTitle className="text-base sm:text-lg flex items-center gap-2">
+                      <Star className="h-5 w-5 text-amber-500 fill-amber-500" />
+                      Hiker Reviews & Ratings
+                    </CardTitle>
+                    <CardDescription className="text-xs sm:text-sm">
+                      Feedback from hikers guided on Mount Kalisungan trails.
+                    </CardDescription>
+                  </div>
+                  {averageRating && (
+                    <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-amber-500/10 border border-amber-500/30">
+                      <Star className="h-4 w-4 fill-amber-400 text-amber-400" />
+                      <span className="font-extrabold text-foreground text-sm">{averageRating} / 5.0</span>
+                      <span className="text-xs text-muted-foreground">({reviews.length} reviews)</span>
+                    </div>
+                  )}
+                </div>
+              </CardHeader>
+              <CardContent className="p-4 sm:p-6 pt-3 space-y-3">
+                {reviews.length === 0 ? (
+                  <div className="text-center py-10 text-muted-foreground text-sm space-y-1">
+                    <Star className="h-8 w-8 mx-auto opacity-30" />
+                    <p>No hiker reviews recorded yet.</p>
+                    <p className="text-xs text-muted-foreground">When hikers rate their completed hike with you, their comments will appear here.</p>
+                  </div>
+                ) : (
+                  reviews.map((r) => (
+                    <div
+                      key={r.id}
+                      className="p-3.5 rounded-xl border border-border/30 bg-secondary/15 space-y-1.5 text-xs"
+                    >
+                      <div className="flex items-center justify-between">
+                        <span className="font-bold text-foreground text-sm">
+                          {r.reviewer_name || 'Mount Kalisungan Hiker'}
+                        </span>
+                        <div className="flex items-center gap-1 text-amber-500 font-bold">
+                          <Star className="h-3.5 w-3.5 fill-amber-400 text-amber-400" />
+                          <span>{r.rating} / 5</span>
+                        </div>
+                      </div>
+                      <p className="text-muted-foreground italic leading-relaxed">
+                        "{r.comment || 'Great guiding experience!'}"
+                      </p>
+                      {r.created_at && (
+                        <p className="text-[10px] text-muted-foreground">
+                          {format(new Date(r.created_at), 'MMMM d, yyyy')}
+                        </p>
+                      )}
+                    </div>
+                  ))
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          {/* Tab 4: Peer Guides Transparency Board */}
           <TabsContent value="peers" className="mt-0">
             <Card className="glass-card">
               <CardHeader className="p-4 sm:p-6 pb-2">
@@ -846,6 +1204,16 @@ export default function GuideDashboard() {
           peerGuides={peerGuides}
           onSuccess={load}
         />
+
+        {/* Direct Booking Chat Modal with Hiker */}
+        {chatBooking && (
+          <BookingChat
+            bookingId={chatBooking.id}
+            bookingDate={chatBooking.date}
+            open={!!chatBooking}
+            onOpenChange={(o) => !o && setChatBooking(null)}
+          />
+        )}
       </div>
     </div>
   );
