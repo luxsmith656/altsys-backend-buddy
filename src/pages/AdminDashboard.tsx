@@ -97,6 +97,7 @@ import { addAnnouncement, loadAnnouncements, removeAnnouncement, type AdminAnnou
 import { writeActivityLog } from '@/lib/activity-log';
 import { motion } from 'framer-motion';
 import { toast } from 'sonner';
+import { TRAILS } from '@/lib/map-data';
 import { loadGuideRatings, renderStars, type GuideRating } from '@/lib/guideRatings';
 import {
   BarChart,
@@ -1563,10 +1564,30 @@ export default function AdminDashboard() {
   };
 
   const officialRoutesForLocation = useCallback((locationId?: string | null) => {
-    return (zones ?? []).filter((z: any) => {
-      const active = z.status === 'active' && z.is_official !== false;
-      return active && (!locationId || !z.location_id || z.location_id === locationId);
+    // 1. Database trail_zones matching location (or unassigned location)
+    const matched = (zones ?? []).filter((z: any) => {
+      const isNotDeleted = z.status !== 'deleted' && z.review_status !== 'deleted';
+      const isOfficialOrActive = z.is_official === true || z.status === 'active' || z.status === 'published';
+      return isNotDeleted && isOfficialOrActive && (!locationId || !z.location_id || z.location_id === locationId);
     });
+    if (matched.length > 0) return matched;
+
+    // 2. Any active or published routes in zones
+    const allActive = (zones ?? []).filter((z: any) => {
+      const isNotDeleted = z.status !== 'deleted' && z.review_status !== 'deleted';
+      return isNotDeleted && (z.is_official === true || z.status === 'active' || z.status === 'published' || Boolean(z.name));
+    });
+    if (allActive.length > 0) return allActive;
+
+    // 3. Fallback to standard official published routes (Summit Trail, River Trail, Ridge Trail)
+    return TRAILS.map((t, idx) => ({
+      id: `default-route-${idx + 1}`,
+      name: t.name,
+      difficulty: t.difficulty,
+      status: 'active',
+      is_official: true,
+      elevation_meters: parseInt(t.elevation, 10) || 622,
+    }));
   }, [zones]);
 
   const resolveAssignedTrail = useCallback((booking: any, requestedId?: string) => {
@@ -1576,13 +1597,13 @@ export default function AdminDashboard() {
       ? routes.find((r: any) => r.id === requestedId)
       : meta.assignedTrailZoneId
         ? routes.find((r: any) => r.id === meta.assignedTrailZoneId)
-        : routes.length === 1
+        : routes.length >= 1
           ? routes[0]
           : null;
     return {
-      route: route ?? null,
+      route: route ?? (routes.length ? routes[0] : null),
       routes,
-      auto: !requestedId && !meta.assignedTrailZoneId && routes.length === 1,
+      auto: !requestedId && !meta.assignedTrailZoneId && routes.length <= 1,
     };
   }, [activeLocationId, officialRoutesForLocation]);
 
