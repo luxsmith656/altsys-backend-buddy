@@ -1346,22 +1346,41 @@ export default function AdminDashboard() {
     if (activeLocationId) q = q.eq('location_id', activeLocationId);
     const { data } = await q.order('full_name');
     const activeLocName = locations.find((l) => l.id === activeLocationId)?.name || '';
-    const mapped: UIGuide[] = (data ?? []).map((g: any) => ({
-      id: g.id,
-      user_id: g.user_id,
-      name: g.full_name,
-      phone: g.phone || '—',
-      status: g.is_active ? (g.status || 'available') : 'off-duty',
-      trail: g.specialty || activeLocName || 'Local trail',
-      totalHikes: 0,
-      per_trip_fee: Number(g.per_trip_fee || 0),
-      location_id: g.location_id,
-    }));
+    const mapped: UIGuide[] = (data ?? [])
+      .filter((g: any) => g.is_active !== false && (g.full_name === 'Test Guide' || Boolean(g.user_id)))
+      .map((g: any) => ({
+        id: g.id,
+        user_id: g.user_id,
+        name: g.full_name,
+        phone: g.phone || '—',
+        status: g.is_active ? (g.status || 'available') : 'off-duty',
+        trail: g.specialty || activeLocName || 'Local trail',
+        totalHikes: 0,
+        per_trip_fee: Number(g.per_trip_fee || 0),
+        location_id: g.location_id,
+      }));
 
     setGuides(mapped);
   };
 
   useEffect(() => { void loadGuides(); /* eslint-disable-next-line */ }, [activeLocationId]);
+
+  /* ── Clean dummy / unlinked guides from DB ── */
+  const handlePurgeDummyGuides = async () => {
+    try {
+      const { data: allG } = await supabase.from('guides').select('id, full_name, user_id');
+      const dummyIds = (allG || [])
+        .filter((g: any) => g.full_name !== 'Test Guide' && !g.user_id)
+        .map((g: any) => g.id);
+      if (dummyIds.length > 0) {
+        await supabase.from('guides').delete().in('id', dummyIds);
+      }
+      await loadGuides();
+      toast.success(`Removed ${dummyIds.length} unlinked guide(s). Only test and registered accounts kept.`);
+    } catch (e: any) {
+      toast.error(e.message || 'Failed to clean dummy guides');
+    }
+  };
 
   /* ── Guide history ── */
   const loadGuideHistory = async (guideName: string) => {
@@ -1436,6 +1455,7 @@ export default function AdminDashboard() {
     await supabase.from('guides').update({ status: next, is_active: next !== 'off-duty' }).eq('id', id);
   };
 
+  /* ── Add real guide (creates auth user + guides row via edge function) ── */
   const handleAddGuide = async () => {
     const name = newGuideName.trim();
     const email = newGuideEmail.trim();
@@ -1485,7 +1505,7 @@ export default function AdminDashboard() {
     }
   };
 
-  const handleRemoveGuide = () => {
+  const handleRemoveGuide = async () => {
     if (!removeGuideId) return;
     const expectedPassword = (import.meta.env.VITE_ADMIN_GUIDE_REMOVE_PASSWORD as string) || 'admin123';
     if (removeGuidePassword !== expectedPassword) {
@@ -1493,6 +1513,11 @@ export default function AdminDashboard() {
       return;
     }
     const guide = guides.find((g) => g.id === removeGuideId);
+    const { error } = await supabase.from('guides').delete().eq('id', removeGuideId);
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
     setGuides((prev) => prev.filter((g) => g.id !== removeGuideId));
     if (selectedGuideId === removeGuideId) {
       setSelectedGuideId(null);
@@ -1500,7 +1525,7 @@ export default function AdminDashboard() {
     }
     setRemoveGuideId(null);
     setRemoveGuidePassword('');
-    toast.success(`Guide "${guide?.name || ''}" removed.`);
+    toast.success(`Guide "${guide?.name || ''}" removed permanently.`);
   };
 
   /* ── Weekly mock data ── */
@@ -2697,9 +2722,19 @@ export default function AdminDashboard() {
                 <h2 className="text-lg font-semibold">Local Guide Roster</h2>
                 <p className="text-sm text-muted-foreground">Manage guide availability and view their hike history.</p>
               </div>
-              <Badge variant="outline" className="text-primary border-primary/30">
-                {guides.filter((g) => g.status === 'available').length} available
-              </Badge>
+              <div className="flex items-center gap-2 flex-wrap">
+                <Badge variant="outline" className="text-primary border-primary/30">
+                  {guides.filter((g) => g.status === 'available').length} available
+                </Badge>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="gap-1.5 text-xs text-muted-foreground hover:text-foreground"
+                  onClick={handlePurgeDummyGuides}
+                >
+                  <Trash2 className="h-3.5 w-3.5" /> Clean Unlinked Guides
+                </Button>
+              </div>
             </div>
 
             <Card className="glass-card">

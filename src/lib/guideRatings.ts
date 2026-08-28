@@ -15,54 +15,19 @@ export interface GuideRating {
   recentReviews: GuideReview[];
 }
 
-const GUIDE_RATINGS_KEY = 'kalisungan_guide_ratings_v1';
+const GUIDE_RATINGS_KEY = 'kalisungan_guide_ratings_v2';
 
 const SEED_RATINGS: GuideRating[] = [
   {
-    guideId: 'g1',
-    guideName: 'Rodel Manalansan',
+    guideId: 'test-guide-1',
+    guideName: 'Test Guide',
     trail: 'Summit Trail',
-    totalRating: 230.4,
-    reviewCount: 48,
-    avgRating: 4.8,
+    totalRating: 24.5,
+    reviewCount: 5,
+    avgRating: 4.9,
     recentReviews: [
-      { rating: 5, comment: 'Very knowledgeable and patient. Best guide!', hikerName: 'Maria S.', date: '2026-03-15' },
-      { rating: 5, comment: 'Made the summit hike so much easier.', hikerName: 'Jun R.', date: '2026-03-08' },
-    ],
-  },
-  {
-    guideId: 'g2',
-    guideName: 'Bong Villarosa',
-    trail: 'Ridge Route',
-    totalRating: 285.2,
-    reviewCount: 62,
-    avgRating: 4.6,
-    recentReviews: [
-      { rating: 5, comment: 'Excellent, very professional and safe.', hikerName: 'Ana P.', date: '2026-03-18' },
-      { rating: 4, comment: 'Knew the trail perfectly. Highly recommend.', hikerName: 'Carlo M.', date: '2026-03-12' },
-    ],
-  },
-  {
-    guideId: 'g3',
-    guideName: 'Nilo Santos',
-    trail: 'Scenic Loop',
-    totalRating: 157.5,
-    reviewCount: 35,
-    avgRating: 4.5,
-    recentReviews: [
-      { rating: 5, comment: 'Great experience! Nilo was very helpful.', hikerName: 'Patricia V.', date: '2026-03-01' },
-      { rating: 4, comment: 'Friendly and informative throughout the hike.', hikerName: 'Roberto A.', date: '2026-02-22' },
-    ],
-  },
-  {
-    guideId: 'g4',
-    guideName: 'Allan Reyes',
-    trail: 'Summit Trail',
-    totalRating: 116.1,
-    reviewCount: 27,
-    avgRating: 4.3,
-    recentReviews: [
-      { rating: 4, comment: 'Good guide, knows the area well.', hikerName: 'Diego C.', date: '2026-02-20' },
+      { rating: 5, comment: 'Very knowledgeable, friendly and patient. Best guide!', hikerName: 'Test Hiker', date: '2026-08-25' },
+      { rating: 5, comment: 'Made the summit hike so much smoother.', hikerName: 'Maria S.', date: '2026-08-20' },
     ],
   },
 ];

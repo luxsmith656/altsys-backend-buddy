@@ -393,7 +393,7 @@ export default function BookingPage() {
       const list = ((gs as any[]) ?? []) as Array<{ id: string; full_name: string; location_id: string; per_trip_fee: number }>;
       setDbGuides(list);
       const names = list.map((g) => g.full_name).filter(Boolean);
-      setGuideOptions(names.length ? names : ['Rodel Manalansan', 'Bong Villarosa', 'Nilo Santos', 'Allan Reyes']);
+      setGuideOptions(names.length ? names : ['Test Guide']);
     };
     void fetchGuides();
   }, []);
