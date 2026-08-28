@@ -4,12 +4,12 @@ import type { LatLngTuple } from 'leaflet';
 export const MT_KALISUNGAN_CENTER: LatLngTuple = [14.1475, 121.3454];
 export const DEFAULT_ZOOM = 15;
 
-// Trail route data (approximate real paths on Mt. Kalisungan)
+// Trail route data (Official published path on Mt. Kalisungan)
 export const TRAILS = [
   {
-    name: 'Summit Trail',
-    difficulty: 'hard' as const,
-    color: '#ef4444',
+    name: 'Summit Trail (Official Route)',
+    difficulty: 'moderate' as const,
+    color: '#16a34a',
     elevation: '622m',
     distance: '3.2 km',
     path: [
@@ -23,41 +23,6 @@ export const TRAILS = [
       [14.1483, 121.3458],
       [14.1488, 121.3460],
       [14.1495, 121.3462],
-    ] as LatLngTuple[],
-  },
-  {
-    name: 'River Trail',
-    difficulty: 'easy' as const,
-    color: '#3b82f6',
-    elevation: '350m',
-    distance: '2.1 km',
-    path: [
-      [14.1440, 121.3430],
-      [14.1438, 121.3438],
-      [14.1435, 121.3445],
-      [14.1433, 121.3452],
-      [14.1430, 121.3458],
-      [14.1428, 121.3465],
-      [14.1425, 121.3470],
-      [14.1423, 121.3475],
-    ] as LatLngTuple[],
-  },
-  {
-    name: 'Ridge Trail',
-    difficulty: 'moderate' as const,
-    color: '#f59e0b',
-    elevation: '480m',
-    distance: '2.8 km',
-    path: [
-      [14.1440, 121.3430],
-      [14.1445, 121.3425],
-      [14.1450, 121.3420],
-      [14.1458, 121.3418],
-      [14.1465, 121.3415],
-      [14.1472, 121.3418],
-      [14.1478, 121.3422],
-      [14.1485, 121.3425],
-      [14.1490, 121.3430],
     ] as LatLngTuple[],
   },
 ];

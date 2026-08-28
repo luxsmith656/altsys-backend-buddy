@@ -47,30 +47,46 @@ export default function QRCameraScanner({
     setCameraLoading(true);
     hasScannedRef.current = false;
     try {
+      // Ensure DOM has rendered and container is available
+      await new Promise((resolve) => setTimeout(resolve, 80));
+
+      const el = document.getElementById(SCANNER_ID);
+      if (!el) {
+        throw new Error('Camera scanner container is not ready. Please try again.');
+      }
+
       const scanner = new Html5Qrcode(SCANNER_ID);
       scannerRef.current = scanner;
 
-      await scanner.start(
-        { facingMode: 'environment' },
-        { fps: 10, qrbox: { width: 240, height: 240 } },
-        (decodedText: string, _result: Html5QrcodeResult) => {
-          if (!hasScannedRef.current) {
-            hasScannedRef.current = true;
-            toast.success('QR Code scanned!');
-            onScan(decodedText);
-            void stopCamera();
-          }
-        },
-        () => {
-          // scan errors are normal (no QR in frame) — ignore
-        },
-      );
+      const qrCodeSuccessCallback = (decodedText: string, _result: Html5QrcodeResult) => {
+        if (!hasScannedRef.current) {
+          hasScannedRef.current = true;
+          toast.success('QR Code scanned!');
+          onScan(decodedText);
+          void stopCamera();
+        }
+      };
+
+      const config = { fps: 10, qrbox: { width: 240, height: 240 } };
+
+      try {
+        // Try back / environment camera first
+        await scanner.start({ facingMode: 'environment' }, config, qrCodeSuccessCallback, () => {});
+      } catch (backErr) {
+        console.warn('Back camera failed, trying default camera:', backErr);
+        // Fallback to front / default user camera
+        await scanner.start({ facingMode: 'user' }, config, qrCodeSuccessCallback, () => {});
+      }
 
       setCameraActive(true);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
       toast.error(`Camera error: ${msg}`);
-      scannerRef.current = null;
+      if (scannerRef.current) {
+        try { scannerRef.current.clear(); } catch { /* noop */ }
+        scannerRef.current = null;
+      }
+      setCameraActive(false);
     } finally {
       setCameraLoading(false);
     }
@@ -115,27 +131,25 @@ export default function QRCameraScanner({
         )}
       </div>
 
-      {/* Camera view */}
-      {(cameraActive || cameraLoading) && (
-        <div className="relative">
-          <div
-            id={SCANNER_ID}
-            className={cn(
-              'w-full rounded-xl overflow-hidden border border-primary/30 bg-black',
-              'min-h-[280px]',
-            )}
-          />
-          {/* Overlay aiming box */}
-          <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-            <div className="w-56 h-56 border-2 border-primary/70 rounded-xl shadow-lg flex items-center justify-center">
-              <ScanLine className="h-8 w-8 text-primary/50 animate-pulse" />
-            </div>
+      {/* Camera view (always mounted in DOM to prevent "Element not found" errors) */}
+      <div className={cn('relative transition-all', !cameraActive && !cameraLoading && 'hidden')}>
+        <div
+          id={SCANNER_ID}
+          className={cn(
+            'w-full rounded-xl overflow-hidden border border-primary/30 bg-black',
+            'min-h-[280px]',
+          )}
+        />
+        {/* Overlay aiming box */}
+        <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+          <div className="w-56 h-56 border-2 border-primary/70 rounded-xl shadow-lg flex items-center justify-center">
+            <ScanLine className="h-8 w-8 text-primary/50 animate-pulse" />
           </div>
-          <p className="text-center text-xs text-muted-foreground mt-2">
-            Point camera at the QR code
-          </p>
         </div>
-      )}
+        <p className="text-center text-xs text-muted-foreground mt-2">
+          Point camera at the QR code
+        </p>
+      </div>
 
       {/* Divider */}
       <div className="flex items-center gap-3">
