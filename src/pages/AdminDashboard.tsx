@@ -86,6 +86,10 @@ import {
   Sun,
   Moon,
   Bell,
+  Timer,
+  Compass,
+  ShieldAlert,
+  ArrowDown,
 } from 'lucide-react';
 import BookingChat from '@/components/booking/BookingChat';
 import ReassignGuideDialog from '@/components/booking/ReassignGuideDialog';
@@ -1128,10 +1132,10 @@ export default function AdminDashboard() {
     });
     const { error } = await supabase
       .from('bookings')
-      .update({ status: 'confirmed', notes: updatedMeta })
+      .update({ status: 'pending', notes: updatedMeta })
       .eq('id', acceptDialogId);
     if (error) {
-      toast.error('Failed to accept booking');
+      toast.error('Failed to assign guide to booking');
     } else {
       // Notify the guide immediately by upserting an assignment row
       if (guideRow) {
@@ -1158,16 +1162,16 @@ export default function AdminDashboard() {
           booking_id: acceptDialogId,
           sender_role: 'system',
           kind: 'system',
-          content: `Admin assigned guide ${guideName}. Please accept or decline.`,
+          content: `Admin assigned guide ${guideName}. Guide must accept before booking confirmation.`,
         } as any);
       }
-      toast.success(`✅ Booking accepted! Guide "${guideName}" notified immediately.`);
+      toast.success(`📋 Assignment offer sent to Guide "${guideName}". Awaiting guide acceptance to confirm booking.`);
       if (booking) await updateDailySlots(booking.booking_date, booking.group_size, 1);
       void writeActivityLog({
-        action: 'booking_confirmed',
+        action: 'guide_assigned',
         entity_type: 'booking',
         entity_id: acceptDialogId,
-        after_state: { status: 'confirmed', assignedGuide: guideName, assignedTrail: routeInfo.route?.name ?? null },
+        after_state: { status: 'pending', assignedGuide: guideName, assignedTrail: routeInfo.route?.name ?? null },
       });
       setPendingBookings((prev) => prev.filter((b) => b.id !== acceptDialogId));
       setAcceptDialogId(null);
@@ -2554,251 +2558,212 @@ export default function AdminDashboard() {
                           </div>
                         </div>
                       ) : meta.onsiteStartConfirmed || hikeStarted ? (
-                        <div className="space-y-4 rounded-2xl border-2 border-emerald-500/40 bg-gradient-to-b from-emerald-500/10 to-transparent p-5">
-                          {/* Live Status Header */}
-                          <div className="flex items-center justify-between flex-wrap gap-2">
-                            <div className="flex items-center gap-2">
-                              <span className="relative flex h-3 w-3">
-                                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                                <span className="relative inline-flex rounded-full h-3 w-3 bg-emerald-500"></span>
-                              </span>
-                              <span className="font-bold text-sm text-foreground">
-                                Active Hike Session in Progress
+                        <div className="rounded-2xl border border-border/80 bg-card p-4 sm:p-5 shadow-xl font-sans space-y-3.5 text-xs text-foreground">
+                          {/* Header: User Icon, Name, Phase Badge, ID */}
+                          <div className="border-b pb-2 flex items-start justify-between gap-2">
+                            <div>
+                              <h4 className="font-bold text-base text-foreground flex items-center gap-2">
+                                <Users className="h-4 w-4 text-slate-500" />
+                                {meta.fullName || scannedBooking.hiker_name || 'Hiker Group'}
+                              </h4>
+                              <span className="text-[11px] text-muted-foreground font-mono">
+                                ID: {scannedBooking.id.slice(0, 8)}
                               </span>
                             </div>
-                            <div className="flex items-center gap-2">
-                              {meta.onsiteStartTime && (
-                                <Badge variant="outline" className="text-xs bg-background/80 border-border/40 font-mono">
-                                  Started: {new Date(meta.onsiteStartTime).toLocaleTimeString('en-PH', { timeZone: 'Asia/Manila', hour: '2-digit', minute: '2-digit' })} PHT
-                                </Badge>
-                              )}
-                              <Badge className={
-                                meta.groupPhase === 'peak' ? 'bg-amber-500 text-white font-bold' :
-                                meta.groupPhase === 'descent' ? 'bg-sky-500 text-white font-bold' :
-                                'bg-emerald-600 text-white font-bold'
-                              }>
-                                {meta.groupPhase === 'peak' ? '🏔️ Summit Peak Stay' :
-                                 meta.groupPhase === 'descent' ? '🥾 Descent (Going Down)' :
-                                 '🧗 Ascent (Going Up)'}
-                              </Badge>
-                            </div>
+                            <span className={cn(
+                              'px-2.5 py-0.5 rounded-full text-[11px] font-bold capitalize',
+                              meta.groupPhase === 'peak' ? 'bg-amber-100 text-amber-900 dark:bg-amber-900/40 dark:text-amber-300 animate-pulse' :
+                              meta.groupPhase === 'descent' ? 'bg-blue-100 text-blue-900 dark:bg-blue-900/40 dark:text-blue-300' :
+                              'bg-emerald-100 text-emerald-900 dark:bg-emerald-900/40 dark:text-emerald-300'
+                            )}>
+                              {meta.groupPhase === 'peak' ? 'Peak' :
+                               meta.groupPhase === 'descent' ? 'Descent' :
+                               'Ascent'}
+                            </span>
                           </div>
 
-                          {/* 7-Station Map Trail Visual Progress Tracker */}
-                          <div className="p-3 rounded-xl bg-background/80 border border-border/40 space-y-2">
-                            <div className="flex items-center justify-between text-xs">
-                              <span className="font-semibold text-foreground flex items-center gap-1.5">
-                                <Mountain className="h-3.5 w-3.5 text-emerald-600" />
-                                Summit Trail (Official Route Station Progress)
-                              </span>
-                              <span className="text-[11px] font-mono text-muted-foreground">
-                                {meta.groupPhase === 'peak' ? 'Station 7 / 7 (Peak)' :
-                                 meta.groupPhase === 'descent' ? 'Station 5 / 7 (Desc)' :
-                                 'Station 3 / 7 (Ascent)'}
+                          {/* Position & Estimated ETA */}
+                          <div className="space-y-1.5 pt-0.5">
+                            <div className="flex items-center justify-between text-muted-foreground">
+                              <span className="flex items-center gap-1.5"><Compass className="h-3.5 w-3.5 text-primary" /> Position:</span>
+                              <span className="font-semibold text-foreground text-right">
+                                {meta.groupPhase === 'peak' ? 'At Peak / End of Path (3.25 km)' :
+                                 meta.groupPhase === 'descent' ? 'Wilderness Ridge - Descending (2.2 km)' :
+                                 'Mountain Spring Rest (1.7 km)'}
                               </span>
                             </div>
-                            {/* Station Pills */}
-                            <div className="grid grid-cols-7 gap-1 text-center font-mono text-[10px]">
-                              {[
-                                { label: 'J', name: 'Jump-off', active: true },
-                                { label: 'S1', name: 'Bamboo', active: true },
-                                { label: 'S2', name: 'Forest', active: true },
-                                { label: 'S3', name: 'Spring', active: meta.groupPhase === 'ascent' || meta.groupPhase === 'peak' || meta.groupPhase === 'descent' },
-                                { label: 'S4', name: 'Ridge', active: meta.groupPhase === 'peak' || meta.groupPhase === 'descent' },
-                                { label: 'S5', name: 'Camp', active: meta.groupPhase === 'peak' || meta.groupPhase === 'descent' },
-                                { label: 'Peak', name: 'Summit', active: meta.groupPhase === 'peak' },
-                              ].map((st, idx) => (
-                                <div
-                                  key={idx}
-                                  className={cn(
-                                    'py-1.5 px-0.5 rounded transition-all flex flex-col items-center justify-center',
-                                    st.active
-                                      ? (st.label === 'Peak' && meta.groupPhase === 'peak')
-                                        ? 'bg-amber-500 text-white font-bold shadow-sm'
-                                        : meta.groupPhase === 'descent'
-                                        ? 'bg-sky-500 text-white font-semibold'
-                                        : 'bg-emerald-600 text-white font-semibold'
-                                      : 'bg-muted/40 text-muted-foreground/60'
-                                  )}
-                                >
-                                  <span className="font-bold">{st.label}</span>
-                                  <span className="text-[8px] opacity-85 truncate max-w-full">{st.name}</span>
-                                </div>
-                              ))}
-                            </div>
-                          </div>
 
-                          {/* Simulation Telemetry Grid (Matching Map Simulation) */}
-                          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
-                            <div className="p-2.5 rounded-xl bg-background/60 border border-border/30">
-                              <span className="text-[10px] text-muted-foreground block">📍 Live Position</span>
-                              <span className="font-bold text-foreground">
-                                {meta.groupPhase === 'peak' ? 'Summit Peak (622m)' :
-                                 meta.groupPhase === 'descent' ? 'Ridge Saddle (Desc)' :
-                                 'Mountain Spring (Ascent)'}
-                              </span>
-                            </div>
-                            <div className="p-2.5 rounded-xl bg-background/60 border border-border/30">
-                              <span className="text-[10px] text-muted-foreground block">⏱️ Estimated ETA</span>
-                              <span className="font-bold text-emerald-600 dark:text-emerald-400">
-                                {meta.groupPhase === 'peak' ? 'Summit Stay Active' :
-                                 meta.groupPhase === 'descent' ? '~40 mins to Base' :
+                            <div className="flex items-center justify-between text-muted-foreground">
+                              <span className="flex items-center gap-1.5"><Clock className="h-3.5 w-3.5 text-primary" /> Est. ETA:</span>
+                              <span className="font-semibold text-emerald-600 dark:text-emerald-400 text-right">
+                                {meta.groupPhase === 'peak' ? 'At Peak - Rest: Summit Stay Active' :
+                                 meta.groupPhase === 'descent' ? '~40 mins to Base Camp' :
                                  '~35 mins to Summit'}
                               </span>
                             </div>
-                            <div className="p-2.5 rounded-xl bg-background/60 border border-border/30">
-                              <span className="text-[10px] text-muted-foreground block">🧭 Distance & Elev</span>
-                              <span className="font-bold text-foreground">
-                                {meta.groupPhase === 'peak' ? '3.2 km • 622m' :
-                                 meta.groupPhase === 'descent' ? '4.5 km • 420m' :
-                                 '1.7 km • 480m'}
-                              </span>
-                            </div>
-                            <div className="p-2.5 rounded-xl bg-background/60 border border-border/30">
-                              <span className="text-[10px] text-muted-foreground block">👥 Group Roster</span>
-                              <span className="font-bold text-foreground">
-                                {scannedBooking.group_size} Pax {meta.hasMinors ? '(1 Minor)' : ''}
-                              </span>
-                            </div>
                           </div>
 
-                          {/* Lead Guide & Emergency Info */}
-                          <div className="p-3 rounded-xl bg-background/60 border border-border/30 text-xs space-y-1">
-                            <div className="flex justify-between flex-wrap gap-1">
-                              <span className="text-muted-foreground">Lead Guide:</span>
-                              <span className="font-semibold text-foreground">
-                                {meta.assignedGuide || 'Test Guide'} ({guides.find((g) => g.name === meta.assignedGuide || g.id === meta.assignedGuideId)?.phone || '+63 917 000 0001'})
-                              </span>
-                            </div>
-                            <div className="flex justify-between flex-wrap gap-1">
-                              <span className="text-muted-foreground">Emergency Contact:</span>
-                              <span className="font-medium text-foreground">
-                                {scannedBooking.emergency_contact_name || meta.fullName} ({scannedBooking.emergency_contact_phone || meta.phoneNumber})
-                              </span>
-                            </div>
-                            {meta.companions && meta.companions.length > 0 && (
-                              <div className="flex justify-between flex-wrap gap-1 text-[11px]">
-                                <span className="text-muted-foreground">Companions:</span>
-                                <span className="text-foreground">{meta.companions.join(', ')}</span>
+                          {/* Summit Limit Timer Box (when at Peak) */}
+                          {meta.groupPhase === 'peak' && (
+                            <div className="mt-1 p-3 bg-amber-500/10 dark:bg-amber-950/40 rounded-xl border border-amber-500/30 text-amber-900 dark:text-amber-200 space-y-1.5">
+                              <div className="flex items-center justify-between">
+                                <span className="flex items-center gap-1.5 font-bold text-xs">
+                                  <Timer className="h-4 w-4 text-amber-600 dark:text-amber-400 animate-spin" />
+                                  Summit Limit Timer:
+                                </span>
+                                <span className="font-mono font-bold text-xs text-amber-800 dark:text-amber-300">
+                                  {meta.peakDeadlineAt
+                                    ? `Stay until ${new Date(meta.peakDeadlineAt).toLocaleTimeString('en-PH', { timeZone: 'Asia/Manila', hour: '2-digit', minute: '2-digit' })} PHT`
+                                    : '1h 00m remaining'}
+                                </span>
                               </div>
-                            )}
-                          </div>
-
-                          {/* Simulation & Action Controls */}
-                          <div className="space-y-2.5">
-                            {meta.groupPhase === 'peak' && meta.peakDeadlineAt && (
-                              <div className="rounded-xl bg-amber-500/15 border border-amber-500/30 p-3 text-xs text-amber-800 dark:text-amber-300 flex items-center justify-between flex-wrap gap-2">
-                                <div>
-                                  <p className="font-bold">🏔️ Group is at the Summit</p>
-                                  <p className="text-[11px] opacity-90">
-                                    Peak stay ends: {new Date(meta.peakDeadlineAt).toLocaleTimeString('en-PH', { timeZone: 'Asia/Manila', hour: '2-digit', minute: '2-digit' })} PHT
-                                    {meta.peakExtensionHours ? ` (+${meta.peakExtensionHours}h extension)` : ''}
-                                  </p>
-                                </div>
-                                <Button size="sm" variant="outline" onClick={() => void extendPeakStay()} disabled={lifecycleSaving} className="border-amber-500/40 text-xs h-8">
-                                  +1 Hour Stay (+₱100)
-                                </Button>
-                              </div>
-                            )}
-
-                            {/* Simulation buttons depending on phase */}
-                            <div className="grid sm:grid-cols-2 gap-2">
-                              {(meta.groupPhase ?? 'ascent') === 'ascent' && (
-                                <>
-                                  <Button
-                                    size="sm"
-                                    variant="secondary"
-                                    onClick={() => void updateGroupPhase('peak')}
-                                    disabled={lifecycleSaving}
-                                    className="w-full text-xs font-semibold gap-1.5"
-                                  >
-                                    🏔️ Advance: Mark at Summit
-                                  </Button>
-                                  <Button
-                                    size="sm"
-                                    variant="outline"
-                                    onClick={() => setEndHikeBooking(scannedBooking)}
-                                    className="w-full text-xs font-semibold gap-1.5 border-amber-500/40 text-amber-600 dark:text-amber-400 hover:bg-amber-500/10"
-                                  >
-                                    ⏹️ End Early & Settle
-                                  </Button>
-                                </>
-                              )}
-                              {meta.groupPhase === 'peak' && (
-                                <>
-                                  <Button
-                                    size="sm"
-                                    variant="secondary"
-                                    onClick={() => void updateGroupPhase('descent')}
-                                    disabled={lifecycleSaving}
-                                    className="w-full text-xs font-semibold gap-1.5"
-                                  >
-                                    🥾 Advance: Start Descent
-                                  </Button>
-                                  <Button
-                                    size="sm"
-                                    variant="outline"
-                                    onClick={() => setEndHikeBooking(scannedBooking)}
-                                    className="w-full text-xs font-semibold gap-1.5 border-amber-500/40 text-amber-600 dark:text-amber-400 hover:bg-amber-500/10"
-                                  >
-                                    ⏹️ End Early & Settle
-                                  </Button>
-                                </>
-                              )}
-                              {meta.groupPhase === 'descent' && (
-                                <Button
-                                  size="sm"
-                                  variant="secondary"
-                                  onClick={() => setEndHikeBooking(scannedBooking)}
-                                  className="w-full sm:col-span-2 text-xs font-semibold gap-1.5 bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-500/30"
-                                >
-                                  🏁 Base Reached: Finalize & Settle
-                                </Button>
-                              )}
-                            </div>
-
-                            <div className="grid sm:grid-cols-2 gap-2 pt-1">
+                              <p className="text-[11px] leading-relaxed text-amber-800/90 dark:text-amber-300/90">
+                                Once timer expires, the group will automatically start descending as per safety protocol.
+                              </p>
                               <Button
                                 size="sm"
                                 variant="outline"
+                                onClick={() => void extendPeakStay()}
+                                disabled={lifecycleSaving}
+                                className="w-full text-xs h-7 border-amber-500/40 text-amber-800 dark:text-amber-200 hover:bg-amber-500/20 mt-1"
+                              >
+                                +1 Hour Stay Extension (+₱100)
+                              </Button>
+                            </div>
+                          )}
+
+                          {/* Lead Guide, Group Count, Medical, Emergency Info */}
+                          <div className="border-t border-border/60 pt-2 space-y-1 text-[11px] text-foreground">
+                            <div>
+                              <span className="font-bold">Lead Guide: </span>
+                              <span>{meta.assignedGuide || 'Test Guide'} ({guides.find((g) => g.name === meta.assignedGuide || g.id === meta.assignedGuideId)?.phone || '+63 920 111 2222'})</span>
+                            </div>
+                            <div>
+                              <span className="font-bold">Group Count: </span>
+                              <span>{scannedBooking.group_size} Pax {meta.hasMinors ? <span className="text-amber-600 font-medium">({meta.minorCount || 1} Minor)</span> : ''}</span>
+                            </div>
+                            {(meta.medicalNotes || scannedBooking.notes?.includes('Asthma') || scannedBooking.notes?.includes('Medical')) && (
+                              <div className="text-red-600 font-medium flex items-center gap-1">
+                                <span className="font-bold">Medical: </span>
+                                <span>{meta.medicalNotes || 'Asthma (Carries rescue inhaler)'}</span>
+                              </div>
+                            )}
+                            <div>
+                              <span className="font-bold">Emergency Contact: </span>
+                              <span>{scannedBooking.emergency_contact_name || meta.fullName || 'Elena Reyes'} ({scannedBooking.emergency_contact_phone || meta.phoneNumber || '+63 918 888 9999'})</span>
+                            </div>
+                          </div>
+
+                          {/* Action Buttons matching screenshot */}
+                          <div className="border-t border-border/60 pt-2.5 space-y-2">
+                            {meta.groupPhase === 'peak' ? (
+                              <Button
+                                size="sm"
+                                onClick={() => void updateGroupPhase('descent')}
+                                disabled={lifecycleSaving}
+                                className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs gap-1.5 shadow-md"
+                              >
+                                <ArrowDown className="h-4 w-4" />
+                                Initiate Early Descent (Down)
+                              </Button>
+                            ) : (meta.groupPhase ?? 'ascent') === 'ascent' ? (
+                              <Button
+                                size="sm"
+                                onClick={() => void updateGroupPhase('peak')}
+                                disabled={lifecycleSaving}
+                                className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs gap-1.5 shadow-md"
+                              >
+                                🏔️ Advance: Mark at Summit (Peak)
+                              </Button>
+                            ) : (
+                              <Button
+                                size="sm"
+                                onClick={() => setEndHikeBooking(scannedBooking)}
+                                className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs gap-1.5 shadow-md"
+                              >
+                                🏁 Base Reached: Finalize & Settle
+                              </Button>
+                            )}
+
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => setEndHikeBooking(scannedBooking)}
+                              className="w-full text-xs font-semibold gap-1.5 border-destructive/40 text-destructive hover:bg-destructive/10"
+                            >
+                              <ShieldAlert className="h-3.5 w-3.5" />
+                              End Early & Settle (Emergency Return)
+                            </Button>
+
+                            <div className="grid grid-cols-2 gap-2 pt-1">
+                              <Button
+                                size="sm"
+                                variant="ghost"
                                 onClick={() => {
                                   setOperationsTab('live-map');
                                   const next = new URLSearchParams(searchParams);
                                   next.set('tab', 'live-map');
                                   setSearchParams(next, { replace: true });
                                 }}
-                                className="w-full gap-1.5 text-xs font-semibold"
+                                className="w-full gap-1 text-[11px]"
                               >
                                 <MapPin className="h-3.5 w-3.5 text-emerald-600" />
-                                🗺️ View on Live Map
+                                View Map
                               </Button>
                               <Button
                                 size="sm"
-                                variant="outline"
+                                variant="ghost"
                                 onClick={() => setCompanionQROpen(true)}
-                                className="w-full gap-1.5 border-primary/40 text-primary hover:bg-primary/10 text-xs font-semibold"
+                                className="w-full gap-1 text-[11px]"
                               >
                                 <Users className="h-3.5 w-3.5" />
-                                📱 Show Group Join QR ({scannedBooking.group_size} Pax)
+                                Companion QR
                               </Button>
                             </div>
-
+                          </div>
+                        </div>
+                      ) : (scannedBooking.status !== 'confirmed' || meta.guideStatus === 'pending' || meta.guideStatus === 'unassigned') ? (
+                        <div className="space-y-2 rounded-xl border border-amber-500/40 bg-amber-500/10 p-3.5 text-xs text-amber-900 dark:text-amber-200">
+                          <div className="flex items-center gap-2 font-bold">
+                            <AlertTriangle className="h-4 w-4 text-amber-600 shrink-0" />
+                            <span>
+                              {meta.assignedGuide && meta.guideStatus === 'pending'
+                                ? `Awaiting Guide Acceptance: ${meta.assignedGuide}`
+                                : 'Booking Not Confirmed'}
+                            </span>
+                          </div>
+                          <p className="text-[11px] leading-relaxed opacity-90">
+                            {meta.assignedGuide && meta.guideStatus === 'pending'
+                              ? `Assigned guide "${meta.assignedGuide}" must accept this booking in their Guide Dashboard before onsite check-in can be started.`
+                              : 'Assign a tour guide and have them accept the permit to confirm this booking before check-in.'}
+                          </p>
+                          <div className="pt-1">
                             <Button
                               size="sm"
-                              onClick={() => setEndHikeBooking(scannedBooking)}
-                              className="w-full gap-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-bold py-2.5 shadow-lg text-xs rounded-xl"
+                              variant="secondary"
+                              onClick={async () => {
+                                const updatedMeta = encodeMeta({ ...meta, guideStatus: 'accepted' });
+                                await supabase.from('bookings').update({ status: 'confirmed', notes: updatedMeta }).eq('id', scannedBooking.id);
+                                if (meta.assignedGuideId) {
+                                  await supabase.from('booking_assignments' as any)
+                                    .update({ status: 'accepted', decided_at: new Date().toISOString() } as any)
+                                    .eq('booking_id', scannedBooking.id);
+                                }
+                                toast.success('Admin confirmed booking! Check-in is now unlocked.');
+                                setScannedBooking((prev: any) => prev ? { ...prev, status: 'confirmed', notes: updatedMeta } : null);
+                              }}
+                              className="text-xs h-7 gap-1 font-semibold"
                             >
-                              <Receipt className="h-4 w-4" /> End Hike & Settle Bill
+                              <CheckCircle2 className="h-3 w-3" /> Force Confirm (Admin Override)
                             </Button>
                           </div>
                         </div>
-                      ) : scannedBooking.status !== 'confirmed' ? (
-                        <div className="flex items-start gap-2 rounded-xl border border-warning/30 bg-warning/5 p-3 text-xs text-warning">
-                          <AlertTriangle className="h-4 w-4 flex-shrink-0 mt-0.5" />
-                          Booking is not confirmed yet. Confirm booking first before starting the hike.
-                        </div>
                       ) : (
-                        <Button className="w-full gap-2" onClick={handleStartHike} disabled={startingHike || !checkInVerified || Number(checkInHeadcount) !== Number(scannedBooking.group_size)}>
+                        <Button
+                          className="w-full gap-2 font-bold py-2.5"
+                          onClick={handleStartHike}
+                          disabled={startingHike || !checkInVerified || Number(checkInHeadcount) !== Number(scannedBooking.group_size)}
+                        >
                           {startingHike ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
                           Confirm Onsite Start — Begin Hike
                         </Button>
