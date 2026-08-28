@@ -527,12 +527,18 @@ export default function AdminDashboard() {
       .from('bookings')
       .select('*')
       .order('created_at', { ascending: false })
-      .limit(300);
-    if (activeLocationId && !isSuperAdmin) {
+      .limit(500);
+    if (activeLocationId) {
       q = q.or(`location_id.eq.${activeLocationId},location_id.is.null`);
     }
     const { data } = await q;
-    setAllTabBookings(data || []);
+    if (data) {
+      setAllTabBookings((prev) => {
+        const existingIds = new Set(data.map((d: any) => d.id));
+        const missingRealtime = prev.filter((p) => !existingIds.has(p.id));
+        return [...missingRealtime, ...data];
+      });
+    }
     setAllTabLoading(false);
   };
 
@@ -1079,11 +1085,17 @@ export default function AdminDashboard() {
       .select('*')
       .in('status', ['pending', 'adjustment_pending'])
       .order('created_at', { ascending: true });
-    if (activeLocationId && !isSuperAdmin) {
+    if (activeLocationId) {
       query = query.or(`location_id.eq.${activeLocationId},location_id.is.null`);
     }
     const { data } = await query;
-    setPendingBookings(data || []);
+    if (data) {
+      setPendingBookings((prev) => {
+        const existingIds = new Set(data.map((d: any) => d.id));
+        const missingRealtime = prev.filter((p) => !existingIds.has(p.id) && (p.status === 'pending' || p.status === 'adjustment_pending'));
+        return [...missingRealtime, ...data];
+      });
+    }
     setPendingLoading(false);
   };
 

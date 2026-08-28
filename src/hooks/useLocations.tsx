@@ -44,7 +44,7 @@ export function LocationsProvider({ children }: { children: ReactNode }) {
   const setActiveLocationId = (id: string | null) => {
     _setActiveLocationId(id);
     if (id) localStorage.setItem('activeLocationId', id);
-    else localStorage.removeItem('activeLocationId');
+    else localStorage.setItem('activeLocationId', 'all');
   };
 
   const refresh = useCallback(async () => {
@@ -67,21 +67,23 @@ export function LocationsProvider({ children }: { children: ReactNode }) {
 
       // Choose default active location
       const stored = localStorage.getItem('activeLocationId');
-      if (stored && list.some((l) => l.id === stored)) {
+      if (stored === 'all') {
+        _setActiveLocationId(null);
+      } else if (stored && list.some((l) => l.id === stored)) {
         _setActiveLocationId(stored);
-      } else if (!isSuperAdmin && ids.length > 0) {
+      } else if (role === 'admin' || role === 'super_admin' || isSuperAdmin) {
+        _setActiveLocationId(null); // Admins see all bookings across mountain by default
+      } else if (ids.length > 0) {
         _setActiveLocationId(ids[0]);
-      } else if (isSuperAdmin) {
-        _setActiveLocationId(null); // All
       } else if (list.length > 0) {
-        _setActiveLocationId(list[0].id); // Hikers default to first active location
+        _setActiveLocationId(list[0].id);
       }
     } else {
       setMyLocationIds([]);
       if (list.length > 0) _setActiveLocationId(list[0].id);
     }
     setLoading(false);
-  }, [user, isSuperAdmin]);
+  }, [user, role, isSuperAdmin]);
 
   useEffect(() => { void refresh(); }, [refresh]);
 
