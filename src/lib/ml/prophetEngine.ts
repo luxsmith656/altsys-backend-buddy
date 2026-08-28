@@ -407,7 +407,7 @@ export class FacebookProphetEngine {
     else if (p.calamity_alert === 'yellow') calamityMultiplier = Math.min(calamityMultiplier, 0.70);
 
     // Sum all components
-    let basePred = trend + weekly + yearly + monthly + weatherEffect + combinedCalamityEffect + combinedHolidays;
+    const basePred = trend + weekly + yearly + monthly + weatherEffect + combinedCalamityEffect + combinedHolidays;
 
     // Apply multiplier & ensure positive floor
     let yhat = Math.max(0, basePred * calamityMultiplier);

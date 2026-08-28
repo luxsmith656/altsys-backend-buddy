@@ -105,7 +105,9 @@ export default function RangerDashboard() {
       const parsed = JSON.parse(qrInput.trim());
       if (parsed?.bookingId) parsedId = parsed.bookingId;
       else if (parsed?.id) parsedId = parsed.id;
-    } catch {}
+    } catch {
+      // A raw booking ID is also accepted at the checkpoint.
+    }
 
     // Look up the booking by QR code or ID
     const { data: booking, error } = await supabase

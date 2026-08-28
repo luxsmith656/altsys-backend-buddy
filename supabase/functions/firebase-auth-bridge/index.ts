@@ -85,7 +85,7 @@ Deno.serve(async (req) => {
           { onConflict: 'user_id,role', ignoreDuplicates: true },
         ),
       ]).catch((e) => console.error('[firebase-auth-bridge] setup error', e));
-      // @ts-ignore Deno EdgeRuntime keeps the task alive after response.
+      // @ts-expect-error Deno EdgeRuntime keeps the task alive after response.
       globalThis.EdgeRuntime?.waitUntil?.(bg);
     }
 

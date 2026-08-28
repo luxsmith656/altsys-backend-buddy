@@ -21,7 +21,7 @@ export default function RoleRoute({ children, allowedRoles }: RoleRouteProps) {
 
   if (!user) return <Navigate to="/login" replace />;
 
-  const currentRole = role || 'hiker';
+  const currentRole: AppRole = role || 'hiker';
   const isSuperAdmin = currentRole === 'super_admin';
   const isAdmin = currentRole === 'admin';
 
@@ -33,7 +33,6 @@ export default function RoleRoute({ children, allowedRoles }: RoleRouteProps) {
 
   if (!hasAccess) {
     const target =
-      currentRole === 'super_admin' ? '/central' :
       currentRole === 'admin' ? '/admin' :
       currentRole === 'ranger' ? '/ranger' :
       currentRole === 'guide' ? '/guide' :

@@ -8,7 +8,6 @@ import { Input } from '@/components/ui/input';
 import { Loader2, Send, Bot, ShieldCheck, Activity } from 'lucide-react';
 import { toast } from 'sonner';
 import ReactMarkdown from 'react-markdown';
-import SystemHealthMonitor from '@/components/admin/SystemHealthMonitor';
 
 type Msg = { role: 'user' | 'assistant'; content: string };
 
@@ -82,9 +81,6 @@ export default function OpsAIPage() {
           <TabsTrigger value="assistant" className="gap-1.5">
             <Bot className="h-4 w-4" /> AI Operations Assistant
           </TabsTrigger>
-          <TabsTrigger value="health" className="gap-1.5">
-            <Activity className="h-4 w-4" /> System Health &amp; Diagnostics
-          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="assistant" className="mt-0">
@@ -128,9 +124,6 @@ export default function OpsAIPage() {
           </Card>
         </TabsContent>
 
-        <TabsContent value="health" className="mt-0">
-          <SystemHealthMonitor />
-        </TabsContent>
       </Tabs>
     </div>
   );

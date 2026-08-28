@@ -44,7 +44,9 @@ export default function JoinHikeGuestPage() {
           setExistingGuest(parsed.guestName);
           setGuestName(parsed.guestName);
         }
-      } catch (_) {}
+      } catch {
+        localStorage.removeItem(`guest_session_${bookingId}`);
+      }
     }
 
     if (!bookingId) {
@@ -111,11 +113,12 @@ export default function JoinHikeGuestPage() {
           async (pos) => {
             try {
               // Log location beacon
-              await supabase.from('activity_logs').insert({
+              await supabase.from('admin_logs').insert({
                 action: 'guest_joined_hike',
-                entity_type: 'booking',
+                entity: 'booking',
                 entity_id: booking.id,
-                details: {
+                user_id: null,
+                metadata: {
                   guestName: guestName.trim(),
                   bookingId: booking.id,
                   lat: pos.coords.latitude,
@@ -123,7 +126,9 @@ export default function JoinHikeGuestPage() {
                   joinedAt: new Date().toISOString(),
                 },
               } as any);
-            } catch (_) {}
+            } catch (error) {
+              console.warn('Guest location audit could not be saved:', error);
+            }
           },
           () => {},
           { enableHighAccuracy: true, timeout: 5000 }

@@ -52,7 +52,7 @@ interface AssignmentRow {
   booking_id: string;
   status: AssignmentStatus;
   decided_at: string | null;
-  decline_reason?: string | null;
+  reassignment_reason?: string | null;
   created_at: string;
   guide_id: string;
   location_id: string;
@@ -161,7 +161,7 @@ export default function GuideDashboard() {
 
       // 4. Pull full bookings data for the assignments
       const bookingIds = Array.from(new Set(mineList.map((a: any) => a.booking_id))).filter(Boolean);
-      let bookingMap: Record<string, any> = {};
+      const bookingMap: Record<string, any> = {};
       if (bookingIds.length > 0) {
         const { data: bks } = await supabase
           .from('bookings')
@@ -630,7 +630,7 @@ export default function GuideDashboard() {
                             </div>
 
                             {/* Special notes & medical alerts */}
-                            {(meta.medicalNotes || meta.userNotes || a.decline_reason) && (
+                            {(meta.medicalNotes || meta.userNotes || a.reassignment_reason) && (
                               <div className="flex flex-wrap gap-2 pt-1 text-xs">
                                 {meta.medicalNotes && (
                                   <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-destructive/10 text-destructive border border-destructive/20 font-medium">
@@ -644,9 +644,9 @@ export default function GuideDashboard() {
                                     Note: {meta.userNotes}
                                   </span>
                                 )}
-                                {a.decline_reason && (
+                                {a.reassignment_reason && (
                                   <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-muted text-muted-foreground italic">
-                                    Decline Reason: {a.decline_reason}
+                                    Decline Reason: {a.reassignment_reason}
                                   </span>
                                 )}
                               </div>
@@ -824,8 +824,8 @@ export default function GuideDashboard() {
                     <Row k="Trail / Route" v={meta.assignedTrail || 'Standard Kalisungan Route'} />
                     <Row k="Medical Notes" v={meta.medicalNotes ?? 'None specified'} />
                     <Row k="Hiker Notes" v={meta.userNotes ?? 'None'} />
-                    {detailOpen.decline_reason && (
-                      <Row k="Decline Reason" v={detailOpen.decline_reason} />
+                    {detailOpen.reassignment_reason && (
+                      <Row k="Decline Reason" v={detailOpen.reassignment_reason} />
                     )}
                     {meta.guideChangeReason && (
                       <Row k="Reassignment Note" v={meta.guideChangeReason} />

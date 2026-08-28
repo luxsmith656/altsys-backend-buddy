@@ -780,7 +780,6 @@ export default function BookingAIChat({
                         : 'bg-primary text-primary-foreground rounded-tr-sm',
                     )}
                   >
-                    {/* eslint-disable-next-line react/no-danger */}
                     <span
                       className="whitespace-pre-wrap"
                       dangerouslySetInnerHTML={{ __html: handleMarkdown(msg.content) }}

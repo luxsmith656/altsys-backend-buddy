@@ -530,7 +530,7 @@ export default function BookingPage() {
     const dateStr = format(date, 'yyyy-MM-dd');
     const cap = monthCapacity[dateStr];
     const totalMax = cap?.max_capacity ?? DEFAULT_MAX_CAPACITY;
-    if (hikeType === 'night' || hikeType === 'overnight') {
+    if (hikeType === 'night') {
       const max = cap?.night_max_capacity ?? Math.max(15, Math.round(totalMax * 0.35));
       const current = cap?.night_current_count ?? 0;
       return Math.max(0, max - current);
@@ -942,7 +942,7 @@ export default function BookingPage() {
 
   /* ─────────────── HIKER ONLINE BOOKING FORM ─────────────── */
   return (
-    <div className="min-h-screen pt-20 pb-24 md:pb-12 px-2 sm:px-4">
+    <div className="min-h-screen overflow-x-hidden pt-20 pb-24 md:pb-12 px-2 sm:px-4">
       <div className="container max-w-5xl mx-auto">
         {/* Admin Preview Mode Banner */}
         {forceHikerView && (

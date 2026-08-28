@@ -44,7 +44,7 @@ export default class ErrorBoundary extends Component<Props, State> {
   public render() {
     if (this.state.hasError) {
       return (
-        <div className="min-h-[70vh] flex items-center justify-center p-4">
+        <div data-testid="fatal-error-boundary" className="min-h-[70vh] flex items-center justify-center p-4">
           <Card className="glass-card border-destructive/30 max-w-lg w-full rounded-3xl p-6 text-center space-y-4 shadow-2xl">
             <CardHeader className="p-0 space-y-2">
               <div className="h-14 w-14 rounded-2xl bg-destructive/15 text-destructive grid place-items-center mx-auto shadow-inner">

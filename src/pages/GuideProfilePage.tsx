@@ -8,6 +8,8 @@ import { Card, CardContent } from '@/components/ui/card';
 type Guide = { id: string; full_name: string; specialty?: string; photo_url?: string | null; facebook_url?: string | null };
 type Review = { id: string; reviewer_name: string; rating: number; comment: string; created_at: string };
 
+const GUIDE_PROFILE_EXTENSIONS_ENABLED = import.meta.env.VITE_GUIDE_PROFILE_EXTENSIONS_ENABLED === 'true';
+
 export default function GuideProfilePage() {
   const { guideId } = useParams();
   const [guide, setGuide] = useState<Guide | null>(null);
@@ -18,19 +20,26 @@ export default function GuideProfilePage() {
     if (!guideId) return;
     const load = async () => {
       setLoading(true);
+      const guideSelect = GUIDE_PROFILE_EXTENSIONS_ENABLED
+        ? 'id,full_name,specialty,photo_url,facebook_url'
+        : 'id,full_name,specialty';
       const { data: guideData } = await supabase.from('guides' as any)
-        .select('id,full_name,specialty,photo_url,facebook_url')
+        .select(guideSelect)
         .eq('id', guideId)
         .eq('is_active', true)
         .maybeSingle();
       setGuide((guideData as unknown as Guide | null) ?? null);
-      const { data: reviewData } = await supabase.from('guide_reviews' as any)
-        .select('id,reviewer_name,rating,comment,created_at')
-        .eq('guide_id', guideId)
-        .eq('is_approved', true)
-        .order('created_at', { ascending: false })
-        .limit(12);
-      setReviews((reviewData as unknown as Review[] | null) ?? []);
+      if (GUIDE_PROFILE_EXTENSIONS_ENABLED) {
+        const { data: reviewData } = await supabase.from('guide_reviews' as any)
+          .select('id,reviewer_name,rating,comment,created_at')
+          .eq('guide_id', guideId)
+          .eq('is_approved', true)
+          .order('created_at', { ascending: false })
+          .limit(12);
+        setReviews((reviewData as unknown as Review[] | null) ?? []);
+      } else {
+        setReviews([]);
+      }
       setLoading(false);
     };
     void load();

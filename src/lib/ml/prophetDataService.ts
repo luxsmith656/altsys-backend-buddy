@@ -370,8 +370,8 @@ export async function runProphetForecastPipeline({
 
     // Base weather regressors
     let rainProb = liveWeather?.rainProb ?? (month >= 7 && month <= 9 ? 55 : 20);
-    let precipMm = liveWeather?.precipMm ?? 0;
-    let tempMax = liveWeather?.tempMax ?? (month >= 3 && month <= 5 ? 33 : 30);
+    const precipMm = liveWeather?.precipMm ?? 0;
+    const tempMax = liveWeather?.tempMax ?? (month >= 3 && month <= 5 ? 33 : 30);
     let typhoonSignal = 0;
     let calamityAlert: 'none' | 'yellow' | 'orange' | 'red' = 'none';
     let lguImpact = ann?.impact ?? (holiday ? 0.3 : 0);

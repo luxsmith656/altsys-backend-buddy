@@ -138,7 +138,7 @@ export default function AdminWalkInRegistrationDialog({
       const metaNotes = encodeMeta({
         fullName: fullName.trim(),
         phoneNumber: phoneNumber.trim(),
-        age,
+        age: String(age),
         groupSize,
         hikeTime,
         hikeType,

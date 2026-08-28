@@ -1,5 +1,6 @@
 export type AppRole = 'admin' | 'ranger' | 'hiker' | 'guide' | 'super_admin';
 export type BookingStatus = 'pending' | 'confirmed' | 'cancelled' | 'adjustment_pending';
+export type BookingPaymentMethod = 'onsite' | 'gcash' | 'bank_transfer' | 'cash' | 'online';
 
 /** Companion with full demographic details */
 export interface CompanionDetail {
@@ -15,8 +16,12 @@ export interface BookingMeta {
   userNotes?: string;
   assignedGuide?: string;       // Guide name assigned by admin
   assignedGuideId?: string;
+  guideAcceptedAt?: string;
   guideChangeReason?: string;
+  guideDeclineReason?: string;
   guideChangedAt?: string;
+  previousGuide?: string | null;
+  previousGuideId?: string | null;
   bookingChange?: {
     changedAt: string;
     reason: string;
@@ -26,7 +31,10 @@ export interface BookingMeta {
   bookingChangeAcknowledgedAt?: string;
   assignedTrailZoneId?: string; // Official route assigned by admin or auto-assigned
   assignedTrailName?: string;
+  assignedTrail?: string;
   assignedTrailAuto?: boolean;
+  groupSize?: number;
+  guideStatus?: 'pending' | 'accepted' | 'declined' | 'reassigned_pending' | 'completed' | string;
   adjustedDate?: string;        // Proposed new date (yyyy-MM-dd) from admin
   adjustedTime?: string;        // e.g. "07:00 AM"
   guidePhone?: string;
@@ -52,6 +60,8 @@ export interface BookingMeta {
   paymentScreenshotPath?: string; // Firebase storage path (for deletion)
   // Payment tracking
   paymentStatus?: 'unpaid' | 'partial' | 'paid';
+  paymentMethod?: BookingPaymentMethod;
+  paymentReference?: string;
   amountPaid?: number;
   cashTendered?: number;
   changeReturned?: number;
@@ -80,6 +90,10 @@ export interface BookingMeta {
   peakExtensionHours?: number;
   descentStartedAt?: string;
   hikeCompletedAt?: string;
+  hikeCompletedBy?: string;
+  isWalkIn?: boolean;
+  walkInRegisteredBy?: string;
+  walkInRegisteredAt?: string;
   emergencyHorseCount?: number;
   emergencyHorseFee?: number;
   priceAdjustments?: {

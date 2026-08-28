@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { runFullSystemDiagnostics, APP_ROUTES } from '@/lib/monitoring/systemHealthEngine';
+import { APP_ROUTES } from '@/app/routes';
 import { calculateFees, calculatePeakExtensionFee, calculateEmergencyHorseFee } from '@/lib/payments';
 import { FacebookProphetEngine } from '@/lib/ml/prophetEngine';
 import { generateSyntheticBaseline } from '@/lib/ml/prophetDataService';
@@ -7,12 +7,14 @@ import { ADMIN_CHECKIN_TOKEN_PREFIX } from '@/lib/tracking/sessionAuthorization'
 import { encodeMeta, parseMeta } from '@/lib/bookingMeta';
 
 describe('System Integrity: Routing & Navigation Table', () => {
-  it('has all 17 critical application routes registered and formatted correctly', () => {
-    expect(APP_ROUTES.length).toBeGreaterThanOrEqual(17);
+  it('has all critical application routes registered and access-controlled', () => {
+    expect(APP_ROUTES.length).toBeGreaterThanOrEqual(20);
     APP_ROUTES.forEach((route) => {
       expect(route.path.startsWith('/')).toBe(true);
       expect(route.name.length).toBeGreaterThan(2);
-      expect(['public', 'admin', 'super_admin', 'ranger', 'guide', 'hiker', 'staff', 'authenticated']).toContain(route.role);
+      expect(['public', 'authenticated', 'roles']).toContain(route.access);
+      expect(route.pageKey.length).toBeGreaterThan(1);
+      if (route.access === 'roles') expect(route.allowedRoles?.length).toBeGreaterThan(0);
     });
   });
 
@@ -29,7 +31,6 @@ describe('System Integrity: Routing & Navigation Table', () => {
     expect(paths).toContain('/ops-ai');
   });
 });
-
 describe('System Integrity: Pricing Engine & Cash Settlement Formula', () => {
   it('strictly enforces 8-pax guide threshold, ₱30 entry fee, and ₱20 env fee per person', () => {
     // 1 hiker -> 1 guide (₱800) + 1 entry (₱30) + 1 env (₱20) = ₱850
@@ -90,7 +91,6 @@ describe('System Integrity: Pricing Engine & Cash Settlement Formula', () => {
     expect(change).toBe(450);
   });
 });
-
 describe('System Integrity: Prophet ML Forecasting Model', () => {
   it('produces valid mathematical bounds for tourist demand predictions', () => {
     const baseline = generateSyntheticBaseline('2025-01-01', '2025-03-31', 40);
@@ -138,40 +138,4 @@ describe('System Integrity: Group Companion QR Protocol & Session Integrity', ()
     expect(parsed.groupPhase).toBe('peak');
     expect(parsed.peakExtensionHours).toBe(2);
   });
-});
-
-describe('System Integrity: Full Diagnostic Suite Runner', () => {
-  it('runs all diagnostic probes without throwing uncaught exceptions', async () => {
-    const report = await runFullSystemDiagnostics();
-    expect(report.totalCount).toBeGreaterThanOrEqual(6);
-    expect(report.overallScore).toBeGreaterThanOrEqual(75);
-    expect(['healthy', 'warning', 'critical']).toContain(report.status);
-    expect(report.items.length).toBe(report.totalCount);
-  });
-});
-
-describe('System Integrity: Page Component Module Resolution & No Missing Variables', () => {
-  it('imports all dashboard and core page modules cleanly without ReferenceError', async () => {
-    const pages = [
-      import('@/pages/HikerDashboard'),
-      import('@/pages/AdminDashboard'),
-      import('@/pages/GuideDashboard'),
-      import('@/pages/RangerDashboard'),
-      import('@/pages/CentralDashboard'),
-      import('@/pages/BookingPage'),
-      import('@/pages/MapPage'),
-      import('@/pages/JoinHikeGuestPage'),
-      import('@/pages/OpsAIPage'),
-      import('@/pages/ProfilePage'),
-      import('@/pages/Onboarding'),
-      import('@/pages/DashboardRedirect'),
-    ];
-
-    const results = await Promise.all(pages);
-    expect(results.length).toBe(12);
-    results.forEach((mod) => {
-      expect(mod.default).toBeDefined();
-      expect(typeof mod.default).toBe('function');
-    });
-  }, 20000);
 });

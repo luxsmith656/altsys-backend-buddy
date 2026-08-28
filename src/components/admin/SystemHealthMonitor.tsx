@@ -278,7 +278,7 @@ export default function SystemHealthMonitor() {
                 </div>
                 <div className="flex items-center gap-1.5 shrink-0">
                   <Badge variant="outline" className="text-[10px] uppercase font-mono px-1.5 py-0">
-                    {route.role}
+                    {route.access === 'roles' ? route.allowedRoles?.join(', ') : route.access}
                   </Badge>
                   <Button asChild size="icon" variant="ghost" className="h-7 w-7">
                     <Link to={route.path} target="_blank" rel="noopener noreferrer">

@@ -3,38 +3,33 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { Suspense } from "react";
 import { AuthProvider } from "@/hooks/useAuth";
 import { LocationsProvider } from "@/hooks/useLocations";
 import { ThemeProvider } from "@/hooks/useTheme";
 import Navbar from "@/components/layout/Navbar";
 import GlobalAIAssistant from "@/components/booking/GlobalAIAssistant";
-import Index from "./pages/Index";
-import Login from "./pages/Login";
-import Register from "./pages/Register";
-import MapPage from "./pages/MapPage";
-import ChatPage from "./pages/ChatPage";
-import OpsAIPage from "./pages/OpsAIPage";
-import BookingPage from "./pages/BookingPage";
-import AdminDashboard from "./pages/AdminDashboard";
-import RangerDashboard from "./pages/RangerDashboard";
-import HikerDashboard from "./pages/HikerDashboard";
-import ProfilePage from "./pages/ProfilePage";
-import DashboardRedirect from "./pages/DashboardRedirect";
-import GuideDashboard from "./pages/GuideDashboard";
-import GuideProfilePage from "./pages/GuideProfilePage";
-import CentralDashboard from "./pages/CentralDashboard";
-import NotificationsPage from "./pages/NotificationsPage";
-import Onboarding from "./pages/Onboarding";
-import JoinHikeGuestPage from "./pages/JoinHikeGuestPage";
 import NotFound from "./pages/NotFound";
 import RoleRoute from "@/components/auth/RoleRoute";
 import ErrorBoundary from "@/components/common/ErrorBoundary";
+import { APP_ROUTES, type AppRouteDefinition } from "@/app/routes";
 import { useEffect } from "react";
 import { startSyncEngine } from "@/lib/tracking/syncEngine";
 
 function OfflineSyncBoot() {
   useEffect(() => { startSyncEngine(); }, []);
   return null;
+}
+
+function RoutedPage({ route }: { route: AppRouteDefinition }) {
+  const Page = route.component;
+  const page = (
+    <div className="contents" data-route-page={route.pageKey}>
+      <Page />
+    </div>
+  );
+
+  return route.allowedRoles ? <RoleRoute allowedRoles={route.allowedRoles}>{page}</RoleRoute> : page;
 }
 
 const queryClient = new QueryClient({
@@ -61,25 +56,17 @@ const App = () => (
               <Navbar />
               <ErrorBoundary>
                 <Routes>
-                  <Route path="/" element={<Index />} />
-                  <Route path="/login" element={<Login />} />
-                  <Route path="/register" element={<Register />} />
-                  <Route path="/map" element={<MapPage />} />
-                  <Route path="/chat" element={<ChatPage />} />
-                  <Route path="/booking" element={<BookingPage />} />
-                  <Route path="/join-hike" element={<JoinHikeGuestPage />} />
-                  <Route path="/join" element={<JoinHikeGuestPage />} />
-                  <Route path="/ops-ai" element={<RoleRoute allowedRoles={['admin','super_admin','ranger','guide']}><OpsAIPage /></RoleRoute>} />
-                  <Route path="/admin" element={<RoleRoute allowedRoles={['admin', 'super_admin']}><AdminDashboard /></RoleRoute>} />
-                  <Route path="/central" element={<RoleRoute allowedRoles={['super_admin']}><CentralDashboard /></RoleRoute>} />
-                  <Route path="/ranger" element={<RoleRoute allowedRoles={['ranger', 'admin', 'super_admin']}><RangerDashboard /></RoleRoute>} />
-                  <Route path="/hiker" element={<RoleRoute allowedRoles={['hiker', 'admin', 'super_admin', 'ranger', 'guide']}><HikerDashboard /></RoleRoute>} />
-                  <Route path="/guide" element={<RoleRoute allowedRoles={['guide', 'admin', 'super_admin']}><GuideDashboard /></RoleRoute>} />
-                  <Route path="/guide/:guideId" element={<GuideProfilePage />} />
-                  <Route path="/profile" element={<ProfilePage />} />
-                  <Route path="/dashboard" element={<DashboardRedirect />} />
-                  <Route path="/notifications" element={<NotificationsPage />} />
-                  <Route path="/onboarding" element={<Onboarding />} />
+                  {APP_ROUTES.map((route) => (
+                    <Route
+                      key={route.path}
+                      path={route.path}
+                      element={
+                        <Suspense fallback={<div className="min-h-screen pt-24 px-4 text-center text-sm text-muted-foreground">Loading page...</div>}>
+                          <RoutedPage route={route} />
+                        </Suspense>
+                      }
+                    />
+                  ))}
                   <Route path="*" element={<NotFound />} />
                 </Routes>
               </ErrorBoundary>

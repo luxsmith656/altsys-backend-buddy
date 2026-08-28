@@ -56,7 +56,8 @@ export default function EndHikeSettlementDialog({
   const groupSize = Number(booking?.group_size || meta.actualGroupSize || 1);
 
   // Fee Calculations
-  const { guideFee, regFee, totalFee: baseTotalFee } = calculateFees(groupSize);
+  const { guideFee, entryFee, envFee, totalFee: baseTotalFee } = calculateFees(groupSize);
+  const registrationAndEnvironmentalFee = entryFee + envFee;
   const peakExtensionFee = calculatePeakExtensionFee(meta.peakExtensionHours);
   const emergencyHorseFee = meta.emergencyHorseFee ?? (meta.emergencyHorseCount ? meta.emergencyHorseCount * 500 : 0);
   const totalAmountDue = (meta.totalFee ?? baseTotalFee) + peakExtensionFee + emergencyHorseFee;
@@ -172,12 +173,12 @@ export default function EndHikeSettlementDialog({
 
       // 5. Log Audit Activity
       try {
-        await supabase.from('activity_logs').insert({
+        await supabase.from('admin_logs').insert({
           action: 'hike_completed',
-          entity_type: 'booking',
+          entity: 'booking',
           entity_id: booking.id,
           user_id: adminUser?.id || null,
-          details: {
+          metadata: {
             bookingId: booking.id,
             completedAt: now,
             totalAmount: totalAmountDue,
@@ -308,7 +309,7 @@ export default function EndHikeSettlementDialog({
               </div>
               <div className="flex justify-between text-muted-foreground">
                 <span>Registration & Environmental Fee ({groupSize} × ₱30)</span>
-                <span className="font-semibold text-foreground">{formatPeso(regFee)}</span>
+                <span className="font-semibold text-foreground">{formatPeso(registrationAndEnvironmentalFee)}</span>
               </div>
               {peakExtensionFee > 0 && (
                 <div className="flex justify-between text-primary">

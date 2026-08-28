@@ -158,7 +158,7 @@ export async function declineAndReassignGuide({
       .update({
         status: 'declined',
         decided_at: decidedAt,
-        decline_reason: cleanReason,
+        reassignment_reason: cleanReason,
       } as any)
       .eq('id', assignmentId);
 
@@ -188,7 +188,7 @@ export async function declineAndReassignGuide({
       if ((existingAss as any)?.id) {
         await supabase
           .from('booking_assignments' as any)
-          .update({ status: 'pending', decided_at: null, decline_reason: null } as any)
+          .update({ status: 'pending', decided_at: null, reassignment_reason: null } as any)
           .eq('id', (existingAss as any).id);
       } else {
         await supabase
@@ -321,10 +321,10 @@ export async function reassignGuideByAdmin({
     if (currentGuideId) {
       await supabase
         .from('booking_assignments' as any)
-        .update({
-          status: 'declined',
-          decided_at: changedAt,
-          decline_reason: `Reassigned by admin: ${cleanReason}`,
+          .update({
+            status: 'declined',
+            decided_at: changedAt,
+            reassignment_reason: `Reassigned by admin: ${cleanReason}`,
         } as any)
         .eq('booking_id', bookingId)
         .eq('guide_id', currentGuideId);
@@ -348,7 +348,7 @@ export async function reassignGuideByAdmin({
     if ((existingAss as any)?.id) {
       await supabase
         .from('booking_assignments' as any)
-        .update({ status: 'pending', decided_at: null, decline_reason: null } as any)
+        .update({ status: 'pending', decided_at: null, reassignment_reason: null } as any)
         .eq('id', (existingAss as any).id);
     } else {
       await supabase

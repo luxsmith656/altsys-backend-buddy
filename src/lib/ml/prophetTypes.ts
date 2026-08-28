@@ -85,8 +85,10 @@ export interface ProphetForecastPoint {
   holidays: number;
   /** Specific regressor effects */
   weatherEffect: number;
+  weatherReg?: number;
   calamityEffect: number;
   lguEffect: number;
+  holidayName?: string;
   /** Capacity limit on this date */
   capacityLimit: number;
   /** Flag if forecasted value exceeds capacity limit */

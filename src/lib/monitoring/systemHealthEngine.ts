@@ -12,6 +12,9 @@ import { FacebookProphetEngine } from '@/lib/ml/prophetEngine';
 import { generateSyntheticBaseline } from '@/lib/ml/prophetDataService';
 import { ADMIN_CHECKIN_TOKEN_PREFIX } from '@/lib/tracking/sessionAuthorization';
 import { parseMeta, encodeMeta } from '@/lib/bookingMeta';
+import { APP_ROUTES } from '@/app/routes';
+
+export { APP_ROUTES } from '@/app/routes';
 
 export interface DiagnosticItem {
   id: string;
@@ -35,25 +38,9 @@ export interface SystemHealthReport {
   items: DiagnosticItem[];
 }
 
-export const APP_ROUTES = [
-  { path: '/', name: 'Landing Page', role: 'public' },
-  { path: '/login', name: 'Login Page', role: 'public' },
-  { path: '/register', name: 'Register Page', role: 'public' },
-  { path: '/booking', name: 'Book a Hike', role: 'public' },
-  { path: '/map', name: 'Interactive Trail Map', role: 'public' },
-  { path: '/join-hike', name: 'Group Companion QR Join', role: 'public' },
-  { path: '/join', name: 'Quick Join Shortcut', role: 'public' },
-  { path: '/chat', name: 'AI Trail Assistant', role: 'public' },
-  { path: '/admin', name: 'Admin Dashboard', role: 'admin' },
-  { path: '/central', name: 'Super Admin Central Dashboard', role: 'super_admin' },
-  { path: '/ranger', name: 'Ranger Checkpoint Monitor', role: 'ranger' },
-  { path: '/hiker', name: 'Hiker Permit Dashboard', role: 'hiker' },
-  { path: '/guide', name: 'Guide Duty Dashboard', role: 'guide' },
-  { path: '/ops-ai', name: 'Ops AI Analytics', role: 'staff' },
-  { path: '/profile', name: 'User Profile Settings', role: 'authenticated' },
-  { path: '/notifications', name: 'Notifications Center', role: 'authenticated' },
-  { path: '/onboarding', name: 'Hiker Onboarding Flow', role: 'authenticated' },
-];
+export function isReleaseHealthy(report: Pick<SystemHealthReport, 'status' | 'failedCount' | 'warningCount'>): boolean {
+  return report.status === 'healthy' && report.failedCount === 0 && report.warningCount === 0;
+}
 
 export async function runFullSystemDiagnostics(): Promise<SystemHealthReport> {
   const items: DiagnosticItem[] = [];
@@ -173,19 +160,19 @@ export async function runFullSystemDiagnostics(): Promise<SystemHealthReport> {
         category: 'database',
         name: 'Supabase PostgreSQL Client Connectivity',
         description: 'Database queried in offline fallback mode.',
-        status: 'warning',
+        status: 'failed',
         latencyMs: Date.now() - dbStart,
         details: `Offline fallback active: ${locErr?.message || bookErr?.message || 'Local mode'}`,
       });
     }
-  } catch (err: any) {
+  } catch (err: unknown) {
     items.push({
       id: 'diag_db_connectivity',
       category: 'database',
       name: 'Supabase PostgreSQL Client Connectivity',
-      description: 'Database network test completed.',
-      status: 'passed',
-      details: 'Mock / Client database layer verified.',
+      description: 'Database verification threw an exception.',
+      status: 'failed',
+      error: err instanceof Error ? err.message : 'Unknown database verification failure.',
     });
   }
 
@@ -316,8 +303,8 @@ export async function runFullSystemDiagnostics(): Promise<SystemHealthReport> {
       category: 'offline_gps',
       name: 'Offline Storage & GPS Point Queue Architecture',
       description: 'Offline storage audit failed.',
-      status: 'warning',
-      error: err.message,
+      status: 'failed',
+      error: err instanceof Error ? err.message : 'Unknown offline storage failure.',
     });
   }
 
@@ -327,7 +314,7 @@ export async function runFullSystemDiagnostics(): Promise<SystemHealthReport> {
     const mockMeta = {
       fullName: 'Juan Dela Cruz',
       companions: ['Maria Santos'],
-      groupPhase: 'ascent',
+      groupPhase: 'ascent' as const,
     };
     const encoded = encodeMeta(mockMeta);
     const decoded = parseMeta(encoded);

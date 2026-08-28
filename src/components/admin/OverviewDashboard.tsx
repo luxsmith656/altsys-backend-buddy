@@ -43,7 +43,7 @@ export default function OverviewDashboard({ locationId }: { locationId: string |
       if (locationId) q = q.eq('location_id', locationId);
       const { data: todayBookings } = await q;
       
-      let totalBookings = todayBookings?.length || 0;
+      const totalBookings = todayBookings?.length || 0;
       let activeHikers = 0;
       let revenue = 0;
       let collected = 0;

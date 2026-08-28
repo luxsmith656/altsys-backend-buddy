@@ -119,7 +119,6 @@ import ForecastingTab from '@/components/admin/forecasting/ForecastingTab';
 import AdminWalkInRegistrationDialog from '@/components/admin/AdminWalkInRegistrationDialog';
 import EditPaymentDialog from '@/components/booking/EditPaymentDialog';
 import EndHikeSettlementDialog from '@/components/admin/EndHikeSettlementDialog';
-import SystemHealthMonitor from '@/components/admin/SystemHealthMonitor';
 import AppDownloadButton from '@/components/AppDownloadButton';
 import { usePullToRefresh } from '@/hooks/usePullToRefresh';
 import PullToRefreshIndicator from '@/components/common/PullToRefreshIndicator';
@@ -161,7 +160,7 @@ const ANNOUNCEMENT_TYPE_STYLES: Record<string, string> = {
 const getMappedTab = (tab: string) => {
   if (['overview', 'demographics'].includes(tab)) return 'overview';
   if (['operations', 'requests', 'scan', 'live-map'].includes(tab)) return 'operations';
-  if (['management', 'guides', 'announcements', 'capacity', 'forecasting', 'system-health'].includes(tab)) return 'management';
+  if (['management', 'guides', 'announcements', 'capacity', 'forecasting'].includes(tab)) return 'management';
   if (['finance', 'payment-summary'].includes(tab)) return 'finance';
   return 'overview';
 };
@@ -176,7 +175,7 @@ export default function AdminDashboard() {
   });
   const [managementTab, setManagementTab] = useState<string>(() => {
     const initialTab = searchParams.get('tab');
-    return ['guides', 'announcements', 'capacity', 'forecasting', 'system-health'].includes(initialTab || '')
+    return ['guides', 'announcements', 'capacity', 'forecasting'].includes(initialTab || '')
       ? initialTab!
       : 'guides';
   });
@@ -219,7 +218,7 @@ export default function AdminDashboard() {
     if (tab === 'requests' || tab === 'scan' || tab === 'live-map') {
       if (tab !== operationsTab) setOperationsTab(tab);
     }
-    if (['guides', 'announcements', 'capacity', 'forecasting', 'system-health'].includes(tab || '')) {
+    if (['guides', 'announcements', 'capacity', 'forecasting'].includes(tab || '')) {
       if (tab !== managementTab) setManagementTab(tab!);
     }
   }, [activeTab, operationsTab, managementTab, searchParams]);
@@ -497,7 +496,9 @@ export default function AdminDashboard() {
       const parsed = JSON.parse(raw);
       if (parsed?.bookingId) q = parsed.bookingId;
       else if (parsed?.id) q = parsed.id;
-    } catch {}
+    } catch {
+      // Plain booking IDs are valid scanner input when the payload is not JSON.
+    }
 
     setScanLoading(true);
     setScannedBooking(null);
@@ -931,6 +932,9 @@ export default function AdminDashboard() {
       .limit(60);
     setUpcomingCapacities(data || []);
   };
+
+  // Keep the refresh action explicit: both capacity views use the same source.
+  const loadAllCapacities = loadUpcomingCapacities;
 
   const saveCapacity = async () => {
     if (!capDate) { toast.error('Please select a date.'); return; }
@@ -2337,7 +2341,6 @@ export default function AdminDashboard() {
                   <TabsTrigger value="announcements">Announcements</TabsTrigger>
                   <TabsTrigger value="capacity">Daily Capacity</TabsTrigger>
                   <TabsTrigger value="forecasting">Prophet Forecasting</TabsTrigger>
-                  <TabsTrigger value="system-health">System Health</TabsTrigger>
                 </TabsList>
               </div>
               <TabsContent value="guides" className="space-y-6 mt-0">
@@ -2751,9 +2754,6 @@ export default function AdminDashboard() {
           </TabsContent>
           <TabsContent value="forecasting" className="space-y-6 mt-0">
             <ForecastingTab locationId={activeLocationId} />
-          </TabsContent>
-          <TabsContent value="system-health" className="space-y-6 mt-0">
-            <SystemHealthMonitor />
           </TabsContent>
             </Tabs>
           </TabsContent>
