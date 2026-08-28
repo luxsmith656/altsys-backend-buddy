@@ -8,6 +8,7 @@ import {
 } from '@/lib/tracking/sessionAuthorization';
 import { useLocations } from '@/hooks/useLocations';
 import { useTheme } from '@/hooks/useTheme';
+import { cn } from '@/lib/utils';
 import RealtimeMonitorMap from '@/components/admin/RealtimeMonitorMap';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -2565,43 +2566,122 @@ export default function AdminDashboard() {
                                 Active Hike Session in Progress
                               </span>
                             </div>
-                            {meta.onsiteStartTime && (
-                              <Badge variant="outline" className="text-xs bg-background/80 border-border/40 font-mono">
-                                Started: {new Date(meta.onsiteStartTime).toLocaleTimeString('en-PH', { timeZone: 'Asia/Manila', hour: '2-digit', minute: '2-digit' })} PHT
+                            <div className="flex items-center gap-2">
+                              {meta.onsiteStartTime && (
+                                <Badge variant="outline" className="text-xs bg-background/80 border-border/40 font-mono">
+                                  Started: {new Date(meta.onsiteStartTime).toLocaleTimeString('en-PH', { timeZone: 'Asia/Manila', hour: '2-digit', minute: '2-digit' })} PHT
+                                </Badge>
+                              )}
+                              <Badge className={
+                                meta.groupPhase === 'peak' ? 'bg-amber-500 text-white font-bold' :
+                                meta.groupPhase === 'descent' ? 'bg-sky-500 text-white font-bold' :
+                                'bg-emerald-600 text-white font-bold'
+                              }>
+                                {meta.groupPhase === 'peak' ? '🏔️ Summit Peak Stay' :
+                                 meta.groupPhase === 'descent' ? '🥾 Descent (Going Down)' :
+                                 '🧗 Ascent (Going Up)'}
                               </Badge>
-                            )}
+                            </div>
                           </div>
 
-                          {/* 4-Step Visual Progress Stepper */}
-                          <div className="grid grid-cols-4 gap-1.5 p-2 rounded-xl bg-background/60 border border-border/30 text-center">
-                            <div className={`p-2 rounded-lg transition-all ${
-                              (meta.groupPhase ?? 'ascent') === 'ascent'
-                                ? 'bg-primary text-primary-foreground font-bold shadow-sm'
-                                : 'text-muted-foreground opacity-70'
-                            }`}>
-                              <p className="text-xs">🧗 1. Going Up</p>
-                              <p className="text-[10px] opacity-80">(Ascent)</p>
+                          {/* 7-Station Map Trail Visual Progress Tracker */}
+                          <div className="p-3 rounded-xl bg-background/80 border border-border/40 space-y-2">
+                            <div className="flex items-center justify-between text-xs">
+                              <span className="font-semibold text-foreground flex items-center gap-1.5">
+                                <Mountain className="h-3.5 w-3.5 text-emerald-600" />
+                                Summit Trail (Official Route Station Progress)
+                              </span>
+                              <span className="text-[11px] font-mono text-muted-foreground">
+                                {meta.groupPhase === 'peak' ? 'Station 7 / 7 (Peak)' :
+                                 meta.groupPhase === 'descent' ? 'Station 5 / 7 (Desc)' :
+                                 'Station 3 / 7 (Ascent)'}
+                              </span>
                             </div>
-                            <div className={`p-2 rounded-lg transition-all ${
-                              meta.groupPhase === 'peak'
-                                ? 'bg-amber-500 text-white font-bold shadow-sm'
-                                : 'text-muted-foreground opacity-70'
-                            }`}>
-                              <p className="text-xs">🏔️ 2. Summit</p>
-                              <p className="text-[10px] opacity-80">(Peak Stay)</p>
+                            {/* Station Pills */}
+                            <div className="grid grid-cols-7 gap-1 text-center font-mono text-[10px]">
+                              {[
+                                { label: 'J', name: 'Jump-off', active: true },
+                                { label: 'S1', name: 'Bamboo', active: true },
+                                { label: 'S2', name: 'Forest', active: true },
+                                { label: 'S3', name: 'Spring', active: meta.groupPhase === 'ascent' || meta.groupPhase === 'peak' || meta.groupPhase === 'descent' },
+                                { label: 'S4', name: 'Ridge', active: meta.groupPhase === 'peak' || meta.groupPhase === 'descent' },
+                                { label: 'S5', name: 'Camp', active: meta.groupPhase === 'peak' || meta.groupPhase === 'descent' },
+                                { label: 'Peak', name: 'Summit', active: meta.groupPhase === 'peak' },
+                              ].map((st, idx) => (
+                                <div
+                                  key={idx}
+                                  className={cn(
+                                    'py-1.5 px-0.5 rounded transition-all flex flex-col items-center justify-center',
+                                    st.active
+                                      ? (st.label === 'Peak' && meta.groupPhase === 'peak')
+                                        ? 'bg-amber-500 text-white font-bold shadow-sm'
+                                        : meta.groupPhase === 'descent'
+                                        ? 'bg-sky-500 text-white font-semibold'
+                                        : 'bg-emerald-600 text-white font-semibold'
+                                      : 'bg-muted/40 text-muted-foreground/60'
+                                  )}
+                                >
+                                  <span className="font-bold">{st.label}</span>
+                                  <span className="text-[8px] opacity-85 truncate max-w-full">{st.name}</span>
+                                </div>
+                              ))}
                             </div>
-                            <div className={`p-2 rounded-lg transition-all ${
-                              meta.groupPhase === 'descent'
-                                ? 'bg-sky-500 text-white font-bold shadow-sm'
-                                : 'text-muted-foreground opacity-70'
-                            }`}>
-                              <p className="text-xs">🥾 3. Going Down</p>
-                              <p className="text-[10px] opacity-80">(Descent)</p>
+                          </div>
+
+                          {/* Simulation Telemetry Grid (Matching Map Simulation) */}
+                          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
+                            <div className="p-2.5 rounded-xl bg-background/60 border border-border/30">
+                              <span className="text-[10px] text-muted-foreground block">📍 Live Position</span>
+                              <span className="font-bold text-foreground">
+                                {meta.groupPhase === 'peak' ? 'Summit Peak (622m)' :
+                                 meta.groupPhase === 'descent' ? 'Ridge Saddle (Desc)' :
+                                 'Mountain Spring (Ascent)'}
+                              </span>
                             </div>
-                            <div className="p-2 rounded-lg text-muted-foreground opacity-70">
-                              <p className="text-xs">🏁 4. Base</p>
-                              <p className="text-[10px] opacity-80">(Complete)</p>
+                            <div className="p-2.5 rounded-xl bg-background/60 border border-border/30">
+                              <span className="text-[10px] text-muted-foreground block">⏱️ Estimated ETA</span>
+                              <span className="font-bold text-emerald-600 dark:text-emerald-400">
+                                {meta.groupPhase === 'peak' ? 'Summit Stay Active' :
+                                 meta.groupPhase === 'descent' ? '~40 mins to Base' :
+                                 '~35 mins to Summit'}
+                              </span>
                             </div>
+                            <div className="p-2.5 rounded-xl bg-background/60 border border-border/30">
+                              <span className="text-[10px] text-muted-foreground block">🧭 Distance & Elev</span>
+                              <span className="font-bold text-foreground">
+                                {meta.groupPhase === 'peak' ? '3.2 km • 622m' :
+                                 meta.groupPhase === 'descent' ? '4.5 km • 420m' :
+                                 '1.7 km • 480m'}
+                              </span>
+                            </div>
+                            <div className="p-2.5 rounded-xl bg-background/60 border border-border/30">
+                              <span className="text-[10px] text-muted-foreground block">👥 Group Roster</span>
+                              <span className="font-bold text-foreground">
+                                {scannedBooking.group_size} Pax {meta.hasMinors ? '(1 Minor)' : ''}
+                              </span>
+                            </div>
+                          </div>
+
+                          {/* Lead Guide & Emergency Info */}
+                          <div className="p-3 rounded-xl bg-background/60 border border-border/30 text-xs space-y-1">
+                            <div className="flex justify-between flex-wrap gap-1">
+                              <span className="text-muted-foreground">Lead Guide:</span>
+                              <span className="font-semibold text-foreground">
+                                {meta.assignedGuide || 'Test Guide'} ({guides.find((g) => g.name === meta.assignedGuide || g.id === meta.assignedGuideId)?.phone || '+63 917 000 0001'})
+                              </span>
+                            </div>
+                            <div className="flex justify-between flex-wrap gap-1">
+                              <span className="text-muted-foreground">Emergency Contact:</span>
+                              <span className="font-medium text-foreground">
+                                {scannedBooking.emergency_contact_name || meta.fullName} ({scannedBooking.emergency_contact_phone || meta.phoneNumber})
+                              </span>
+                            </div>
+                            {meta.companions && meta.companions.length > 0 && (
+                              <div className="flex justify-between flex-wrap gap-1 text-[11px]">
+                                <span className="text-muted-foreground">Companions:</span>
+                                <span className="text-foreground">{meta.companions.join(', ')}</span>
+                              </div>
+                            )}
                           </div>
 
                           {/* Simulation & Action Controls */}
@@ -2675,24 +2755,41 @@ export default function AdminDashboard() {
                                   🏁 Base Reached: Finalize & Settle
                                 </Button>
                               )}
+                            </div>
+
+                            <div className="grid sm:grid-cols-2 gap-2 pt-1">
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => {
+                                  setOperationsTab('live-map');
+                                  const next = new URLSearchParams(searchParams);
+                                  next.set('tab', 'live-map');
+                                  setSearchParams(next, { replace: true });
+                                }}
+                                className="w-full gap-1.5 text-xs font-semibold"
+                              >
+                                <MapPin className="h-3.5 w-3.5 text-emerald-600" />
+                                🗺️ View on Live Map
+                              </Button>
                               <Button
                                 size="sm"
                                 variant="outline"
                                 onClick={() => setCompanionQROpen(true)}
-                                className="w-full sm:col-span-full gap-2 border-primary/40 text-primary hover:bg-primary/10 font-bold py-2 text-xs rounded-xl"
+                                className="w-full gap-1.5 border-primary/40 text-primary hover:bg-primary/10 text-xs font-semibold"
                               >
-                                <Users className="h-4 w-4" />
-                                📱 Show Group Companion Join QR (For All {scannedBooking.group_size} Pax)
-                              </Button>
-                              <Button
-                                size="sm"
-                                onClick={() => setEndHikeBooking(scannedBooking)}
-                                className="w-full sm:col-span-full gap-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-bold py-2.5 shadow-lg text-xs rounded-xl"
-                              >
-                                <CheckCircle2 className="h-4 w-4" />
-                                🏁 End Hike & Settle Payment (Complete Session)
+                                <Users className="h-3.5 w-3.5" />
+                                📱 Show Group Join QR ({scannedBooking.group_size} Pax)
                               </Button>
                             </div>
+
+                            <Button
+                              size="sm"
+                              onClick={() => setEndHikeBooking(scannedBooking)}
+                              className="w-full gap-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-bold py-2.5 shadow-lg text-xs rounded-xl"
+                            >
+                              <Receipt className="h-4 w-4" /> End Hike & Settle Bill
+                            </Button>
                           </div>
                         </div>
                       ) : scannedBooking.status !== 'confirmed' ? (
