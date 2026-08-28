@@ -59,7 +59,18 @@ export default function RangerDashboard() {
   const [checkoutId, setCheckoutId] = useState<string | null>(null);
 
   useEffect(() => {
-    loadData();
+    void loadData();
+
+    const ch = supabase
+      .channel('ranger-realtime')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'hiker_sessions' }, () => void loadData())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'trail_reports' }, () => void loadData())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'bookings' }, () => void loadData())
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(ch);
+    };
   }, []);
 
   const loadData = async () => {

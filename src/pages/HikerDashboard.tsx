@@ -105,12 +105,11 @@ export default function HikerDashboard() {
 
   useEffect(() => {
     if (!user) return;
-    loadData();
+    void loadData();
 
-    // Auto-start: when admin checks in the hiker via QR, a new active
-    // hiker_session is inserted. We detect it via realtime and jump to /map.
+    // Auto-start & live booking sync
     const ch = supabase
-      .channel(`hiker-autostart-${user.id}`)
+      .channel(`hiker-realtime-sync-${user.id}`)
       .on(
         'postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'hiker_sessions', filter: `user_id=eq.${user.id}` },
@@ -124,8 +123,28 @@ export default function HikerDashboard() {
       )
       .on(
         'postgres_changes',
-        { event: 'UPDATE', schema: 'public', table: 'bookings', filter: `user_id=eq.${user.id}` },
-        () => { void loadData(); },
+        { event: '*', schema: 'public', table: 'bookings', filter: `user_id=eq.${user.id}` },
+        (payload) => {
+          if (payload.eventType === 'UPDATE' && payload.new) {
+            const updated = payload.new as any;
+            const meta = parseMeta(updated.notes);
+            if (updated.status === 'confirmed') {
+              toast.success(`Booking on ${updated.booking_date} confirmed! Guide: ${meta.assignedGuide || 'Assigned'}`);
+            } else if (updated.status === 'adjustment_pending') {
+              toast.info(`Schedule adjustment proposed for your booking.`);
+            } else if (updated.status === 'completed') {
+              toast.success(`Hike completed! You can now rate your experience and guide.`);
+            }
+            setBookings((prev) => prev.map((b) => (b.id === updated.id ? { ...b, ...updated } : b)));
+          } else if (payload.eventType === 'INSERT' && payload.new) {
+            const newBooking = payload.new as any;
+            setBookings((prev) => [newBooking, ...prev.filter((b) => b.id !== newBooking.id)]);
+          } else if (payload.eventType === 'DELETE' && payload.old) {
+            const oldId = (payload.old as any).id;
+            setBookings((prev) => prev.filter((b) => b.id !== oldId));
+          }
+          void loadData();
+        },
       )
       .subscribe();
     return () => { supabase.removeChannel(ch); };

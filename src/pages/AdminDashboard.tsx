@@ -196,7 +196,7 @@ export default function AdminDashboard() {
 
   /* ── Guide state ── */
   /* ── Real guides loaded from DB, mapped to the legacy UI shape ── */
-  const { activeLocationId, isSuperAdmin, locations } = useLocations();
+  const { activeLocationId, isSuperAdmin, locations, setActiveLocationId } = useLocations();
   const { user: adminUser, role, signOut } = useAuth();
   const navigate = useNavigate();
   const { theme, toggleTheme } = useTheme();
@@ -430,10 +430,38 @@ export default function AdminDashboard() {
     void loadUpcomingCapacities();
     setAnnouncements(loadAnnouncements());
 
-    // Listen for realtime booking changes & assignments
+    // Listen for realtime booking changes & assignments with immediate optimistic state update
     const ch = supabase
-      .channel('admin-bookings-realtime')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'bookings' }, () => {
+      .channel(`admin-bookings-live-${activeLocationId ?? 'all'}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'bookings' }, (payload) => {
+        if (payload.eventType === 'INSERT' && payload.new) {
+          const newBooking = payload.new as any;
+          const meta = parseMeta(newBooking.notes);
+          toast.info(`🔔 New Booking: ${meta.fullName || newBooking.emergency_contact_name || 'Hiker'} (${newBooking.booking_date})`);
+          setAllTabBookings((prev) => {
+            if (prev.some((b) => b.id === newBooking.id)) return prev;
+            return [newBooking, ...prev];
+          });
+          if (newBooking.status === 'pending' || newBooking.status === 'adjustment_pending') {
+            setPendingBookings((prev) => {
+              if (prev.some((b) => b.id === newBooking.id)) return prev;
+              return [newBooking, ...prev];
+            });
+          }
+        } else if (payload.eventType === 'UPDATE' && payload.new) {
+          const updated = payload.new as any;
+          setAllTabBookings((prev) => prev.map((b) => (b.id === updated.id ? { ...b, ...updated } : b)));
+          setPendingBookings((prev) => {
+            if (updated.status !== 'pending' && updated.status !== 'adjustment_pending') {
+              return prev.filter((b) => b.id !== updated.id);
+            }
+            return prev.map((b) => (b.id === updated.id ? { ...b, ...updated } : b));
+          });
+        } else if (payload.eventType === 'DELETE' && payload.old) {
+          const oldId = (payload.old as any).id;
+          setAllTabBookings((prev) => prev.filter((b) => b.id !== oldId));
+          setPendingBookings((prev) => prev.filter((b) => b.id !== oldId));
+        }
         void loadAllTabBookings();
         void loadPendingBookings();
         void loadData();
@@ -1645,6 +1673,29 @@ export default function AdminDashboard() {
             <p className="text-muted-foreground">
               Monitor real-time hiker activity, manage zones, announcements, and guides.
             </p>
+            {/* Location Scope Switcher */}
+            <div className="flex items-center gap-2 flex-wrap mt-3">
+              <div className="flex items-center gap-1.5 text-xs text-muted-foreground font-medium">
+                <MapPin className="h-3.5 w-3.5 text-primary shrink-0" />
+                <span>Scope:</span>
+              </div>
+              <Select
+                value={activeLocationId ?? 'all'}
+                onValueChange={(val) => setActiveLocationId(val === 'all' ? null : val)}
+              >
+                <SelectTrigger className="h-8 text-xs font-semibold w-auto min-w-[200px] bg-background/80 border-border/40">
+                  <SelectValue placeholder="All Locations & Trails" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">🌐 All Locations & Trails (Full Mountain)</SelectItem>
+                  {locations.map((loc) => (
+                    <SelectItem key={loc.id} value={loc.id}>
+                      📍 {loc.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
           </div>
           <div className="hidden sm:flex items-center gap-2">
             <AppDownloadButton />
