@@ -16,25 +16,36 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 const ROLE_PRIORITY: AppRole[] = ['super_admin', 'admin', 'ranger', 'guide', 'hiker'];
 
 function pickPrimaryRole(rows: { role: string | null }[] | null, user?: User | null): AppRole {
-  const roles = new Set((rows ?? []).map((row) => row.role).filter(Boolean));
+  // 1. If database has explicit role records in user_roles, strictly respect them
+  const dbRoles = (rows ?? []).map((row) => row.role).filter(Boolean) as AppRole[];
+  if (dbRoles.length > 0) {
+    const matched = ROLE_PRIORITY.find((candidate) => dbRoles.includes(candidate));
+    if (matched) return matched;
+  }
 
-  // Also inspect metadata / email patterns for immediate fallback
-  if (user?.user_metadata?.role) roles.add(user.user_metadata.role);
-  if (user?.app_metadata?.role) roles.add(user.app_metadata.role);
+  // 2. Explicit metadata fallback
+  if (user?.user_metadata?.role && ROLE_PRIORITY.includes(user.user_metadata.role)) {
+    return user.user_metadata.role;
+  }
+  if (user?.app_metadata?.role && ROLE_PRIORITY.includes(user.app_metadata.role)) {
+    return user.app_metadata.role;
+  }
+
+  // 3. Fallback for administrative system accounts by exact domain/prefix
   if (user?.email) {
-    const email = user.email.toLowerCase();
-    if (email.startsWith('superadmin') || email.includes('superadmin@') || email.includes('central@')) {
-      roles.add('super_admin');
-    } else if (email.startsWith('admin') || email.includes('admin@') || email.includes('kalicontrol@')) {
-      roles.add('admin');
-    } else if (email.startsWith('ranger') || email.includes('ranger@')) {
-      roles.add('ranger');
-    } else if (email.startsWith('guide') || email.includes('guide@')) {
-      roles.add('guide');
+    const email = user.email.toLowerCase().trim();
+    if (email === 'superadmin@mtkalisungan.ph' || email.startsWith('superadmin@') || email.startsWith('central@')) {
+      return 'super_admin';
+    } else if (email === 'admin@mtkalisungan.ph' || email.startsWith('admin@') || email.startsWith('kalicontrol@')) {
+      return 'admin';
+    } else if (email === 'ranger@mtkalisungan.ph' || email.startsWith('ranger@')) {
+      return 'ranger';
+    } else if (email === 'guide@mtkalisungan.ph' || email.startsWith('guide@')) {
+      return 'guide';
     }
   }
 
-  return ROLE_PRIORITY.find((candidate) => roles.has(candidate)) ?? 'hiker';
+  return 'hiker';
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {

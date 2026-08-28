@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
 import {
@@ -239,53 +239,61 @@ export default function HikerDashboard() {
   };
 
   /* ── Submit hike review ── */
-  const handleSubmitReview = async (session: any) => {
+  const handleSubmitReview = async (hikeItem: {
+    id: string;
+    bookingId?: string;
+    sessionId?: string;
+    assignedGuide?: string;
+    assignedGuideId?: string;
+    trailName?: string;
+    fullName?: string;
+  }) => {
     if (!user || !hikeReviewText.trim()) { toast.error('Please write a review.'); return; }
     setSubmittingReview(true);
-    // Find booking for this session to get guide info
-    const booking = bookings.find((b) => b.id === session.booking_id);
-    const meta = booking ? parseMeta(booking.notes) : {};
-    const assignedGuide = meta.assignedGuide;
+    const assignedGuide = hikeItem.assignedGuide;
 
     // Submit hiking experience review to Supabase
     const { error } = await supabase
       .from('reviews')
       .insert({
         user_id: user.id,
-        reviewer_name: meta.fullName || user.email || 'Hiker',
+        reviewer_name: hikeItem.fullName || user.email || 'Hiker',
         rating: hikeRating,
         review_text: hikeReviewText.trim(),
-        trail_name: 'Summit Trail',
+        trail_name: hikeItem.trailName || 'Summit Trail',
         is_approved: true,
       });
 
     if (error) {
       toast.error('Failed to submit review: ' + error.message);
     } else {
-      // Save guide rating to localStorage if guide was assigned and rated
-      if (assignedGuide && guideReviewText.trim()) {
-        const guideId = meta.assignedGuideId || `guide_${assignedGuide.replace(/\s+/g, '_').toLowerCase()}`;
-        addGuideRating(guideId, assignedGuide, 'Summit Trail', guideRating, guideReviewText.trim(), meta.fullName || 'Hiker');
-        if (meta.assignedGuideId) {
+      // Save guide rating to localStorage and Supabase guide_reviews if guide was assigned
+      if (assignedGuide && (guideReviewText.trim() || guideRating > 0)) {
+        const guideId = hikeItem.assignedGuideId || `guide_${assignedGuide.replace(/\s+/g, '_').toLowerCase()}`;
+        addGuideRating(guideId, assignedGuide, hikeItem.trailName || 'Summit Trail', guideRating, guideReviewText.trim(), hikeItem.fullName || 'Hiker');
+        if (hikeItem.assignedGuideId) {
           const { error: guideReviewError } = await supabase.from('guide_reviews' as any).insert({
-            guide_id: meta.assignedGuideId,
-            booking_id: booking?.id ?? null,
+            guide_id: hikeItem.assignedGuideId,
+            booking_id: hikeItem.bookingId ?? null,
             reviewer_id: user.id,
-            reviewer_name: meta.fullName || user.email || 'Hiker',
+            reviewer_name: hikeItem.fullName || user.email || 'Hiker',
             rating: guideRating,
             comment: guideReviewText.trim(),
+            is_approved: true,
           } as any);
           if (guideReviewError) console.warn('Guide review sync failed:', guideReviewError.message);
         }
       }
-      // Mark session as reviewed
-      const updated = new Set([...reviewedSessionIds, session.id]);
+      // Mark session/booking as reviewed
+      const updated = new Set([...reviewedSessionIds, hikeItem.id]);
+      if (hikeItem.bookingId) updated.add(hikeItem.bookingId);
+      if (hikeItem.sessionId) updated.add(hikeItem.sessionId);
       setReviewedSessionIds(updated);
       localStorage.setItem('reviewed_sessions', JSON.stringify([...updated]));
       setReviewSessionId(null);
       setHikeReviewText('');
       setGuideReviewText('');
-      toast.success('Thank you for your review! It helps future hikers.');
+      toast.success('Thank you for your review! It helps future hikers and guides.');
     }
     setSubmittingReview(false);
   };
@@ -293,7 +301,62 @@ export default function HikerDashboard() {
   /* ── Derived data ── */
   const adjustmentPending = bookings.filter((b) => b.status === 'adjustment_pending');
   const hasNotifications = adjustmentPending.length > 0;
-  const completedSessions = sessions.filter((s) => s.status === 'completed');
+
+  const completedHikes = useMemo(() => {
+    const list: Array<{
+      id: string;
+      bookingId?: string;
+      sessionId?: string;
+      title: string;
+      subtitle?: string;
+      assignedGuide?: string;
+      assignedGuideId?: string;
+      trailName?: string;
+      fullName?: string;
+    }> = [];
+    const seenBookingIds = new Set<string>();
+
+    // 1. Completed sessions
+    sessions.filter((s) => s.status === 'completed').forEach((s) => {
+      const b = bookings.find((bk) => bk.id === s.booking_id);
+      const meta = b ? parseMeta(b.notes) : {};
+      if (b) seenBookingIds.add(b.id);
+      list.push({
+        id: s.id,
+        sessionId: s.id,
+        bookingId: b?.id,
+        title: `Hike on ${s.start_time ? new Date(s.start_time).toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' }) : 'Mount Kalisungan'}`,
+        subtitle: `${s.total_distance_km?.toFixed(1) ?? '0'} km completed`,
+        assignedGuide: meta.assignedGuide,
+        assignedGuideId: meta.assignedGuideId,
+        trailName: meta.assignedTrailName || 'Mount Kalisungan Trail',
+        fullName: meta.fullName,
+      });
+    });
+
+    // 2. Completed bookings without separate session rows
+    bookings
+      .filter((b) => {
+        const meta = parseMeta(b.notes);
+        return (b.status === 'completed' || meta.groupPhase === 'completed' || Boolean(meta.hikeCompletedAt)) && !seenBookingIds.has(b.id);
+      })
+      .forEach((b) => {
+        const meta = parseMeta(b.notes);
+        list.push({
+          id: b.id,
+          bookingId: b.id,
+          title: `Guided Hike on ${b.booking_date}`,
+          subtitle: `Group of ${b.group_size} pax • Completed & Settled`,
+          assignedGuide: meta.assignedGuide,
+          assignedGuideId: meta.assignedGuideId,
+          trailName: meta.assignedTrailName || 'Mount Kalisungan Trail',
+          fullName: meta.fullName || b.emergency_contact_name,
+        });
+      });
+
+    return list;
+  }, [sessions, bookings]);
+
   const activeSession = sessions.find(
     (session) =>
       session.status === 'active' &&
@@ -578,41 +641,42 @@ export default function HikerDashboard() {
         </div>
 
         {/* ── Review Section: completed hikes ── */}
-        {completedSessions.length > 0 && (
-          <Card className="glass-card mb-6">
+        {completedHikes.length > 0 && (
+          <Card className="glass-card mb-6 border-amber-500/20 bg-amber-500/5">
             <CardHeader>
               <CardTitle className="text-lg flex items-center gap-2">
-                <Star className="h-5 w-5 text-amber-500" /> Rate Your Hike Experience
+                <Star className="h-5 w-5 text-amber-500" /> Rate Your Hike & Guide Experience
               </CardTitle>
-              <p className="text-sm text-muted-foreground">Only completed hikes are eligible for reviews.</p>
+              <p className="text-sm text-muted-foreground">Share your feedback to help guides and future hikers.</p>
             </CardHeader>
             <CardContent className="space-y-4">
-              {completedSessions.map((session) => {
-                const booking = bookings.find((b) => b.id === session.booking_id);
-                const meta = booking ? parseMeta(booking.notes) : {};
-                const alreadyReviewed = reviewedSessionIds.has(session.id);
+              {completedHikes.map((hikeItem) => {
+                const alreadyReviewed = reviewedSessionIds.has(hikeItem.id) || (hikeItem.bookingId ? reviewedSessionIds.has(hikeItem.bookingId) : false);
                 return (
-                  <div key={session.id} className="rounded-xl border border-border/20 bg-secondary/20 p-4 space-y-3">
+                  <div key={hikeItem.id} className="rounded-xl border border-border/20 bg-secondary/20 p-4 space-y-3">
                     <div className="flex items-center justify-between flex-wrap gap-2">
                       <div>
-                        <p className="text-sm font-semibold">
-                          Hike on {session.start_time ? new Date(session.start_time).toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' }) : '—'}
-                        </p>
-                        <p className="text-xs text-muted-foreground">{session.total_distance_km?.toFixed(1) ?? '0'} km completed</p>
+                        <p className="text-sm font-semibold">{hikeItem.title}</p>
+                        {hikeItem.subtitle && (
+                          <p className="text-xs text-muted-foreground">{hikeItem.subtitle}</p>
+                        )}
+                        {hikeItem.assignedGuide && (
+                          <p className="text-xs text-primary font-medium mt-0.5">Assigned Guide: {hikeItem.assignedGuide}</p>
+                        )}
                       </div>
                       {alreadyReviewed ? (
                         <span className="px-3 py-1 rounded-full text-xs bg-primary/20 text-primary font-semibold">✓ Reviewed</span>
                       ) : (
-                        <Button size="sm" variant="outline" className="gap-1.5 text-amber-600 border-amber-400/40 hover:bg-amber-500/10"
-                          onClick={() => setReviewSessionId(reviewSessionId === session.id ? null : session.id)}>
-                          <Star className="h-3.5 w-3.5" />
-                          {reviewSessionId === session.id ? 'Close' : 'Leave Review'}
+                        <Button size="sm" variant="outline" className="gap-1.5 text-amber-600 border-amber-400/40 hover:bg-amber-500/10 font-bold"
+                          onClick={() => setReviewSessionId(reviewSessionId === hikeItem.id ? null : hikeItem.id)}>
+                          <Star className="h-3.5 w-3.5 fill-amber-500 text-amber-500" />
+                          {reviewSessionId === hikeItem.id ? 'Close' : 'Leave Review'}
                         </Button>
                       )}
                     </div>
 
                     <AnimatePresence>
-                      {reviewSessionId === session.id && !alreadyReviewed && (
+                      {reviewSessionId === hikeItem.id && !alreadyReviewed && (
                         <motion.div
                           initial={{ opacity: 0, height: 0 }}
                           animate={{ opacity: 1, height: 'auto' }}
@@ -632,20 +696,20 @@ export default function HikerDashboard() {
                             </div>
                           </div>
                           <div className="space-y-2">
-                            <Label htmlFor={`hikeReview-${session.id}`} className="text-xs font-bold uppercase tracking-wider">Your Review</Label>
+                            <Label htmlFor={`hikeReview-${hikeItem.id}`} className="text-xs font-bold uppercase tracking-wider">Your Experience Review</Label>
                             <Textarea
-                              id={`hikeReview-${session.id}`}
+                              id={`hikeReview-${hikeItem.id}`}
                               value={hikeReviewText}
                               onChange={(e) => setHikeReviewText(e.target.value)}
-                              placeholder="Share your experience with Mt. Kalisungan..."
+                              placeholder="Share your experience on Mount Kalisungan..."
                               rows={3}
                             />
                           </div>
 
                           {/* Guide rating (if guide was assigned) */}
-                          {meta.assignedGuide && (
+                          {hikeItem.assignedGuide && (
                             <div className="rounded-xl border border-primary/20 bg-primary/5 p-4 space-y-3">
-                              <p className="text-sm font-semibold">Rate your guide: <span className="text-primary">{meta.assignedGuide}</span></p>
+                              <p className="text-sm font-semibold">Rate your guide: <span className="text-primary">{hikeItem.assignedGuide}</span></p>
                               <div className="space-y-2">
                                 <Label className="text-xs font-bold uppercase tracking-wider">Guide Rating</Label>
                                 <div className="flex gap-1">
@@ -658,19 +722,19 @@ export default function HikerDashboard() {
                                 </div>
                               </div>
                               <div className="space-y-2">
-                                <Label htmlFor={`guideReview-${session.id}`} className="text-xs font-bold uppercase tracking-wider">Guide Review (optional)</Label>
+                                <Label htmlFor={`guideReview-${hikeItem.id}`} className="text-xs font-bold uppercase tracking-wider">Guide Review (optional)</Label>
                                 <Textarea
-                                  id={`guideReview-${session.id}`}
+                                  id={`guideReview-${hikeItem.id}`}
                                   value={guideReviewText}
                                   onChange={(e) => setGuideReviewText(e.target.value)}
-                                  placeholder={`How was ${meta.assignedGuide} as your guide?`}
+                                  placeholder={`How was ${hikeItem.assignedGuide} as your guide?`}
                                   rows={2}
                                 />
                               </div>
                             </div>
                           )}
 
-                          <Button className="w-full gap-2" onClick={() => handleSubmitReview(session)} disabled={submittingReview}>
+                          <Button className="w-full gap-2" onClick={() => handleSubmitReview(hikeItem)} disabled={submittingReview}>
                             {submittingReview ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
                             Submit Review
                           </Button>

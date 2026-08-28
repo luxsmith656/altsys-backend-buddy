@@ -1206,6 +1206,61 @@ export default function AdminDashboard() {
     }
   };
 
+  /* ── Delete a booking & purge related data ── */
+  const handleDeleteBooking = async (bookingId: string) => {
+    try {
+      const booking = allTabBookings.find((b) => b.id === bookingId);
+      // Clean up linked rows first
+      await Promise.allSettled([
+        supabase.from('booking_assignments' as any).delete().eq('booking_id', bookingId),
+        supabase.from('booking_messages' as any).delete().eq('booking_id', bookingId),
+        supabase.from('hiker_sessions' as any).delete().eq('booking_id', bookingId),
+      ]);
+
+      const { error } = await supabase.from('bookings').delete().eq('id', bookingId);
+      if (error) throw error;
+
+      if (booking && booking.status === 'confirmed') {
+        await updateDailySlots(booking.booking_date, booking.group_size, -1);
+      }
+
+      toast.success('Booking deleted and removed from database.');
+      void loadAllTabBookings();
+      void loadPendingBookings();
+      void loadData();
+      void loadUpcomingCapacities();
+    } catch (err: any) {
+      toast.error('Failed to delete booking: ' + (err?.message || 'Database error'));
+    }
+  };
+
+  /* ── Purge all cancelled test/conflict bookings in bulk ── */
+  const handlePurgeCancelledBookings = async () => {
+    try {
+      const cancelledIds = allTabBookings.filter((b) => b.status === 'cancelled').map((b) => b.id);
+      if (cancelledIds.length === 0) {
+        toast.info('No cancelled bookings to purge.');
+        return;
+      }
+
+      await Promise.allSettled([
+        supabase.from('booking_assignments' as any).delete().in('booking_id', cancelledIds),
+        supabase.from('booking_messages' as any).delete().in('booking_id', cancelledIds),
+        supabase.from('hiker_sessions' as any).delete().in('booking_id', cancelledIds),
+      ]);
+
+      const { error } = await supabase.from('bookings').delete().in('id', cancelledIds);
+      if (error) throw error;
+
+      toast.success(`Purged ${cancelledIds.length} cancelled/conflict bookings.`);
+      void loadAllTabBookings();
+      void loadPendingBookings();
+      void loadData();
+    } catch (err: any) {
+      toast.error('Failed to purge cancelled bookings: ' + (err?.message || 'Database error'));
+    }
+  };
+
   const loadData = async () => {
     // Scope to current location when the admin has one selected (super_admin sees all).
     const scopeBookings = (q: any) =>
@@ -1667,6 +1722,32 @@ export default function AdminDashboard() {
                 <h2 className="text-lg font-semibold">All Bookings</h2>
                 <p className="text-sm text-muted-foreground">View and manage all booking records by status.</p>
               </div>
+              {allTabBookings.some((b) => b.status === 'cancelled') && (
+                <AlertDialog>
+                  <AlertDialogTrigger asChild>
+                    <Button size="sm" variant="outline" className="gap-1.5 text-xs text-destructive border-destructive/30 hover:bg-destructive/10">
+                      <Trash2 className="h-3.5 w-3.5" /> Purge Cancelled ({allTabBookings.filter((b) => b.status === 'cancelled').length})
+                    </Button>
+                  </AlertDialogTrigger>
+                  <AlertDialogContent>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>Purge all cancelled bookings?</AlertDialogTitle>
+                      <AlertDialogDescription>
+                        This will permanently delete {allTabBookings.filter((b) => b.status === 'cancelled').length} cancelled bookings and their linked chat messages/session data to clean up the database.
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel>Cancel</AlertDialogCancel>
+                      <AlertDialogAction
+                        className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                        onClick={() => void handlePurgeCancelledBookings()}
+                      >
+                        Purge All Cancelled
+                      </AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
+              )}
             </div>
 
             {/* Search */}
@@ -1946,6 +2027,30 @@ export default function AdminDashboard() {
                                 <AlertTriangle className="h-3.5 w-3.5" /> Send dup-week reminder
                               </Button>
                             )}
+                            <AlertDialog>
+                              <AlertDialogTrigger asChild>
+                                <Button size="sm" variant="ghost" className="gap-1 text-destructive hover:bg-destructive/10 text-xs h-8 px-2" title="Permanently delete booking">
+                                  <Trash2 className="h-3.5 w-3.5" />
+                                </Button>
+                              </AlertDialogTrigger>
+                              <AlertDialogContent>
+                                <AlertDialogHeader>
+                                  <AlertDialogTitle>Delete this booking permanently?</AlertDialogTitle>
+                                  <AlertDialogDescription>
+                                    This will permanently remove the booking for <strong>{meta.fullName || b.emergency_contact_name}</strong> ({b.id}), including its chat history and assignments.
+                                  </AlertDialogDescription>
+                                </AlertDialogHeader>
+                                <AlertDialogFooter>
+                                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                  <AlertDialogAction
+                                    className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                                    onClick={() => void handleDeleteBooking(b.id)}
+                                  >
+                                    Yes, Delete
+                                  </AlertDialogAction>
+                                </AlertDialogFooter>
+                              </AlertDialogContent>
+                            </AlertDialog>
                           </div>
                         </div>
                       </CardContent>
@@ -2410,25 +2515,55 @@ export default function AdminDashboard() {
                             {/* Simulation buttons depending on phase */}
                             <div className="grid sm:grid-cols-2 gap-2">
                               {(meta.groupPhase ?? 'ascent') === 'ascent' && (
-                                <Button
-                                  size="sm"
-                                  variant="secondary"
-                                  onClick={() => void updateGroupPhase('peak')}
-                                  disabled={lifecycleSaving}
-                                  className="w-full text-xs font-semibold gap-1.5"
-                                >
-                                  🏔️ Simulate: Mark Group at Peak
-                                </Button>
+                                <>
+                                  <Button
+                                    size="sm"
+                                    variant="secondary"
+                                    onClick={() => void updateGroupPhase('peak')}
+                                    disabled={lifecycleSaving}
+                                    className="w-full text-xs font-semibold gap-1.5"
+                                  >
+                                    🏔️ Advance: Mark at Summit
+                                  </Button>
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() => setEndHikeBooking(scannedBooking)}
+                                    className="w-full text-xs font-semibold gap-1.5 border-amber-500/40 text-amber-600 dark:text-amber-400 hover:bg-amber-500/10"
+                                  >
+                                    ⏹️ End Early & Settle
+                                  </Button>
+                                </>
                               )}
                               {meta.groupPhase === 'peak' && (
+                                <>
+                                  <Button
+                                    size="sm"
+                                    variant="secondary"
+                                    onClick={() => void updateGroupPhase('descent')}
+                                    disabled={lifecycleSaving}
+                                    className="w-full text-xs font-semibold gap-1.5"
+                                  >
+                                    🥾 Advance: Start Descent
+                                  </Button>
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() => setEndHikeBooking(scannedBooking)}
+                                    className="w-full text-xs font-semibold gap-1.5 border-amber-500/40 text-amber-600 dark:text-amber-400 hover:bg-amber-500/10"
+                                  >
+                                    ⏹️ End Early & Settle
+                                  </Button>
+                                </>
+                              )}
+                              {meta.groupPhase === 'descent' && (
                                 <Button
                                   size="sm"
                                   variant="secondary"
-                                  onClick={() => void updateGroupPhase('descent')}
-                                  disabled={lifecycleSaving}
-                                  className="w-full text-xs font-semibold gap-1.5"
+                                  onClick={() => setEndHikeBooking(scannedBooking)}
+                                  className="w-full sm:col-span-2 text-xs font-semibold gap-1.5 bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-500/30"
                                 >
-                                  🥾 Simulate: Start Descent
+                                  🏁 Base Reached: Finalize & Settle
                                 </Button>
                               )}
                               <Button
