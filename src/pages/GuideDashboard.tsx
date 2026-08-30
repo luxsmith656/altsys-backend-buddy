@@ -22,13 +22,10 @@ import {
   MapPin,
   XCircle,
   Inbox,
-  Activity,
   Copy,
   ImageUp,
   Share2,
   Radio,
-  Sparkles,
-  ArrowRight,
   HeartPulse,
   FileText,
   AlertTriangle,
@@ -39,6 +36,7 @@ import {
   TrendingUp,
   Wallet,
   Calendar,
+  RefreshCw,
 } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { parseMeta } from '@/lib/bookingMeta';
@@ -95,6 +93,8 @@ export default function GuideDashboard() {
   const [activeSession, setActiveSession] = useState<any | null>(null);
   const [acceptingId, setAcceptingId] = useState<string | null>(null);
   const [earningsFilter, setEarningsFilter] = useState<'all' | 'completed' | 'pending'>('all');
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [loadWarnings, setLoadWarnings] = useState<string[]>([]);
 
   useEffect(() => {
     if (!user) return;
@@ -137,13 +137,17 @@ export default function GuideDashboard() {
 
   const load = async () => {
     setLoading(true);
+    setLoadError(null);
+    setLoadWarnings([]);
+    const warnings: string[] = [];
     try {
       // 1. Find this user's guide row
-      const { data: guides } = await supabase
+      const { data: guides, error: guideError } = await supabase
         .from('guides' as any)
         .select('*')
         .eq('user_id', user!.id)
         .limit(1);
+      if (guideError) throw guideError;
       const me = (guides as any[] | null)?.[0] ?? null;
       setGuideRow(me);
 
@@ -153,7 +157,7 @@ export default function GuideDashboard() {
       }
 
       // 2. Check for active hike session without forceful redirect
-      const { data: session } = await supabase
+      const { data: session, error: sessionError } = await supabase
         .from('hiker_sessions')
         .select('id, client_session_id, start_time, status')
         .eq('user_id', user!.id)
@@ -163,10 +167,12 @@ export default function GuideDashboard() {
         .limit(1)
         .maybeSingle();
 
+      if (sessionError) warnings.push('Active hike status is temporarily unavailable.');
+
       setActiveSession(session || null);
 
       // 3. Fetch assignments for me + peer guides at same location + reviews
-      const [{ data: mineRaw }, { data: peers }, { data: reviewsData }] = await Promise.all([
+      const [assignmentResult, peerResult, reviewResult] = await Promise.all([
         supabase
           .from('booking_assignments' as any)
           .select('*')
@@ -185,6 +191,13 @@ export default function GuideDashboard() {
           .order('created_at', { ascending: false }),
       ]);
 
+      if (assignmentResult.error) throw assignmentResult.error;
+      if (peerResult.error) warnings.push('Peer guide availability could not be loaded.');
+      if (reviewResult.error) warnings.push('Guide reviews could not be loaded.');
+      const mineRaw = assignmentResult.data;
+      const peers = peerResult.data;
+      const reviewsData = reviewResult.data;
+
       const mineList = ((mineRaw as any[]) ?? []) as AssignmentRow[];
       setReviews((reviewsData as any[]) || []);
 
@@ -192,10 +205,11 @@ export default function GuideDashboard() {
       const bookingIds = Array.from(new Set(mineList.map((a: any) => a.booking_id))).filter(Boolean);
       const bookingMap: Record<string, any> = {};
       if (bookingIds.length > 0) {
-        const { data: bks } = await supabase
+        const { data: bks, error: bookingsError } = await supabase
           .from('bookings')
           .select('*')
           .in('id', bookingIds);
+        if (bookingsError) throw bookingsError;
         (bks ?? []).forEach((b: any) => {
           bookingMap[b.id] = b;
         });
@@ -210,10 +224,11 @@ export default function GuideDashboard() {
       setPeerGuides(peersList);
       if (peersList.length > 0) {
         const peerIds = peersList.map((g: any) => g.id);
-        const { data: allAss } = await supabase
+        const { data: allAss, error: peerAssignmentsError } = await supabase
           .from('booking_assignments' as any)
           .select('guide_id, status')
           .in('guide_id', peerIds);
+        if (peerAssignmentsError) warnings.push('Peer guide workload counts could not be loaded.');
         const counts: Record<string, { active: number; total: number }> = {};
         ((allAss as any[]) ?? []).forEach((row: any) => {
           const c = (counts[row.guide_id] ??= { active: 0, total: 0 });
@@ -222,8 +237,10 @@ export default function GuideDashboard() {
         });
         setPeerCounts(counts);
       }
+      setLoadWarnings(warnings);
     } catch (err: any) {
       console.error('Failed to load guide dashboard data:', err);
+      setLoadError(err?.message || 'Guide assignments could not be loaded.');
     } finally {
       setLoading(false);
     }
@@ -253,9 +270,21 @@ export default function GuideDashboard() {
     return (sum / reviews.length).toFixed(1);
   }, [reviews]);
 
-  const filteredAssignments = filter === 'all'
-    ? assignments
-    : assignments.filter((a) => a.status === filter);
+  const filteredAssignments = useMemo(() => {
+    const statusOrder: Record<AssignmentStatus, number> = {
+      pending: 0,
+      accepted: 1,
+      completed: 2,
+      declined: 3,
+    };
+    return assignments
+      .filter((assignment) => filter === 'all' || assignment.status === filter)
+      .sort((a, b) => {
+        const statusDifference = statusOrder[a.status] - statusOrder[b.status];
+        if (statusDifference !== 0) return statusDifference;
+        return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+      });
+  }, [assignments, filter]);
 
   const filteredHikeRecords = earnings.hikeRecords.filter((r) => {
     if (earningsFilter === 'completed') return r.assignmentStatus === 'completed';
@@ -452,97 +481,65 @@ export default function GuideDashboard() {
           </motion.div>
         )}
 
-        {/* Dashboard Header */}
-        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div>
-            <h1 className="text-2xl font-bold sm:text-3xl flex items-center gap-2">
-              Tour Guide <span className="text-gradient">Portal</span>
-            </h1>
-            <p className="text-muted-foreground text-sm mt-1">
-              Welcome, <strong>{guideRow.full_name}</strong>. Manage your bookings, accept new assignments, and collaborate with peer guides.
-            </p>
-          </div>
-
-          <div className="flex items-center gap-2">
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => navigate('/map')}
-              className="gap-1.5 text-xs rounded-xl"
-            >
-              <Mountain className="h-3.5 w-3.5 text-primary" />
-              Explore Trail Map
-            </Button>
-          </div>
-        </motion.div>
-
-        {/* Guide Profile Quick Bar */}
-        <Card className="glass-card">
-          <CardContent className="p-4 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-            <div className="flex items-center gap-3.5 min-w-0">
+        <motion.section
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="border-b border-border/50 pb-5"
+        >
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+            <div className="flex min-w-0 items-center gap-3">
               {guideRow.photo_url ? (
                 <img
                   src={guideRow.photo_url}
                   alt={guideRow.full_name}
-                  className="h-16 w-16 shrink-0 rounded-2xl object-cover border border-border/40 shadow-sm"
+                  className="h-12 w-12 shrink-0 rounded-md border border-border/50 object-cover"
                 />
               ) : (
-                <div className="h-16 w-16 shrink-0 rounded-2xl bg-primary/15 text-primary grid place-items-center font-bold text-2xl border border-primary/20">
+                <div className="grid h-12 w-12 shrink-0 place-items-center rounded-md border border-primary/25 bg-primary/10 text-lg font-bold text-primary">
                   {guideRow.full_name?.slice(0, 1)?.toUpperCase() || 'G'}
                 </div>
               )}
               <div className="min-w-0">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <p className="font-bold text-foreground text-base truncate">{guideRow.full_name}</p>
-                  <Badge variant="outline" className="text-[10px] text-primary border-primary/30">
-                    Official Guide
+                <div className="flex flex-wrap items-center gap-2">
+                  <h1 className="text-xl font-bold sm:text-2xl">Guide Operations</h1>
+                  <Badge variant="outline" className="border-primary/30 text-[10px] text-primary">
+                    {guideRow.full_name}
                   </Badge>
                   {averageRating && (
-                    <Badge className="bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30 text-[10px] gap-1">
-                      <Star className="h-3 w-3 fill-amber-400 text-amber-400" />
+                    <span className="inline-flex items-center gap-1 text-xs font-semibold text-amber-500">
+                      <Star className="h-3.5 w-3.5 fill-current" />
                       {averageRating} ({reviews.length})
-                    </Badge>
+                    </span>
                   )}
                 </div>
-                <p className="text-xs text-muted-foreground mt-0.5">
-                  {guideRow.specialty || 'Mount Kalisungan Eco-Guide'} • {guideRow.phone || 'Phone on file'}
-                </p>
-                <p className="text-[11px] text-muted-foreground mt-0.5">
-                  Standard Rate: <strong>₱{guideRow.per_trip_fee || 800}</strong> / group (up to 8 pax)
+                <p className="mt-1 text-xs text-muted-foreground sm:text-sm">
+                  Assigned groups, duty status, trail activity, and earnings.
                 </p>
               </div>
             </div>
 
-            {/* Duty Status Selector & Quick Actions */}
-            <div className="flex flex-wrap items-center gap-2.5 pt-2 lg:pt-0 border-t lg:border-t-0 border-border/20">
-              <div className="flex items-center gap-1.5 bg-secondary/40 px-3 py-1.5 rounded-xl border border-border/40">
-                <span className="text-[11px] font-semibold text-muted-foreground uppercase">Duty Status:</span>
-                <Select
-                  value={guideRow.status || 'available'}
-                  onValueChange={(val) => void handleDutyStatusChange(val)}
-                  disabled={statusUpdating}
-                >
-                  <SelectTrigger className="h-7 text-xs font-bold border-none bg-transparent shadow-none px-1.5 focus:ring-0">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="available" className="text-xs font-medium text-emerald-600 dark:text-emerald-400">
-                      🟢 Available (Ready for Dispatches)
-                    </SelectItem>
-                    <SelectItem value="on_duty" className="text-xs font-medium text-primary">
-                      🔵 On Duty (Currently on Trail)
-                    </SelectItem>
-                    <SelectItem value="off_duty" className="text-xs font-medium text-muted-foreground">
-                      ⚪ Off Duty (Not Accepting Hikes)
-                    </SelectItem>
-                  </SelectContent>
-                </Select>
-                {statusUpdating && <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />}
-              </div>
-
-              <label className="inline-flex h-9 cursor-pointer items-center justify-center gap-1.5 rounded-xl border border-input bg-background px-3 text-xs font-medium hover:bg-accent transition-all">
-                {uploadingPhoto ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ImageUp className="h-3.5 w-3.5" />}
-                Update Photo
+            <div className="flex flex-wrap items-center gap-2">
+              <Select
+                value={guideRow.status || 'available'}
+                onValueChange={(value) => void handleDutyStatusChange(value)}
+                disabled={statusUpdating}
+              >
+                <SelectTrigger className="h-9 w-[150px] text-xs font-semibold">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="available">Available</SelectItem>
+                  <SelectItem value="on_duty">On duty</SelectItem>
+                  <SelectItem value="off_duty">Off duty</SelectItem>
+                </SelectContent>
+              </Select>
+              <Button size="sm" variant="outline" className="gap-1.5" onClick={() => navigate('/map')}>
+                <Mountain className="h-4 w-4" />
+                Map
+              </Button>
+              <label className="inline-flex h-9 cursor-pointer items-center justify-center gap-1.5 rounded-md border border-input bg-background px-3 text-xs font-medium hover:bg-accent">
+                {uploadingPhoto ? <Loader2 className="h-4 w-4 animate-spin" /> : <ImageUp className="h-4 w-4" />}
+                Photo
                 <input
                   className="sr-only"
                   type="file"
@@ -551,69 +548,65 @@ export default function GuideDashboard() {
                   onChange={(event) => void handlePhotoUpload(event.target.files?.[0])}
                 />
               </label>
-              <Button size="sm" variant="outline" className="gap-1.5 text-xs rounded-xl" onClick={() => void copyGuideLink('profile')}>
-                <Share2 className="h-3.5 w-3.5" /> Share Profile
+              <Button size="sm" variant="outline" className="gap-1.5" onClick={() => void copyGuideLink('profile')}>
+                <Share2 className="h-4 w-4" />
+                Profile
               </Button>
-              <Button size="sm" className="gap-1.5 text-xs rounded-xl" onClick={() => void copyGuideLink('booking')}>
-                <Copy className="h-3.5 w-3.5" /> Referral Link
+              <Button size="sm" className="gap-1.5" onClick={() => void copyGuideLink('booking')}>
+                <Copy className="h-4 w-4" />
+                Referral
               </Button>
             </div>
-          </CardContent>
-        </Card>
+          </div>
+        </motion.section>
 
-        {/* Quick Stats Grid (Including Total Earnings) */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+        {loadError && (
+          <div role="alert" className="flex flex-col gap-3 rounded-md border border-destructive/30 bg-destructive/5 p-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-start gap-2.5">
+              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-destructive" />
+              <div>
+                <p className="text-sm font-semibold">Assignments could not be refreshed</p>
+                <p className="mt-0.5 text-xs text-muted-foreground">{loadError}</p>
+              </div>
+            </div>
+            <Button size="sm" variant="outline" className="gap-1.5" onClick={() => void load()}>
+              <RefreshCw className="h-4 w-4" />
+              Retry
+            </Button>
+          </div>
+        )}
+
+        {loadWarnings.length > 0 && !loadError && (
+          <div role="status" className="flex items-start gap-2.5 rounded-md border border-amber-500/30 bg-amber-500/5 p-3">
+            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-500" />
+            <p className="text-xs text-muted-foreground">{loadWarnings.join(' ')}</p>
+          </div>
+        )}
+
+        <section aria-label="Guide work summary" className="grid grid-cols-2 divide-x divide-y overflow-hidden rounded-md border border-border/60 bg-card/35 sm:grid-cols-4 sm:divide-y-0">
           {[
-            { label: 'Pending Acceptance', value: counts.pending, icon: Inbox, color: 'text-amber-500', alert: counts.pending > 0 },
-            { label: 'Confirmed Hikes', value: counts.accepted, icon: CheckCircle2, color: 'text-primary' },
-            {
-              label: "Today's Limit",
-              value: `${counts.todayAccepted}/${QUOTA_PER_GUIDE_PER_DAY}`,
-              icon: Activity,
-              color: counts.todayAccepted >= QUOTA_PER_GUIDE_PER_DAY ? 'text-destructive' : 'text-emerald-500',
-            },
-            { label: 'Completed Hikes', value: counts.completed, icon: Mountain, color: 'text-sky-500' },
-            {
-              label: 'Total Earned',
-              value: formatPeso(earnings.lifetimeEarned),
-              icon: DollarSign,
-              color: 'text-emerald-500 font-extrabold',
-            },
-            {
-              label: 'Pending Payout',
-              value: formatPeso(earnings.pendingEarnings),
-              icon: Wallet,
-              color: 'text-primary font-extrabold',
-            },
-          ].map((s) => (
-            <Card
-              key={s.label}
-              className={`glass-card transition-all ${
-                s.alert ? 'border-amber-500/40 bg-amber-500/5 shadow-md' : ''
-              }`}
-            >
-              <CardContent className="p-3.5 flex items-center gap-2.5">
-                <div className={`p-2 rounded-xl bg-secondary/50 ${s.color}`}>
-                  <s.icon className="h-4 w-4" />
-                </div>
-                <div className="min-w-0">
-                  <p className="text-[10px] uppercase tracking-wider font-semibold text-muted-foreground truncate">
-                    {s.label}
-                  </p>
-                  <p className={`text-base font-bold text-foreground mt-0.5 truncate ${s.color}`}>{s.value}</p>
-                </div>
-              </CardContent>
-            </Card>
+            { label: 'Needs response', value: counts.pending, icon: Inbox, color: 'text-amber-500' },
+            { label: 'Upcoming', value: counts.accepted, icon: CalendarCheck, color: 'text-primary' },
+            { label: 'Completed', value: counts.completed, icon: CheckCircle2, color: 'text-sky-500' },
+            { label: 'Total earnings', value: formatPeso(earnings.lifetimeEarned), icon: Wallet, color: 'text-emerald-500' },
+          ].map((item) => (
+            <div key={item.label} className="flex min-h-20 items-center gap-3 p-3 sm:p-4">
+              <item.icon className={`h-4 w-4 shrink-0 ${item.color}`} />
+              <div className="min-w-0">
+                <p className="text-[11px] font-medium text-muted-foreground">{item.label}</p>
+                <p className="mt-0.5 truncate text-lg font-bold text-foreground">{item.value}</p>
+              </div>
+            </div>
           ))}
-        </div>
+        </section>
 
         {/* Main Tabs */}
         <Tabs defaultValue="my" className="space-y-4">
-          <div className="flex items-center justify-between flex-wrap gap-3">
-            <TabsList className="glass-card">
+          <div className="-mx-3 overflow-x-auto px-3 pb-1 sm:mx-0 sm:px-0">
+            <TabsList className="h-10 w-max min-w-full justify-start rounded-md bg-muted/70 p-1">
               <TabsTrigger value="my" className="gap-1.5 text-xs">
                 <Inbox className="h-3.5 w-3.5" />
-                My Assignments
+                Assignments
                 {counts.pending > 0 && (
                   <span className="ml-1 px-1.5 py-0.2 rounded-full bg-amber-500 text-white font-bold text-[10px]">
                     {counts.pending}
@@ -622,19 +615,19 @@ export default function GuideDashboard() {
               </TabsTrigger>
               <TabsTrigger value="earnings" className="gap-1.5 text-xs">
                 <Receipt className="h-3.5 w-3.5" />
-                Earnings & Hike Ledger
+                Earnings
               </TabsTrigger>
               <TabsTrigger value="reviews" className="gap-1.5 text-xs">
                 <Star className="h-3.5 w-3.5" />
-                Hiker Reviews ({reviews.length})
+                Reviews ({reviews.length})
               </TabsTrigger>
               <TabsTrigger value="peers" className="gap-1.5 text-xs">
                 <Users className="h-3.5 w-3.5" />
-                Peer Guides ({peerGuides.length})
+                Team ({peerGuides.length})
               </TabsTrigger>
               <TabsTrigger value="off" className="gap-1.5 text-xs">
                 <Clock className="h-3.5 w-3.5" />
-                Schedule & Off-Duty
+                Schedule
               </TabsTrigger>
             </TabsList>
           </div>
@@ -679,7 +672,10 @@ export default function GuideDashboard() {
                   const isAccepted = a.status === 'accepted';
                   const isDeclined = a.status === 'declined';
                   const isCompleted = a.status === 'completed';
-                  const feeAmount = meta.guideFee || (guideRow?.per_trip_fee || 800);
+                  const feeAmount =
+                    earnings.hikeRecords.find((record) => record.assignmentId === a.id)?.guideFee ??
+                    guideRow?.per_trip_fee ??
+                    800;
 
                   return (
                     <Card
@@ -790,7 +786,7 @@ export default function GuideDashboard() {
                           </div>
 
                           {/* Action Buttons */}
-                          <div className="flex flex-row lg:flex-col gap-2 shrink-0 justify-end pt-2 lg:pt-0 border-t lg:border-t-0 border-border/20">
+                          <div className="grid w-full grid-cols-2 gap-2 border-t border-border/20 pt-2 lg:w-auto lg:shrink-0 lg:grid-cols-1 lg:border-t-0 lg:pt-0">
                             {isPending && (
                               <>
                                 <Button

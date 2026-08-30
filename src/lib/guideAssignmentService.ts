@@ -71,48 +71,49 @@ export async function acceptGuideAssignment({
   try {
     const decidedAt = new Date().toISOString();
 
-    // 1. Update assignment row
-    const { error: assignError } = await supabase
-      .from('booking_assignments' as any)
-      .update({ status: 'accepted', decided_at: decidedAt } as any)
-      .eq('id', assignmentId);
-
-    if (assignError) throw assignError;
-
-    // 2. Update booking metadata & status
+    // Read the booking before changing assignment state so a denied read leaves it untouched.
     const { data: booking, error: fetchError } = await supabase
       .from('bookings')
       .select('notes, user_id, booking_date')
       .eq('id', bookingId)
       .single();
 
-    if (!fetchError && booking) {
-      const meta = parseMeta(booking.notes);
-      const updatedMeta = encodeMeta({
-        ...meta,
-        assignedGuide: guideName,
-        assignedGuideId: guideId,
-        guideStatus: 'accepted',
-        guideAcceptedAt: decidedAt,
-      });
+    if (fetchError) throw fetchError;
+    if (!booking) throw new Error('Assigned booking was not found.');
 
-      await supabase
-        .from('bookings')
-        .update({ status: 'confirmed', notes: updatedMeta } as any)
-        .eq('id', bookingId);
-    }
+    const meta = parseMeta(booking.notes);
+    const updatedMeta = encodeMeta({
+      ...meta,
+      assignedGuide: guideName,
+      assignedGuideId: guideId,
+      guideStatus: 'accepted',
+      guideAcceptedAt: decidedAt,
+    });
+
+    const { error: assignError } = await supabase
+      .from('booking_assignments' as any)
+      .update({ status: 'accepted', decided_at: decidedAt } as any)
+      .eq('id', assignmentId);
+    if (assignError) throw assignError;
+
+    const { error: bookingUpdateError } = await supabase
+      .from('bookings')
+      .update({ status: 'confirmed', notes: updatedMeta } as any)
+      .eq('id', bookingId);
+    if (bookingUpdateError) throw bookingUpdateError;
 
     const effectiveHikerId = hikerUserId || booking?.user_id;
     const effectiveDate = bookingDate || booking?.booking_date || 'your scheduled date';
 
     // 3. Post system message visible in booking chat
-    await supabase.from('booking_messages' as any).insert({
+    const { error: messageError } = await supabase.from('booking_messages' as any).insert({
       booking_id: bookingId,
       sender_id: guideUserId || null,
       sender_role: 'system',
       kind: 'system',
       content: `✅ Tour Guide ${guideName} has ACCEPTED this booking for ${effectiveDate}. See you at the trailhead!`,
     } as any);
+    if (messageError) throw messageError;
 
     // 4. Notify Hiker
     if (effectiveHikerId) {
@@ -152,24 +153,26 @@ export async function declineAndReassignGuide({
     const decidedAt = new Date().toISOString();
     const cleanReason = reason.trim() || 'Not available';
 
-    // 1. Mark current assignment as declined
-    const { error: declError } = await supabase
-      .from('booking_assignments' as any)
-      .update({
-        status: 'declined',
-        decided_at: decidedAt,
-        reassignment_reason: cleanReason,
-      } as any)
-      .eq('id', assignmentId);
+    const declineCurrentAssignment = async () => {
+      const { error } = await supabase
+        .from('booking_assignments' as any)
+        .update({
+          status: 'declined',
+          decided_at: decidedAt,
+          reassignment_reason: cleanReason,
+        } as any)
+        .eq('id', assignmentId);
+      if (error) throw error;
+    };
 
-    if (declError) throw declError;
-
-    // 2. Fetch booking to update metadata
-    const { data: booking } = await supabase
+    // Keep the current assignment active until all handover writes succeed.
+    const { data: booking, error: bookingFetchError } = await supabase
       .from('bookings')
       .select('notes, user_id, booking_date, location_id')
       .eq('id', bookingId)
       .single();
+    if (bookingFetchError) throw bookingFetchError;
+    if (!booking) throw new Error('Assigned booking was not found.');
 
     const effectiveHikerId = hikerUserId || booking?.user_id;
     const effectiveLocId = locationId || booking?.location_id;
@@ -178,20 +181,22 @@ export async function declineAndReassignGuide({
 
     if (replacementGuideId && replacementGuideName) {
       // 3A. Reassign to replacement peer guide
-      const { data: existingAss } = await supabase
+      const { data: existingAss, error: existingError } = await supabase
         .from('booking_assignments' as any)
         .select('id')
         .eq('booking_id', bookingId)
         .eq('guide_id', replacementGuideId)
         .maybeSingle();
+      if (existingError) throw existingError;
 
       if ((existingAss as any)?.id) {
-        await supabase
+        const { error: replacementUpdateError } = await supabase
           .from('booking_assignments' as any)
           .update({ status: 'pending', decided_at: null, reassignment_reason: null } as any)
           .eq('id', (existingAss as any).id);
+        if (replacementUpdateError) throw replacementUpdateError;
       } else {
-        await supabase
+        const { error: replacementInsertError } = await supabase
           .from('booking_assignments' as any)
           .insert({
             booking_id: bookingId,
@@ -199,6 +204,7 @@ export async function declineAndReassignGuide({
             location_id: effectiveLocId,
             status: 'pending',
           } as any);
+        if (replacementInsertError) throw replacementInsertError;
       }
 
       // Update booking metadata
@@ -213,13 +219,14 @@ export async function declineAndReassignGuide({
         guideChangedAt: decidedAt,
       });
 
-      await supabase
+      const { error: bookingUpdateError } = await supabase
         .from('bookings')
         .update({ notes: updatedMeta } as any)
         .eq('id', bookingId);
+      if (bookingUpdateError) throw bookingUpdateError;
 
       // System chat messages
-      await supabase.from('booking_messages' as any).insert([
+      const { error: messageError } = await supabase.from('booking_messages' as any).insert([
         {
           booking_id: bookingId,
           sender_id: currentGuideUserId || null,
@@ -235,6 +242,9 @@ export async function declineAndReassignGuide({
           content: `📩 Assignment sent to new guide ${replacementGuideName}. Awaiting confirmation.`,
         },
       ] as any);
+      if (messageError) throw messageError;
+
+      await declineCurrentAssignment();
 
       // Notify replacement guide
       if (replacementGuideUserId) {
@@ -266,18 +276,22 @@ export async function declineAndReassignGuide({
         guideChangedAt: decidedAt,
       });
 
-      await supabase
+      const { error: bookingUpdateError } = await supabase
         .from('bookings')
         .update({ notes: updatedMeta } as any)
         .eq('id', bookingId);
+      if (bookingUpdateError) throw bookingUpdateError;
 
-      await supabase.from('booking_messages' as any).insert({
+      const { error: messageError } = await supabase.from('booking_messages' as any).insert({
         booking_id: bookingId,
         sender_id: currentGuideUserId || null,
         sender_role: 'system',
         kind: 'system',
         content: `⚠️ Guide ${currentGuideName} declined this assignment (Reason: ${cleanReason}). Returned to Admin Dispatch pool.`,
       } as any);
+      if (messageError) throw messageError;
+
+      await declineCurrentAssignment();
 
       // Notify hiker that admin is assigning a replacement
       if (effectiveHikerId) {

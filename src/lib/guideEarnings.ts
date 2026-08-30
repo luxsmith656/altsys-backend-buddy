@@ -56,28 +56,34 @@ export function calculateGuideEarnings(
     const meta = parseMeta(booking.notes);
     const groupSize = Number(booking.group_size || meta.actualGroupSize || 1);
     
-    // Fee calculation: Standard formula or metadata fee
+    // Booking fees contain the total for every required guide. This ledger is
+    // per guide, so divide the booking total across the assigned guide count.
     const feeCalculation = calculateFees(groupSize);
-    // If baseRate is customized, scale by guide count needed for group size
     const guideCount = Math.max(1, Math.ceil(groupSize / 8));
-    const calculatedFee = baseRate === 800 ? feeCalculation.guideFee : baseRate * guideCount;
-    const fee = meta.guideFee ? Number(meta.guideFee) : calculatedFee;
+    const bookingGuideFee = Number(meta.guideFee) > 0
+      ? Number(meta.guideFee)
+      : feeCalculation.guideFee;
+    const fee = baseRate === 800
+      ? Math.round(bookingGuideFee / guideCount)
+      : baseRate;
 
     const assignmentStatus = a.status || 'pending';
-    const isCompleted = assignmentStatus === 'completed' || booking.status === 'completed';
+    const isCompleted =
+      assignmentStatus === 'completed' ||
+      (assignmentStatus === 'accepted' && booking.status === 'completed');
     const isAccepted = assignmentStatus === 'accepted' && !isCompleted;
     const isPending = assignmentStatus === 'pending';
 
     // Payment state detection
     let paymentStatus: 'paid' | 'pending' | 'unsettled' = 'pending';
-    if (
+    if (assignmentStatus === 'declined' || booking.payment_status === 'cancelled') {
+      paymentStatus = 'unsettled';
+    } else if (
       booking.payment_status === 'paid' ||
       meta.paymentStatus === 'paid' ||
       isCompleted
     ) {
       paymentStatus = 'paid';
-    } else if (booking.payment_status === 'cancelled' || a.status === 'declined') {
-      paymentStatus = 'unsettled';
     }
 
     const hikeDateStr = booking.booking_date || a.created_at?.split('T')[0] || '';

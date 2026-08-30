@@ -452,7 +452,7 @@ export default function ActiveHikersLayer({
   // Dynamic clustered group marker icon
   const groupMarkerIcon = (h: SimulatedHiker) => {
     let color = '#10b981'; // ascent green
-    let iconLetter = '👥';
+    const iconLetter = '👥';
     if (h.phase === 'peak') color = '#eab308';
     else if (h.phase === 'descent') color = '#3b82f6';
     else if (h.phase === 'sos') color = '#dc2626';

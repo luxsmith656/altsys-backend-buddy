@@ -12,6 +12,7 @@ import { loadRemovedNotificationIds, loadSeenNotificationIds } from '@/lib/notif
 import { isFirebaseConfigured } from '@/lib/firebase';
 import { subscribeUserNotifications, type FsNotification } from '@/lib/firestoreNotifications';
 import { supabase } from '@/integrations/supabase/client';
+import { getRoleHomePath } from '@/lib/authRoles';
 
 export default function Navbar() {
   const { user, role, signOut } = useAuth();
@@ -22,12 +23,7 @@ export default function Navbar() {
   const [notifCount, setNotifCount] = useState(0);
   const [notifPreview, setNotifPreview] = useState<Array<{ id: string; title: string; createdAt: string }>>([]);
 
-  const dashboardPath =
-    role === 'super_admin' ? '/central' :
-    role === 'admin' ? '/admin' :
-    role === 'ranger' ? '/ranger' :
-    role === 'guide' ? '/guide' :
-    '/hiker';
+  const dashboardPath = role ? getRoleHomePath(role) : '/dashboard';
 
   const navLinks = user
     ? [

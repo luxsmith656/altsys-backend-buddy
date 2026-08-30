@@ -48,7 +48,7 @@ export const APP_ROUTES: AppRouteDefinition[] = [
   { path: '/admin', pageKey: 'admin', name: 'Admin Dashboard', access: 'roles', allowedRoles: ['admin', 'super_admin'], showInNavigation: true, component: AdminDashboard },
   { path: '/central', pageKey: 'central', name: 'Super Admin Central Dashboard', access: 'roles', allowedRoles: ['super_admin'], showInNavigation: true, component: CentralDashboard },
   { path: '/ranger', pageKey: 'ranger', name: 'Ranger Checkpoint Monitor', access: 'roles', allowedRoles: ['ranger', 'admin', 'super_admin'], showInNavigation: true, component: RangerDashboard },
-  { path: '/hiker', pageKey: 'hiker', name: 'Hiker Permit Dashboard', access: 'roles', allowedRoles: ['hiker', 'admin', 'super_admin', 'ranger', 'guide'], showInNavigation: true, component: HikerDashboard },
+  { path: '/hiker', pageKey: 'hiker', name: 'Hiker Permit Dashboard', access: 'roles', allowedRoles: ['hiker'], showInNavigation: true, component: HikerDashboard },
   { path: '/guide', pageKey: 'guide', name: 'Guide Duty Dashboard', access: 'roles', allowedRoles: ['guide', 'admin', 'super_admin'], showInNavigation: true, component: GuideDashboard },
   { path: '/guide/:guideId', pageKey: 'guide-profile', name: 'Guide Profile', access: 'public', showInNavigation: false, component: GuideProfilePage },
   { path: '/profile', pageKey: 'profile', name: 'User Profile Settings', access: 'roles', allowedRoles: ALL_ROLES, showInNavigation: false, component: ProfilePage },

@@ -17,6 +17,8 @@ const mockState = vi.hoisted(() => ({
   from: vi.fn(),
   notifyUser: vi.fn(),
   operations: [] as Operation[],
+  bookingFetchError: null as Error | null,
+  failInsertTable: null as string | null,
 }));
 
 vi.mock('@/integrations/supabase/client', () => ({
@@ -43,7 +45,7 @@ function createQueryChain() {
       booking_date: '2026-08-25',
       location_id: 'loc-1',
     },
-    error: null,
+    error: mockState.bookingFetchError,
   });
   return chain;
 }
@@ -51,6 +53,8 @@ function createQueryChain() {
 describe('Guide Assignment & Confirmation Service', () => {
   beforeEach(() => {
     mockState.operations.length = 0;
+    mockState.bookingFetchError = null;
+    mockState.failInsertTable = null;
     mockState.from.mockReset();
     mockState.notifyUser.mockReset();
     mockState.notifyUser.mockResolvedValue('notif-id-123');
@@ -62,7 +66,10 @@ describe('Guide Assignment & Confirmation Service', () => {
       });
       chain.insert = vi.fn((payload: unknown) => {
         mockState.operations.push({ table, method: 'insert', payload });
-        return Promise.resolve({ data: null, error: null });
+        return Promise.resolve({
+          data: null,
+          error: mockState.failInsertTable === table ? new Error(`${table} insert denied`) : null,
+        });
       });
       return chain;
     });
@@ -93,6 +100,19 @@ describe('Guide Assignment & Confirmation Service', () => {
     expect(mockState.notifyUser).toHaveBeenCalledWith('user-hiker-1', expect.objectContaining({ category: 'booking' }));
   });
 
+  it('does not report acceptance success when the assigned booking cannot be read', async () => {
+    mockState.bookingFetchError = new Error('booking read denied');
+
+    const result = await acceptGuideAssignment({
+      assignmentId: 'assign-1', bookingId: 'booking-123', guideId: 'guide-1', guideName: 'Juan Dela Cruz',
+    });
+
+    expect(result).toEqual({ success: false, error: 'booking read denied' });
+    expect(mockState.operations).not.toContainEqual(expect.objectContaining({
+      table: 'booking_assignments', method: 'update', payload: expect.objectContaining({ status: 'accepted' }),
+    }));
+  });
+
   it('declines and reassigns using the schema-supported reassignment_reason field', async () => {
     const result = await declineAndReassignGuide({
       assignmentId: 'assign-1', bookingId: 'booking-123', currentGuideId: 'guide-1', currentGuideName: 'Juan Dela Cruz',
@@ -109,6 +129,20 @@ describe('Guide Assignment & Confirmation Service', () => {
       table: 'booking_assignments', method: 'insert', payload: expect.objectContaining({ guide_id: 'guide-2', location_id: 'loc-1', status: 'pending' }),
     }));
     expect(mockState.notifyUser).toHaveBeenCalledWith('user-guide-2', expect.objectContaining({ category: 'booking' }));
+  });
+
+  it('does not report reassignment success when the replacement assignment insert fails', async () => {
+    mockState.failInsertTable = 'booking_assignments';
+
+    const result = await declineAndReassignGuide({
+      assignmentId: 'assign-1', bookingId: 'booking-123', currentGuideId: 'guide-1', currentGuideName: 'Juan Dela Cruz',
+      reason: 'Emergency', replacementGuideId: 'guide-2', replacementGuideName: 'Maria Santos', locationId: 'loc-1',
+    });
+
+    expect(result).toEqual({ success: false, error: 'booking_assignments insert denied' });
+    expect(mockState.operations).not.toContainEqual(expect.objectContaining({
+      table: 'booking_assignments', method: 'update', payload: expect.objectContaining({ status: 'declined' }),
+    }));
   });
 
   it('returns a declined assignment to admin dispatch when no replacement guide is selected', async () => {

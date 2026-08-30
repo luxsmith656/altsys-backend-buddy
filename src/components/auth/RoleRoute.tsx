@@ -2,6 +2,8 @@ import { ReactNode } from 'react';
 import { Navigate } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import type { AppRole } from '@/types';
+import { Button } from '@/components/ui/button';
+import { getRoleHomePath } from '@/lib/authRoles';
 
 interface RoleRouteProps {
   children: ReactNode;
@@ -9,9 +11,21 @@ interface RoleRouteProps {
 }
 
 export default function RoleRoute({ children, allowedRoles }: RoleRouteProps) {
-  const { user, role, loading } = useAuth();
+  const { user, role, loading, roleError, retryRole } = useAuth();
 
-  if (loading) {
+  if (user && roleError && !role) {
+    return (
+      <div className="min-h-screen pt-20 px-4 flex items-center justify-center">
+        <div className="max-w-sm text-center space-y-3">
+          <p className="font-semibold">We could not verify your account role.</p>
+          <p className="text-sm text-muted-foreground">{roleError}</p>
+          <Button onClick={() => void retryRole()}>Retry access check</Button>
+        </div>
+      </div>
+    );
+  }
+
+  if (loading || (user && !role)) {
     return (
       <div className="min-h-screen pt-20 px-4 flex items-center justify-center">
         <p className="text-sm text-muted-foreground">Checking access...</p>
@@ -21,23 +35,11 @@ export default function RoleRoute({ children, allowedRoles }: RoleRouteProps) {
 
   if (!user) return <Navigate to="/login" replace />;
 
-  const currentRole: AppRole = role || 'hiker';
-  const isSuperAdmin = currentRole === 'super_admin';
-  const isAdmin = currentRole === 'admin';
-
-  // Permission hierarchy: super_admin can view everything; admin can view admin, ranger, guide, hiker; etc.
-  const hasAccess =
-    isSuperAdmin ||
-    allowedRoles.includes(currentRole) ||
-    (isAdmin && (allowedRoles.includes('admin') || allowedRoles.includes('ranger') || allowedRoles.includes('guide') || allowedRoles.includes('hiker')));
+  const currentRole: AppRole = role;
+  const hasAccess = allowedRoles.includes(currentRole);
 
   if (!hasAccess) {
-    const target =
-      currentRole === 'admin' ? '/admin' :
-      currentRole === 'ranger' ? '/ranger' :
-      currentRole === 'guide' ? '/guide' :
-      '/hiker';
-    return <Navigate to={target} replace />;
+    return <Navigate to={getRoleHomePath(currentRole)} replace />;
   }
 
   return <>{children}</>;

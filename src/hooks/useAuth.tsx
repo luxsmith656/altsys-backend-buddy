@@ -2,104 +2,85 @@ import { useState, useEffect, createContext, useContext, ReactNode, useCallback 
 import { supabase } from '@/integrations/supabase/client';
 import { User } from '@supabase/supabase-js';
 import type { AppRole } from '@/types';
+import { resolveAccountRole, resolveKnownAccountRole } from '@/lib/authRoles';
 
 interface AuthContextType {
   user: User | null;
   role: AppRole | null;
   loading: boolean;
+  roleError: string | null;
+  retryRole: () => Promise<void>;
   signIn: (email: string, password: string) => Promise<{ error: Error | null }>;
   signUp: (email: string, password: string, fullName: string, referralGuideId?: string | null) => Promise<{ error: Error | null }>;
   signOut: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
-const ROLE_PRIORITY: AppRole[] = ['super_admin', 'admin', 'ranger', 'guide', 'hiker'];
-
-function pickPrimaryRole(rows: { role: string | null }[] | null, user?: User | null): AppRole {
-  // 1. If database has explicit role records in user_roles, strictly respect them
-  const dbRoles = (rows ?? []).map((row) => row.role).filter(Boolean) as AppRole[];
-  if (dbRoles.length > 0) {
-    const matched = ROLE_PRIORITY.find((candidate) => dbRoles.includes(candidate));
-    if (matched) return matched;
-  }
-
-  // 2. Explicit metadata fallback
-  if (user?.user_metadata?.role && ROLE_PRIORITY.includes(user.user_metadata.role)) {
-    return user.user_metadata.role;
-  }
-  if (user?.app_metadata?.role && ROLE_PRIORITY.includes(user.app_metadata.role)) {
-    return user.app_metadata.role;
-  }
-
-  // 3. System staff account detection by email prefix / keywords
-  if (user?.email) {
-    const email = user.email.toLowerCase().trim();
-    if (email === 'superadmin@mtkalisungan.ph' || email.startsWith('superadmin@') || email.startsWith('central@')) {
-      return 'super_admin';
-    } else if (email === 'admin@mtkalisungan.ph' || email.startsWith('admin@') || email.startsWith('kalicontrol@')) {
-      return 'admin';
-    } else if (email === 'ranger@mtkalisungan.ph' || email.startsWith('ranger@')) {
-      return 'ranger';
-    } else if (email === 'guide@mtkalisungan.ph' || email.startsWith('guide@') || email.includes('guide')) {
-      return 'guide';
-    }
-  }
-
-  return 'hiker';
-}
-
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [role, setRole] = useState<AppRole | null>(null);
   const [loading, setLoading] = useState(true);
+  const [roleError, setRoleError] = useState<string | null>(null);
 
-  const fetchRole = useCallback(async (u: User) => {
-    try {
-      const { data, error } = await supabase
-        .from('user_roles')
-        .select('role')
-        .eq('user_id', u.id);
+  const fetchRole = useCallback(async (u: User): Promise<AppRole> => {
+    const { data, error } = await supabase
+      .from('user_roles')
+      .select('role')
+      .eq('user_id', u.id);
 
-      let detectedRole = pickPrimaryRole(data, u);
-
-      // If still defaulted to hiker, check if user exists in guides or rangers tables
-      if (detectedRole === 'hiker') {
-        const { data: g } = await supabase.from('guides').select('id').eq('user_id', u.id).maybeSingle();
-        if (g?.id) {
-          detectedRole = 'guide';
-        } else {
-          const { data: r } = await (supabase.from('rangers' as any).select('id').eq('user_id', u.id).maybeSingle() as any);
-          if (r?.id) {
-            detectedRole = 'ranger';
-          }
-        }
-      }
-
-      setRole(detectedRole);
-    } catch (err) {
-      console.warn('Role lookup fallback:', err);
-      setRole(pickPrimaryRole(null, u));
+    if (error) {
+      const knownRole = resolveKnownAccountRole(u);
+      if (knownRole) return knownRole;
+      throw error;
     }
+
+    if ((data ?? []).some((row) => Boolean(row.role))) {
+      return resolveAccountRole(data, u);
+    }
+
+    const knownRole = resolveKnownAccountRole(u);
+    if (knownRole && knownRole !== 'hiker') return knownRole;
+
+    const { data: guide, error: guideError } = await supabase
+      .from('guides')
+      .select('id')
+      .eq('user_id', u.id)
+      .maybeSingle();
+    if (guideError) throw guideError;
+    if (guide?.id) return 'guide';
+
+    return knownRole ?? 'hiker';
   }, []);
 
   const syncSession = useCallback(async (session: { user: User } | null) => {
+    if (session?.user) {
+      setLoading(true);
+      setRole(null);
+      setRoleError(null);
+    }
     setUser(session?.user ?? null);
 
     if (!session?.user) {
       setRole(null);
+      setRoleError(null);
       setLoading(false);
       return;
     }
 
     try {
-      await fetchRole(session.user);
+      setRole(await fetchRole(session.user));
     } catch (err) {
       console.error('Session sync error:', err);
-      setRole(pickPrimaryRole(null, session.user));
+      setRole(null);
+      setRoleError(err instanceof Error ? err.message : 'Unable to verify account access.');
     } finally {
       setLoading(false);
     }
   }, [fetchRole]);
+
+  const retryRole = useCallback(async () => {
+    if (user) await syncSession({ user });
+  }, [syncSession, user]);
 
   useEffect(() => {
     let mounted = true;
@@ -180,12 +161,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } finally {
       setUser(null);
       setRole(null);
+      setRoleError(null);
       setLoading(false);
     }
   };
 
   return (
-    <AuthContext.Provider value={{ user, role, loading, signIn, signUp, signOut }}>
+    <AuthContext.Provider value={{ user, role, loading, roleError, retryRole, signIn, signUp, signOut }}>
       {children}
     </AuthContext.Provider>
   );
