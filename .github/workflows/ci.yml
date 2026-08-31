@@ -15,25 +15,26 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     env:
-      VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
-      VITE_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.VITE_SUPABASE_PUBLISHABLE_KEY }}
-      VITE_SUPABASE_PROJECT_ID: ${{ secrets.VITE_SUPABASE_PROJECT_ID }}
+      # These are public browser configuration values. Secrets override the
+      # checked-in CI defaults when a repository uses a different project.
+      VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL || 'https://evcqnlbumsfgbfddoonv.supabase.co' }}
+      VITE_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.VITE_SUPABASE_PUBLISHABLE_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJhbGciOiJIUzI1NiIsInJlZiI6ImV2Y3FubGJ1bXNmZ2JmZGRvb252Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzkxNTgwMDMsImV4cCI6MjA5NDczNDAwM30.mKWBV5Ie8cnUGin9tj80Y0aoiSqGPgqijiZ6hRu_PAo' }}
+      VITE_SUPABASE_PROJECT_ID: ${{ secrets.VITE_SUPABASE_PROJECT_ID || 'evcqnlbumsfgbfddoonv' }}
       VITE_GUIDE_PROFILE_EXTENSIONS_ENABLED: ${{ secrets.VITE_GUIDE_PROFILE_EXTENSIONS_ENABLED }}
       E2E_REQUIRE_AUTH: 'true'
-      E2E_SUPER_ADMIN_EMAIL: ${{ secrets.E2E_SUPER_ADMIN_EMAIL }}
-      E2E_SUPER_ADMIN_PASSWORD: ${{ secrets.E2E_SUPER_ADMIN_PASSWORD }}
-      E2E_MDRRMO_EMAIL: ${{ secrets.E2E_MDRRMO_EMAIL }}
-      E2E_MDRRMO_PASSWORD: ${{ secrets.E2E_MDRRMO_PASSWORD }}
-      E2E_ADMIN_EMAIL: ${{ secrets.E2E_ADMIN_EMAIL }}
-      E2E_ADMIN_PASSWORD: ${{ secrets.E2E_ADMIN_PASSWORD }}
-      E2E_STOTOMAS_ADMIN_EMAIL: ${{ secrets.E2E_STOTOMAS_ADMIN_EMAIL }}
-      E2E_STOTOMAS_ADMIN_PASSWORD: ${{ secrets.E2E_STOTOMAS_ADMIN_PASSWORD }}
-      E2E_RANGER_EMAIL: ${{ secrets.E2E_RANGER_EMAIL }}
-      E2E_RANGER_PASSWORD: ${{ secrets.E2E_RANGER_PASSWORD }}
-      E2E_GUIDE_EMAIL: ${{ secrets.E2E_GUIDE_EMAIL }}
-      E2E_GUIDE_PASSWORD: ${{ secrets.E2E_GUIDE_PASSWORD }}
-      E2E_HIKER_EMAIL: ${{ secrets.E2E_HIKER_EMAIL }}
-      E2E_HIKER_PASSWORD: ${{ secrets.E2E_HIKER_PASSWORD }}
+      # Test identities are only fallbacks; repository secrets override them.
+      E2E_SUPER_ADMIN_EMAIL: ${{ secrets.E2E_SUPER_ADMIN_EMAIL || 'central@kalisungan.ph' }}
+      E2E_SUPER_ADMIN_PASSWORD: ${{ secrets.E2E_SUPER_ADMIN_PASSWORD || 'central123' }}
+      E2E_MDRRMO_EMAIL: ${{ secrets.E2E_MDRRMO_EMAIL || 'mdrrmo@kalisungan.ph' }}
+      E2E_MDRRMO_PASSWORD: ${{ secrets.E2E_MDRRMO_PASSWORD || 'mdrrmo123' }}
+      E2E_ADMIN_EMAIL: ${{ secrets.E2E_ADMIN_EMAIL || 'lamot1@kalisungan.ph' }}
+      E2E_ADMIN_PASSWORD: ${{ secrets.E2E_ADMIN_PASSWORD || 'lamot123' }}
+      E2E_STOTOMAS_ADMIN_EMAIL: ${{ secrets.E2E_STOTOMAS_ADMIN_EMAIL || 'stotomas@kalisungan.ph' }}
+      E2E_STOTOMAS_ADMIN_PASSWORD: ${{ secrets.E2E_STOTOMAS_ADMIN_PASSWORD || 'stotomas123' }}
+      E2E_GUIDE_EMAIL: ${{ secrets.E2E_GUIDE_EMAIL || 'guide@kalisungan.ph' }}
+      E2E_GUIDE_PASSWORD: ${{ secrets.E2E_GUIDE_PASSWORD || 'guide123' }}
+      E2E_HIKER_EMAIL: ${{ secrets.E2E_HIKER_EMAIL || 'hiker@kalisungan.ph' }}
+      E2E_HIKER_PASSWORD: ${{ secrets.E2E_HIKER_PASSWORD || 'hiker123' }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4

@@ -14,8 +14,6 @@ const SEEDED_ACCOUNT_ROLES: Record<string, AppRole> = {
   'lamot1@kalisungan.ph': 'admin',
   'lamot2@kalisungan.ph': 'admin',
   'stotomas@kalisungan.ph': 'admin',
-  'ranger@kalisungan.ph': 'ranger',
-  'ranger@mtkalisungan.ph': 'ranger',
   'guide@kalisungan.ph': 'guide',
   'guide@mtkalisungan.ph': 'guide',
   'hiker@kalisungan.ph': 'hiker',

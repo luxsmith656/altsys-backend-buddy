@@ -6,7 +6,6 @@ const ROLE_CASES = [
   { role: 'mdrrmo', email: process.env.E2E_MDRRMO_EMAIL, password: process.env.E2E_MDRRMO_PASSWORD, path: '/mdrrmo', pageKey: 'mdrrmo' },
   { role: 'admin', email: process.env.E2E_ADMIN_EMAIL, password: process.env.E2E_ADMIN_PASSWORD, path: '/admin', pageKey: 'admin' },
   { role: 'sto_tomas_admin', email: process.env.E2E_STOTOMAS_ADMIN_EMAIL, password: process.env.E2E_STOTOMAS_ADMIN_PASSWORD, path: '/admin', pageKey: 'admin' },
-  { role: 'ranger', email: process.env.E2E_RANGER_EMAIL, password: process.env.E2E_RANGER_PASSWORD, path: '/ranger', pageKey: 'ranger' },
   { role: 'guide', email: process.env.E2E_GUIDE_EMAIL, password: process.env.E2E_GUIDE_PASSWORD, path: '/guide', pageKey: 'guide' },
   { role: 'hiker', email: process.env.E2E_HIKER_EMAIL, password: process.env.E2E_HIKER_PASSWORD, path: '/hiker', pageKey: 'hiker' },
 ] as const;

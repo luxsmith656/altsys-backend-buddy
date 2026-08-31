@@ -212,9 +212,6 @@ export default function Login() {
             <Button variant="outline" size="sm" className="text-xs" onClick={() => quickLogin('guide@kalisungan.ph', 'guide123')}>
               Guide
             </Button>
-            <Button variant="outline" size="sm" className="text-xs" onClick={() => quickLogin('ranger@kalisungan.ph', 'ranger123')}>
-              Ranger
-            </Button>
             <Button variant="outline" size="sm" className="text-xs" onClick={() => quickLogin('hiker@kalisungan.ph', 'hiker123')}>
               Hiker
             </Button>

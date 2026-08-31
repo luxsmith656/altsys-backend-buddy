@@ -27,7 +27,6 @@ describe('resolveAccountRole', () => {
     ['lamot1@kalisungan.ph', 'admin'],
     ['lamot2@kalisungan.ph', 'admin'],
     ['guide@kalisungan.ph', 'guide'],
-    ['ranger@kalisungan.ph', 'ranger'],
     ['hiker@kalisungan.ph', 'hiker'],
     ['mdrrmo@kalisungan.ph', 'mdrrmo'],
   ] as const)('keeps the seeded %s account mapped to %s when role rows are temporarily empty', (email, role) => {

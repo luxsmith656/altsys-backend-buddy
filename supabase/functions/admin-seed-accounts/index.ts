@@ -19,7 +19,12 @@ interface SeedSpec {
   guide?: { phone: string; specialty: string; per_trip_fee: number };
 }
 
-const RETIRED_TEST_ACCOUNT_EMAILS = ['admin@kalisungan.ph', 'admin@mtkalisungan.ph'];
+const RETIRED_TEST_ACCOUNT_EMAILS = [
+  'admin@kalisungan.ph',
+  'admin@mtkalisungan.ph',
+  'ranger@kalisungan.ph',
+  'ranger@mtkalisungan.ph',
+];
 
 const SEEDS: SeedSpec[] = [
   { email: 'central@kalisungan.ph', password: 'central123', full_name: 'LGU Central', role: 'super_admin' },
