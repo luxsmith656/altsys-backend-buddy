@@ -17,7 +17,9 @@ export default function Login() {
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
-  const { signIn } = useAuth();
+  const [confirmationEmail, setConfirmationEmail] = useState('');
+  const [resendingConfirmation, setResendingConfirmation] = useState(false);
+  const { signIn, resendSignupConfirmation } = useAuth();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
 
@@ -27,6 +29,9 @@ export default function Login() {
     const { error } = await signIn(email, password);
     setLoading(false);
     if (error) {
+      if (/email not confirmed|confirm your email/i.test(error.message)) {
+        setConfirmationEmail(email.trim().toLowerCase());
+      }
       toast.error(error.message);
     } else {
       toast.success('Welcome back!');
@@ -43,12 +48,24 @@ export default function Login() {
     const { error } = await signIn(qEmail, qPassword);
     setLoading(false);
     if (error) {
+      if (/email not confirmed|confirm your email/i.test(error.message)) {
+        setConfirmationEmail(qEmail.trim().toLowerCase());
+      }
       toast.error(`${error.message}. Try "Reset test accounts" below.`);
       return;
     }
     toast.success('Signed in');
     const redirectPath = searchParams.get('redirect');
     navigate(redirectPath || '/dashboard');
+  };
+
+  const resendConfirmation = async () => {
+    if (!confirmationEmail || resendingConfirmation) return;
+    setResendingConfirmation(true);
+    const { error } = await resendSignupConfirmation(confirmationEmail);
+    setResendingConfirmation(false);
+    if (error) toast.error(error.message);
+    else toast.success(`Confirmation email sent to ${confirmationEmail}`);
   };
 
   const [reseeding, setReseeding] = useState(false);
@@ -61,7 +78,8 @@ export default function Login() {
       });
       const j = await r.json();
       if (!r.ok) throw new Error(j?.error || 'Reseed failed');
-      toast.success(`Reseeded ${j.results?.length ?? 0} test accounts`);
+      const removed = Array.isArray(j.removed) ? j.removed.length : 0;
+      toast.success(`Reset ${j.results?.length ?? 0} test accounts${removed ? `; removed ${removed} retired account` : ''}`);
     } catch (e: any) {
       toast.error(e.message);
     } finally {
@@ -164,6 +182,12 @@ export default function Login() {
               Sign Up
             </Link>
           </div>
+          {confirmationEmail && (
+            <Button type="button" variant="ghost" className="w-full mt-2 text-xs" onClick={resendConfirmation} disabled={resendingConfirmation}>
+              {resendingConfirmation ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : null}
+              Resend confirmation email
+            </Button>
+          )}
         </div>
 
         {/* Quick login buttons for testing */}
@@ -175,9 +199,6 @@ export default function Login() {
             </Button>
             <Button variant="outline" size="sm" className="text-xs" onClick={() => quickLogin('mdrrmo@kalisungan.ph', 'mdrrmo123')}>
               MDRRMO Emergency Desk
-            </Button>
-            <Button variant="outline" size="sm" className="text-xs" onClick={() => quickLogin('admin@kalisungan.ph', 'admin123')}>
-              Main Admin
             </Button>
             <Button variant="outline" size="sm" className="text-xs" onClick={() => quickLogin('lamot1@kalisungan.ph', 'lamot123')}>
               Lamot 1 Admin

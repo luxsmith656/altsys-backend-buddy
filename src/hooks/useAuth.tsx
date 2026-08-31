@@ -11,6 +11,7 @@ interface AuthContextType {
   roleError: string | null;
   retryRole: () => Promise<void>;
   signIn: (email: string, password: string) => Promise<{ error: Error | null }>;
+  resendSignupConfirmation: (email: string) => Promise<{ error: Error | null }>;
   signUp: (email: string, password: string, fullName: string, referralGuideId?: string | null) => Promise<{ error: Error | null }>;
   signOut: () => Promise<void>;
 }
@@ -126,7 +127,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     for (let attempt = 0; attempt < maxRetries; attempt++) {
       try {
-        const { error } = await supabase.auth.signInWithPassword({ email, password });
+        const { error } = await supabase.auth.signInWithPassword({ email: email.trim().toLowerCase(), password });
         if (error) return { error: error as Error };
         return { error: null };
       } catch (err) {
@@ -138,6 +139,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
     
     return { error: lastError };
+  };
+
+  const resendSignupConfirmation = async (email: string) => {
+    const { error } = await supabase.auth.resend({
+      type: 'signup',
+      email: email.trim().toLowerCase(),
+      options: { emailRedirectTo: window.location.origin + '/login' },
+    });
+    return { error: error as Error | null };
   };
 
   const signUp = async (email: string, password: string, fullName: string, referralGuideId?: string | null) => {
@@ -167,7 +177,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, role, loading, roleError, retryRole, signIn, signUp, signOut }}>
+    <AuthContext.Provider value={{ user, role, loading, roleError, retryRole, signIn, resendSignupConfirmation, signUp, signOut }}>
       {children}
     </AuthContext.Provider>
   );

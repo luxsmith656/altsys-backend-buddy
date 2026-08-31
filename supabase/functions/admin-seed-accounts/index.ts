@@ -19,10 +19,11 @@ interface SeedSpec {
   guide?: { phone: string; specialty: string; per_trip_fee: number };
 }
 
+const RETIRED_TEST_ACCOUNT_EMAILS = ['admin@kalisungan.ph', 'admin@mtkalisungan.ph'];
+
 const SEEDS: SeedSpec[] = [
   { email: 'central@kalisungan.ph', password: 'central123', full_name: 'LGU Central', role: 'super_admin' },
   { email: 'mdrrmo@kalisungan.ph', password: 'mdrrmo123', full_name: 'MDRRMO Emergency Desk', role: 'mdrrmo' },
-  { email: 'admin@kalisungan.ph',   password: 'admin123',   full_name: 'Main Admin',   role: 'admin', location_slugs: ['mt-kalisungan', 'lamot-1', 'lamot-2'] },
   { email: 'lamot1@kalisungan.ph',  password: 'lamot123',   full_name: 'Lamot 1 Admin', role: 'admin', location_slugs: ['lamot-1'] },
   { email: 'lamot2@kalisungan.ph',  password: 'lamot123',   full_name: 'Lamot 2 Admin', role: 'admin', location_slugs: ['lamot-2'] },
   { email: 'stotomas@kalisungan.ph', password: 'stotomas123', full_name: 'Sto. Tomas Admin', role: 'admin', location_slugs: ['sto-tomas'] },
@@ -44,6 +45,18 @@ Deno.serve(async (req) => {
     const locMap = new Map<string, string>((locs ?? []).map((l: any) => [l.slug, l.id]));
 
     const results: any[] = [];
+    const removed: string[] = [];
+
+    // Retire the old unrestricted test admin so it cannot remain usable after a reset.
+    const existingUsers = await admin.auth.admin.listUsers({ page: 1, perPage: 200 });
+    for (const email of RETIRED_TEST_ACCOUNT_EMAILS) {
+      const retired = existingUsers.data?.users?.find((u) => u.email?.toLowerCase() === email);
+      if (retired) {
+        const { error } = await admin.auth.admin.deleteUser(retired.id);
+        if (error) throw error;
+        removed.push(email);
+      }
+    }
 
     for (const s of SEEDS) {
       // Try to find existing user
@@ -119,7 +132,7 @@ Deno.serve(async (req) => {
       results.push({ email: s.email, role: s.role, id: userId });
     }
 
-    return new Response(JSON.stringify({ ok: true, results }), {
+    return new Response(JSON.stringify({ ok: true, results, removed }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   } catch (e) {

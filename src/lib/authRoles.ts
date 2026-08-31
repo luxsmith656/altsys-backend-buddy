@@ -11,8 +11,6 @@ const ROLE_PRIORITY: AppRole[] = ['super_admin', 'mdrrmo', 'admin', 'ranger', 'g
 const SEEDED_ACCOUNT_ROLES: Record<string, AppRole> = {
   'central@kalisungan.ph': 'super_admin',
   'superadmin@mtkalisungan.ph': 'super_admin',
-  'admin@kalisungan.ph': 'admin',
-  'admin@mtkalisungan.ph': 'admin',
   'lamot1@kalisungan.ph': 'admin',
   'lamot2@kalisungan.ph': 'admin',
   'stotomas@kalisungan.ph': 'admin',

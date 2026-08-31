@@ -24,7 +24,6 @@ describe('resolveAccountRole', () => {
 
   it.each([
     ['central@kalisungan.ph', 'super_admin'],
-    ['admin@kalisungan.ph', 'admin'],
     ['lamot1@kalisungan.ph', 'admin'],
     ['lamot2@kalisungan.ph', 'admin'],
     ['guide@kalisungan.ph', 'guide'],
@@ -37,5 +36,10 @@ describe('resolveAccountRole', () => {
 
   it('does not promote ordinary users merely because their email contains a role word', () => {
     expect(resolveAccountRole([], { email: 'hikingguidefan@example.com' })).toBe('hiker');
+  });
+
+  it('does not promote the retired main admin fallback account', () => {
+    expect(resolveAccountRole([], { email: 'admin@kalisungan.ph' })).toBe('hiker');
+    expect(resolveAccountRole([], { email: 'admin@mtkalisungan.ph' })).toBe('hiker');
   });
 });
