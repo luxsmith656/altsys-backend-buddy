@@ -2,6 +2,10 @@ import { describe, expect, it } from 'vitest';
 import { buildKaliContext } from '@/lib/kaliContext';
 
 describe('buildKaliContext', () => {
+  it('does not flag an unfinished age field', () => {
+    expect(buildKaliContext({ role: 'hiker', savedAge: 10, currentAge: '' })).toEqual([]);
+  });
+
   it('flags an age change that crosses the minor boundary as review', () => {
     const [insight] = buildKaliContext({
       role: 'hiker',
@@ -13,6 +17,18 @@ describe('buildKaliContext', () => {
     expect(insight.kind).toBe('age-review');
     expect(insight.severity).toBe('high');
     expect(insight.message).toContain('admin');
+  });
+
+  it('flags a same-name participant changing from minor to adult', () => {
+    const [insight] = buildKaliContext({
+      role: 'admin',
+      savedParticipants: [{ name: 'Maria Santos', age: 10 }],
+      currentParticipants: [{ name: 'Juan Santos', age: 30 }, { name: 'Maria Santos', age: 18 }],
+    });
+
+    expect(insight.id).toBe('age-review-1');
+    expect(insight.message).toContain("Maria Santos's");
+    expect(insight.meta.crossesMinorBoundary).toBe(true);
   });
 
   it('calls out a minor booking for adult and admin verification', () => {
@@ -46,6 +62,21 @@ describe('buildKaliContext', () => {
     expect(insight.severity).toBe('high');
     expect(insight.message).toContain('resched');
     expect(insight.meta?.forecastStatus).toBe('stale');
+  });
+
+  it('adds an age-aware start-time suggestion to weather guidance', () => {
+    const [insight] = buildKaliContext({
+      role: 'hiker',
+      currentAge: 36,
+      selectedStartTime: '08:00 AM',
+      recommendedStartTime: '06:00 AM',
+      weather: { condition: 'Clear', rainProbability: 10, fetchedAt: '2026-08-31T08:00:00+08:00' },
+      now: '2026-08-31T09:00:00+08:00',
+    });
+
+    expect(insight.kind).toBe('weather');
+    expect(insight.message).toContain('06:00 AM');
+    expect(insight.message).toContain('mid-30s');
   });
 
   it('uses role-aware copy for MDRRMO', () => {

@@ -101,6 +101,7 @@ interface WeatherSnapshot {
 /* ─── Draft persistence key ─── */
 const DRAFT_KEY = 'mt-kalisnugon-booking-draft';
 const LAST_BOOKING_AGE_PREFIX = 'mt-kalisungan-last-booking-age:';
+const LAST_BOOKING_PARTICIPANTS_PREFIX = 'mt-kalisungan-last-booking-participants:';
 
 /* ─── Constants ─── */
 const HIKE_TIME_OPTIONS: Record<HikeType, TimeOption[]> = {
@@ -257,7 +258,7 @@ export default function BookingPage() {
   }, [searchParams, setSearchParams]);
   const [customTimeInput, setCustomTimeInput] = useState('');
   const [monthCapacity, setMonthCapacity] = useState<DayCapacityMap>({});
-  const [smartGuideEnabled, setSmartGuideEnabled] = useState(false);
+  const [smartGuideEnabled, setSmartGuideEnabled] = useState(true);
   const [groupComposition, setGroupComposition] = useState<GroupComposition | null>(null);
   const [weatherInsight, setWeatherInsight] = useState<WeatherSnapshot | null>(null);
   const [weatherLoading, setWeatherLoading] = useState(false);
@@ -639,7 +640,11 @@ export default function BookingPage() {
       })
       .map((opt) => opt.time);
 
-    const bestTime = recommendedTimes[0] ?? HIKE_TIME_OPTIONS[hikeType][0].time;
+    const bestTime = highRain || weatherInsight.maxTempC >= 32
+      ? (recommendedTimes[0] ?? HIKE_TIME_OPTIONS[hikeType][0].time)
+      : HIKE_TIME_OPTIONS[hikeType].find((option) => option.recommended)?.time
+        ?? recommendedTimes[0]
+        ?? HIKE_TIME_OPTIONS[hikeType][0].time;
 
     return {
       bestTime,
@@ -657,11 +662,35 @@ export default function BookingPage() {
     try { return localStorage.getItem(`${LAST_BOOKING_AGE_PREFIX}${user.id}`) || undefined; } catch { return undefined; }
   }, [user]);
 
+  const savedParticipants = useMemo(() => {
+    if (!user || typeof localStorage === 'undefined') return [];
+    try {
+      const raw = localStorage.getItem(`${LAST_BOOKING_PARTICIPANTS_PREFIX}${user.id}`);
+      const parsed = raw ? JSON.parse(raw) : [];
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  }, [user]);
+
+  const currentParticipants = useMemo(
+    () => [
+      { name: fullName, age: committedMainAge },
+      ...companionDetails.map((companion, index) => ({
+        name: companion.name || companions[index] || '',
+        age: committedCompanionAges[index] ?? '',
+      })),
+    ],
+    [fullName, committedMainAge, companionDetails, companions, committedCompanionAges],
+  );
+
   const { insights: kaliInsights } = useKaliContext({
     role: role ?? 'guest',
     savedAge: lastSavedAge,
-    currentAge: age,
-    currentAges: [age, ...companionDetails.map((companion) => companion.age ?? null)],
+    currentAge: committedMainAge,
+    currentAges: [committedMainAge, ...committedCompanionAges],
+    savedParticipants,
+    currentParticipants,
     groupSize,
     weather: weatherInsight
       ? {
@@ -670,6 +699,8 @@ export default function BookingPage() {
           fetchedAt: weatherInsight.fetchedAt ?? Date.now(),
         }
       : null,
+    selectedStartTime: date ? hikeTime : undefined,
+    recommendedStartTime: smartRecommendations?.bestTime,
   });
 
   /* ── Hike type change ── */
@@ -886,6 +917,15 @@ export default function BookingPage() {
         });
       }
       try { localStorage.setItem(`${LAST_BOOKING_AGE_PREFIX}${user.id}`, age); } catch { /* storage unavailable */ }
+      try {
+        localStorage.setItem(
+          `${LAST_BOOKING_PARTICIPANTS_PREFIX}${user.id}`,
+          JSON.stringify([
+            { name: fullName, age },
+            ...enrichedCompanions.map((companion) => ({ name: companion.name, age: companion.age ?? '' })),
+          ].filter((participant) => participant.name.trim() && String(participant.age).trim())),
+        );
+      } catch { /* storage unavailable */ }
     }
     setLoading(false);
   };

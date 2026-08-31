@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from 'react';
-import { AlertTriangle, BellRing, Info, ShieldAlert, X } from 'lucide-react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { AlertTriangle, BellRing, Info, MessageCircle, ShieldAlert, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { getKaliRoleLabel, type KaliInsight, type KaliRole } from '@/lib/kaliContext';
 import KaliAvatar from './KaliAvatar';
@@ -23,8 +23,17 @@ function severityClasses(severity: KaliInsight['severity']) {
   return 'border-primary/25 bg-primary/10 text-primary';
 }
 
+function followUpPrompt(insight: KaliInsight): string {
+  if (insight.kind === 'minor-review') return 'Why does this booking need a minor safety check, and what documents should we bring?';
+  if (insight.kind === 'age-review') return 'Why does this age change need verification before check-in?';
+  if (insight.kind === 'weather') return 'What weather precautions and start time do you recommend for my selected booking date?';
+  if (insight.kind === 'group-guidance') return 'Why are two guides needed for this group?';
+  return 'What should I prepare for my confirmed booking?';
+}
+
 export default function KaliContextPanel({ role, insights }: KaliContextPanelProps) {
   const [open, setOpen] = useState(false);
+  const previousInsightIds = useRef<string[]>([]);
   const sortedInsights = useMemo(
     () => [...insights].sort((a, b) => severityRank[a.severity] - severityRank[b.severity]),
     [insights],
@@ -32,13 +41,24 @@ export default function KaliContextPanel({ role, insights }: KaliContextPanelPro
   const insight = sortedInsights[0];
 
   useEffect(() => {
-    if (!insight) setOpen(false);
-  }, [insight]);
+    const nextIds = sortedInsights.map((item) => item.id);
+    if (!insight) {
+      setOpen(false);
+      previousInsightIds.current = [];
+      return;
+    }
+    if (nextIds.some((id) => !previousInsightIds.current.includes(id))) setOpen(true);
+    previousInsightIds.current = nextIds;
+  }, [insight, sortedInsights]);
 
   // Kali is intentionally absent until there is actionable context to surface.
   if (!insight) return null;
 
   const label = `${insight.title}: ${insight.message}`;
+  const askKali = () => {
+    setOpen(false);
+    window.dispatchEvent(new CustomEvent('open-global-ai-assistant', { detail: { prompt: followUpPrompt(insight) } }));
+  };
 
   return (
     <div className="pointer-events-none fixed inset-x-0 bottom-[calc(env(safe-area-inset-bottom)+7rem)] z-[2050] flex justify-end px-3 sm:inset-x-auto sm:right-4 sm:bottom-4 sm:p-0">
@@ -69,6 +89,13 @@ export default function KaliContextPanel({ role, insights }: KaliContextPanelPro
             <p className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
               <BellRing className="h-3 w-3" /> Context checked just now. Confirm details with the responsible staff member when needed.
             </p>
+            <button
+              type="button"
+              onClick={askKali}
+              className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-primary px-3 py-2.5 text-xs font-bold text-primary-foreground shadow-sm transition-colors hover:bg-primary/90"
+            >
+              <MessageCircle className="h-4 w-4" /> Ask Kali in chat
+            </button>
           </div>
         </section>
       )}

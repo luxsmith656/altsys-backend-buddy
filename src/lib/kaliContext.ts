@@ -15,15 +15,24 @@ export interface KaliBookingInput {
   date: string;
 }
 
+export interface KaliParticipantInput {
+  name?: string | null;
+  age?: number | string | null;
+}
+
 export interface KaliContextInput {
   role: KaliRole;
   now?: string | number | Date;
   savedAge?: number | string | null;
   currentAge?: number | string | null;
   currentAges?: Array<number | string | null>;
+  savedParticipants?: KaliParticipantInput[];
+  currentParticipants?: KaliParticipantInput[];
   groupSize?: number;
   weather?: KaliWeatherInput | null;
   booking?: KaliBookingInput | null;
+  selectedStartTime?: string;
+  recommendedStartTime?: string;
 }
 
 export interface KaliInsight {
@@ -79,23 +88,71 @@ function bookingDateLabel(value: string): string {
   return new Intl.DateTimeFormat('en-US', { month: 'long', day: 'numeric' }).format(date);
 }
 
-function ageReviewInsight(input: KaliContextInput): KaliInsight | null {
-  const savedAge = asNumber(input.savedAge);
-  const currentAge = asNumber(input.currentAge);
+function normalizeName(name: string | null | undefined): string {
+  return (name ?? '').trim().toLocaleLowerCase().replace(/\s+/g, ' ');
+}
+
+function ageReviewInsight({
+  role,
+  savedAge: rawSavedAge,
+  currentAge: rawCurrentAge,
+  participantName,
+  id = 'age-review',
+}: {
+  role: KaliRole;
+  savedAge?: number | string | null;
+  currentAge?: number | string | null;
+  participantName?: string | null;
+  id?: string;
+}): KaliInsight | null {
+  const savedAge = asNumber(rawSavedAge);
+  const currentAge = asNumber(rawCurrentAge);
   if (savedAge === null || currentAge === null || savedAge === currentAge) return null;
 
-  const role = getKaliRoleLabel(input.role);
+  const roleLabel = getKaliRoleLabel(role);
+  const subject = participantName?.trim() ? `${participantName.trim()}'s` : 'the booking';
   return {
-    id: 'age-review',
+    id,
     kind: 'age-review',
     severity: 'high',
     expression: 'review',
     title: 'Verify age before check-in',
-    message: input.role === 'hiker'
-      ? `The booking age changed from ${savedAge} to ${currentAge}. Please ask an admin to verify the details before check-in.`
-      : `${role} should verify the booking age change from ${savedAge} to ${currentAge} before check-in.`,
-    meta: { savedAge, currentAge, crossesMinorBoundary: (savedAge <= 17) !== (currentAge <= 17) },
+    message: role === 'hiker'
+      ? `${subject} age changed from ${savedAge} to ${currentAge}. Please ask an admin to verify the details before check-in.`
+      : `${roleLabel} should verify ${subject} age change from ${savedAge} to ${currentAge} before check-in.`,
+    meta: { savedAge, currentAge, crossesMinorBoundary: (savedAge <= 17) !== (currentAge <= 17), participantName: participantName ?? '' },
   };
+}
+
+function ageReviewInsights(input: KaliContextInput): KaliInsight[] {
+  const currentParticipants = input.currentParticipants ?? [];
+  const savedParticipants = input.savedParticipants ?? [];
+  const mainParticipant = currentParticipants[0];
+  const matchingMain = mainParticipant?.name
+    ? savedParticipants.find((participant) => normalizeName(participant.name) === normalizeName(mainParticipant.name))
+    : undefined;
+  const insights: KaliInsight[] = [];
+  const mainInsight = ageReviewInsight({
+    role: input.role,
+    savedAge: matchingMain?.age ?? input.savedAge,
+    currentAge: mainParticipant?.age ?? input.currentAge,
+    participantName: mainParticipant?.name,
+  });
+  if (mainInsight) insights.push(mainInsight);
+
+  currentParticipants.slice(1).forEach((participant, index) => {
+    if (!participant.name) return;
+    const previous = savedParticipants.find((saved) => normalizeName(saved.name) === normalizeName(participant.name));
+    const insight = ageReviewInsight({
+      role: input.role,
+      savedAge: previous?.age,
+      currentAge: participant.age,
+      participantName: participant.name,
+      id: `age-review-${index + 1}`,
+    });
+    if (insight) insights.push(insight);
+  });
+  return insights;
 }
 
 function minorInsight(input: KaliContextInput): KaliInsight | null {
@@ -131,6 +188,14 @@ function weatherInsight(input: KaliContextInput): KaliInsight | null {
   const severe = /thunder|typhoon|tropical cyclone|hurricane/.test(condition) || rain >= 80 || wind >= 50;
   const caution = severe || /rain|drizzle|shower|storm/.test(condition) || rain >= 40 || wind >= 30;
   const forecastNote = stale ? ' Forecast is stale; check again before departure.' : '';
+  const currentAge = asNumber(input.currentAge);
+  const timeNote = input.recommendedStartTime && input.selectedStartTime && input.selectedStartTime !== input.recommendedStartTime
+    ? ` For a beginner-friendly, gentler start${currentAge !== null && currentAge >= 35 ? ' for hikers in their mid-30s and above' : ''}, consider ${input.recommendedStartTime}.`
+    : input.recommendedStartTime && currentAge !== null && currentAge >= 35
+      ? ` For a more comfortable pace, ${input.recommendedStartTime} is the better start time for hikers in their mid-30s and above.`
+      : input.recommendedStartTime
+        ? ` ${input.recommendedStartTime} is a good beginner-friendly start time for this hike.`
+      : '';
 
   return {
     id: 'weather',
@@ -139,10 +204,10 @@ function weatherInsight(input: KaliContextInput): KaliInsight | null {
     expression: severe ? 'alert' : caution ? 'thinking' : 'happy',
     title: severe ? 'Strong weather warning' : caution ? 'Weather caution' : 'Weather window',
     message: severe
-      ? `Strong weather risk is expected (${weather.condition}). We strongly recommend rescheduling for safety.${forecastNote}`
+      ? `Strong weather risk is expected (${weather.condition}). We strongly recommend rescheduling for safety.${forecastNote}${timeNote}`
       : caution
-        ? `${weather.condition} is possible for this hike. Proceed with care, rain gear, and a flexible turnaround plan.${forecastNote}`
-        : `${weather.condition} looks favorable for the selected hike window. Continue checking the forecast because mountain weather can change.${forecastNote}`,
+        ? `${weather.condition} is possible for this hike. Proceed with care, rain gear, and a flexible turnaround plan.${forecastNote}${timeNote}`
+        : `${weather.condition} looks favorable for the selected hike window. Continue checking the forecast because mountain weather can change.${timeNote}`,
     meta: { rainProbability: rain, windKmh: wind, forecastStatus: stale ? 'stale' : 'fresh' },
   };
 }
@@ -189,7 +254,7 @@ function bookingInsight(input: KaliContextInput): KaliInsight | null {
 
 export function buildKaliContext(input: KaliContextInput): KaliInsight[] {
   return [
-    ageReviewInsight(input),
+    ...ageReviewInsights(input),
     minorInsight(input),
     weatherInsight(input),
     groupInsight(input),
