@@ -63,6 +63,8 @@ import { formatPeso } from '@/lib/payments';
 import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import KaliContextPanel from '@/components/kali/KaliContextPanel';
+import { useKaliContext } from '@/hooks/useKaliContext';
 
 const STATUS_STYLES: Record<string, string> = {
   confirmed: 'bg-primary/20 text-primary',
@@ -179,6 +181,18 @@ export default function HikerDashboard() {
   };
 
   const totalDistance = sessions.reduce((sum, s) => sum + Number(s.total_distance_km || 0), 0);
+  const upcomingConfirmedBooking = useMemo(
+    () => bookings
+      .filter((booking) => booking.status === 'confirmed' && booking.booking_date >= new Date().toISOString().slice(0, 10))
+      .sort((a, b) => a.booking_date.localeCompare(b.booking_date))[0],
+    [bookings],
+  );
+  const { insights: kaliInsights } = useKaliContext({
+    role: 'hiker',
+    booking: upcomingConfirmedBooking
+      ? { status: upcomingConfirmedBooking.status, date: upcomingConfirmedBooking.booking_date }
+      : null,
+  });
 
   /* ── Cancel booking ── */
   const handleCancelBooking = async (booking: any) => {
@@ -1055,6 +1069,7 @@ export default function HikerDashboard() {
           onAfterReschedule={() => { setChatBooking(null); window.location.reload(); }}
         />
       )}
+      <KaliContextPanel role="hiker" insights={kaliInsights} />
     </div>
   );
 }

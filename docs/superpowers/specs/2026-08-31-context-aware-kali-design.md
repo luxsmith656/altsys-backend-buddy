@@ -23,7 +23,7 @@ Add a local-first, role-aware Kali guidance surface that proactively flags booki
 
 ## Rules
 
-- Minor: age 0-17. A saved age and current age that differ by at least one year produce a high-priority review insight.
+- Minor: age 0-17. Any current minor produces a high-priority responsible-adult/admin review insight. A saved age and current age that differ by at least one year produce an additional high-priority review insight.
 - Group size above five explains that two guides are required for front/back coverage while preserving one group.
 - Severe conditions produce `avoid`; rain or elevated risk produces `caution`; clear conditions produce `go`.
 - A confirmed booking within seven days produces a reminder with the local Manila date/time.

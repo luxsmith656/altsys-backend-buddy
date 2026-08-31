@@ -30,3 +30,7 @@ In GitHub repository settings, protect `main` and require a pull request plus th
 ## Database migrations
 
 Apply pending files in `supabase/migrations` to the target Supabase project before enabling optional schema-backed features. The guide profile extension flag is `VITE_GUIDE_PROFILE_EXTENSIONS_ENABLED=true`; leave it `false` until the `guide_reviews`, `photo_url`, and `facebook_url` migration is deployed.
+
+## Context-aware Kali guidance
+
+Kali's proactive guidance is local-first and deterministic. Age consistency, minor review, group-size guidance, booking reminders, and weather severity are evaluated in the browser from the data already available to the page. Weather snapshots are cached locally for offline display and marked stale when older than six hours. This feature does not require an AI provider or `SUPABASE_ACCESS_TOKEN`; the existing Supabase URL and publishable key are still required by the application's authentication and booking services.

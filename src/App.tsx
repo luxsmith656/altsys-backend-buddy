@@ -2,9 +2,10 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, Routes, Route, useLocation } from "react-router-dom";
 import { Suspense } from "react";
 import { AuthProvider } from "@/hooks/useAuth";
+import { useAuth } from "@/hooks/useAuth";
 import { LocationsProvider } from "@/hooks/useLocations";
 import { ThemeProvider } from "@/hooks/useTheme";
 import Navbar from "@/components/layout/Navbar";
@@ -15,10 +16,23 @@ import ErrorBoundary from "@/components/common/ErrorBoundary";
 import { APP_ROUTES, type AppRouteDefinition } from "@/app/routes";
 import { useEffect } from "react";
 import { startSyncEngine } from "@/lib/tracking/syncEngine";
+import { useKaliContext } from "@/hooks/useKaliContext";
+import KaliContextPanel from "@/components/kali/KaliContextPanel";
 
 function OfflineSyncBoot() {
   useEffect(() => { startSyncEngine(); }, []);
   return null;
+}
+
+function AppKaliGuidance() {
+  const { user, role } = useAuth();
+  const location = useLocation();
+  const { insights } = useKaliContext({ role: role ?? 'guest' });
+
+  if (location.pathname === '/booking' || location.pathname === '/hiker') return null;
+  if (!user && !['/', '/map', '/chat'].includes(location.pathname)) return null;
+
+  return <KaliContextPanel role={role ?? 'guest'} insights={insights} />;
 }
 
 function RoutedPage({ route }: { route: AppRouteDefinition }) {
@@ -70,6 +84,7 @@ const App = () => (
                   <Route path="*" element={<NotFound />} />
                 </Routes>
               </ErrorBoundary>
+              <AppKaliGuidance />
               <GlobalAIAssistant />
             </LocationsProvider>
           </AuthProvider>

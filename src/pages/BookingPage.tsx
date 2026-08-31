@@ -63,6 +63,8 @@ import { useLocations } from '@/hooks/useLocations';
 import LocationPreview from '@/components/booking/LocationPreview';
 import AdminWalkInRegistrationDialog from '@/components/admin/AdminWalkInRegistrationDialog';
 import AdminWalkInDesk from '@/components/admin/AdminWalkInDesk';
+import KaliContextPanel from '@/components/kali/KaliContextPanel';
+import { useKaliContext } from '@/hooks/useKaliContext';
 
 /* ── Weather code → human-readable label (Open-Meteo) ── */
 function weatherCodeToLabel(code: number): string {
@@ -93,10 +95,12 @@ interface WeatherSnapshot {
   minTempC: number;
   rainProbability: number;
   condition: string;
+  fetchedAt?: number;
 }
 
 /* ─── Draft persistence key ─── */
 const DRAFT_KEY = 'mt-kalisnugon-booking-draft';
+const LAST_BOOKING_AGE_PREFIX = 'mt-kalisungan-last-booking-age:';
 
 /* ─── Constants ─── */
 const HIKE_TIME_OPTIONS: Record<HikeType, TimeOption[]> = {
@@ -565,6 +569,7 @@ export default function BookingPage() {
           minTempC: selected.day.mintemp_c,
           rainProbability: Number(selected.day.daily_chance_of_rain ?? 0),
           condition: selected.day.condition?.text ?? 'Forecast available',
+          fetchedAt: Date.now(),
         });
         return;
       }
@@ -590,6 +595,7 @@ export default function BookingPage() {
         minTempC: payload.daily.temperature_2m_min[idx],
         rainProbability: payload.daily.precipitation_probability_max[idx] ?? 0,
         condition: weatherCodeToLabel(payload.daily.weathercode[idx] ?? -1),
+        fetchedAt: Date.now(),
       });
     } catch (err: unknown) {
       setWeatherInsight(null);
@@ -643,6 +649,28 @@ export default function BookingPage() {
       recommendedTimes,
     };
   }, [smartGuideEnabled, date, weatherInsight, hikeTime, groupSize, hikeType]);
+
+  const lastSavedAge = useMemo(() => {
+    const metadataAge = user?.user_metadata?.age;
+    if (metadataAge) return String(metadataAge);
+    if (!user || typeof localStorage === 'undefined') return undefined;
+    try { return localStorage.getItem(`${LAST_BOOKING_AGE_PREFIX}${user.id}`) || undefined; } catch { return undefined; }
+  }, [user]);
+
+  const { insights: kaliInsights } = useKaliContext({
+    role: role ?? 'guest',
+    savedAge: lastSavedAge,
+    currentAge: age,
+    currentAges: [age, ...companionDetails.map((companion) => companion.age ?? null)],
+    groupSize,
+    weather: weatherInsight
+      ? {
+          condition: weatherInsight.condition,
+          rainProbability: weatherInsight.rainProbability,
+          fetchedAt: weatherInsight.fetchedAt ?? Date.now(),
+        }
+      : null,
+  });
 
   /* ── Hike type change ── */
   const handleHikeTypeChange = (type: HikeType) => {
@@ -857,6 +885,7 @@ export default function BookingPage() {
           category: 'booking',
         });
       }
+      try { localStorage.setItem(`${LAST_BOOKING_AGE_PREFIX}${user.id}`, age); } catch { /* storage unavailable */ }
     }
     setLoading(false);
   };
@@ -2003,6 +2032,8 @@ export default function BookingPage() {
           </div>
         </div>
       </div>
+
+      <KaliContextPanel role={role ?? 'guest'} insights={kaliInsights} />
 
       {/* Floating AI Chat — left side */}
       <BookingAIChat

@@ -11,6 +11,30 @@ export interface WeatherSnapshot {
   fetchedAt: number;
 }
 
+const WEATHER_CACHE_KEY = 'mt-kalisungan-weather-cache-v1';
+
+function readWeatherCache(lat: number, lng: number): WeatherSnapshot | null {
+  if (typeof localStorage === 'undefined') return null;
+  try {
+    const raw = localStorage.getItem(WEATHER_CACHE_KEY);
+    if (!raw) return null;
+    const cached = JSON.parse(raw) as { lat: number; lng: number; snapshot: WeatherSnapshot };
+    if (Math.abs(cached.lat - lat) > 0.5 || Math.abs(cached.lng - lng) > 0.5) return null;
+    return cached.snapshot;
+  } catch {
+    return null;
+  }
+}
+
+function writeWeatherCache(lat: number, lng: number, snapshot: WeatherSnapshot) {
+  if (typeof localStorage === 'undefined') return;
+  try {
+    localStorage.setItem(WEATHER_CACHE_KEY, JSON.stringify({ lat, lng, snapshot }));
+  } catch {
+    // Weather remains usable when storage is unavailable.
+  }
+}
+
 export interface RouteAdvice {
   level: 'go' | 'caution' | 'avoid';
   headline: string;
@@ -31,6 +55,11 @@ const codeLabel = (c: number): string => {
 };
 
 export async function fetchWeather(lat: number, lng: number): Promise<WeatherSnapshot> {
+  if (typeof navigator !== 'undefined' && !navigator.onLine) {
+    const cached = readWeatherCache(lat, lng);
+    if (cached) return cached;
+    throw new Error('Weather is unavailable offline and no cached forecast exists.');
+  }
   const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lng}` +
     `&current=temperature_2m,is_day,precipitation,weather_code,wind_speed_10m` +
     `&hourly=precipitation&forecast_hours=6&wind_speed_unit=kmh`;
@@ -40,7 +69,7 @@ export async function fetchWeather(lat: number, lng: number): Promise<WeatherSna
   const next6 = Array.isArray(j?.hourly?.precipitation)
     ? (j.hourly.precipitation as number[]).slice(0, 6).reduce((a, b) => a + (b ?? 0), 0)
     : 0;
-  return {
+  const snapshot = {
     tempC: j.current?.temperature_2m ?? 0,
     windKmh: j.current?.wind_speed_10m ?? 0,
     precipMm: j.current?.precipitation ?? 0,
@@ -49,6 +78,8 @@ export async function fetchWeather(lat: number, lng: number): Promise<WeatherSna
     isDay: !!j.current?.is_day,
     fetchedAt: Date.now(),
   };
+  writeWeatherCache(lat, lng, snapshot);
+  return snapshot;
 }
 
 export function adviseRoute(w: WeatherSnapshot): RouteAdvice {
