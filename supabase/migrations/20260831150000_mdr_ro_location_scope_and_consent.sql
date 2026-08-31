@@ -276,7 +276,10 @@ CREATE POLICY hiker_sessions_admin_location_insert ON public.hiker_sessions
     (public.has_role(auth.uid(), 'admin'::public.app_role)
       OR public.has_role(auth.uid(), 'super_admin'::public.app_role)
       OR public.has_role(auth.uid(), 'ranger'::public.app_role))
-    AND public.admin_can_access_location(public.session_location_id(hiker_sessions.id))
+    AND public.admin_can_access_location(COALESCE(
+      hiker_sessions.location_id,
+      (SELECT b.location_id FROM public.bookings b WHERE b.id = hiker_sessions.booking_id)
+    ))
   );
 CREATE POLICY hiker_sessions_admin_location_update ON public.hiker_sessions
   FOR UPDATE TO authenticated
@@ -290,7 +293,10 @@ CREATE POLICY hiker_sessions_admin_location_update ON public.hiker_sessions
     (public.has_role(auth.uid(), 'admin'::public.app_role)
       OR public.has_role(auth.uid(), 'super_admin'::public.app_role)
       OR public.has_role(auth.uid(), 'ranger'::public.app_role))
-    AND public.admin_can_access_location(public.session_location_id(hiker_sessions.id))
+    AND public.admin_can_access_location(COALESCE(
+      hiker_sessions.location_id,
+      (SELECT b.location_id FROM public.bookings b WHERE b.id = hiker_sessions.booking_id)
+    ))
   );
 
 DROP POLICY IF EXISTS "hl_staff_scope_select" ON public.hiker_locations;
