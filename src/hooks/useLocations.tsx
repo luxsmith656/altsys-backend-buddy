@@ -39,7 +39,9 @@ export function LocationsProvider({ children }: { children: ReactNode }) {
   const [activeLocationId, _setActiveLocationId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const isSuperAdmin = role === ('super_admin' as any);
+  const isSuperAdmin = role === 'super_admin';
+  const isAllLocationRole = role === 'super_admin' || role === 'mdrrmo';
+  const isMappedLocationRole = role === 'admin' || role === 'ranger' || role === 'guide';
 
   const setActiveLocationId = (id: string | null) => {
     _setActiveLocationId(id);
@@ -67,16 +69,16 @@ export function LocationsProvider({ children }: { children: ReactNode }) {
 
       // Choose default active location
       const stored = localStorage.getItem('activeLocationId');
-      if (stored === 'all') {
+      if (isAllLocationRole && stored === 'all') {
         _setActiveLocationId(null);
-      } else if (stored && list.some((l) => l.id === stored)) {
+      } else if (isMappedLocationRole && stored && ids.includes(stored)) {
         _setActiveLocationId(stored);
-      } else if (role === 'admin' || role === 'super_admin' || isSuperAdmin) {
-        _setActiveLocationId(null); // Admins see all bookings across mountain by default
+      } else if (isAllLocationRole) {
+        _setActiveLocationId(null);
       } else if (ids.length > 0) {
         _setActiveLocationId(ids[0]);
-      } else if (list.length > 0) {
-        _setActiveLocationId(list[0].id);
+      } else {
+        _setActiveLocationId(null);
       }
     } else {
       setMyLocationIds([]);

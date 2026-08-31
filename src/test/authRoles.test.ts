@@ -4,6 +4,7 @@ import { getRoleHomePath, resolveAccountRole } from '@/lib/authRoles';
 describe('resolveAccountRole', () => {
   it.each([
     ['super_admin', '/central'],
+    ['mdrrmo', '/mdrrmo'],
     ['admin', '/admin'],
     ['ranger', '/ranger'],
     ['guide', '/guide'],
@@ -29,6 +30,7 @@ describe('resolveAccountRole', () => {
     ['guide@kalisungan.ph', 'guide'],
     ['ranger@kalisungan.ph', 'ranger'],
     ['hiker@kalisungan.ph', 'hiker'],
+    ['mdrrmo@kalisungan.ph', 'mdrrmo'],
   ] as const)('keeps the seeded %s account mapped to %s when role rows are temporarily empty', (email, role) => {
     expect(resolveAccountRole([], { email })).toBe(role);
   });

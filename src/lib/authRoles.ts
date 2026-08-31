@@ -6,7 +6,7 @@ export interface RoleIdentity {
   app_metadata?: unknown;
 }
 
-const ROLE_PRIORITY: AppRole[] = ['super_admin', 'admin', 'ranger', 'guide', 'hiker'];
+const ROLE_PRIORITY: AppRole[] = ['super_admin', 'mdrrmo', 'admin', 'ranger', 'guide', 'hiker'];
 
 const SEEDED_ACCOUNT_ROLES: Record<string, AppRole> = {
   'central@kalisungan.ph': 'super_admin',
@@ -15,11 +15,13 @@ const SEEDED_ACCOUNT_ROLES: Record<string, AppRole> = {
   'admin@mtkalisungan.ph': 'admin',
   'lamot1@kalisungan.ph': 'admin',
   'lamot2@kalisungan.ph': 'admin',
+  'stotomas@kalisungan.ph': 'admin',
   'ranger@kalisungan.ph': 'ranger',
   'ranger@mtkalisungan.ph': 'ranger',
   'guide@kalisungan.ph': 'guide',
   'guide@mtkalisungan.ph': 'guide',
   'hiker@kalisungan.ph': 'hiker',
+  'mdrrmo@kalisungan.ph': 'mdrrmo',
 };
 
 function isAppRole(value: unknown): value is AppRole {
@@ -64,6 +66,8 @@ export function getRoleHomePath(role: AppRole): string {
       return '/central';
     case 'admin':
       return '/admin';
+    case 'mdrrmo':
+      return '/mdrrmo';
     case 'ranger':
       return '/ranger';
     case 'guide':

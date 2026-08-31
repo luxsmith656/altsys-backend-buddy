@@ -173,6 +173,9 @@ export default function Login() {
             <Button variant="outline" size="sm" className="text-xs" onClick={() => quickLogin('central@kalisungan.ph', 'central123')}>
               LGU Central (super admin)
             </Button>
+            <Button variant="outline" size="sm" className="text-xs" onClick={() => quickLogin('mdrrmo@kalisungan.ph', 'mdrrmo123')}>
+              MDRRMO Emergency Desk
+            </Button>
             <Button variant="outline" size="sm" className="text-xs" onClick={() => quickLogin('admin@kalisungan.ph', 'admin123')}>
               Main Admin
             </Button>
@@ -181,6 +184,9 @@ export default function Login() {
             </Button>
             <Button variant="outline" size="sm" className="text-xs" onClick={() => quickLogin('lamot2@kalisungan.ph', 'lamot123')}>
               Lamot 2 Admin
+            </Button>
+            <Button variant="outline" size="sm" className="text-xs" onClick={() => quickLogin('stotomas@kalisungan.ph', 'stotomas123')}>
+              Sto. Tomas Admin
             </Button>
             <Button variant="outline" size="sm" className="text-xs" onClick={() => quickLogin('guide@kalisungan.ph', 'guide123')}>
               Guide

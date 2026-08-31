@@ -45,6 +45,13 @@ import {
 } from '@/lib/tracking/nativeBackgroundRecorder';
 import { useAuth } from '@/hooks/useAuth';
 import type { LatLngTuple } from 'leaflet';
+import {
+  canUsePlatformGeolocation,
+  clearPlatformWatch,
+  getCurrentPlatformPosition,
+  watchPlatformPosition,
+  type PlatformWatchId,
+} from '@/lib/tracking/platformGeolocation';
 
 const pointIcon = new L.DivIcon({
   html: `<div style="width:14px;height:14px;background:#f59e0b;border:3px solid #fff;border-radius:50%;box-shadow:0 1px 5px rgba(15,23,42,.45);cursor:grab"></div>`,
@@ -203,7 +210,7 @@ export default function TrailRecorder({ existingTrails, locationId, onSaved }: T
   const [status, setStatus] = useState<'draft' | 'active'>('active');
   const [saving, setSaving] = useState(false);
   const [editingTrailId, setEditingTrailId] = useState<string | null>(null);
-  const watchRef = useRef<number | null>(null);
+  const watchRef = useRef<PlatformWatchId | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const gpsFilterRef = useRef<MotionGpsFilter | null>(null);
   const nativeRecordingStartedRef = useRef(false);
@@ -307,11 +314,11 @@ export default function TrailRecorder({ existingTrails, locationId, onSaved }: T
 
   // GPS recording
   const startRecording = useCallback(() => {
-    if (!navigator.geolocation) {
+    if (!canUsePlatformGeolocation()) {
       toast.error('Geolocation not supported on this device');
       return;
     }
-    if (watchRef.current !== null) navigator.geolocation.clearWatch(watchRef.current);
+    if (watchRef.current !== null) void clearPlatformWatch(watchRef.current);
     if (pollRef.current) clearInterval(pollRef.current);
     gpsFilterRef.current = new MotionGpsFilter({
       minAccuracyForStartM: 50,
@@ -401,18 +408,18 @@ export default function TrailRecorder({ existingTrails, locationId, onSaved }: T
     };
 
     const options = { enableHighAccuracy: true, maximumAge: 0, timeout: 30000 };
-    navigator.geolocation.getCurrentPosition(
+    void getCurrentPlatformPosition(
       acceptPosition,
       (err) => toast.error(`GPS Error: ${err.message}`),
       options
     );
-    watchRef.current = navigator.geolocation.watchPosition(
+    void watchPlatformPosition(
       acceptPosition,
       (err) => toast.error(`GPS Error: ${err.message}`),
-      options
-    );
+      options,
+    ).then((watchId) => { watchRef.current = watchId; }).catch((err) => toast.error(`GPS Error: ${err.message}`));
     pollRef.current = setInterval(() => {
-      navigator.geolocation.getCurrentPosition(acceptPosition, () => {}, options);
+      void getCurrentPlatformPosition(acceptPosition, () => {}, options);
     }, 3500);
   }, []);
 
@@ -453,7 +460,7 @@ export default function TrailRecorder({ existingTrails, locationId, onSaved }: T
       }
     }
     if (watchRef.current !== null) {
-      navigator.geolocation.clearWatch(watchRef.current);
+      void clearPlatformWatch(watchRef.current);
       watchRef.current = null;
     }
     if (pollRef.current) {
@@ -1053,7 +1060,7 @@ export default function TrailRecorder({ existingTrails, locationId, onSaved }: T
   useEffect(() => {
     return () => {
       if (watchRef.current !== null) {
-        navigator.geolocation.clearWatch(watchRef.current);
+        void clearPlatformWatch(watchRef.current);
       }
       if (pollRef.current) clearInterval(pollRef.current);
     };

@@ -2,6 +2,25 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Keeps fixed navigation and bottom actions clear of iPhone safe areas. */
+html,
+body,
+#root {
+  min-height: 100%;
+}
+
+body {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+.app-navbar {
+  padding-top: env(safe-area-inset-top, 0px);
+}
+
+.safe-area-bottom {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
 @layer base {
   :root {
     /* Light theme – vibrant mountain morning */

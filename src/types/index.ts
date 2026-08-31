@@ -1,4 +1,4 @@
-export type AppRole = 'admin' | 'ranger' | 'hiker' | 'guide' | 'super_admin';
+export type AppRole = 'admin' | 'ranger' | 'hiker' | 'guide' | 'super_admin' | 'mdrrmo';
 export type BookingStatus = 'pending' | 'confirmed' | 'cancelled' | 'adjustment_pending';
 export type BookingPaymentMethod = 'onsite' | 'gcash' | 'bank_transfer' | 'cash' | 'online';
 

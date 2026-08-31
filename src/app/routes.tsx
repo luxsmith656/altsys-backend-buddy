@@ -32,8 +32,9 @@ const DashboardRedirect = lazy(() => import('@/pages/DashboardRedirect'));
 const NotificationsPage = lazy(() => import('@/pages/NotificationsPage'));
 const Onboarding = lazy(() => import('@/pages/Onboarding'));
 const MonitoringPage = lazy(() => import('@/pages/MonitoringPage'));
+const MDRRMODashboard = lazy(() => import('@/pages/MDRRMODashboard'));
 
-const ALL_ROLES: AppRole[] = ['admin', 'super_admin', 'ranger', 'guide', 'hiker'];
+const ALL_ROLES: AppRole[] = ['admin', 'super_admin', 'ranger', 'guide', 'hiker', 'mdrrmo'];
 
 export const APP_ROUTES: AppRouteDefinition[] = [
   { path: '/', pageKey: 'landing', name: 'Landing Page', access: 'public', showInNavigation: true, component: Index },
@@ -56,6 +57,7 @@ export const APP_ROUTES: AppRouteDefinition[] = [
   { path: '/notifications', pageKey: 'notifications', name: 'Notifications Center', access: 'roles', allowedRoles: ALL_ROLES, showInNavigation: false, component: NotificationsPage },
   { path: '/onboarding', pageKey: 'onboarding', name: 'Hiker Onboarding Flow', access: 'roles', allowedRoles: ALL_ROLES, showInNavigation: false, component: Onboarding },
   { path: '/monitoring', pageKey: 'monitoring', name: 'System Monitoring', access: 'roles', allowedRoles: ['admin', 'super_admin'], showInNavigation: false, component: MonitoringPage },
+  { path: '/mdrrmo', pageKey: 'mdrrmo', name: 'MDRRMO Emergency View', access: 'roles', allowedRoles: ['mdrrmo'], showInNavigation: false, component: MDRRMODashboard },
 ];
 
 export function findAppRoute(path: string) {

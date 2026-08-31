@@ -8,7 +8,7 @@ import { corsHeaders } from 'npm:@supabase/supabase-js@2/cors';
 const SUPABASE_URL = (Deno.env.get('SUPABASE_URL') ?? '').trim();
 const SERVICE_ROLE = (Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '').trim();
 
-type SeedRole = 'super_admin' | 'admin' | 'guide' | 'hiker' | 'ranger';
+type SeedRole = 'super_admin' | 'admin' | 'guide' | 'hiker' | 'ranger' | 'mdrrmo';
 
 interface SeedSpec {
   email: string;
@@ -21,9 +21,11 @@ interface SeedSpec {
 
 const SEEDS: SeedSpec[] = [
   { email: 'central@kalisungan.ph', password: 'central123', full_name: 'LGU Central', role: 'super_admin' },
+  { email: 'mdrrmo@kalisungan.ph', password: 'mdrrmo123', full_name: 'MDRRMO Emergency Desk', role: 'mdrrmo' },
   { email: 'admin@kalisungan.ph',   password: 'admin123',   full_name: 'Main Admin',   role: 'admin', location_slugs: ['mt-kalisungan', 'lamot-1', 'lamot-2'] },
   { email: 'lamot1@kalisungan.ph',  password: 'lamot123',   full_name: 'Lamot 1 Admin', role: 'admin', location_slugs: ['lamot-1'] },
   { email: 'lamot2@kalisungan.ph',  password: 'lamot123',   full_name: 'Lamot 2 Admin', role: 'admin', location_slugs: ['lamot-2'] },
+  { email: 'stotomas@kalisungan.ph', password: 'stotomas123', full_name: 'Sto. Tomas Admin', role: 'admin', location_slugs: ['sto-tomas'] },
   { email: 'guide@kalisungan.ph',   password: 'guide123',   full_name: 'Test Guide',   role: 'guide',
     guide: { phone: '+63 917 000 0001', specialty: 'Summit Trail', per_trip_fee: 500 } },
   { email: 'hiker@kalisungan.ph',   password: 'hiker123',   full_name: 'Test Hiker',   role: 'hiker' },

@@ -3,7 +3,9 @@ import { attachRuntimeMonitor, expectRenderedPage } from '../support/runtime-mon
 
 const ROLE_CASES = [
   { role: 'super_admin', email: process.env.E2E_SUPER_ADMIN_EMAIL, password: process.env.E2E_SUPER_ADMIN_PASSWORD, path: '/central', pageKey: 'central' },
+  { role: 'mdrrmo', email: process.env.E2E_MDRRMO_EMAIL, password: process.env.E2E_MDRRMO_PASSWORD, path: '/mdrrmo', pageKey: 'mdrrmo' },
   { role: 'admin', email: process.env.E2E_ADMIN_EMAIL, password: process.env.E2E_ADMIN_PASSWORD, path: '/admin', pageKey: 'admin' },
+  { role: 'sto_tomas_admin', email: process.env.E2E_STOTOMAS_ADMIN_EMAIL, password: process.env.E2E_STOTOMAS_ADMIN_PASSWORD, path: '/admin', pageKey: 'admin' },
   { role: 'ranger', email: process.env.E2E_RANGER_EMAIL, password: process.env.E2E_RANGER_PASSWORD, path: '/ranger', pageKey: 'ranger' },
   { role: 'guide', email: process.env.E2E_GUIDE_EMAIL, password: process.env.E2E_GUIDE_PASSWORD, path: '/guide', pageKey: 'guide' },
   { role: 'hiker', email: process.env.E2E_HIKER_EMAIL, password: process.env.E2E_HIKER_PASSWORD, path: '/hiker', pageKey: 'hiker' },
@@ -32,7 +34,7 @@ for (const account of ROLE_CASES) {
     await page.getByLabel(/password/i).fill(account.password);
     await page.getByRole('button', { name: 'Sign In', exact: true }).click();
     await expect(page).toHaveURL(new RegExp(`${account.path.replace('/', '\\/')}(?:\\?.*)?$`), { timeout: 15_000 });
-    await expectRenderedPage(page, account.pageKey, /Dashboard|Hike|Checkpoint|Duty|Central/i);
+    await expectRenderedPage(page, account.pageKey, /Dashboard|Hike|Checkpoint|Duty|Central|Emergency/i);
 
     await page.reload({ waitUntil: 'domcontentloaded' });
     await expect(page).toHaveURL(new RegExp(`${account.path.replace('/', '\\/')}(?:\\?.*)?$`), { timeout: 15_000 });

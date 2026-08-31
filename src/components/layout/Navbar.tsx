@@ -121,7 +121,7 @@ export default function Navbar() {
   };
 
   return (
-    <nav className="fixed top-0 left-0 right-0 z-[2000] glass-card-strong border-b border-border/30">
+    <nav className="app-navbar fixed top-0 left-0 right-0 z-[2000] glass-card-strong border-b border-border/30">
       <div className="container mx-auto flex items-center justify-between h-16 px-4">
         <Link to="/" className="flex min-w-0 items-center gap-2 group">
           <img

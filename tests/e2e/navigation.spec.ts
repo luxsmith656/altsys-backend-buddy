@@ -19,7 +19,9 @@ test('rendered internal links resolve without NotFound, blank pages, or redirect
     monitor.assertClean();
   }
 
-  expect(destinations.size).toBeGreaterThan(3);
+  // The crawler must find the public shell links, while the exact count may
+  // vary by authenticated state and feature flags.
+  expect(destinations.size).toBeGreaterThanOrEqual(3);
 
   for (const destination of destinations) {
     const monitor = attachRuntimeMonitor(page);

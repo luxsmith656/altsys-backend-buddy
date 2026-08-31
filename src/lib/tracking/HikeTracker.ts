@@ -19,6 +19,13 @@ import {
   startNativeTrailRecording,
   stopNativeTrailRecording,
 } from './nativeBackgroundRecorder';
+import {
+  canUsePlatformGeolocation,
+  clearPlatformWatch,
+  getCurrentPlatformPosition,
+  watchPlatformPosition,
+  type PlatformWatchId,
+} from './platformGeolocation';
 
 type Listener = (snap: TrackerSnapshot) => void;
 
@@ -44,7 +51,7 @@ export interface TrackerSnapshot {
 }
 
 export class HikeTracker {
-  private watchId: number | null = null;
+  private watchId: PlatformWatchId | null = null;
   private session: OfflineSession;
   private listeners = new Set<Listener>();
   private points: OfflinePoint[] = [];
@@ -129,24 +136,26 @@ export class HikeTracker {
     void startNativeTrailRecording(this.session.id, 'hike')
       .then((started) => { this.nativeStarted = started; })
       .catch((e) => console.warn('Native background hike recorder unavailable', e));
-    if (!navigator.geolocation) throw new Error('Geolocation not supported');
-    if (this.watchId !== null) navigator.geolocation.clearWatch(this.watchId);
+    if (!canUsePlatformGeolocation()) throw new Error('Geolocation not supported');
+    if (this.watchId !== null) await clearPlatformWatch(this.watchId);
+    this.watchId = null;
     if (this.tickHandle) clearInterval(this.tickHandle);
-    navigator.geolocation.getCurrentPosition(
+    const options = { enableHighAccuracy: true, maximumAge: 2000, timeout: 30000 };
+    void getCurrentPlatformPosition(
       (p) => this.onFix(p),
       (e) => console.warn('Initial GPS error', e),
-      { enableHighAccuracy: true, maximumAge: 0, timeout: 30000 },
+      { ...options, maximumAge: 0 },
     );
-    this.watchId = navigator.geolocation.watchPosition(
+    this.watchId = await watchPlatformPosition(
       (p) => this.onFix(p),
       (e) => console.warn('GPS error', e),
-      { enableHighAccuracy: true, maximumAge: 2000, timeout: 30000 },
+      options,
     );
     this.tickHandle = setInterval(() => this.tick(), 1000);
   }
 
   async pause() {
-    if (this.watchId !== null) navigator.geolocation.clearWatch(this.watchId);
+    if (this.watchId !== null) await clearPlatformWatch(this.watchId);
     if (this.tickHandle) clearInterval(this.tickHandle);
     this.watchId = null; this.tickHandle = null;
     await this.pullNativePoints();
@@ -168,7 +177,7 @@ export class HikeTracker {
   }
 
   async suspend() {
-    if (this.watchId !== null) navigator.geolocation.clearWatch(this.watchId);
+    if (this.watchId !== null) await clearPlatformWatch(this.watchId);
     if (this.tickHandle) clearInterval(this.tickHandle);
     this.watchId = null;
     this.tickHandle = null;
@@ -180,7 +189,7 @@ export class HikeTracker {
   }
 
   async stop(): Promise<OfflineSession> {
-    if (this.watchId !== null) navigator.geolocation.clearWatch(this.watchId);
+    if (this.watchId !== null) await clearPlatformWatch(this.watchId);
     if (this.tickHandle) clearInterval(this.tickHandle);
     this.watchId = null; this.tickHandle = null;
     await this.pullNativePoints();

@@ -120,6 +120,7 @@ import TrailRecorder from '@/components/map/TrailRecorder';
 import QRCameraScanner from '@/components/admin/QRCameraScanner';
 import DemographicsTab from '@/components/admin/DemographicsTab';
 import OverviewDashboard from '@/components/admin/OverviewDashboard';
+import MDRRMOAccessAudit from '@/components/admin/MDRRMOAccessAudit';
 import PaymentSummaryTab from '@/components/admin/PaymentSummaryTab';
 import ForecastingTab from '@/components/admin/forecasting/ForecastingTab';
 import AdminWalkInRegistrationDialog from '@/components/admin/AdminWalkInRegistrationDialog';
@@ -442,6 +443,7 @@ export default function AdminDashboard() {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'bookings' }, (payload) => {
         if (payload.eventType === 'INSERT' && payload.new) {
           const newBooking = payload.new as any;
+          if (!isSuperAdmin && (!activeLocationId || newBooking.location_id !== activeLocationId)) return;
           const meta = parseMeta(newBooking.notes);
           toast.info(`🔔 New Booking: ${meta.fullName || newBooking.emergency_contact_name || 'Hiker'} (${newBooking.booking_date})`);
           setAllTabBookings((prev) => {
@@ -529,14 +531,17 @@ export default function AdminDashboard() {
   /* ── Load all bookings (for Bookings tab + Payments tab) ── */
   const loadAllTabBookings = async () => {
     setAllTabLoading(true);
+    if (!isSuperAdmin && !activeLocationId) {
+      setAllTabBookings([]);
+      setAllTabLoading(false);
+      return;
+    }
     let q: any = supabase
       .from('bookings')
       .select('*')
       .order('created_at', { ascending: false })
       .limit(500);
-    if (activeLocationId) {
-      q = q.or(`location_id.eq.${activeLocationId},location_id.is.null`);
-    }
+    if (!isSuperAdmin) q = q.eq('location_id', activeLocationId);
     const { data } = await q;
     if (data) {
       setAllTabBookings((prev) => {
@@ -550,19 +555,21 @@ export default function AdminDashboard() {
 
   /* ── Update daily_capacity.current_count on confirm/cancel ── */
   const updateDailySlots = async (bookingDate: string, groupSize: number, delta: number) => {
+    if (!isSuperAdmin && !activeLocationId) return;
     try {
-      const { data: cap } = await supabase
+      let capacityQuery: any = supabase
         .from('daily_capacity')
         .select('*')
-        .eq('date', bookingDate)
-        .maybeSingle();
+        .eq('date', bookingDate);
+      if (!isSuperAdmin || activeLocationId) capacityQuery = capacityQuery.eq('location_id', activeLocationId);
+      const { data: cap } = await capacityQuery.maybeSingle();
       if (cap) {
         const newCount = Math.max(0, (cap.current_count ?? 0) + delta * groupSize);
         await supabase.from('daily_capacity').update({ current_count: newCount }).eq('id', cap.id);
       } else if (delta > 0) {
         await supabase
           .from('daily_capacity')
-          .insert({ date: bookingDate, max_capacity: 100, current_count: groupSize });
+          .insert({ date: bookingDate, location_id: activeLocationId, max_capacity: 100, current_count: groupSize });
       }
     } catch (err) {
       console.warn('[Slots] Update error:', err);
@@ -592,8 +599,9 @@ export default function AdminDashboard() {
       .select('*')
       .or(`qr_code_data.eq.${raw},qr_code_data.eq.${q},id.eq.${q}`)
       .limit(1);
-    if (activeLocationId && !isSuperAdmin) {
-      exactQuery = exactQuery.or(`location_id.eq.${activeLocationId},location_id.is.null`);
+    if (!isSuperAdmin) {
+      if (!activeLocationId) { setScanLoading(false); toast.error('Select an assigned location first.'); return; }
+      exactQuery = exactQuery.eq('location_id', activeLocationId);
     }
     const { data: exactData } = await exactQuery.maybeSingle();
 
@@ -614,9 +622,7 @@ export default function AdminDashboard() {
       .not('status', 'eq', 'cancelled')
       .order('created_at', { ascending: false })
       .limit(1);
-    if (activeLocationId && !isSuperAdmin) {
-      nameQuery = nameQuery.or(`location_id.eq.${activeLocationId},location_id.is.null`);
-    }
+    if (!isSuperAdmin) nameQuery = nameQuery.eq('location_id', activeLocationId);
     const { data: nameData } = await nameQuery.maybeSingle();
 
     if (nameData) {
@@ -1010,12 +1016,14 @@ export default function AdminDashboard() {
   /* ── Capacity Management ── */
   const loadUpcomingCapacities = async () => {
     const today = format(new Date(), 'yyyy-MM-dd');
-    const { data } = await supabase
+    let capacityQuery: any = supabase
       .from('daily_capacity')
       .select('*')
       .gte('date', today)
       .order('date', { ascending: true })
       .limit(60);
+    if (!isSuperAdmin || activeLocationId) capacityQuery = capacityQuery.eq('location_id', activeLocationId);
+    const { data } = await capacityQuery;
     setUpcomingCapacities(data || []);
   };
 
@@ -1029,11 +1037,12 @@ export default function AdminDashboard() {
     const { error } = await supabase
       .from('daily_capacity')
       .upsert({
+        location_id: activeLocationId,
         date: capDate,
         max_capacity: capMax,
         day_max_capacity: capDayMax,
         night_max_capacity: capNightMax,
-      } as any, { onConflict: 'date' });
+      } as any, { onConflict: 'location_id,date' });
     if (error) {
       toast.error('Failed to save: ' + error.message);
     } else {
@@ -1051,10 +1060,11 @@ export default function AdminDashboard() {
     const end = new Date(`${capRangeEnd}T00:00:00`);
     if (end < start) { toast.error('End date must be after start date.'); return; }
 
-    const rows: Array<{ date: string; max_capacity: number; day_max_capacity?: number; night_max_capacity?: number }> = [];
+    const rows: Array<{ location_id: string | null; date: string; max_capacity: number; day_max_capacity?: number; night_max_capacity?: number }> = [];
     const cursor = new Date(start);
     while (cursor <= end) {
       rows.push({
+        location_id: activeLocationId,
         date: format(cursor, 'yyyy-MM-dd'),
         max_capacity: capMax,
         day_max_capacity: capDayMax,
@@ -1063,7 +1073,7 @@ export default function AdminDashboard() {
       cursor.setDate(cursor.getDate() + 1);
     }
     setCapSaving(true);
-    const { error } = await supabase.from('daily_capacity').upsert(rows as any, { onConflict: 'date' });
+    const { error } = await supabase.from('daily_capacity').upsert(rows as any, { onConflict: 'location_id,date' });
     if (error) {
       toast.error('Failed bulk update: ' + error.message);
     } else {
@@ -1086,14 +1096,17 @@ export default function AdminDashboard() {
 
   const loadPendingBookings = async () => {
     setPendingLoading(true);
+    if (!isSuperAdmin && !activeLocationId) {
+      setPendingBookings([]);
+      setPendingLoading(false);
+      return;
+    }
     let query: any = supabase
       .from('bookings')
       .select('*')
       .in('status', ['pending', 'adjustment_pending'])
       .order('created_at', { ascending: true });
-    if (activeLocationId) {
-      query = query.or(`location_id.eq.${activeLocationId},location_id.is.null`);
-    }
+    if (!isSuperAdmin) query = query.eq('location_id', activeLocationId);
     const { data } = await query;
     if (data) {
       setPendingBookings((prev) => {
@@ -1309,17 +1322,17 @@ export default function AdminDashboard() {
 
   const loadData = async () => {
     // Scope to current location when the admin has one selected (super_admin sees all).
-    const scopeBookings = (q: any) =>
-      activeLocationId && !isSuperAdmin
-        ? q.or(`location_id.eq.${activeLocationId},location_id.is.null`)
-        : q;
+    const scopeBookings = (q: any) => {
+      if (isSuperAdmin) return q;
+      return q.eq('location_id', activeLocationId || '00000000-0000-0000-0000-000000000000');
+    };
     let activeHikersQuery = supabase
       .from('hiker_sessions')
       .select('*', { count: 'exact', head: true })
       .eq('status', 'active')
       .like('client_session_id', `${ADMIN_CHECKIN_TOKEN_PREFIX}%`);
-    if (activeLocationId && !isSuperAdmin) {
-      activeHikersQuery = activeHikersQuery.or(`location_id.eq.${activeLocationId},location_id.is.null`);
+    if (!isSuperAdmin) {
+      activeHikersQuery = activeHikersQuery.eq('location_id', activeLocationId || '00000000-0000-0000-0000-000000000000');
     }
     const [
       { count: totalBookings },
@@ -1750,8 +1763,8 @@ export default function AdminDashboard() {
                   <SelectValue placeholder="All Locations & Trails" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">🌐 All Locations & Trails (Full Mountain)</SelectItem>
-                  {locations.map((loc) => (
+                  {isSuperAdmin && <SelectItem value="all">🌐 All Locations & Trails (Full Mountain)</SelectItem>}
+                  {(isSuperAdmin ? locations : locations.filter((loc) => loc.id === activeLocationId)).map((loc) => (
                     <SelectItem key={loc.id} value={loc.id}>
                       📍 {loc.name}
                     </SelectItem>
@@ -1808,6 +1821,7 @@ export default function AdminDashboard() {
           
           <TabsContent value="overview" className="space-y-6 mt-0">
             <OverviewDashboard locationId={activeLocationId} />
+            <MDRRMOAccessAudit locationId={activeLocationId} />
           </TabsContent>
 
           <TabsContent value="operations" className="mt-0">

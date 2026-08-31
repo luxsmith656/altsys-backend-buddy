@@ -27,6 +27,7 @@ describe('authoritative application routes', () => {
       '/notifications',
       '/onboarding',
       '/monitoring',
+      '/mdrrmo',
     ]);
   });
 
@@ -36,5 +37,13 @@ describe('authoritative application routes', () => {
     expect(route?.showInNavigation).toBe(false);
     expect(route?.allowedRoles).toEqual(['admin', 'super_admin']);
     expect(route?.pageKey).toBe('monitoring');
+  });
+
+  it('keeps MDRRMO emergency access direct-link-only and role protected', () => {
+    const route = findAppRoute('/mdrrmo');
+
+    expect(route?.showInNavigation).toBe(false);
+    expect(route?.allowedRoles).toEqual(['mdrrmo']);
+    expect(route?.pageKey).toBe('mdrrmo');
   });
 });
