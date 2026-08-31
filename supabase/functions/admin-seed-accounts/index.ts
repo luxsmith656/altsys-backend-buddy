@@ -41,12 +41,17 @@ Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
 
   try {
+    if (!SUPABASE_URL || !SERVICE_ROLE) {
+      throw new Error('Supabase service configuration is missing');
+    }
+
     const admin = createClient(SUPABASE_URL, SERVICE_ROLE, {
       auth: { persistSession: false, autoRefreshToken: false },
     });
 
     // Build slug -> location_id map
-    const { data: locs } = await admin.from('locations').select('id, slug');
+    const { data: locs, error: locationsError } = await admin.from('locations').select('id, slug');
+    if (locationsError) throw locationsError;
     const locMap = new Map<string, string>((locs ?? []).map((l: any) => [l.slug, l.id]));
 
     const results: any[] = [];
@@ -137,7 +142,9 @@ Deno.serve(async (req) => {
       results.push({ email: s.email, role: s.role, id: userId });
     }
 
-    return new Response(JSON.stringify({ ok: true, results, removed }), {
+    const failures = results.filter((result) => result.error);
+    return new Response(JSON.stringify({ ok: failures.length === 0, results, removed, failures }), {
+      status: failures.length ? 500 : 200,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   } catch (e) {

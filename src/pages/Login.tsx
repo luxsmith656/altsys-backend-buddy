@@ -78,6 +78,16 @@ export default function Login() {
       });
       const j = await r.json();
       if (!r.ok) throw new Error(j?.error || 'Reseed failed');
+      const seededEmails = new Set(
+        Array.isArray(j.results)
+          ? j.results.map((result: { email?: unknown }) => result.email).filter((email): email is string => typeof email === 'string')
+          : [],
+      );
+      const requiredAccounts = ['mdrrmo@kalisungan.ph', 'stotomas@kalisungan.ph'];
+      const missingAccounts = requiredAccounts.filter((account) => !seededEmails.has(account));
+      if (missingAccounts.length) {
+        throw new Error(`The deployed account reset is outdated. Deploy the latest Supabase seed function first (missing ${missingAccounts.join(' and ')}).`);
+      }
       const removed = Array.isArray(j.removed) ? j.removed.length : 0;
       toast.success(`Reset ${j.results?.length ?? 0} test accounts${removed ? `; removed ${removed} retired account` : ''}`);
     } catch (e: any) {
