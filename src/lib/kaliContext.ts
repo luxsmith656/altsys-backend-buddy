@@ -1,5 +1,5 @@
 export type KaliRole = 'hiker' | 'guide' | 'admin' | 'super_admin' | 'ranger' | 'mdrrmo' | 'guest';
-export type KaliInsightKind = 'age-review' | 'minor-review' | 'weather' | 'group-guidance' | 'booking-reminder';
+export type KaliInsightKind = 'age-review' | 'minor-review' | 'weather' | 'group-guidance' | 'booking-reminder' | 'hike-type';
 export type KaliSeverity = 'info' | 'medium' | 'high';
 export type KaliExpression = 'alert' | 'review' | 'map' | 'happy' | 'thinking';
 
@@ -33,6 +33,7 @@ export interface KaliContextInput {
   booking?: KaliBookingInput | null;
   selectedStartTime?: string;
   recommendedStartTime?: string;
+  hikeType?: 'morning' | 'night' | 'overnight' | 'day' | string;
 }
 
 export interface KaliInsight {
@@ -170,9 +171,25 @@ function minorInsight(input: KaliContextInput): KaliInsight | null {
     expression: 'review',
     title: `${minorCount} minor${minorCount === 1 ? '' : 's'} need a safety check`,
     message: input.role === 'hiker'
-      ? `This booking includes ${minorCount} minor${minorCount === 1 ? '' : 's'}. A responsible adult must stay with them, and an admin should verify the details at check-in.`
-      : `Please verify the ${minorCount} minor${minorCount === 1 ? '' : 's'} and confirm responsible-adult coverage before the group starts.`,
-    meta: { minorCount, responsibleAdultRequired: true },
+      ? `This booking includes ${minorCount} minor${minorCount === 1 ? '' : 's'}. A responsible adult must stay with them, and an admin should verify the details at check-in. Tap “View required documents” for the full checklist.`
+      : `Please verify the ${minorCount} minor${minorCount === 1 ? '' : 's'} and confirm responsible-adult coverage before the group starts. Tap “View required documents” for the full checklist.`,
+    meta: { minorCount, responsibleAdultRequired: true, targetId: 'minor-requirements' },
+  };
+}
+
+function hikeTypeInsight(input: KaliContextInput): KaliInsight | null {
+  if (input.hikeType !== 'night' && input.hikeType !== 'overnight') return null;
+  const overnight = input.hikeType === 'overnight';
+  return {
+    id: 'hike-type-guidance',
+    kind: 'hike-type',
+    severity: 'info',
+    expression: overnight ? 'thinking' : 'map',
+    title: overnight ? 'Overnight hike plan' : 'Night hike plan',
+    message: overnight
+      ? 'Overnight hikes start between 2:00 PM and 4:00 PM and include an overnight stay. Pack extra food, lighting, warm layers, and rest gear for the longer mountain exposure.'
+      : 'Night hikes start between 2:00 PM and 5:00 PM and continue into the evening. Bring a headlamp, spare batteries, and visibility layers; choose this when your group is ready for reduced-light travel.',
+    meta: { hikeType: input.hikeType, scheduleStart: '02:00 PM', scheduleEnd: overnight ? '04:00 PM' : '05:00 PM' },
   };
 }
 
@@ -258,6 +275,7 @@ export function buildKaliContext(input: KaliContextInput): KaliInsight[] {
     minorInsight(input),
     weatherInsight(input),
     groupInsight(input),
+    hikeTypeInsight(input),
     bookingInsight(input),
   ].filter((insight): insight is KaliInsight => insight !== null);
 }

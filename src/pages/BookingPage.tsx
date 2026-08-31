@@ -65,6 +65,7 @@ import AdminWalkInRegistrationDialog from '@/components/admin/AdminWalkInRegistr
 import AdminWalkInDesk from '@/components/admin/AdminWalkInDesk';
 import KaliContextPanel from '@/components/kali/KaliContextPanel';
 import { useKaliContext } from '@/hooks/useKaliContext';
+import { HIKE_TIME_OPTIONS, getHikeTypeLabel, isValidHikeTime, normalizeHikeType, type HikeType } from '@/lib/hikeSchedule';
 
 /* ── Weather code → human-readable label (Open-Meteo) ── */
 function weatherCodeToLabel(code: number): string {
@@ -82,14 +83,6 @@ function weatherCodeToLabel(code: number): string {
 }
 
 /* ─── Types ─── */
-type HikeType = 'day' | 'night';
-
-interface TimeOption {
-  time: string;
-  label: string;
-  recommended?: boolean;
-}
-
 interface WeatherSnapshot {
   maxTempC: number;
   minTempC: number;
@@ -104,22 +97,6 @@ const LAST_BOOKING_AGE_PREFIX = 'mt-kalisungan-last-booking-age:';
 const LAST_BOOKING_PARTICIPANTS_PREFIX = 'mt-kalisungan-last-booking-participants:';
 
 /* ─── Constants ─── */
-const HIKE_TIME_OPTIONS: Record<HikeType, TimeOption[]> = {
-  day: [
-    { time: '04:30 AM', label: 'Very Early' },
-    { time: '05:00 AM', label: 'Early Bird' },
-    { time: '06:00 AM', label: 'Most Popular', recommended: true },
-    { time: '07:00 AM', label: 'Morning' },
-    { time: '08:00 AM', label: 'Late Start' },
-  ],
-  night: [
-    { time: '09:00 PM', label: 'Evening' },
-    { time: '10:00 PM', label: 'Summit at Dawn', recommended: true },
-    { time: '11:00 PM', label: 'Midnight Trek' },
-    { time: '12:00 AM', label: 'Late Night' },
-  ],
-};
-
 const STEPS = [
   { id: 1, label: 'Schedule', icon: CalendarCheck },
   { id: 2, label: 'Details', icon: UserRound },
@@ -194,14 +171,6 @@ function CityAutocomplete({ value, options, onPick, placeholder }: { value: stri
 
 /* ─── Helpers ─── */
 
-function formatTimeInput(time24: string): string {
-  if (!time24) return '';
-  const [h, m] = time24.split(':').map(Number);
-  const ampm = h >= 12 ? 'PM' : 'AM';
-  const h12 = h % 12 || 12;
-  return `${String(h12).padStart(2, '0')}:${String(m).padStart(2, '0')} ${ampm}`;
-}
-
 function parseHourFromTime12(time12: string): number {
   const [time, period] = time12.split(' ');
   if (!time || !period) return 0;
@@ -227,10 +196,9 @@ export default function BookingPage() {
 
   // ── Step 1: Schedule
   const [date, setDate] = useState<Date | undefined>();
-  const [hikeType, setHikeType] = useState<HikeType>('day');
+  const [hikeType, setHikeType] = useState<HikeType>('morning');
   const [hikeTime, setHikeTime] = useState('06:00 AM');
   const [groupSize, setGroupSize] = useState(1);
-  const [useCustomTime, setUseCustomTime] = useState(false);
 
   /* Prefill from the global AI assistant redirect: /booking?date=&time=&pax=&type= */
   const [searchParams, setSearchParams] = useSearchParams();
@@ -246,9 +214,13 @@ export default function BookingPage() {
       const next = new Date(y, m - 1, day);
       if (!Number.isNaN(next.getTime())) { setDate(next); applied.push(format(next, 'MMM d, yyyy')); }
     }
-    if (t) { setHikeTime(t); setUseCustomTime(true); applied.push(t); }
+    if (t) { setHikeTime(t); applied.push(t); }
     if (pax && Number(pax) >= 1) { setGroupSize(Math.min(30, Number(pax))); applied.push(`${pax} pax`); }
-    if (type === 'day' || type === 'night') { setHikeType(type); applied.push(type === 'night' ? 'Night hike' : 'Day hike'); }
+    if (type === 'morning' || type === 'day' || type === 'night' || type === 'overnight') {
+      const nextType = normalizeHikeType(type);
+      setHikeType(nextType);
+      applied.push(`${getHikeTypeLabel(nextType)} hike`);
+    }
     if (applied.length) toast.success(`Assistant applied: ${applied.join(' · ')}`);
     if (searchParams.get('ready') === '1') {
       setStep(2);
@@ -256,7 +228,6 @@ export default function BookingPage() {
     }
     setSearchParams({}, { replace: true });
   }, [searchParams, setSearchParams]);
-  const [customTimeInput, setCustomTimeInput] = useState('');
   const [monthCapacity, setMonthCapacity] = useState<DayCapacityMap>({});
   const [smartGuideEnabled, setSmartGuideEnabled] = useState(true);
   const [groupComposition, setGroupComposition] = useState<GroupComposition | null>(null);
@@ -348,8 +319,8 @@ export default function BookingPage() {
       if (!raw) return;
       const d = JSON.parse(raw);
       if (d.date) setDate(new Date(d.date));
-      if (d.hikeType) setHikeType(d.hikeType);
-      if (d.hikeTime) setHikeTime(d.hikeTime);
+      if (d.hikeType) setHikeType(normalizeHikeType(d.hikeType));
+      if (d.hikeTime && isValidHikeTime(normalizeHikeType(d.hikeType), d.hikeTime)) setHikeTime(d.hikeTime);
       if (typeof d.groupSize === 'number') setGroupSize(d.groupSize);
       if (d.fullName) setFullName(d.fullName);
       if (d.age) setAge(d.age);
@@ -535,7 +506,7 @@ export default function BookingPage() {
     const dateStr = format(date, 'yyyy-MM-dd');
     const cap = monthCapacity[dateStr];
     const totalMax = cap?.max_capacity ?? DEFAULT_MAX_CAPACITY;
-    if (hikeType === 'night') {
+    if (hikeType === 'night' || hikeType === 'overnight') {
       const max = cap?.night_max_capacity ?? Math.max(15, Math.round(totalMax * 0.35));
       const current = cap?.night_current_count ?? 0;
       return Math.max(0, max - current);
@@ -701,13 +672,12 @@ export default function BookingPage() {
       : null,
     selectedStartTime: date ? hikeTime : undefined,
     recommendedStartTime: smartRecommendations?.bestTime,
+    hikeType,
   });
 
   /* ── Hike type change ── */
   const handleHikeTypeChange = (type: HikeType) => {
     setHikeType(type);
-    setUseCustomTime(false);
-    setCustomTimeInput('');
     const recommended = HIKE_TIME_OPTIONS[type].find((t) => t.recommended);
     if (recommended) setHikeTime(recommended.time);
   };
@@ -721,6 +691,7 @@ export default function BookingPage() {
         return `Only ${slotsForDate} slot${slotsForDate !== 1 ? 's' : ''} available on this date. Reduce group size or choose another date.`;
       }
       if (!hikeTime) return 'Please select a start time.';
+      if (!isValidHikeTime(hikeType, hikeTime)) return `Please choose a start time within the ${getHikeTypeLabel(hikeType).toLowerCase()} hike window.`;
     }
     if (step === 2) {
       if (!fullName.trim()) return 'Full name is required.';
@@ -792,7 +763,7 @@ export default function BookingPage() {
 
     const qrData = `KALISUNGAN-${user.id.slice(0, 8)}-${dateStr}-${Date.now()}`;
     const companionNames = companions.map((name) => name.trim()).filter(Boolean);
-    const fees = calculateFees(groupSize);
+    const fees = calculateFees(groupSize, { hikeType });
 
     // Upload screenshot to Firebase if present
     let screenshotUrl: string | undefined;
@@ -878,7 +849,7 @@ export default function BookingPage() {
     if (error) {
       toast.error(error.message);
     } else {
-      const fees = calculateFees(groupSize);
+      const fees = calculateFees(groupSize, { hikeType });
       setBooking({
         ...data,
         hikeTime,
@@ -956,7 +927,7 @@ export default function BookingPage() {
             <div className="space-y-2 text-sm">
               {[
                 { label: 'Date', value: booking.booking_date },
-                { label: 'Hike Type', value: booking.hikeType === 'night' ? '🌙 Night Hike' : '☀️ Day Hike' },
+                { label: 'Hike Type', value: `${booking.hikeType === 'overnight' || booking.hikeType === 'night' ? '🌙' : '☀️'} ${getHikeTypeLabel(booking.hikeType)} Hike` },
                 { label: 'Start Time', value: booking.hikeTime },
                 { label: 'Group Size', value: `${booking.group_size} pax` },
                 { label: 'Full Name', value: booking.fullName },
@@ -1107,8 +1078,9 @@ export default function BookingPage() {
                     <div className="grid grid-cols-2 gap-3">
                       {(
                         [
-                          { type: 'day' as HikeType, Icon: Sun, label: 'Day Hike', desc: 'Summit by daylight' },
-                          { type: 'night' as HikeType, Icon: Moon, label: 'Night Hike', desc: 'Sunrise at the top' },
+                          { type: 'morning' as HikeType, Icon: Sun, label: 'Morning', desc: 'Summit by daylight' },
+                          { type: 'night' as HikeType, Icon: Moon, label: 'Night', desc: 'Continue into evening' },
+                          { type: 'overnight' as HikeType, Icon: Moon, label: 'Overnight', desc: 'Stay overnight on trail' },
                         ] as const
                       ).map(({ type, Icon, label, desc }) => (
                         <button
@@ -1224,18 +1196,18 @@ export default function BookingPage() {
                       <Label className="text-[11px] font-bold uppercase tracking-widest text-muted-foreground flex flex-wrap items-center gap-1.5">
                         Preferred Start Time
                         <span className="text-[10px] font-normal normal-case tracking-normal text-muted-foreground/60">
-                          — {hikeType === 'day' ? 'Day hike schedule' : 'Night hike schedule'}
+                          — {getHikeTypeLabel(hikeType)} hike schedule
                         </span>
                       </Label>
                       <div className="flex flex-wrap gap-2">
                         {HIKE_TIME_OPTIONS[hikeType].map((opt) => (
                           <button
                             key={opt.time}
-                            onClick={() => { setHikeTime(opt.time); setUseCustomTime(false); }}
-                            aria-pressed={hikeTime === opt.time && !useCustomTime}
+                            onClick={() => setHikeTime(opt.time)}
+                            aria-pressed={hikeTime === opt.time}
                             className={cn(
                               'flex flex-col items-center px-3 py-2.5 rounded-xl border-2 text-xs font-bold transition-all min-w-[76px]',
-                              hikeTime === opt.time && !useCustomTime
+                              hikeTime === opt.time
                                 ? 'bg-primary border-primary text-primary-foreground shadow-md'
                                 : smartRecommendations?.recommendedTimes.includes(opt.time)
                                 ? 'border-amber-400/60 bg-amber-500/10 text-amber-700 dark:text-amber-300'
@@ -1246,7 +1218,7 @@ export default function BookingPage() {
                             <span
                               className={cn(
                                 'text-[9px] font-medium mt-0.5',
-                                hikeTime === opt.time && !useCustomTime
+                                hikeTime === opt.time
                                   ? 'text-primary-foreground/70'
                                   : smartRecommendations?.recommendedTimes.includes(opt.time)
                                   ? 'text-amber-600 dark:text-amber-300'
@@ -1259,64 +1231,15 @@ export default function BookingPage() {
                                 ? '⭐ Recommended'
                                 : opt.recommended
                                 ? '★ Recommended'
-                                : opt.label}
+                                  : opt.notSuggested
+                                  ? `${opt.label}`
+                                  : opt.label}
                             </span>
                           </button>
                         ))}
 
-                        {/* Custom time chip */}
-                        <button
-                          onClick={() => setUseCustomTime(true)}
-                          aria-pressed={useCustomTime}
-                          className={cn(
-                            'flex flex-col items-center px-3 py-2.5 rounded-xl border-2 text-xs font-bold transition-all min-w-[76px]',
-                            useCustomTime
-                              ? 'bg-primary border-primary text-primary-foreground shadow-md'
-                              : 'border-border/30 text-muted-foreground hover:border-primary/30 hover:bg-primary/5',
-                          )}
-                        >
-                          <span>{useCustomTime && hikeTime ? hikeTime : 'Custom'}</span>
-                          <span
-                            className={cn(
-                              'text-[9px] font-medium mt-0.5',
-                              useCustomTime ? 'text-primary-foreground/70' : 'opacity-55',
-                            )}
-                          >
-                            Pick time
-                          </span>
-                        </button>
                       </div>
-
-                      {/* Custom time input */}
-                      <AnimatePresence>
-                        {useCustomTime && (
-                          <motion.div
-                            initial={{ opacity: 0, height: 0 }}
-                            animate={{ opacity: 1, height: 'auto' }}
-                            exit={{ opacity: 0, height: 0 }}
-                            className="flex items-center gap-3 overflow-hidden"
-                          >
-                            <Input
-                              type="time"
-                              value={customTimeInput}
-                              onChange={(e) => {
-                                setCustomTimeInput(e.target.value);
-                                const formatted = formatTimeInput(e.target.value);
-                                if (formatted) setHikeTime(formatted);
-                              }}
-                              className="max-w-[150px] font-semibold"
-                              aria-label="Custom start time"
-                            />
-                            <span className="text-sm text-muted-foreground">
-                              {hikeTime && useCustomTime ? (
-                                <span className="text-primary font-semibold">{hikeTime}</span>
-                              ) : (
-                                'Enter desired time'
-                              )}
-                            </span>
-                          </motion.div>
-                        )}
-                      </AnimatePresence>
+                      <p className="text-[11px] text-muted-foreground">Choose a fixed safe window. 10:00 AM is intentionally marked very late and not suggested.</p>
                     </div>
 
                   </div>
@@ -1575,7 +1498,7 @@ export default function BookingPage() {
 
                       {/* Minors — auto-detected from ages entered above */}
                       {hasMinors && (
-                        <div className="space-y-3 sm:col-span-2">
+                        <div id="minor-requirements" data-testid="minor-requirements" tabIndex={-1} className="space-y-3 sm:col-span-2 outline-none">
                           <div className="flex items-center gap-3 p-3 rounded-xl border border-amber-400/60 bg-amber-500/5 text-amber-700 dark:text-amber-300">
                             <Baby className="h-5 w-5 flex-shrink-0 text-amber-500" />
                             <div>
@@ -1801,7 +1724,7 @@ export default function BookingPage() {
 
                 {/* ═══════════════ STEP 4: CONFIRM ═══════════════ */}
                 {step === 4 && (() => {
-                  const { entryFee, envFee, guideFee, totalFee } = calculateFees(groupSize);
+                  const { entryFee, envFee, guideFee, totalFee } = calculateFees(groupSize, { hikeType });
                   return (
                   <div className="space-y-6">
                     <div className="text-center mb-6">
@@ -1811,7 +1734,7 @@ export default function BookingPage() {
                     <div className="space-y-3 p-5 rounded-2xl bg-primary/5 border border-primary/20">
                       {[
                         { label: 'Hike Date', value: date ? format(date, 'MMMM d, yyyy') : '' },
-                        { label: 'Hike Type', value: hikeType === 'night' ? '🌙 Night Hike' : '☀️ Day Hike' },
+                        { label: 'Hike Type', value: `${hikeType === 'overnight' ? '🌙' : hikeType === 'night' ? '🌙' : '☀️'} ${getHikeTypeLabel(hikeType)} Hike` },
                         { label: 'Start Time', value: hikeTime },
                         { label: 'Group Size', value: `${groupSize} Pax` },
                         { label: 'Full Name', value: fullName },
@@ -2091,8 +2014,8 @@ export default function BookingPage() {
             const next = new Date(y, m - 1, d);
             if (!Number.isNaN(next.getTime())) { setDate(next); applied.push(format(next, 'MMM d, yyyy')); }
           }
-          if (s.hikeType) { setHikeType(s.hikeType); applied.push(s.hikeType === 'night' ? 'Night hike' : 'Day hike'); }
-          if (s.hikeTime) { setHikeTime(s.hikeTime); setUseCustomTime(true); applied.push(s.hikeTime); }
+          if (s.hikeType) { const nextType = normalizeHikeType(s.hikeType); setHikeType(nextType); applied.push(`${getHikeTypeLabel(nextType)} hike`); }
+          if (s.hikeTime && isValidHikeTime(s.hikeType ? normalizeHikeType(s.hikeType) : hikeType, s.hikeTime)) { setHikeTime(s.hikeTime); applied.push(s.hikeTime); }
           if (typeof s.groupSize === 'number') { setGroupSize(s.groupSize); applied.push(`${s.groupSize} pax`); }
           if (applied.length) toast.success(`Applied: ${applied.join(' · ')}`);
           if (s.submit) {

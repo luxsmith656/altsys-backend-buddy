@@ -21,8 +21,8 @@ import {
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
+import type { HikeType } from '@/lib/hikeSchedule';
 
-type HikeType = 'day' | 'night';
 
 export interface WeatherSnapshot {
   maxTempC: number;

@@ -37,6 +37,33 @@ describe('buildKaliContext', () => {
     expect(insight.kind).toBe('minor-review');
     expect(insight.severity).toBe('high');
     expect(insight.message).toContain('responsible adult');
+    expect(insight.meta.targetId).toBe('minor-requirements');
+  });
+
+  it('explains the difference between night and overnight bookings', () => {
+    const [night] = buildKaliContext({ role: 'hiker', hikeType: 'night' });
+    const [overnight] = buildKaliContext({ role: 'hiker', hikeType: 'overnight' });
+
+    expect(night.kind).toBe('hike-type');
+    expect(night.message).toContain('Night');
+    expect(night.message).toContain('headlamp');
+    expect(overnight.kind).toBe('hike-type');
+    expect(overnight.message).toContain('overnight stay');
+  });
+
+  it('returns all simultaneous safety notices instead of dropping lower-priority notices', () => {
+    const insights = buildKaliContext({
+      role: 'hiker',
+      currentAges: [14, 32],
+      groupSize: 6,
+      hikeType: 'night',
+    });
+
+    expect(insights.map((item) => item.kind)).toEqual([
+      'minor-review',
+      'group-guidance',
+      'hike-type',
+    ]);
   });
 
   it('explains two-guide coverage for groups above five', () => {

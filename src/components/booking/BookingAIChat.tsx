@@ -6,8 +6,8 @@ import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
 import { supabase } from '@/integrations/supabase/client';
 import { getProphetAIForecastContext } from '@/lib/ml/prophetDataService';
+import { getHikeTypeLabel, type HikeType } from '@/lib/hikeSchedule';
 
-type HikeType = 'day' | 'night';
 
 interface WeatherSnapshot {
   maxTempC: number;
@@ -80,7 +80,7 @@ function extractSuggestion(text: string): { clean: string; suggestion?: BookingS
     if (typeof raw.groupSize === 'number' && raw.groupSize >= 1 && raw.groupSize <= 30) {
       suggestion.groupSize = Math.round(raw.groupSize);
     }
-    if (raw.hikeType === 'day' || raw.hikeType === 'night') suggestion.hikeType = raw.hikeType;
+    if (raw.hikeType === 'day' || raw.hikeType === 'morning' || raw.hikeType === 'night' || raw.hikeType === 'overnight') suggestion.hikeType = raw.hikeType;
     if (typeof raw.label === 'string') suggestion.label = raw.label.slice(0, 80);
     if (raw.submit === true) suggestion.submit = true;
     const hasValue = suggestion.date || suggestion.hikeTime || suggestion.groupSize || suggestion.hikeType;
@@ -107,7 +107,9 @@ function getWeatherHikeAdvice(
   const comfortable = weather.maxTempC < 30 && weather.rainProbability < 30;
 
   if (comfortable) {
-    const time = hasKids || hasSeniors ? '05:00 AM' : '06:00 AM';
+    const time = hikeType === 'morning' || hikeType === 'day'
+      ? (hasKids || hasSeniors ? '05:00 AM' : '06:00 AM')
+      : '02:00 PM';
     return (
       `Great news! Forecast looks perfect — **${weather.condition}**, ` +
       `${Math.round(weather.minTempC)}–${Math.round(weather.maxTempC)}°C, ` +
@@ -296,19 +298,25 @@ function generateResponse(
     if (hikeType === 'night') {
       return {
         content:
-          `For a **night hike**, best start times:\n\n` +
-          `⭐ **10:00 PM** — Summit at dawn, witness the sea of clouds! (Most popular)\n` +
-          `🌙 **09:00 PM** — More time to rest at the summit\n` +
-          `⚡ **11:00 PM** — For the adventurous!\n\n` +
-          `The summit at sunrise is absolutely **breathtaking** 🌅 — worth every dark step!`,
-        quickReplies: ['Tell me about sunrise at summit', "What's the trail like at night?", 'Any safety tips?'],
+          `For a **night hike**, choose a **2:00–5:00 PM** start so the group can reach the darker sections prepared.\n\n` +
+          `Bring headlamps, spare batteries, and visibility layers. This is a late-day hike that continues into the evening.`,
+        quickReplies: ['Why choose overnight?', "What's the trail like at night?", 'Any safety tips?'],
+      };
+    }
+
+    if (hikeType === 'overnight') {
+      return {
+        content:
+          `For an **overnight hike**, choose a **2:00–4:00 PM** start.\n\n` +
+          `Unlike a night hike, this includes an overnight stay, so pack extra food, warm layers, lighting, and rest gear.`,
+        quickReplies: ['What is a night hike?', 'What should I pack?', 'Any safety tips?'],
       };
     }
 
     const recommended = hasKids || hasSeniors ? '05:00 AM' : '06:00 AM';
     return {
       content:
-        `For a **day hike**, here's my recommendation:\n\n` +
+        `For a **morning hike**, here's my recommendation:\n\n` +
         `${hasKids ? '👦 With kids: **05:00 AM**' : hasSeniors ? '👴 With seniors: **05:00 AM**' : `⭐ **${recommended}** — Best weather window`}\n` +
         `📍 Reach the summit by 9–10 AM before peak heat\n` +
         `🌤️ Morning light makes for the best summit photos!\n\n` +
@@ -451,7 +459,7 @@ function generateResponse(
     return {
       content:
         `You're all set with **${format(date, 'MMMM d')}** selected and weather loaded! 🎯\n\n` +
-        `Current plan: **${hikeType === 'night' ? 'Night Hike 🌙' : 'Day Hike ☀️'}** ` +
+      `Current plan: **${getHikeTypeLabel(hikeType)} Hike ${hikeType === 'morning' || hikeType === 'day' ? '☀️' : '🌙'}** ` +
         `with **${groupSize} person${groupSize > 1 ? 's' : ''}**.\n\n` +
         `Anything else I can help with?`,
       quickReplies: ['Weather advice', 'Best start time', 'What to pack'],
@@ -538,7 +546,7 @@ export default function BookingAIChat({
       greeting ??
       (`Let's plan this booking together.\n\n` +
       `I can guide your **date**, **start time**, and **group size**.\n` +
-      `Current setup: ${date ? format(date, 'MMM d, yyyy') : 'No date yet'} · ${hikeType === 'night' ? 'Night hike' : 'Day hike'} · ${groupSize} pax.\n\n` +
+      `Current setup: ${date ? format(date, 'MMM d, yyyy') : 'No date yet'} · ${getHikeTypeLabel(hikeType)} hike · ${groupSize} pax.\n\n` +
       `What should we adjust first?`),
       greeting
         ? ['Help me book a hike', 'What can I do on this page?', 'Weather and best time', 'What should I bring?']
@@ -755,7 +763,7 @@ export default function BookingAIChat({
                 )}
                 <span className="inline-flex items-center gap-1 text-[10px] bg-secondary/80 text-foreground px-2 py-1 rounded-full font-semibold">
                   <Mountain className="h-2.5 w-2.5" />
-                  {hikeType === 'night' ? 'Night Hike' : 'Day Hike'}
+                  {getHikeTypeLabel(hikeType)} Hike
                 </span>
               </div>
             )}

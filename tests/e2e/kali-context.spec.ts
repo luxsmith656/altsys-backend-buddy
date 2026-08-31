@@ -14,7 +14,7 @@ test('booking guidance explains the two-guide plan without blocking the form', a
   await expect(page.getByRole('region', { name: 'Kali context guidance' })).toContainText('front and back');
   await page.getByRole('button', { name: 'Ask Kali in chat' }).click();
   await expect(page.getByText('Kali — AI Trail Assistant')).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Continue' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Continue', exact: true })).toBeVisible();
   await expect(page.getByTestId('fatal-error-boundary')).toHaveCount(0);
   monitor.assertClean();
 });

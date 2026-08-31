@@ -56,11 +56,14 @@ export default function EndHikeSettlementDialog({
   const groupSize = Number(booking?.group_size || meta.actualGroupSize || 1);
 
   // Fee Calculations
-  const { guideFee, entryFee, envFee, totalFee: baseTotalFee } = calculateFees(groupSize);
+  const { guideFee, entryFee, envFee, totalFee: baseTotalFee } = calculateFees(groupSize, { hikeType: meta.hikeType });
   const registrationAndEnvironmentalFee = entryFee + envFee;
   const peakExtensionFee = calculatePeakExtensionFee(meta.peakExtensionHours);
   const emergencyHorseFee = meta.emergencyHorseFee ?? (meta.emergencyHorseCount ? meta.emergencyHorseCount * 500 : 0);
-  const totalAmountDue = (meta.totalFee ?? baseTotalFee) + peakExtensionFee + emergencyHorseFee;
+  const horseHelpFee = (meta.horseHelpRequests ?? [])
+    .filter((request) => request.status !== 'cancelled')
+    .reduce((sum, request) => sum + Number(request.fee || 0), 0);
+  const totalAmountDue = (meta.totalFee ?? baseTotalFee) + peakExtensionFee + emergencyHorseFee + horseHelpFee;
 
   // Payment Status
   const alreadyPaid = Number(meta.amountPaid ?? (booking?.payment_status === 'paid' ? totalAmountDue : 0));
@@ -304,7 +307,7 @@ export default function EndHikeSettlementDialog({
 
             <div className="space-y-1.5 text-xs">
               <div className="flex justify-between text-muted-foreground">
-                <span>Guide Fee ({Math.ceil(groupSize / 8)} guide × ₱800)</span>
+                  <span>Guide Fee ({Math.ceil(groupSize / 8)} guide{Math.ceil(groupSize / 8) === 1 ? '' : 's'} · {meta.hikeType === 'overnight' ? '₱1,600' : meta.hikeType === 'night' ? '₱1,000' : '₱800'} each)</span>
                 <span className="font-semibold text-foreground">{formatPeso(guideFee)}</span>
               </div>
               <div className="flex justify-between text-muted-foreground">
@@ -321,6 +324,12 @@ export default function EndHikeSettlementDialog({
                 <div className="flex justify-between text-amber-600 dark:text-amber-400">
                   <span>Horse / Rescue Service ({meta.emergencyHorseCount || 1} × ₱500)</span>
                   <span className="font-semibold">{formatPeso(emergencyHorseFee)}</span>
+                </div>
+              )}
+              {horseHelpFee > 0 && (
+                <div className="flex justify-between text-amber-600 dark:text-amber-400">
+                  <span>Guide-requested horse help</span>
+                  <span className="font-semibold">{formatPeso(horseHelpFee)}</span>
                 </div>
               )}
 

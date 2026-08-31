@@ -47,6 +47,7 @@ import {
   PEAK_EXTENSION_FEE_PER_HOUR,
   HORSE_EMERGENCY_SERVICE_FEE,
 } from '@/lib/payments';
+import { HIKE_TIME_OPTIONS, type HikeType } from '@/lib/hikeSchedule';
 import { useAuth } from '@/hooks/useAuth';
 import { useNavigate } from 'react-router-dom';
 
@@ -69,7 +70,7 @@ export default function AdminWalkInDesk({
   const [groupSize, setGroupSize] = useState<number>(1);
   const [bookingDate, setBookingDate] = useState<string>(format(new Date(), 'yyyy-MM-dd'));
   const [hikeTime, setHikeTime] = useState<string>('06:00 AM');
-  const [hikeType, setHikeType] = useState<'day' | 'night'>('day');
+  const [hikeType, setHikeType] = useState<HikeType>('morning');
   const [emergencyName, setEmergencyName] = useState('');
   const [emergencyPhone, setEmergencyPhone] = useState('');
   const [medicalNotes, setMedicalNotes] = useState('');
@@ -108,6 +109,7 @@ export default function AdminWalkInDesk({
 
   // Fees calculation
   const fees = calculateFees(groupSize, {
+    hikeType,
     peakExtensionHours: peakHours,
     emergencyHorseCount: horseCount,
   });
@@ -483,23 +485,22 @@ export default function AdminWalkInDesk({
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="05:00 AM" className="text-xs">05:00 AM (Early Sunrise)</SelectItem>
-                        <SelectItem value="06:00 AM" className="text-xs">06:00 AM (Standard Day)</SelectItem>
-                        <SelectItem value="07:00 AM" className="text-xs">07:00 AM (Morning)</SelectItem>
-                        <SelectItem value="08:00 AM" className="text-xs">08:00 AM (Late Start)</SelectItem>
-                        <SelectItem value="10:00 PM" className="text-xs">10:00 PM (Night Hike)</SelectItem>
+                        {HIKE_TIME_OPTIONS[hikeType].map((option) => (
+                          <SelectItem key={option.time} value={option.time} className="text-xs">{option.time} ({option.label})</SelectItem>
+                        ))}
                       </SelectContent>
                     </Select>
                   </div>
                   <div className="space-y-1">
                     <Label className="text-xs">Hike Type</Label>
-                    <Select value={hikeType} onValueChange={(v: 'day' | 'night') => setHikeType(v)}>
+                    <Select value={hikeType} onValueChange={(v: HikeType) => { setHikeType(v); setHikeTime(HIKE_TIME_OPTIONS[v].find((option) => option.recommended)?.time ?? HIKE_TIME_OPTIONS[v][0].time); }}>
                       <SelectTrigger className="text-xs h-9">
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="day" className="text-xs">☀️ Day Hike</SelectItem>
+                        <SelectItem value="morning" className="text-xs">☀️ Morning Hike</SelectItem>
                         <SelectItem value="night" className="text-xs">🌙 Night Hike</SelectItem>
+                        <SelectItem value="overnight" className="text-xs">🌙 Overnight Hike</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>

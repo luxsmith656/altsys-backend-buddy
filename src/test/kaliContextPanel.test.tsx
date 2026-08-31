@@ -48,4 +48,34 @@ describe('KaliContextPanel', () => {
     expect((listener.mock.calls[0]?.[0] as CustomEvent<{ prompt: string }>).detail.prompt).toContain('documents');
     window.removeEventListener('open-global-ai-assistant', listener);
   });
+
+  it('shows every current notice in the open panel', () => {
+    const second: KaliInsight = {
+      ...insight,
+      id: 'minor-review',
+      kind: 'minor-review',
+      severity: 'high',
+      title: 'Minor safety check',
+      message: 'Required documents must be reviewed.',
+    };
+
+    render(<KaliContextPanel role="hiker" insights={[insight, second]} />);
+
+    expect(screen.getByText('Two guides cover the front and back.')).toBeVisible();
+    expect(screen.getByText('Required documents must be reviewed.')).toBeVisible();
+  });
+
+  it('offers a direct link to the minor requirements section', () => {
+    const target = document.createElement('section');
+    target.id = 'minor-requirements';
+    document.body.appendChild(target);
+    const scrollIntoView = vi.fn();
+    target.scrollIntoView = scrollIntoView;
+
+    render(<KaliContextPanel role="hiker" insights={[{ ...insight, kind: 'minor-review', title: 'Minor safety check' }]} />);
+    fireEvent.click(screen.getByRole('button', { name: /view minor requirements/i }));
+
+    expect(scrollIntoView).toHaveBeenCalledWith({ behavior: 'smooth', block: 'center' });
+    target.remove();
+  });
 });

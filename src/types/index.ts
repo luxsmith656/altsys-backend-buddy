@@ -97,6 +97,14 @@ export interface BookingMeta {
   walkInRegisteredAt?: string;
   emergencyHorseCount?: number;
   emergencyHorseFee?: number;
+  horseHelpRequests?: {
+    station: string;
+    stationLabel: string;
+    fee: number;
+    requestedAt: string;
+    requestedBy?: string;
+    status: 'requested' | 'accepted' | 'completed' | 'cancelled' | string;
+  }[];
   priceAdjustments?: {
     changedAt: string;
     changedBy: string;

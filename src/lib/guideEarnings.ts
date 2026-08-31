@@ -32,7 +32,8 @@ export interface GuideEarningsSummary {
 
 /**
  * Calculates a guide's earnings and fee ledger from their assignments and bookings.
- * Standard base fee is ₱800 per 1-8 hikers or uses the guide's custom per_trip_fee.
+ * The booking schedule determines the standard fee (morning ₱800, night ₱1,000,
+ * overnight ₱1,600) or uses the guide's custom per_trip_fee.
  */
 export function calculateGuideEarnings(
   assignments: any[],
@@ -58,7 +59,7 @@ export function calculateGuideEarnings(
     
     // Booking fees contain the total for every required guide. This ledger is
     // per guide, so divide the booking total across the assigned guide count.
-    const feeCalculation = calculateFees(groupSize);
+    const feeCalculation = calculateFees(groupSize, { hikeType: meta.hikeType });
     const guideCount = Math.max(1, Math.ceil(groupSize / 8));
     const bookingGuideFee = Number(meta.guideFee) > 0
       ? Number(meta.guideFee)

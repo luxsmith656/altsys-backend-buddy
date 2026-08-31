@@ -96,6 +96,26 @@ describe('Guide Earnings Calculator', () => {
     expect(result.completedHikesCount).toBe(1);
   });
 
+  it('uses the stored hike type when a legacy booking has no guide fee field', () => {
+    const result = calculateGuideEarnings([
+      {
+        id: 'assign-night-1',
+        booking_id: 'bk-night',
+        status: 'completed',
+        created_at: '2026-08-10T08:00:00Z',
+        booking: {
+          id: 'bk-night',
+          booking_date: '2026-08-10',
+          group_size: 1,
+          status: 'completed',
+          notes: JSON.stringify({ hikeType: 'night', fullName: 'Night Hiker' }),
+        },
+      },
+    ]);
+
+    expect(result.hikeRecords[0].guideFee).toBe(1000);
+  });
+
   it('credits an assigned guide only their share of a multi-guide booking fee', () => {
     const result = calculateGuideEarnings([
       {

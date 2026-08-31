@@ -1,4 +1,6 @@
 /** Fee constants for Mt. Kalisungan hikes (Philippine Peso ₱) */
+import { getGuideFeePerGuide } from '@/lib/hikeSchedule';
+
 export const ENTRY_FEE_PER_PERSON = 30;   // ₱30 registration fee per head
 export const ENV_FEE_PER_PERSON   = 20;   // ₱20 environmental/DSPA fee per head
 export const MAX_PAX_PER_GUIDE    = 8;    // 1 guide per 1–8 hikers
@@ -8,6 +10,7 @@ export const PEAK_EXTENSION_FEE_PER_HOUR = 100; // ₱100 / extra hour at peak s
 export const HORSE_EMERGENCY_SERVICE_FEE = 500; // ₱500 emergency horse / porter rescue service
 
 export interface FeeOptions {
+  hikeType?: string | null;
   peakExtensionHours?: number | null;
   emergencyHorseCount?: number | null;
   customAdjustment?: number | null;
@@ -45,7 +48,7 @@ export function calculateFees(groupSize: number, options?: FeeOptions): FeeBreak
   const entryFee = ENTRY_FEE_PER_PERSON * size;
   const envFee   = ENV_FEE_PER_PERSON   * size;
   const guidesNeeded = calculateGuidesNeeded(size);
-  const guideFee = guidesNeeded * GUIDE_FEE_PER_GUIDE;
+  const guideFee = guidesNeeded * getGuideFeePerGuide(options?.hikeType);
   
   const peakExtensionHours = Math.max(0, Math.floor(Number(options?.peakExtensionHours) || 0));
   const peakExtensionFee = peakExtensionHours * PEAK_EXTENSION_FEE_PER_HOUR;

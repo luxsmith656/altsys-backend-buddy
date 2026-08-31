@@ -104,6 +104,7 @@ import { motion } from 'framer-motion';
 import { toast } from 'sonner';
 import { TRAILS } from '@/lib/map-data';
 import { loadGuideRatings, renderStars, type GuideRating } from '@/lib/guideRatings';
+import { getHikeTypeLabel } from '@/lib/hikeSchedule';
 import {
   BarChart,
   Bar,
@@ -964,7 +965,7 @@ export default function AdminDashboard() {
     if (!scannedBooking || !scanPayAmount) { toast.error('Enter amount paid.'); return; }
     setScanPaySaving(true);
     const meta = parseMeta(scannedBooking.notes);
-    const { entryFee, envFee, guideFee, totalFee: baseTotalFee } = calculateFees(scannedBooking.group_size);
+    const { entryFee, envFee, guideFee, totalFee: baseTotalFee } = calculateFees(scannedBooking.group_size, { hikeType: meta.hikeType });
     const peakExtensionFee = calculatePeakExtensionFee(meta.peakExtensionHours);
     const totalFee = baseTotalFee + peakExtensionFee;
     const paid = Number(scanPayAmount);
@@ -2310,7 +2311,7 @@ export default function AdminDashboard() {
 
                 {scannedBooking && (() => {
                   const meta = parseMeta(scannedBooking.notes);
-                  const { totalFee: baseTotalFee } = calculateFees(scannedBooking.group_size);
+                  const { totalFee: baseTotalFee } = calculateFees(scannedBooking.group_size, { hikeType: meta.hikeType });
                   const peakExtensionFee = calculatePeakExtensionFee(meta.peakExtensionHours);
                   const totalFee = baseTotalFee + peakExtensionFee;
                   const payStatus = meta.paymentStatus ?? 'unpaid';
@@ -2332,7 +2333,7 @@ export default function AdminDashboard() {
                           { label: 'Group Size', value: `${scannedBooking.group_size} pax` },
                           { label: 'Booking Date', value: scannedBooking.booking_date },
                           { label: 'Start Time', value: meta.hikeTime || '—' },
-                          { label: 'Hike Type', value: meta.hikeType === 'night' ? '🌙 Night Hike' : '☀️ Day Hike' },
+                          { label: 'Hike Type', value: `${meta.hikeType === 'night' || meta.hikeType === 'overnight' ? '🌙' : '☀️'} ${getHikeTypeLabel(meta.hikeType)} Hike` },
                           { label: 'Age', value: meta.age || '—' },
                           { label: 'Phone', value: meta.phoneNumber || scannedBooking.emergency_contact_phone || '—' },
                           { label: 'Email', value: meta.emailAddress || '—' },
@@ -2947,7 +2948,7 @@ export default function AdminDashboard() {
                             <div className="flex items-center justify-between flex-wrap gap-2">
                               <div>
                                 <p className="font-semibold text-sm">{meta.fullName || b.emergency_contact_name || '—'}</p>
-                                <p className="text-xs text-muted-foreground">{b.booking_date} • {b.group_size} pax • {meta.hikeType === 'night' ? '🌙 Night' : '☀️ Day'} Hike</p>
+                                <p className="text-xs text-muted-foreground">{b.booking_date} • {b.group_size} pax • {meta.hikeType === 'night' || meta.hikeType === 'overnight' ? '🌙' : '☀️'} {getHikeTypeLabel(meta.hikeType)} Hike</p>
                               </div>
                               <span className={`px-2 py-0.5 rounded-full text-xs font-bold ${BOOKING_STATUS_STYLE[b.status] || ''}`}>
                                 {b.status}

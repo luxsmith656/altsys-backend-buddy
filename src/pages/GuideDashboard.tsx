@@ -23,6 +23,7 @@ import {
   XCircle,
   Inbox,
   Copy,
+  Send,
   ImageUp,
   Share2,
   Radio,
@@ -57,6 +58,8 @@ import BookingChat from '@/components/booking/BookingChat';
 import { acceptGuideAssignment } from '@/lib/guideAssignmentService';
 import { calculateGuideEarnings, GuideEarningsSummary } from '@/lib/guideEarnings';
 import { formatPeso } from '@/lib/payments';
+import { addHorseHelpRequest, getHorseHelpOption, HORSE_HELP_OPTIONS, type HorseHelpStation } from '@/lib/hikeSupport';
+import { notifyUser } from '@/lib/firestoreNotifications';
 
 const QUOTA_PER_GUIDE_PER_DAY = 5;
 
@@ -95,6 +98,8 @@ export default function GuideDashboard() {
   const [earningsFilter, setEarningsFilter] = useState<'all' | 'completed' | 'pending'>('all');
   const [loadError, setLoadError] = useState<string | null>(null);
   const [loadWarnings, setLoadWarnings] = useState<string[]>([]);
+  const [horseHelpStation, setHorseHelpStation] = useState<HorseHelpStation>('station-5-3');
+  const [horseHelpSaving, setHorseHelpSaving] = useState(false);
 
   useEffect(() => {
     if (!user) return;
@@ -364,6 +369,56 @@ export default function GuideDashboard() {
       void load();
     } catch (err: any) {
       toast.error(err?.message || 'Failed to update assignment');
+    }
+  };
+
+  const handleHorseHelp = async (assignment: AssignmentRow) => {
+    const booking = assignment.booking;
+    const option = getHorseHelpOption(horseHelpStation);
+    if (!booking?.id || !guideRow || !option) return;
+
+    const currentMeta = parseMeta(booking.notes);
+    const alreadyRequested = currentMeta.horseHelpRequests?.some(
+      (request) => request.station === option.id && request.status === 'requested',
+    );
+    if (alreadyRequested) {
+      toast.info(`${option.label} horse help is already requested for this booking.`);
+      return;
+    }
+
+    setHorseHelpSaving(true);
+    const requestedAt = new Date().toISOString();
+    try {
+      const updatedMeta = addHorseHelpRequest(currentMeta, option.id, guideRow.id, requestedAt);
+      const { error } = await supabase
+        .from('bookings')
+        .update({ notes: JSON.stringify(updatedMeta) } as any)
+        .eq('id', booking.id);
+      if (error) throw error;
+
+      const updatedBooking = { ...booking, notes: JSON.stringify(updatedMeta) };
+      setAssignments((current) => current.map((item) => item.id === assignment.id ? { ...item, booking: updatedBooking } : item));
+      setDetailOpen((current) => current?.id === assignment.id ? { ...current, booking: updatedBooking } : current);
+
+      await supabase.from('booking_messages' as any).insert({
+        booking_id: booking.id,
+        sender_id: user?.id || null,
+        sender_role: 'guide',
+        kind: 'system',
+        content: `🐴 Horse help requested from ${option.label} (${formatPeso(option.fee)}). Requested by ${guideRow.full_name}.`,
+      } as any);
+      if (booking.user_id) {
+        await notifyUser(booking.user_id, {
+          title: 'Horse help requested',
+          body: `${guideRow.full_name} requested horse help from ${option.label} for your hike. Fee: ${formatPeso(option.fee)}.`,
+          category: 'alert',
+        });
+      }
+      toast.success(`Horse help requested from ${option.label}. Admin has the fee and station details.`);
+    } catch (err: any) {
+      toast.error(err?.message || 'Could not request horse help.');
+    } finally {
+      setHorseHelpSaving(false);
     }
   };
 
@@ -676,6 +731,7 @@ export default function GuideDashboard() {
                     earnings.hikeRecords.find((record) => record.assignmentId === a.id)?.guideFee ??
                     guideRow?.per_trip_fee ??
                     800;
+                  const horseHelpCount = meta.horseHelpRequests?.filter((request) => request.status === 'requested').length ?? 0;
 
                   return (
                     <Card
@@ -782,6 +838,11 @@ export default function GuideDashboard() {
                                   </span>
                                 )}
                               </div>
+                            )}
+                            {horseHelpCount > 0 && (
+                              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-amber-500/10 text-amber-700 dark:text-amber-300 border border-amber-500/20 text-xs font-medium">
+                                <Send className="h-3 w-3" /> Horse help requested ({horseHelpCount})
+                              </span>
                             )}
                           </div>
 
@@ -1185,6 +1246,43 @@ export default function GuideDashboard() {
                       <Row k="Reassignment Note" v={meta.guideChangeReason} />
                     )}
                   </div>
+                  {detailOpen.status === 'accepted' && (
+                    <div className="pt-3 space-y-3">
+                      <div>
+                        <p className="font-semibold text-foreground">Horse help</p>
+                        <p className="text-xs text-muted-foreground">Send a horse from the nearest station and record the fixed service fee for admin follow-up.</p>
+                      </div>
+                      <Select value={horseHelpStation} onValueChange={(value) => setHorseHelpStation(value as HorseHelpStation)}>
+                        <SelectTrigger aria-label="Horse help station">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {HORSE_HELP_OPTIONS.map((option) => (
+                            <SelectItem key={option.id} value={option.id}>{option.label} · {formatPeso(option.fee)}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <Button
+                        type="button"
+                        onClick={() => handleHorseHelp(detailOpen)}
+                        disabled={horseHelpSaving}
+                        className="w-full gap-2 bg-amber-600 text-white hover:bg-amber-700"
+                      >
+                        {horseHelpSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+                        {horseHelpSaving ? 'Requesting…' : 'Send horse help'}
+                      </Button>
+                      {(meta.horseHelpRequests?.length ?? 0) > 0 && (
+                        <div className="space-y-1 rounded-lg bg-secondary/40 p-2 text-xs">
+                          {meta.horseHelpRequests?.map((request, index) => (
+                            <div key={`${request.requestedAt}-${index}`} className="flex items-center justify-between gap-2">
+                              <span>{request.stationLabel}</span>
+                              <span className="font-semibold">{formatPeso(request.fee)} · {request.status}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               );
             })()}

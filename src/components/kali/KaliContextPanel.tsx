@@ -28,6 +28,7 @@ function followUpPrompt(insight: KaliInsight): string {
   if (insight.kind === 'age-review') return 'Why does this age change need verification before check-in?';
   if (insight.kind === 'weather') return 'What weather precautions and start time do you recommend for my selected booking date?';
   if (insight.kind === 'group-guidance') return 'Why are two guides needed for this group?';
+  if (insight.kind === 'hike-type') return 'What is the difference between a night hike and an overnight hike, and what should I bring?';
   return 'What should I prepare for my confirmed booking?';
 }
 
@@ -39,6 +40,9 @@ export default function KaliContextPanel({ role, insights }: KaliContextPanelPro
     [insights],
   );
   const insight = sortedInsights[0];
+  const hasMinorRequirements = sortedInsights.some(
+    (item) => item.kind === 'minor-review' && Boolean(document.getElementById('minor-requirements')),
+  );
 
   useEffect(() => {
     const nextIds = sortedInsights.map((item) => item.id);
@@ -60,6 +64,12 @@ export default function KaliContextPanel({ role, insights }: KaliContextPanelPro
     window.dispatchEvent(new CustomEvent('open-global-ai-assistant', { detail: { prompt: followUpPrompt(insight) } }));
   };
 
+  const viewMinorRequirements = () => {
+    const target = document.getElementById('minor-requirements');
+    if (!target) return;
+    target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  };
+
   return (
     <div className="pointer-events-none fixed inset-x-0 bottom-[calc(env(safe-area-inset-bottom)+7rem)] z-[2050] flex justify-end px-3 sm:inset-x-auto sm:right-4 sm:bottom-4 sm:p-0">
       {open && (
@@ -78,14 +88,26 @@ export default function KaliContextPanel({ role, insights }: KaliContextPanelPro
             </button>
           </header>
 
-          <div className="space-y-3 p-4">
-            <div className={cn('flex items-start gap-2 rounded-2xl border p-3', severityClasses(insight.severity))}>
-              <InsightIcon severity={insight.severity} />
-              <div className="min-w-0">
-                <p className="text-xs font-bold">{insight.title}</p>
-                <p className="mt-1 text-sm leading-relaxed text-foreground">{insight.message}</p>
+          <div className="max-h-[min(70vh,34rem)] space-y-3 overflow-y-auto p-4">
+            {sortedInsights.map((item) => (
+              <div key={item.id} className={cn('flex items-start gap-2 rounded-2xl border p-3', severityClasses(item.severity))}>
+                <InsightIcon severity={item.severity} />
+                <div className="min-w-0">
+                  <p className="text-xs font-bold">{item.title}</p>
+                  <p className="mt-1 text-sm leading-relaxed text-foreground">{item.message}</p>
+                </div>
               </div>
-            </div>
+            ))}
+            {hasMinorRequirements && (
+              <button
+                type="button"
+                onClick={viewMinorRequirements}
+                aria-label="View minor requirements"
+                className="w-full rounded-xl border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-left text-xs font-bold text-amber-700 transition-colors hover:bg-amber-500/20 dark:text-amber-300"
+              >
+                View required documents
+              </button>
+            )}
             <p className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
               <BellRing className="h-3 w-3" /> Context checked just now. Confirm details with the responsible staff member when needed.
             </p>
