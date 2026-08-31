@@ -34,26 +34,34 @@ function followUpPrompt(insight: KaliInsight): string {
 
 export default function KaliContextPanel({ role, insights }: KaliContextPanelProps) {
   const [open, setOpen] = useState(false);
+  const [dismissedInsightIds, setDismissedInsightIds] = useState<string[]>([]);
   const previousInsightIds = useRef<string[]>([]);
   const sortedInsights = useMemo(
     () => [...insights].sort((a, b) => severityRank[a.severity] - severityRank[b.severity]),
     [insights],
   );
-  const insight = sortedInsights[0];
-  const hasMinorRequirements = sortedInsights.some(
-    (item) => item.kind === 'minor-review' && Boolean(document.getElementById('minor-requirements')),
+  const visibleInsights = useMemo(
+    () => sortedInsights.filter((item) => !dismissedInsightIds.includes(item.id)).slice(0, 2),
+    [dismissedInsightIds, sortedInsights],
+  );
+  const insight = visibleInsights[0];
+  const hasMinorRequirements = visibleInsights.some(
+    (item) => item.kind === 'minor-review' && typeof document !== 'undefined' && Boolean(document.getElementById('minor-requirements')),
   );
 
   useEffect(() => {
     const nextIds = sortedInsights.map((item) => item.id);
-    if (!insight) {
+    if (nextIds.length === 0) {
       setOpen(false);
+      setDismissedInsightIds([]);
       previousInsightIds.current = [];
       return;
     }
-    if (nextIds.some((id) => !previousInsightIds.current.includes(id))) setOpen(true);
+    const hasNewInsight = nextIds.some((id) => !previousInsightIds.current.includes(id));
+    setDismissedInsightIds((current) => current.filter((id) => nextIds.includes(id)));
+    if (hasNewInsight) setOpen(true);
     previousInsightIds.current = nextIds;
-  }, [insight, sortedInsights]);
+  }, [sortedInsights]);
 
   // Kali is intentionally absent until there is actionable context to surface.
   if (!insight) return null;
@@ -70,12 +78,17 @@ export default function KaliContextPanel({ role, insights }: KaliContextPanelPro
     target.scrollIntoView({ behavior: 'smooth', block: 'center' });
   };
 
+  const dismissCurrentInsights = () => {
+    setDismissedInsightIds(sortedInsights.map((item) => item.id));
+    setOpen(false);
+  };
+
   return (
     <div className="pointer-events-none fixed inset-x-0 bottom-[calc(env(safe-area-inset-bottom)+7rem)] z-[2050] flex justify-end px-3 sm:inset-x-auto sm:right-4 sm:bottom-4 sm:p-0">
       {open && (
         <section
           aria-label="Kali context guidance"
-          className="pointer-events-auto absolute bottom-16 right-0 w-[min(22rem,calc(100vw-1.5rem))] overflow-hidden rounded-3xl border border-border/50 bg-card/95 shadow-2xl backdrop-blur-xl sm:bottom-16"
+          className="pointer-events-auto absolute bottom-16 right-0 w-[min(22rem,calc(100vw-1.5rem))] transform-gpu overflow-hidden rounded-3xl border border-border/50 bg-card/95 shadow-2xl backdrop-blur-md sm:bottom-16"
         >
           <header className="flex items-center gap-3 border-b border-border/30 px-4 py-3">
             <KaliAvatar expression={insight?.expression ?? 'happy'} size="sm" />
@@ -83,13 +96,13 @@ export default function KaliContextPanel({ role, insights }: KaliContextPanelPro
               <p className="text-sm font-bold">Kali guidance</p>
               <p className="truncate text-[11px] text-muted-foreground">For {getKaliRoleLabel(role)}</p>
             </div>
-            <button type="button" onClick={() => setOpen(false)} aria-label="Close Kali guidance" className="grid h-9 w-9 place-items-center rounded-full text-muted-foreground hover:bg-secondary hover:text-foreground">
+            <button type="button" onClick={dismissCurrentInsights} aria-label="Dismiss Kali reminder" className="grid h-9 w-9 place-items-center rounded-full text-muted-foreground hover:bg-secondary hover:text-foreground">
               <X className="h-4 w-4" />
             </button>
           </header>
 
-          <div className="max-h-[min(70vh,34rem)] space-y-3 overflow-y-auto p-4">
-            {sortedInsights.map((item) => (
+          <div className="max-h-[min(70vh,34rem)] space-y-3 overscroll-contain overflow-y-auto p-4">
+            {visibleInsights.map((item) => (
               <div key={item.id} className={cn('flex items-start gap-2 rounded-2xl border p-3', severityClasses(item.severity))}>
                 <InsightIcon severity={item.severity} />
                 <div className="min-w-0">
@@ -99,14 +112,14 @@ export default function KaliContextPanel({ role, insights }: KaliContextPanelPro
               </div>
             ))}
             {hasMinorRequirements && (
-              <button
-                type="button"
+              <a
+                href="#minor-requirements"
                 onClick={viewMinorRequirements}
                 aria-label="View minor requirements"
-                className="w-full rounded-xl border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-left text-xs font-bold text-amber-700 transition-colors hover:bg-amber-500/20 dark:text-amber-300"
+                className="block w-full rounded-xl border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-left text-xs font-bold text-amber-700 underline decoration-amber-500/60 underline-offset-2 transition-colors hover:bg-amber-500/20 dark:text-amber-300"
               >
                 View required documents
-              </button>
+              </a>
             )}
             <p className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
               <BellRing className="h-3 w-3" /> Context checked just now. Confirm details with the responsible staff member when needed.

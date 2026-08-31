@@ -187,8 +187,8 @@ function hikeTypeInsight(input: KaliContextInput): KaliInsight | null {
     expression: overnight ? 'thinking' : 'map',
     title: overnight ? 'Overnight hike plan' : 'Night hike plan',
     message: overnight
-      ? 'Overnight hikes start between 2:00 PM and 4:00 PM and include an overnight stay. Pack extra food, lighting, warm layers, and rest gear for the longer mountain exposure.'
-      : 'Night hikes start between 2:00 PM and 5:00 PM and continue into the evening. Bring a headlamp, spare batteries, and visibility layers; choose this when your group is ready for reduced-light travel.',
+      ? 'Overnight hikes start between 2:00 PM and 4:00 PM and include an overnight stay. Bring your own tent because tents are not provided and there is no lodging at the peak. Pack extra food, lighting, warm layers, and rest gear.'
+      : 'Night hikes start between 2:00 PM and 5:00 PM and continue into the evening, but the group still needs to descend the same day. Bring a headlamp, spare batteries, and visibility layers; choose this for prepared reduced-light travel.',
     meta: { hikeType: input.hikeType, scheduleStart: '02:00 PM', scheduleEnd: overnight ? '04:00 PM' : '05:00 PM' },
   };
 }

@@ -1565,7 +1565,7 @@ export default function BookingPage() {
                           </SelectContent>
                         </Select>
                         <p className="text-xs text-muted-foreground">
-                          Pick the trailhead you'll start from. Each LGU site has its own admin and team.
+                          This is the exact jump-off point where your hike starts and the matching route will appear on the map. Choose carefully between Lamot 1, Lamot 2, and Sto. Tomas based on the closest or most convenient entry point; each has its own admin and team.
                         </p>
                       </div>
 

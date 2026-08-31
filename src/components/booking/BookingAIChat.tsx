@@ -1,12 +1,14 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Button } from '@/components/ui/button';
-import { MessageSquare, X, Send, Sparkles, Users, Calendar, Mountain } from 'lucide-react';
+import { MessageSquare, X, Send, Users, Calendar, Mountain } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
 import { supabase } from '@/integrations/supabase/client';
 import { getProphetAIForecastContext } from '@/lib/ml/prophetDataService';
 import { getHikeTypeLabel, type HikeType } from '@/lib/hikeSchedule';
+import KaliAvatar from '@/components/kali/KaliAvatar';
+import type { KaliExpression } from '@/lib/kaliContext';
 
 
 interface WeatherSnapshot {
@@ -92,6 +94,13 @@ function extractSuggestion(text: string): { clean: string; suggestion?: BookingS
 
 function generateId() {
   return Math.random().toString(36).slice(2, 9);
+}
+
+function assistantExpression(content: string): KaliExpression {
+  if (/(warning|storm|minor|verify|descend|no lodging|not provided)/i.test(content)) return 'alert';
+  if (/(recommend|bring|prepare|plan|time)/i.test(content)) return 'thinking';
+  if (/(great|perfect|ready|enjoy|welcome)/i.test(content)) return 'happy';
+  return 'map';
 }
 
 /* ── Weather-aware hike advice ── */
@@ -299,7 +308,7 @@ function generateResponse(
       return {
         content:
           `For a **night hike**, choose a **2:00–5:00 PM** start so the group can reach the darker sections prepared.\n\n` +
-          `Bring headlamps, spare batteries, and visibility layers. This is a late-day hike that continues into the evening.`,
+          `Bring headlamps, spare batteries, and visibility layers. This continues into the evening, but you still need to descend the same day.`,
         quickReplies: ['Why choose overnight?', "What's the trail like at night?", 'Any safety tips?'],
       };
     }
@@ -308,7 +317,7 @@ function generateResponse(
       return {
         content:
           `For an **overnight hike**, choose a **2:00–4:00 PM** start.\n\n` +
-          `Unlike a night hike, this includes an overnight stay, so pack extra food, warm layers, lighting, and rest gear.`,
+          `Unlike a night hike, this includes an overnight stay. Bring your own tent because tents are not provided and there is no lodging at the peak, plus extra food, warm layers, and lighting.`,
         quickReplies: ['What is a night hike?', 'What should I pack?', 'Any safety tips?'],
       };
     }
@@ -721,13 +730,11 @@ export default function BookingAIChat({
               if (startX - endX > 70) setIsOpen(false);
               touchStartX.current = null;
             }}
-            className="fixed inset-0 z-[2100] w-screen sm:w-[360px] sm:left-0 sm:right-auto sm:top-16 sm:bottom-0 flex flex-col bg-card sm:border-r border-border/50 shadow-2xl"
+            className="fixed inset-0 z-[2100] w-screen transform-gpu overscroll-contain sm:w-[360px] sm:left-0 sm:right-auto sm:top-16 sm:bottom-0 flex flex-col bg-card sm:border-r border-border/50 shadow-2xl"
           >
             {/* Header */}
             <div className="flex items-center gap-3 p-4 border-b border-border/30 bg-primary/5">
-              <div className="w-9 h-9 rounded-full bg-primary/20 flex items-center justify-center shrink-0">
-                <Sparkles className="h-4 w-4 text-primary" />
-              </div>
+              <KaliAvatar expression="happy" size="sm" className="h-9 w-9 rounded-full" />
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-bold">Kali — AI Trail Assistant</p>
                 <p className="text-xs text-muted-foreground flex items-center gap-1.5">
@@ -769,16 +776,14 @@ export default function BookingAIChat({
             )}
 
             {/* Messages */}
-            <div className="flex-1 overflow-y-auto px-3 py-4 space-y-3">
+            <div className="flex-1 overscroll-contain overflow-y-auto px-3 py-4 space-y-3">
               {messages.map((msg) => (
                 <div
                   key={msg.id}
                   className={cn('flex gap-2', msg.role === 'user' ? 'justify-end' : 'justify-start')}
                 >
                   {msg.role === 'assistant' && (
-                    <div className="w-7 h-7 rounded-full bg-primary/20 flex items-center justify-center shrink-0 mt-0.5">
-                      <Sparkles className="h-3.5 w-3.5 text-primary" />
-                    </div>
+                    <KaliAvatar expression={assistantExpression(msg.content)} size="sm" className="mt-0.5 h-7 w-7 rounded-full" />
                   )}
                   <div
                     className={cn(
@@ -820,9 +825,7 @@ export default function BookingAIChat({
               {/* Typing indicator */}
               {isTyping && (
                 <div className="flex gap-2 items-center">
-                  <div className="w-7 h-7 rounded-full bg-primary/20 flex items-center justify-center shrink-0">
-                    <Sparkles className="h-3.5 w-3.5 text-primary" />
-                  </div>
+                  <KaliAvatar expression="thinking" size="sm" className="h-7 w-7 rounded-full" />
                   <div className="bg-secondary/60 rounded-2xl rounded-tl-sm px-3 py-2.5 flex gap-1.5">
                     {[0, 0.15, 0.3].map((delay, i) => (
                       <motion.span

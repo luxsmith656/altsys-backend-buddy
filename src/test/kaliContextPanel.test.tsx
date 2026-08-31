@@ -29,12 +29,12 @@ describe('KaliContextPanel', () => {
     expect(within(screen.getByRole('region', { name: 'Kali context guidance' })).getByLabelText('Kali map expression')).toBeInTheDocument();
   });
 
-  it('can close an open panel without removing the launcher', () => {
+  it('dismisses the current reminder and removes the launcher until context changes', () => {
     render(<KaliContextPanel role="hiker" insights={[insight]} />);
-    fireEvent.click(screen.getByRole('button', { name: /close kali guidance/i }));
+    fireEvent.click(screen.getByRole('button', { name: /dismiss kali reminder/i }));
 
     expect(screen.queryByText('Two guides cover the front and back.')).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /open kali guidance/i })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /open kali guidance/i })).not.toBeInTheDocument();
   });
 
   it('opens the existing chat with a focused follow-up question', () => {
@@ -73,9 +73,26 @@ describe('KaliContextPanel', () => {
     target.scrollIntoView = scrollIntoView;
 
     render(<KaliContextPanel role="hiker" insights={[{ ...insight, kind: 'minor-review', title: 'Minor safety check' }]} />);
-    fireEvent.click(screen.getByRole('button', { name: /view minor requirements/i }));
+    fireEvent.click(screen.getByRole('link', { name: /view minor requirements/i }));
 
     expect(scrollIntoView).toHaveBeenCalledWith({ behavior: 'smooth', block: 'center' });
     target.remove();
+  });
+
+  it('only shows the two highest-priority notices in the stacked panel', () => {
+    const third: KaliInsight = {
+      ...insight,
+      id: 'booking-reminder',
+      kind: 'booking-reminder',
+      severity: 'info',
+      title: 'Booking reminder',
+      message: 'Your booking is tomorrow.',
+    };
+
+    render(<KaliContextPanel role="hiker" insights={[insight, { ...insight, id: 'minor-review', kind: 'minor-review', severity: 'high', title: 'Minor safety check', message: 'Bring documents.' }, third]} />);
+
+    expect(screen.getByText('Two guides cover the front and back.')).toBeVisible();
+    expect(screen.getByText('Bring documents.')).toBeVisible();
+    expect(screen.queryByText('Your booking is tomorrow.')).not.toBeInTheDocument();
   });
 });

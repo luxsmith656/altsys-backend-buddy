@@ -47,8 +47,11 @@ describe('buildKaliContext', () => {
     expect(night.kind).toBe('hike-type');
     expect(night.message).toContain('Night');
     expect(night.message).toContain('headlamp');
+    expect(night.message).toContain('descend the same day');
     expect(overnight.kind).toBe('hike-type');
     expect(overnight.message).toContain('overnight stay');
+    expect(overnight.message).toContain('tent');
+    expect(overnight.message).toContain('no lodging');
   });
 
   it('returns all simultaneous safety notices instead of dropping lower-priority notices', () => {
