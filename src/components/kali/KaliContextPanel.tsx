@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { AlertTriangle, BellRing, ChevronRight, Info, ShieldAlert, X } from 'lucide-react';
+import { AlertTriangle, BellRing, Info, ShieldAlert, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { getKaliRoleLabel, type KaliInsight, type KaliRole } from '@/lib/kaliContext';
 import KaliAvatar from './KaliAvatar';
@@ -35,10 +35,13 @@ export default function KaliContextPanel({ role, insights }: KaliContextPanelPro
     if (!insight) setOpen(false);
   }, [insight]);
 
-  const label = insight ? `${insight.title}: ${insight.message}` : 'No urgent guidance';
+  // Kali is intentionally absent until there is actionable context to surface.
+  if (!insight) return null;
+
+  const label = `${insight.title}: ${insight.message}`;
 
   return (
-    <div className="pointer-events-none fixed inset-x-0 bottom-[calc(env(safe-area-inset-bottom)+4.75rem)] z-[1900] flex justify-end p-3 sm:inset-x-auto sm:right-4 sm:bottom-4 sm:p-0">
+    <div className="pointer-events-none fixed inset-x-0 bottom-[calc(env(safe-area-inset-bottom)+7rem)] z-[2050] flex justify-end px-3 sm:inset-x-auto sm:right-4 sm:bottom-4 sm:p-0">
       {open && (
         <section
           aria-label="Kali context guidance"
@@ -55,22 +58,18 @@ export default function KaliContextPanel({ role, insights }: KaliContextPanelPro
             </button>
           </header>
 
-          {insight ? (
-            <div className="space-y-3 p-4">
-              <div className={cn('flex items-start gap-2 rounded-2xl border p-3', severityClasses(insight.severity))}>
-                <InsightIcon severity={insight.severity} />
-                <div className="min-w-0">
-                  <p className="text-xs font-bold">{insight.title}</p>
-                  <p className="mt-1 text-sm leading-relaxed text-foreground">{insight.message}</p>
-                </div>
+          <div className="space-y-3 p-4">
+            <div className={cn('flex items-start gap-2 rounded-2xl border p-3', severityClasses(insight.severity))}>
+              <InsightIcon severity={insight.severity} />
+              <div className="min-w-0">
+                <p className="text-xs font-bold">{insight.title}</p>
+                <p className="mt-1 text-sm leading-relaxed text-foreground">{insight.message}</p>
               </div>
-              <p className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
-                <BellRing className="h-3 w-3" /> Context checked just now. Confirm details with the responsible staff member when needed.
-              </p>
             </div>
-          ) : (
-            <p className="p-4 text-sm text-muted-foreground">Kali is watching this page for important updates.</p>
-          )}
+            <p className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
+              <BellRing className="h-3 w-3" /> Context checked just now. Confirm details with the responsible staff member when needed.
+            </p>
+          </div>
         </section>
       )}
 
@@ -81,12 +80,11 @@ export default function KaliContextPanel({ role, insights }: KaliContextPanelPro
         aria-expanded={open}
         title={label}
         className={cn(
-          'pointer-events-auto relative grid h-14 w-14 place-items-center rounded-full border-2 border-primary/30 bg-card shadow-xl transition-transform active:scale-95',
+          'pointer-events-auto relative grid h-14 w-14 place-items-center rounded-full border-2 border-primary-foreground/20 bg-primary text-primary-foreground shadow-xl shadow-primary/30 transition-transform active:scale-95',
           open && 'ring-2 ring-primary/30',
         )}
       >
-        <KaliAvatar expression={insight?.expression ?? 'happy'} size="sm" className="h-11 w-11 rounded-full border-0" />
-        {insight && <span className={cn('absolute -right-0.5 -top-0.5 grid h-5 w-5 place-items-center rounded-full text-white', insight.severity === 'high' ? 'bg-destructive' : insight.severity === 'medium' ? 'bg-amber-500' : 'bg-primary')}><ChevronRight className="h-3 w-3" /></span>}
+        <KaliAvatar expression={insight.expression} size="sm" className="h-11 w-11 rounded-full border border-primary-foreground/40 bg-primary/80" />
       </button>
     </div>
   );

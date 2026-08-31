@@ -14,12 +14,20 @@ const insight: KaliInsight = {
 };
 
 describe('KaliContextPanel', () => {
+  it('renders nothing when Kali has no current guidance', () => {
+    render(<KaliContextPanel role="hiker" insights={[]} />);
+
+    expect(screen.queryByRole('button', { name: /kali guidance/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('region', { name: 'Kali context guidance' })).not.toBeInTheDocument();
+  });
+
   it('opens the mobile Kali panel and shows the role-aware insight', () => {
     render(<KaliContextPanel role="hiker" insights={[insight]} />);
 
     fireEvent.click(screen.getByRole('button', { name: /open kali guidance/i }));
 
     expect(screen.getByText('Two guides cover the front and back.')).toBeVisible();
+    expect(screen.getByRole('button', { name: /toggle kali guidance/i })).toHaveClass('bg-primary');
     expect(within(screen.getByRole('region', { name: 'Kali context guidance' })).getByLabelText('Kali map expression')).toBeInTheDocument();
   });
 
