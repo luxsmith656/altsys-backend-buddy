@@ -28,7 +28,7 @@ jobs:
       - name: Deploy test-account seed function
         run: |
           if [ -z "$SUPABASE_ACCESS_TOKEN" ]; then
-            echo "SUPABASE_ACCESS_TOKEN is not configured; Supabase deployment skipped."
-            exit 0
+            echo "::error::SUPABASE_ACCESS_TOKEN is required to deploy Supabase changes."
+            exit 1
           fi
-          supabase functions deploy admin-seed-accounts --project-ref "${{ secrets.SUPABASE_PROJECT_REF || 'evcqnlbumsfgbfddoonv' }}"
+          supabase functions deploy admin-seed-accounts --project-ref "evcqnlbumsfgbfddoonv"
