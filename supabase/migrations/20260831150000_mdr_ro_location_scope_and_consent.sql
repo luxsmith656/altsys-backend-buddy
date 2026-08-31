@@ -1,5 +1,6 @@
 -- Location-scoped dispatch access plus a limited MDRRMO emergency directory.
-ALTER TYPE public.app_role ADD VALUE IF NOT EXISTS 'mdrrmo';
+-- The mdrrmo enum value is added by the immediately preceding migration so
+-- this migration can safely reference it in policies and functions.
 
 INSERT INTO public.locations (
   slug, name, lgu, region, address, center_lat, center_lng, status,
