@@ -50,8 +50,16 @@ Deno.serve(async (req) => {
   if (!response.ok) {
     await admin.from('email_otp_challenges').delete().eq('id', challenge.id);
     const result = await response.json().catch(() => ({}));
-    return json({ error: result.message || 'Resend could not deliver the email' }, 502);
+    const detail = typeof result.message === 'string' ? result.message : 'Resend could not deliver the email';
+    console.error('Resend delivery failed', response.status, detail);
+    const sandboxed = /only send testing emails/i.test(detail);
+    return json({
+      error: sandboxed
+        ? 'Email sending is still in test mode: a sender domain must be verified before codes can be sent to this address.'
+        : detail,
+    }, 502);
   }
+
 
   return json({ success: true, challengeId: challenge.id });
 });
