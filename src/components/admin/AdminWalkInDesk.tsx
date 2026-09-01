@@ -42,12 +42,11 @@ import {
   formatPeso,
   ENTRY_FEE_PER_PERSON,
   ENV_FEE_PER_PERSON,
-  GUIDE_FEE_PER_GUIDE,
   MAX_PAX_PER_GUIDE,
   PEAK_EXTENSION_FEE_PER_HOUR,
   HORSE_EMERGENCY_SERVICE_FEE,
 } from '@/lib/payments';
-import { HIKE_TIME_OPTIONS, type HikeType } from '@/lib/hikeSchedule';
+import { getGuideFeePerGuide, HIKE_TIME_OPTIONS, type HikeType } from '@/lib/hikeSchedule';
 import { useAuth } from '@/hooks/useAuth';
 import { useNavigate } from 'react-router-dom';
 
@@ -426,7 +425,7 @@ export default function AdminWalkInDesk({
                   <div className="flex items-center justify-between">
                     <div>
                       <Label className="text-xs font-bold text-foreground">Group Size (Hikers)</Label>
-                      <p className="text-[11px] text-muted-foreground">1 Tour Guide required per 1–8 hikers (₱800/guide)</p>
+                      <p className="text-[11px] text-muted-foreground">1 Tour Guide required per 1–{MAX_PAX_PER_GUIDE} hikers ({formatPeso(getGuideFeePerGuide(hikeType))}/guide)</p>
                     </div>
                     <div className="flex items-center gap-2">
                       <Button
@@ -450,7 +449,7 @@ export default function AdminWalkInDesk({
                       </Button>
                     </div>
                   </div>
-                  {groupSize > 8 && (
+                    {groupSize > MAX_PAX_PER_GUIDE && (
                     <div className="p-2 rounded-xl bg-primary/10 border border-primary/20 text-[11px] text-primary font-medium flex items-center gap-1.5">
                       <ShieldCheck className="h-3.5 w-3.5 shrink-0" />
                       <span>{groupSize} hikers requires <strong>{fees.guidesNeeded} tour guides</strong> (₱{fees.guideFee.toLocaleString()}).</span>
@@ -603,7 +602,7 @@ export default function AdminWalkInDesk({
                     <span className="font-semibold text-foreground">{formatPeso(fees.envFee)}</span>
                   </div>
                   <div className="flex justify-between items-center text-muted-foreground">
-                    <span>Tour Guide Fee ({fees.guidesNeeded} guide @ ₱{GUIDE_FEE_PER_GUIDE})</span>
+                    <span>Tour Guide Fee ({fees.guidesNeeded} guide @ {formatPeso(fees.guideFee / fees.guidesNeeded)})</span>
                     <span className="font-semibold text-foreground">{formatPeso(fees.guideFee)}</span>
                   </div>
                   {fees.peakExtensionFee > 0 && (

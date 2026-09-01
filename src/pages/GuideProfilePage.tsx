@@ -5,10 +5,8 @@ import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 
-type Guide = { id: string; full_name: string; specialty?: string; photo_url?: string | null; facebook_url?: string | null };
+type Guide = { id: string; full_name: string; specialty?: string; photo_url?: string | null; facebook_url?: string | null; user_id?: string | null };
 type Review = { id: string; reviewer_name: string; rating: number; comment: string; created_at: string };
-
-const GUIDE_PROFILE_EXTENSIONS_ENABLED = import.meta.env.VITE_GUIDE_PROFILE_EXTENSIONS_ENABLED === 'true';
 
 export default function GuideProfilePage() {
   const { guideId } = useParams();
@@ -20,26 +18,40 @@ export default function GuideProfilePage() {
     if (!guideId) return;
     const load = async () => {
       setLoading(true);
-      const guideSelect = GUIDE_PROFILE_EXTENSIONS_ENABLED
-        ? 'id,full_name,specialty,photo_url,facebook_url'
-        : 'id,full_name,specialty';
-      const { data: guideData } = await supabase.from('guides' as any)
-        .select(guideSelect)
+      const { data: guideData, error: guideError } = await supabase.from('guides' as any)
+        // `*` keeps public profiles compatible with deployments before optional
+        // photo/social columns were added; fields are picked below explicitly.
+        .select('*')
         .eq('id', guideId)
         .eq('is_active', true)
+        .not('user_id', 'is', null)
         .maybeSingle();
-      setGuide((guideData as unknown as Guide | null) ?? null);
-      if (GUIDE_PROFILE_EXTENSIONS_ENABLED) {
-        const { data: reviewData } = await supabase.from('guide_reviews' as any)
+      if (guideError) {
+        const { data: fallbackGuide } = await supabase.from('guides' as any)
+          .select('id,full_name,specialty,user_id')
+          .eq('id', guideId)
+          .eq('is_active', true)
+          .not('user_id', 'is', null)
+          .maybeSingle();
+        setGuide((fallbackGuide as unknown as Guide | null) ?? null);
+        setLoading(false);
+        return;
+      } else {
+        setGuide((guideData as unknown as Guide | null) ?? null);
+      }
+      const profile = guideData as unknown as Record<string, unknown> | null;
+      if (profile && Object.prototype.hasOwnProperty.call(profile, 'photo_url')) {
+        const { data: reviewData, error: reviewError } = await supabase.from('guide_reviews' as any)
           .select('id,reviewer_name,rating,comment,created_at')
           .eq('guide_id', guideId)
           .eq('is_approved', true)
           .order('created_at', { ascending: false })
           .limit(12);
-        setReviews((reviewData as unknown as Review[] | null) ?? []);
+        setReviews(reviewError ? [] : ((reviewData as unknown as Review[] | null) ?? []));
       } else {
         setReviews([]);
       }
+      /* Keep the profile usable on deployments that predate optional profile columns. */
       setLoading(false);
     };
     void load();

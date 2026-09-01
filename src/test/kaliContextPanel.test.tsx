@@ -37,6 +37,23 @@ describe('KaliContextPanel', () => {
     expect(screen.queryByRole('button', { name: /open kali guidance/i })).not.toBeInTheDocument();
   });
 
+  it('acknowledges only the reminder whose OK button was pressed', () => {
+    const second: KaliInsight = {
+      ...insight,
+      id: 'booking-reminder',
+      kind: 'booking-reminder',
+      severity: 'info',
+      title: 'Booking reminder',
+      message: 'Your booking is tomorrow.',
+    };
+    render(<KaliContextPanel role="hiker" insights={[insight, second]} />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Acknowledge Two-guide safety plan' }));
+
+    expect(screen.queryByText('Two guides cover the front and back.')).not.toBeInTheDocument();
+    expect(screen.getByText('Your booking is tomorrow.')).toBeVisible();
+  });
+
   it('opens the existing chat with a focused follow-up question', () => {
     const listener = vi.fn();
     window.addEventListener('open-global-ai-assistant', listener);

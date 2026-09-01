@@ -14,6 +14,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { useLocations } from '@/hooks/useLocations';
 import { parseMeta } from '@/lib/bookingMeta';
 import { routeStationsFromMetadata } from '@/lib/map-data';
+import { getLocationAgeLabel } from '@/lib/tracking/locationAge';
 import type { CompanionDetail } from '@/types';
 
 interface Props {
@@ -99,6 +100,12 @@ export default function RealtimeMonitorMap({ locationId, canAddCheckpoints = fal
   const [progress, setProgress] = useState<Record<string, { checkpoint_id: string; created_at: string }[]>>({});
   const [loading, setLoading] = useState(true);
   const [viewMode, setViewMode] = useState<'cluster' | 'individual'>('cluster');
+  const [clock, setClock] = useState(() => Date.now());
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setClock(Date.now()), 30_000);
+    return () => window.clearInterval(timer);
+  }, []);
 
   // checkpoint placement
   const [pendingCp, setPendingCp] = useState<{ lat: number; lng: number } | null>(null);
@@ -421,8 +428,8 @@ export default function RealtimeMonitorMap({ locationId, canAddCheckpoints = fal
     // hikers / groups
     sessions.forEach((s) => {
       if (s.lastLat == null || s.lastLng == null) return;
-      const ageMin = s.lastTs ? Math.round((Date.now() - new Date(s.lastTs).getTime()) / 60000) : null;
-      const isOffline = ageMin == null || ageMin >= 2; // > 2 mins without ping = offline paused position
+      const ageMin = s.lastTs ? Math.round((clock - new Date(s.lastTs).getTime()) / 60000) : null;
+      const isOffline = ageMin == null || ageMin >= 5; // five minutes without a ping is a stale mobile position
       const reached = (progress[s.id] ?? []).length;
       const role = s.participant_role ?? 'hiker';
       const isCluster = viewMode === 'cluster' && (s.groupSize ?? 1) > 1;
@@ -472,19 +479,20 @@ export default function RealtimeMonitorMap({ locationId, canAddCheckpoints = fal
       const lastSeenFormatted = s.lastTs
         ? new Date(s.lastTs).toLocaleTimeString('en-PH', { timeZone: 'Asia/Manila', hour: '2-digit', minute: '2-digit' })
         : 'Unknown';
+      const locationAgeLabel = getLocationAgeLabel(ageMin);
 
       const popupHtml = `
         <div style="min-width:250px;max-width:320px;font-family:system-ui,-apple-system,sans-serif">
           <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;border-bottom:1px solid rgba(0,0,0,0.1);padding-bottom:6px">
             <strong style="font-size:14px">${isCluster ? `🏔️ ${esc(s.hiker_name)}'s Group` : esc(s.hiker_name)}</strong>
             <span style="font-size:10px;font-weight:700;padding:2px 6px;border-radius:999px;background:${isOffline ? 'rgba(249,115,22,0.15);color:#ea580c' : 'rgba(34,197,94,0.15);color:#16a34a'}">
-              ${isOffline ? `⏸️ OFFLINE (PAUSED)` : `🟢 LIVE`}
+              ${isOffline ? `⏸️ ${locationAgeLabel}` : `🟢 LIVE`}
             </span>
           </div>
 
           ${isOffline ? `
             <div style="margin-top:6px;padding:6px 8px;background:rgba(249,115,22,0.1);border-radius:6px;font-size:11px;color:#c2410c">
-              <b>⏸️ Last Recorded: ${lastSeenFormatted} PHT (${ageMin}m ago)</b><br/>
+              <b>⏸️ ${locationAgeLabel} · ${lastSeenFormatted} PHT (${ageMin}m ago)</b><br/>
               <span>Position is paused at last recorded GPS coordinates. Cached trail points will sync when device reconnects.</span>
             </div>
           ` : ''}
@@ -497,6 +505,7 @@ export default function RealtimeMonitorMap({ locationId, canAddCheckpoints = fal
             ${s.guidePhone ? `<div><b>Guide Phone:</b> ${esc(s.guidePhone)}</div>` : ''}
             ${s.hikerPhone ? `<div><b>Lead Phone:</b> ${esc(s.hikerPhone)}</div>` : ''}
             <div><b>Distance:</b> ${distanceKm.toFixed(2)} km · <b>Moving:</b> ${movingMin} min</div>
+            <div><b>Last location:</b> ${lastSeenFormatted} PHT · ${locationAgeLabel}</div>
             ${s.tracking_phase === 'peak' ? `
               <div style="margin-top:4px;padding:4px;background:rgba(234,179,8,0.1);border-radius:4px">
                 <b style="color:#eab308">At Summit / Peak</b><br/>
@@ -529,7 +538,7 @@ export default function RealtimeMonitorMap({ locationId, canAddCheckpoints = fal
       }).bindPopup(popupHtml);
       hikerLayer.current!.addLayer(m);
     });
-  }, [sessions, checkpoints, progress, officialRoutes, viewMode]);
+  }, [sessions, checkpoints, progress, officialRoutes, viewMode, clock]);
 
   /* ── Inactivity alert: warn admin when a hiker hasn't pinged in 20+ min ── */
   const alertedRef = useRef<Set<string>>(new Set());
@@ -651,8 +660,8 @@ export default function RealtimeMonitorMap({ locationId, canAddCheckpoints = fal
             </div>
             {sessions.map((s) => {
               const reached = (progress[s.id] ?? []).length;
-              const ageMin = s.lastTs ? Math.round((Date.now() - new Date(s.lastTs).getTime()) / 60000) : null;
-              const isOffline = ageMin == null || ageMin >= 2;
+              const ageMin = s.lastTs ? Math.round((clock - new Date(s.lastTs).getTime()) / 60000) : null;
+              const isOffline = ageMin == null || ageMin >= 5;
               const isCluster = viewMode === 'cluster' && (s.groupSize ?? 1) > 1;
 
               return (

@@ -34,7 +34,7 @@ export const KB_SEED: KbSeed[] = [
     title: "Recommended start times",
     category: "booking",
     content:
-      "For all adult groups the recommended start time is 06:00 AM. When the group includes children, seniors, or the forecast is hot (32C or above), 05:00 AM is better. Night hikes normally start at 10:00 PM to summit before dawn and require headlamps, extra layers and a guide.",
+      "For all adult groups the recommended morning start time is 06:00 AM. When the group includes children, seniors, or the forecast is hot (32C or above), 05:00 AM is better. Morning hikes may start 02:00–08:00 AM, night hikes 02:00–05:00 PM and descend the same day, and overnight hikes 02:00–04:00 PM with the hiker's own tent because there is no peak lodging.",
   },
   {
     title: "Registration and booking policy",
@@ -46,7 +46,7 @@ export const KB_SEED: KbSeed[] = [
     title: "Fees",
     category: "fees",
     content:
-      "Registration or entry fee is 50 pesos per person. Environmental fee is 20 pesos per person. Guide fee is a mandatory flat 300 pesos per group. Example: a group of 4 pays (50 x 4) + (20 x 4) + 300 = 580 pesos. Fees are the same on every trail. Payment is accepted onsite at the registration desk, through GCash, or by bank transfer.",
+      "Registration or entry fee is 30 pesos per person. Environmental fee is 20 pesos per person. A guide is mandatory: 1 guide covers 1–5 hikers. The per-guide rate is 800 pesos for morning, 1,000 pesos for night, and 1,600 pesos for overnight; groups above 5 need another guide. Example: a morning group of 6 pays (30 x 6) + (20 x 6) + (800 x 2) = 1,900 pesos. Fees are the same on every trail. Payment is accepted onsite at the registration desk, through GCash, or by bank transfer.",
   },
   {
     title: "Guides",

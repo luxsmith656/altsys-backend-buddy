@@ -34,7 +34,6 @@ export default function Login() {
       }
       toast.error(error.message);
     } else {
-      toast.success('Welcome back!');
       const redirectPath = searchParams.get('redirect');
       navigate(redirectPath || '/dashboard');
     }
@@ -54,7 +53,6 @@ export default function Login() {
       toast.error(`${error.message}. Try "Reset test accounts" below.`);
       return;
     }
-    toast.success('Signed in');
     const redirectPath = searchParams.get('redirect');
     navigate(redirectPath || '/dashboard');
   };
@@ -115,14 +113,12 @@ export default function Login() {
     // profile + hiker role upserts finish in the background on the server.
     if (isNewUser) {
       setGoogleLoading(false);
-      toast.success('Signed in with Google');
       navigate(redirect ? `/onboarding?redirect=${encodeURIComponent(redirect)}` : '/onboarding');
       return;
     }
     const { data: { user } } = await supabase.auth.getUser();
     const next = user ? await resolvePostLoginPath(user.id, redirect) : '/dashboard';
     setGoogleLoading(false);
-    toast.success('Signed in with Google');
     navigate(next);
   };
 
@@ -133,7 +129,7 @@ export default function Login() {
         <div className="text-center mb-8">
           <img src={logo} alt="Mt. Kalisungan logo" className="h-12 w-12 rounded-full object-cover mx-auto mb-4 bg-white/5" />
           <h1 className="text-2xl font-bold">Welcome Back</h1>
-          <p className="text-muted-foreground text-sm mt-1">Sign in to Mt. Kalisungan Tracker</p>
+          <p className="text-muted-foreground text-sm mt-1">Sign in to Mt. Kalisungan System</p>
         </div>
 
         <div className="glass-card rounded-xl p-6">

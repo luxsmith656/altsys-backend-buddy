@@ -187,7 +187,8 @@ export default function GuideDashboard() {
           .from('guides' as any)
           .select('id, full_name, is_active, specialty, phone, user_id, location_id, status, per_trip_fee')
           .eq('location_id', me.location_id)
-          .eq('is_active', true),
+          .eq('is_active', true)
+          .not('user_id', 'is', null),
         supabase
           .from('guide_reviews' as any)
           .select('*')

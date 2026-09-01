@@ -45,7 +45,7 @@ import {
   MapPin,
   UserPlus,
 } from 'lucide-react';
-import { calculateFees, formatPeso, GCASH_DETAILS, BANK_DETAILS } from '@/lib/payments';
+import { calculateFees, formatPeso, GCASH_DETAILS, BANK_DETAILS, MAX_PAX_PER_GUIDE } from '@/lib/payments';
 import { QRCodeSVG } from 'qrcode.react';
 import { toast } from 'sonner';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -65,7 +65,7 @@ import AdminWalkInRegistrationDialog from '@/components/admin/AdminWalkInRegistr
 import AdminWalkInDesk from '@/components/admin/AdminWalkInDesk';
 import KaliContextPanel from '@/components/kali/KaliContextPanel';
 import { useKaliContext } from '@/hooks/useKaliContext';
-import { HIKE_TIME_OPTIONS, getHikeTypeLabel, isValidHikeTime, normalizeHikeType, type HikeType } from '@/lib/hikeSchedule';
+import { HIKE_TIME_OPTIONS, getGuideFeePerGuide, getHikeTypeLabel, isValidHikeTime, normalizeHikeType, type HikeType } from '@/lib/hikeSchedule';
 
 /* ── Weather code → human-readable label (Open-Meteo) ── */
 function weatherCodeToLabel(code: number): string {
@@ -234,6 +234,7 @@ export default function BookingPage() {
   const [weatherInsight, setWeatherInsight] = useState<WeatherSnapshot | null>(null);
   const [weatherLoading, setWeatherLoading] = useState(false);
   const [weatherError, setWeatherError] = useState<string | null>(null);
+  const weatherRequestId = useRef(0);
 
   // ── Step 2: Personal details
   const [fullName, setFullName] = useState('');
@@ -520,15 +521,17 @@ export default function BookingPage() {
   const fetchSmartWeather = useCallback(async (selectedDate: Date) => {
     const weatherApiKey = import.meta.env.VITE_WEATHERAPI_KEY as string | undefined;
     const formattedDate = format(selectedDate, 'yyyy-MM-dd');
+    const requestId = ++weatherRequestId.current;
 
     try {
       setWeatherLoading(true);
       setWeatherError(null);
 
-      if (weatherApiKey) {
-        const diff = Math.max(1, Math.min(10, dayDifference(selectedDate) + 1));
+      const diff = dayDifference(selectedDate) + 1;
+      if (weatherApiKey && diff <= 10) {
+        const forecastDays = Math.max(1, diff);
         const response = await fetch(
-          `https://api.weatherapi.com/v1/forecast.json?key=${weatherApiKey}&q=14.1475,121.3454&days=${diff}&aqi=no&alerts=no`,
+          `https://api.weatherapi.com/v1/forecast.json?key=${weatherApiKey}&q=14.1475,121.3454&days=${forecastDays}&aqi=no&alerts=no`,
         );
         if (!response.ok) throw new Error(`WeatherAPI request failed (${response.status})`);
         const payload = await response.json() as {
@@ -536,6 +539,7 @@ export default function BookingPage() {
         };
         const selected = payload.forecast?.forecastday?.find((item) => item.date === formattedDate);
         if (!selected) throw new Error('No forecast available for the selected date');
+        if (requestId !== weatherRequestId.current) return;
         setWeatherInsight({
           maxTempC: selected.day.maxtemp_c,
           minTempC: selected.day.mintemp_c,
@@ -562,6 +566,7 @@ export default function BookingPage() {
 
       const idx = payload.daily?.time?.findIndex((d) => d === formattedDate) ?? -1;
       if (idx < 0 || !payload.daily) throw new Error('No forecast available for the selected date');
+      if (requestId !== weatherRequestId.current) return;
       setWeatherInsight({
         maxTempC: payload.daily.temperature_2m_max[idx],
         minTempC: payload.daily.temperature_2m_min[idx],
@@ -570,15 +575,23 @@ export default function BookingPage() {
         fetchedAt: Date.now(),
       });
     } catch (err: unknown) {
-      setWeatherInsight(null);
-      setWeatherError(err instanceof Error ? err.message : 'Unable to load weather insight');
+      if (requestId === weatherRequestId.current) {
+        setWeatherInsight(null);
+        setWeatherError(err instanceof Error ? err.message : 'Unable to load weather insight');
+      }
     } finally {
-      setWeatherLoading(false);
+      if (requestId === weatherRequestId.current) setWeatherLoading(false);
     }
   }, []);
 
   useEffect(() => {
-    if (!smartGuideEnabled || !date) return;
+    if (!smartGuideEnabled || !date) {
+      weatherRequestId.current += 1;
+      setWeatherInsight(null);
+      setWeatherLoading(false);
+      return;
+    }
+    setWeatherInsight(null);
     void fetchSmartWeather(date);
   }, [smartGuideEnabled, date, fetchSmartWeather]);
 
@@ -662,6 +675,7 @@ export default function BookingPage() {
     currentAges: [committedMainAge, ...committedCompanionAges],
     savedParticipants,
     currentParticipants,
+    selectedDate: date ? format(date, 'yyyy-MM-dd') : undefined,
     groupSize,
     weather: weatherInsight
       ? {
@@ -1153,7 +1167,7 @@ export default function BookingPage() {
                         <Users className="h-4 w-4 text-muted-foreground" />
                         <div>
                           <p className="text-sm font-semibold leading-tight">Group Size</p>
-                          <p className="text-[11px] text-muted-foreground">1–30 hikers (1 guide per 8 pax · ₱800/guide)</p>
+                          <p className="text-[11px] text-muted-foreground">1–30 hikers (1 guide per {MAX_PAX_PER_GUIDE} pax · {formatPeso(getGuideFeePerGuide(hikeType))}/guide)</p>
                         </div>
                       </div>
                       <div className="flex items-center gap-2">
@@ -1182,11 +1196,11 @@ export default function BookingPage() {
                       </div>
                     </div>
 
-                    {groupSize > 8 && (
+                    {groupSize > MAX_PAX_PER_GUIDE && (
                       <div className="flex items-center gap-2 p-2.5 rounded-xl bg-primary/10 border border-primary/20 text-xs text-primary">
                         <Users className="h-4 w-4 shrink-0" />
                         <span>
-                          Groups over 8 hikers require <strong>{Math.ceil(groupSize / 8)} tour guides</strong> (₱800 per guide) for trail safety.
+                          Groups over {MAX_PAX_PER_GUIDE} hikers require <strong>{Math.ceil(groupSize / MAX_PAX_PER_GUIDE)} tour guides</strong> ({formatPeso(getGuideFeePerGuide(hikeType))} per guide) for trail safety.
                         </span>
                       </div>
                     )}
@@ -1724,7 +1738,7 @@ export default function BookingPage() {
 
                 {/* ═══════════════ STEP 4: CONFIRM ═══════════════ */}
                 {step === 4 && (() => {
-                  const { entryFee, envFee, guideFee, totalFee } = calculateFees(groupSize, { hikeType });
+                  const { entryFee, envFee, guideFee, guidesNeeded, totalFee } = calculateFees(groupSize, { hikeType });
                   return (
                   <div className="space-y-6">
                     <div className="text-center mb-6">
@@ -1769,7 +1783,7 @@ export default function BookingPage() {
                         </div>
                         <div className="flex justify-between">
                           <span className="text-muted-foreground">
-                            Tour Guide Fee (₱800 / guide · {Math.max(1, Math.ceil(groupSize / 8))} {Math.max(1, Math.ceil(groupSize / 8)) > 1 ? 'guides' : 'guide'})
+                            Tour Guide Fee ({formatPeso(getGuideFeePerGuide(hikeType))} / guide · {guidesNeeded} {guidesNeeded > 1 ? 'guides' : 'guide'})
                           </span>
                           <span className="font-semibold">{formatPeso(guideFee)}</span>
                         </div>

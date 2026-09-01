@@ -464,7 +464,7 @@ export default function AdminWalkInRegistrationDialog({
                 </div>
                 <div>
                   <span className="text-muted-foreground block">
-                    Guide ({fees.guidesNeeded} × ₱800):
+                    Guide ({fees.guidesNeeded} × {formatPeso(fees.guideFee / fees.guidesNeeded)}):
                   </span>
                   <span className="font-semibold">{formatPeso(fees.guideFee)}</span>
                 </div>

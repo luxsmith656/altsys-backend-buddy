@@ -3,8 +3,8 @@ import { getGuideFeePerGuide } from '@/lib/hikeSchedule';
 
 export const ENTRY_FEE_PER_PERSON = 30;   // ₱30 registration fee per head
 export const ENV_FEE_PER_PERSON   = 20;   // ₱20 environmental/DSPA fee per head
-export const MAX_PAX_PER_GUIDE    = 8;    // 1 guide per 1–8 hikers
-export const GUIDE_FEE_PER_GUIDE  = 800;  // ₱800 guide fee per guide (up to 8 pax)
+export const MAX_PAX_PER_GUIDE    = 5;    // 1 guide per 1–5 hikers
+export const GUIDE_FEE_PER_GUIDE  = 800;  // ₱800 morning guide fee per guide (up to 5 pax)
 export const GUIDE_FEE_FLAT       = 800;  // backwards compatibility alias
 export const PEAK_EXTENSION_FEE_PER_HOUR = 100; // ₱100 / extra hour at peak summit
 export const HORSE_EMERGENCY_SERVICE_FEE = 500; // ₱500 emergency horse / porter rescue service

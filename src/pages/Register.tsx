@@ -12,12 +12,14 @@ import { signInWithFirebaseGoogle } from '@/lib/firebase-auth';
 import { isFirebaseConfigured } from '@/lib/firebase';
 import { supabase } from '@/integrations/supabase/client';
 import { resolvePostLoginPath } from '@/lib/post-login';
+import { validatePasswordConfirmation } from '@/lib/authValidation';
 
 export default function Register() {
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
   const { signUp } = useAuth();
@@ -43,7 +45,6 @@ export default function Register() {
     const { data: { user } } = await supabase.auth.getUser();
     const next = user ? await resolvePostLoginPath(user.id, redirect) : '/onboarding';
     setGoogleLoading(false);
-    toast.success('Signed in with Google');
     navigate(next);
   };
 
@@ -66,7 +67,7 @@ export default function Register() {
   }, [resendTimer]);
 
   const sendOtp = async (method: 'sms' | 'email' = verificationMethod) => {
-    if (!fullName || !email || !phone || !password) {
+    if (!fullName || !email || !phone || !password || !confirmPassword) {
       toast.error('Please fill in all fields first');
       return;
     }
@@ -99,6 +100,8 @@ export default function Register() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (password.length < 6) { toast.error('Password must be at least 6 characters'); return; }
+    const passwordError = validatePasswordConfirmation(password, confirmPassword);
+    if (passwordError) { toast.error(passwordError); return; }
     if (!phone.match(/^(09|\+639)\d{9}$/)) { toast.error('Please enter a valid PH mobile number'); return; }
     await sendOtp(verificationMethod);
   };
@@ -184,6 +187,10 @@ export default function Register() {
               <div className="space-y-2">
                 <Label htmlFor="password">Password</Label>
                 <Input id="password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Min. 6 characters" required />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="confirmPassword">Confirm Password</Label>
+                <Input id="confirmPassword" type="password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} placeholder="Re-enter your password" required />
               </div>
 
               <div className="space-y-2 pt-2">

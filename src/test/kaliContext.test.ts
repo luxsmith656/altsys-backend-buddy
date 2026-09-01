@@ -125,4 +125,16 @@ describe('buildKaliContext', () => {
     expect(insight.kind).toBe('booking-reminder');
     expect(insight.message).toContain('September 2');
   });
+
+  it('labels weather guidance with the currently selected booking date', () => {
+    const [insight] = buildKaliContext({
+      role: 'hiker',
+      selectedDate: '2026-09-05',
+      weather: { condition: 'Rain', rainProbability: 65, fetchedAt: '2026-09-01T01:00:00Z' },
+      now: '2026-09-01T02:00:00Z',
+    });
+
+    expect(insight.kind).toBe('weather');
+    expect(insight.message).toContain('September 5');
+  });
 });

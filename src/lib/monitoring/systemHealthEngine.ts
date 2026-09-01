@@ -89,32 +89,32 @@ export async function runFullSystemDiagnostics(): Promise<SystemHealthReport> {
     const solo = calculateFees(1);
     const soloValid = solo.guideFee === 800 && solo.entryFee === 30 && solo.envFee === 20 && solo.totalFee === 850;
 
-    // Test 2: 8 hikers (max 1 guide -> ₱800 guide + ₱240 entry + ₱160 env = ₱1,200)
-    const eight = calculateFees(8);
-    const eightValid = eight.guideFee === 800 && eight.entryFee === 240 && eight.envFee === 160 && eight.totalFee === 1200;
+    // Test 2: 5 hikers (max 1 guide -> ₱800 guide + ₱150 entry + ₱100 env = ₱1,050)
+    const five = calculateFees(5);
+    const fiveValid = five.guideFee === 800 && five.entryFee === 150 && five.envFee === 100 && five.totalFee === 1050;
 
-    // Test 3: 9 hikers (2 guides required -> ₱1,600 guide + ₱270 entry + ₱180 env = ₱2,050)
-    const nine = calculateFees(9);
-    const nineValid = nine.guideFee === 1600 && nine.entryFee === 270 && nine.envFee === 180 && nine.totalFee === 2050;
+    // Test 3: 6 hikers (2 guides required -> ₱1,600 guide + ₱180 entry + ₱120 env = ₱1,900)
+    const six = calculateFees(6);
+    const sixValid = six.guideFee === 1600 && six.entryFee === 180 && six.envFee === 120 && six.totalFee === 1900;
 
     // Test 4: Peak stay & Horse rescue
     const peak = calculatePeakExtensionFee(2); // ₱200
     const horse = calculateEmergencyHorseFee(1); // ₱500
     const addOnValid = peak === 200 && horse === 500;
 
-    // Test 5: Change calculator (₱2500 paid for ₱2050 total = ₱450 change)
-    const change = 2500 - 2050;
-    const changeValid = change === 450;
+    // Test 5: Change calculator (₱2500 paid for ₱1900 total = ₱600 change)
+    const change = 2500 - 1900;
+    const changeValid = change === 600;
 
-    if (soloValid && eightValid && nineValid && addOnValid && changeValid) {
+    if (soloValid && fiveValid && sixValid && addOnValid && changeValid) {
       items.push({
         id: 'diag_pricing_engine',
         category: 'pricing',
         name: 'Pricing & Cash Change Calculator Math',
-        description: 'Tested 8-pax guide ratio, registration & environmental fees, peak stays, horse rescues, and change formula.',
+        description: 'Tested 5-pax guide ratio, registration & environmental fees, peak stays, horse rescues, and change formula.',
         status: 'passed',
         latencyMs: Date.now() - pricingStart,
-        details: 'Solo (₱850), 8-pax (₱1,200), 9-pax 2-guide (₱2,050), ₱200 peak, ₱500 horse verified 100% accurate.',
+        details: 'Solo (₱850), 5-pax (₱1,050), 6-pax 2-guide (₱1,900), ₱200 peak, ₱500 horse verified 100% accurate.',
       });
     } else {
       items.push({

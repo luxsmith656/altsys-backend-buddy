@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { AlertTriangle, BellRing, Info, MessageCircle, ShieldAlert, X } from 'lucide-react';
+import { AlertTriangle, BellRing, Check, Info, MessageCircle, ShieldAlert, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { getKaliRoleLabel, type KaliInsight, type KaliRole } from '@/lib/kaliContext';
 import KaliAvatar from './KaliAvatar';
@@ -83,6 +83,10 @@ export default function KaliContextPanel({ role, insights }: KaliContextPanelPro
     setOpen(false);
   };
 
+  const acknowledgeInsight = (id: string) => {
+    setDismissedInsightIds((current) => current.includes(id) ? current : [...current, id]);
+  };
+
   return (
     <div className="pointer-events-none fixed inset-x-0 bottom-[calc(env(safe-area-inset-bottom)+7rem)] z-[2050] flex justify-end px-3 sm:inset-x-auto sm:right-4 sm:bottom-4 sm:p-0">
       {open && (
@@ -103,12 +107,20 @@ export default function KaliContextPanel({ role, insights }: KaliContextPanelPro
 
           <div className="max-h-[min(70vh,34rem)] space-y-3 overscroll-contain overflow-y-auto p-4">
             {visibleInsights.map((item) => (
-              <div key={item.id} className={cn('flex items-start gap-2 rounded-2xl border p-3', severityClasses(item.severity))}>
-                <InsightIcon severity={item.severity} />
-                <div className="min-w-0">
-                  <p className="text-xs font-bold">{item.title}</p>
-                  <p className="mt-1 text-sm leading-relaxed text-foreground">{item.message}</p>
-                </div>
+                <div key={item.id} className={cn('flex items-start gap-2 rounded-2xl border p-3', severityClasses(item.severity))}>
+                  <InsightIcon severity={item.severity} />
+                  <div className="min-w-0 flex-1">
+                    <p className="text-xs font-bold">{item.title}</p>
+                    <p className="mt-1 text-sm leading-relaxed text-foreground">{item.message}</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => acknowledgeInsight(item.id)}
+                    aria-label={`Acknowledge ${item.title}`}
+                    className="inline-flex shrink-0 items-center gap-1 rounded-lg border border-current/25 px-2 py-1 text-[10px] font-bold uppercase tracking-wide transition-colors hover:bg-background/50"
+                  >
+                    <Check className="h-3 w-3" /> OK
+                  </button>
               </div>
             ))}
             {hasMinorRequirements && (

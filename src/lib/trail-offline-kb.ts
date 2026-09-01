@@ -216,7 +216,7 @@ Afternoon thunderstorms can occur year-round.`,
 - Registration is **required** at the barangay hall / trailhead
 - Registration fee: ₱30 per person
 - Environmental fee: ₱20 per person
-- Mandatory Tour Guide fee: ₱800 per guide (1 guide per 8 hikers; groups over 8 require an additional guide)
+- Mandatory Tour Guide fee: ₱800 per morning guide (1 guide per 1–5 hikers; groups over 5 require an additional guide)
 - Groups should register together
 - Bring exact cash, GCash, or pre-book through the app
 
@@ -462,8 +462,8 @@ Afternoon thunderstorms can occur year-round.`,
     keywords: ['guide', 'tour', 'group', 'hire', 'porter', 'organized', 'join'],
     answer: `**Guides & Group Hikes:**
 
-- Local guides available at the trailhead (₱300–500/day)
-- Guides are **recommended** for first-timers on Summit Trail
+- A guide is mandatory: 1 guide covers 1–5 hikers
+- Guide rate: ₱800 morning, ₱1,000 night, or ₱1,600 overnight per guide
 - Guides know the best routes and hidden viewpoints
 - Group hikes organized by local mountaineering clubs
 - Join Facebook groups for organized weekend hikes
@@ -492,15 +492,16 @@ Afternoon thunderstorms can occur year-round.`,
 
 | Item | Cost (₱) |
 |------|----------|
-| Registration fee | 50–100 |
-| Guide (optional) | 300–500 |
+| Registration / entry fee | ₱30 |
+| Environmental fee | ₱20 |
+| Morning guide (1–5 hikers) | ₱800 per guide |
+| Night guide (1–5 hikers) | ₱1,000 per guide |
+| Overnight guide (1–5 hikers) | ₱1,600 per guide |
 | Transportation (Manila roundtrip) | 300–600 |
 | Food & water | 200–400 |
-| Accommodation (if overnight) | 500–3,000 |
-| **Total day trip** | **~₱850–1,600** |
-| **Total with overnight** | **~₱1,350–4,600** |
+| Accommodation | Bring your own tent; no peak lodging |
 
-💡 Budget tip: Bring your own food and water to save ₱200+`,
+💡 Your final total depends on group size, hike type, transport, and optional emergency services.`,
   },
 
   // ─── BEST TIME TO VISIT ───

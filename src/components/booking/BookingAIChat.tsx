@@ -180,7 +180,7 @@ function getGroupAdvice(comp: GroupComposition, groupSize: number): string {
   if (total > 10) {
     return (
       `Large group of **${total} people** — exciting! Here are my tips:\n\n` +
-      `👥 **Split into sub-groups** of 5–8 for better trail flow\n` +
+      `👥 **Split into guide groups** of 1–5 for better trail flow and headcounts\n` +
       `🕐 **Start time: 05:00–06:00 AM** — arrive before crowds\n` +
       `📍 **Designate a group leader** per sub-group\n` +
       `⏱️ **Set a turnaround time** regardless of summit status\n\n` +
@@ -189,7 +189,7 @@ function getGroupAdvice(comp: GroupComposition, groupSize: number): string {
   }
   return (
     `Your group looks well-balanced! **${comp.adults} adult${comp.adults > 1 ? 's' : ''}** — ` +
-    `great size for the trail. I recommend **06:00 AM** start for the best experience. Enjoy! 🏔️`
+    `great size for the trail. One guide covers up to **5 hikers**. I recommend **06:00 AM** start for the best experience. Enjoy! 🏔️`
   );
 }
 
@@ -526,6 +526,7 @@ export default function BookingAIChat({
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const touchStartX = useRef<number | null>(null);
+  const previousDateKey = useRef<string | null>(null);
 
   const scrollToBottom = useCallback(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -562,6 +563,18 @@ export default function BookingAIChat({
         : ['Pick best date', 'Recommend time', 'Set group size tips', 'Check weather for my date'],
     );
   }, [isOpen, messages.length, date, hikeType, groupSize, addAIMessage, greeting]);
+
+  useEffect(() => {
+    const nextDateKey = date ? format(date, 'yyyy-MM-dd') : null;
+    const previous = previousDateKey.current;
+    if (isOpen && previous && nextDateKey && previous !== nextDateKey) {
+      addAIMessage(
+        `I noticed you changed your hike date from **${format(new Date(`${previous}T00:00:00`), 'MMMM d')}** to **${format(date, 'MMMM d, yyyy')}**. I’ll use the new date for weather, start-time advice, and booking reminders.`,
+        ['Weather advice', 'Best start time', 'What to pack'],
+      );
+    }
+    previousDateKey.current = nextDateKey;
+  }, [date, isOpen, addAIMessage]);
 
 
   const getOnlineAnswer = useCallback(async (text: string): Promise<string | null> => {

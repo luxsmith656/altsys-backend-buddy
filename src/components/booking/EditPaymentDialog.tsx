@@ -361,7 +361,7 @@ export default function EditPaymentDialog({
           {/* Live Recalculated Summary */}
           <div className="p-3.5 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 space-y-2">
             <div className="flex items-center justify-between text-xs">
-              <span className="text-muted-foreground">Base Fees (Reg ₱30 + Env ₱20 + Guide ₱800/8pax):</span>
+              <span className="text-muted-foreground">Base Fees (Reg ₱30 + Env ₱20 + Guide ₱800/1–5 pax):</span>
               <span className="font-semibold">{formatPeso(fees.entryFee + fees.envFee + fees.guideFee)}</span>
             </div>
             {fees.peakExtensionFee > 0 && (

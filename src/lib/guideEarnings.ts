@@ -1,5 +1,5 @@
 ﻿import { parseMeta } from '@/lib/bookingMeta';
-import { calculateFees } from '@/lib/payments';
+import { calculateFees, calculateGuidesNeeded } from '@/lib/payments';
 import { isSameMonth, isSameWeek } from 'date-fns';
 
 export interface GuideHikeRecord {
@@ -60,7 +60,7 @@ export function calculateGuideEarnings(
     // Booking fees contain the total for every required guide. This ledger is
     // per guide, so divide the booking total across the assigned guide count.
     const feeCalculation = calculateFees(groupSize, { hikeType: meta.hikeType });
-    const guideCount = Math.max(1, Math.ceil(groupSize / 8));
+    const guideCount = calculateGuidesNeeded(groupSize);
     const bookingGuideFee = Number(meta.guideFee) > 0
       ? Number(meta.guideFee)
       : feeCalculation.guideFee;

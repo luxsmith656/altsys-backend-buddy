@@ -20,7 +20,7 @@ const PAYMENT_RE =
   /\b(revenue|earnings|income|sales|profit|collections?|payout|payouts|billing|invoice|invoices|receipt|receipts|transaction|transactions|refunds?|who paid|paid users?|payment (?:history|records?|list|logs?|status)|proof of payment|reference number|account number|balance)\b/i;
 // Public price questions — answered from the published fee schedule.
 const QUOTE_RE = /\b(how much|cost|costs|price|prices|pricing|fee|fees|rate|rates|magkano)\b/i;
-const FEE_SCHEDULE = `PUBLISHED FEE SCHEDULE (Philippine Peso): registration/entry ₱30 per person, environmental fee ₱20 per person, guide fee per required guide for up to 8 pax is ₱800 for morning, ₱1,000 for night, and ₱1,600 for overnight (groups over 8 require an additional guide at the same schedule rate). Fees are identical for every trail and jump-off point; transport is arranged by the hiker. Accepted methods: onsite, GCash, bank transfer. You may compute these standard costs, but never reveal any individual's payment, receipt, refund or total collections.`;
+const FEE_SCHEDULE = `PUBLISHED FEE SCHEDULE (Philippine Peso): registration/entry ₱30 per person, environmental fee ₱20 per person, guide fee per required guide for 1–5 pax is ₱800 for morning, ₱1,000 for night, and ₱1,600 for overnight (groups over 5 require an additional guide at the same schedule rate). Fees are identical for every trail and jump-off point; transport is arranged by the hiker. Accepted methods: onsite, GCash, bank transfer. You may compute these standard costs, but never reveal any individual's payment, receipt, refund or total collections.`;
 
 // ---------------- date helpers (Asia/Manila) ----------------
 function manilaToday(): string {

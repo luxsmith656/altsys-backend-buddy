@@ -27,7 +27,7 @@ const TRAIL_INTENT_RE =
 const FEE_SCHEDULE = `PUBLISHED FEE SCHEDULE (Mount Kalisungan, Philippine Peso):
 - Registration/entry fee: ₱30 per person
 - Environmental fee: ₱20 per person
-- Guide fee: ₱800 per guide for up to 8 pax (mandatory). If more than 8 hikers, an additional tour guide is required (e.g. 1–8 pax = 1 guide @ ₱800, 9–16 pax = 2 guides @ ₱1,600).
+- Guide fee: mandatory for every group; 1 guide covers 1–5 pax. The per-guide rate is ₱800 morning, ₱1,000 night, or ₱1,600 overnight. If more than 5 hikers, an additional guide is required (e.g. 1–5 pax = 1 guide, 6–10 pax = 2 guides).
 - Example: a group of 4 = (₱30 × 4) + (₱20 × 4) + ₱800 = ₱1,000 total
 - Fees are the same regardless of which trail or jump-off point is used; transport to/from the jump-off is arranged by the hiker.
 - Accepted payment methods: onsite (at the registration desk), GCash, or bank transfer.

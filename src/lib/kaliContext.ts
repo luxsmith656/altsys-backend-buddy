@@ -31,6 +31,7 @@ export interface KaliContextInput {
   groupSize?: number;
   weather?: KaliWeatherInput | null;
   booking?: KaliBookingInput | null;
+  selectedDate?: string;
   selectedStartTime?: string;
   recommendedStartTime?: string;
   hikeType?: 'morning' | 'night' | 'overnight' | 'day' | string;
@@ -213,6 +214,7 @@ function weatherInsight(input: KaliContextInput): KaliInsight | null {
       : input.recommendedStartTime
         ? ` ${input.recommendedStartTime} is a good beginner-friendly start time for this hike.`
       : '';
+  const dateNote = input.selectedDate ? ` for ${bookingDateLabel(input.selectedDate)}` : '';
 
   return {
     id: 'weather',
@@ -221,10 +223,10 @@ function weatherInsight(input: KaliContextInput): KaliInsight | null {
     expression: severe ? 'alert' : caution ? 'thinking' : 'happy',
     title: severe ? 'Strong weather warning' : caution ? 'Weather caution' : 'Weather window',
     message: severe
-      ? `Strong weather risk is expected (${weather.condition}). We strongly recommend rescheduling for safety.${forecastNote}${timeNote}`
+        ? `Strong weather risk is expected${dateNote} (${weather.condition}). We strongly recommend rescheduling for safety.${forecastNote}${timeNote}`
       : caution
-        ? `${weather.condition} is possible for this hike. Proceed with care, rain gear, and a flexible turnaround plan.${forecastNote}${timeNote}`
-        : `${weather.condition} looks favorable for the selected hike window. Continue checking the forecast because mountain weather can change.${timeNote}`,
+        ? `${weather.condition} is possible${dateNote} for this hike. Proceed with care, rain gear, and a flexible turnaround plan.${forecastNote}${timeNote}`
+        : `${weather.condition} looks favorable${dateNote} for the selected hike window. Continue checking the forecast because mountain weather can change.${timeNote}`,
     meta: { rainProbability: rain, windKmh: wind, forecastStatus: stale ? 'stale' : 'fresh' },
   };
 }

@@ -18,20 +18,20 @@ describe('Payment and Fee Calculation Logic', () => {
     expect(ENTRY_FEE_PER_PERSON).toBe(30);
     expect(ENV_FEE_PER_PERSON).toBe(20);
     expect(GUIDE_FEE_PER_GUIDE).toBe(800);
-    expect(MAX_PAX_PER_GUIDE).toBe(8);
+    expect(MAX_PAX_PER_GUIDE).toBe(5);
     expect(PEAK_EXTENSION_FEE_PER_HOUR).toBe(100);
     expect(HORSE_EMERGENCY_SERVICE_FEE).toBe(500);
   });
 
-  it('calculates correct number of tour guides per 8 pax ratio', () => {
+  it('calculates correct number of tour guides per 5 pax ratio', () => {
     expect(calculateGuidesNeeded(1)).toBe(1);
     expect(calculateGuidesNeeded(4)).toBe(1);
-    expect(calculateGuidesNeeded(8)).toBe(1);
-    expect(calculateGuidesNeeded(9)).toBe(2);
-    expect(calculateGuidesNeeded(16)).toBe(2);
-    expect(calculateGuidesNeeded(17)).toBe(3);
-    expect(calculateGuidesNeeded(24)).toBe(3);
-    expect(calculateGuidesNeeded(25)).toBe(4);
+    expect(calculateGuidesNeeded(5)).toBe(1);
+    expect(calculateGuidesNeeded(6)).toBe(2);
+    expect(calculateGuidesNeeded(10)).toBe(2);
+    expect(calculateGuidesNeeded(11)).toBe(3);
+    expect(calculateGuidesNeeded(15)).toBe(3);
+    expect(calculateGuidesNeeded(16)).toBe(4);
   });
 
   it('calculates fees accurately for 1 solo hiker', () => {
@@ -52,22 +52,22 @@ describe('Payment and Fee Calculation Logic', () => {
     expect(fees.totalFee).toBe(1000); // 120 + 80 + 800
   });
 
-  it('calculates fees accurately for 8 hikers (max for 1 guide)', () => {
-    const fees = calculateFees(8);
-    expect(fees.entryFee).toBe(240); // 30 * 8
-    expect(fees.envFee).toBe(160);   // 20 * 8
+  it('calculates fees accurately for 5 hikers (max for 1 guide)', () => {
+    const fees = calculateFees(5);
+    expect(fees.entryFee).toBe(150); // 30 * 5
+    expect(fees.envFee).toBe(100);   // 20 * 5
     expect(fees.guidesNeeded).toBe(1);
     expect(fees.guideFee).toBe(800);
-    expect(fees.totalFee).toBe(1200);
+    expect(fees.totalFee).toBe(1050);
   });
 
-  it('calculates fees accurately for 9 hikers (triggers 2nd tour guide)', () => {
-    const fees = calculateFees(9);
-    expect(fees.entryFee).toBe(270);  // 30 * 9
-    expect(fees.envFee).toBe(180);    // 20 * 9
-    expect(fees.guidesNeeded).toBe(2); // >8 requires 2 guides
+  it('calculates fees accurately for 6 hikers (triggers 2nd tour guide)', () => {
+    const fees = calculateFees(6);
+    expect(fees.entryFee).toBe(180);  // 30 * 6
+    expect(fees.envFee).toBe(120);    // 20 * 6
+    expect(fees.guidesNeeded).toBe(2); // >5 requires 2 guides
     expect(fees.guideFee).toBe(1600); // 800 * 2
-    expect(fees.totalFee).toBe(2050); // 270 + 180 + 1600
+    expect(fees.totalFee).toBe(1900); // 180 + 120 + 1600
   });
 
   it('handles fee calculation with edge cases gracefully', () => {
@@ -85,15 +85,15 @@ describe('Payment and Fee Calculation Logic', () => {
     });
 
     it('calculates correct cash change when onsite hiker tenders cash at trailhead', () => {
-      const fees = calculateFees(8); // 8 * 50 + 800 = 1200
+      const fees = calculateFees(5); // 5 * 50 + 800 = 1050
       const totalAmountDue = fees.totalFee;
       const alreadyPaid = 0;
       const remainingBalance = Math.max(0, totalAmountDue - alreadyPaid);
-      expect(remainingBalance).toBe(1200);
+      expect(remainingBalance).toBe(1050);
 
       const cashTendered = 1500;
       const changeDue = cashTendered - remainingBalance;
-      expect(changeDue).toBe(300);
+      expect(changeDue).toBe(450);
       expect(cashTendered >= remainingBalance).toBe(true);
     });
 

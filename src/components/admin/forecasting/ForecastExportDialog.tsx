@@ -159,7 +159,7 @@ export default function ForecastExportDialog({
   <div class="section-title">💡 Operational Action Plan &amp; Guide Scheduling</div>
   <div style="border: 1px solid #e2e8f0; border-radius: 10px; padding: 14px; background: #f8fafc; margin-bottom: 20px; font-size: 12px; line-height: 1.6;">
     <ul style="margin: 0; padding-left: 20px;">
-      <li><strong>Weekend Tour Guide Allocation:</strong> Peak surges occur primarily on Saturdays and Sundays. Ensure at least <strong>${Math.ceil((peakDay?.yhat || 80) / 8)} on-duty tour guides</strong> are rostered (1 guide per 8 hikers ratio).</li>
+    <li><strong>Weekend Tour Guide Allocation:</strong> Peak surges occur primarily on Saturdays and Sundays. Ensure at least <strong>${Math.ceil((peakDay?.yhat || 80) / 5)} on-duty tour guides</strong> are rostered (1 guide per 5 hikers ratio).</li>
       <li><strong>Midweek Promotions &amp; Maintenance:</strong> Tuesdays and Wednesdays average the lowest traffic (~${quietDay ? Math.round(quietDay.yhat) : 10} hikers). Schedule trail clearing and vegetation maintenance on these days.</li>
       <li><strong>Weather &amp; Safety:</strong> The model automatically adjusts predictions for Open-Meteo precipitation probability and PAGASA storm signals. On high-rain days, prepare emergency equipment and trail check-in alerts.</li>
     </ul>

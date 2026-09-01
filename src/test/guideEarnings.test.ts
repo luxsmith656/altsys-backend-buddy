@@ -26,7 +26,7 @@ describe('Guide Earnings Calculator', () => {
         booking: {
           id: 'bk-2',
           booking_date: '2026-08-15',
-          group_size: 12, // Requires 2 guides; this guide receives one ₱800 share
+          group_size: 12, // Requires 3 guides; this guide receives one ₱800 share
           status: 'completed',
           payment_status: 'paid',
           notes: JSON.stringify({ fullName: 'Bob Builder', phoneNumber: '09182222222' }),
@@ -126,7 +126,7 @@ describe('Guide Earnings Calculator', () => {
         booking: {
           id: 'bk-group',
           booking_date: '2026-08-20',
-          group_size: 12,
+          group_size: 6,
           status: 'completed',
           payment_status: 'paid',
           notes: JSON.stringify({ guideFee: 1600, fullName: 'Large Group Lead' }),
