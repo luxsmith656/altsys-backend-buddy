@@ -1,5 +1,6 @@
 import emailjs from '@emailjs/browser';
 import { EMAIL_CONFIG, SMS_CONFIG } from './notification-config';
+import { supabase } from '@/integrations/supabase/client';
 
 /**
  * Send SMS using the custom SMS API bridge.
@@ -30,9 +31,28 @@ export const sendSms = async (phone: string, message: string) => {
 };
 
 /**
- * Send OTP via EmailJS.
+ * Send OTP through the server-side Resend bridge. EmailJS remains a
+ * compatibility fallback for deployments where the function is not deployed.
  */
 export const sendOtpEmail = async (email: string, name: string, otp: string) => {
+    let resendError = 'Email delivery is not configured';
+    try {
+        const { data, error } = await supabase.functions.invoke('send-email-otp', {
+            body: { email: email.trim().toLowerCase(), name: name.trim() },
+        });
+
+        if (!error && data?.success === true && typeof data.challengeId === 'string') {
+            return { success: true, challengeId: data.challengeId };
+        }
+        resendError = error?.message || data?.error || resendError;
+    } catch (error: any) {
+        resendError = error.message || resendError;
+    }
+
+    if (!EMAIL_CONFIG.SERVICE_ID || !EMAIL_CONFIG.TEMPLATES.OTP || !EMAIL_CONFIG.PUBLIC_KEY) {
+        return { success: false, error: resendError };
+    }
+
     try {
         await emailjs.send(
             EMAIL_CONFIG.SERVICE_ID,
@@ -49,7 +69,23 @@ export const sendOtpEmail = async (email: string, name: string, otp: string) => 
 
         return { success: true };
     } catch (error: any) {
-        return { success: false, error: error.text || error.message };
+        return { success: false, error: error.text || error.message || resendError };
+    }
+};
+
+/**
+ * Verify an email OTP without exposing the generated code to the browser.
+ */
+export const verifyOtpEmail = async (email: string, challengeId: string, otp: string) => {
+    try {
+        const { data, error } = await supabase.functions.invoke('verify-email-otp', {
+            body: { email: email.trim().toLowerCase(), challengeId, otp },
+        });
+        if (error) return { success: false, error: error.message };
+        if (data?.success === true) return { success: true };
+        return { success: false, error: data?.error || 'Invalid verification code' };
+    } catch (error: any) {
+        return { success: false, error: error.message || 'Email verification failed' };
     }
 };
 

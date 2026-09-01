@@ -7,7 +7,7 @@ import { Label } from '@/components/ui/label';
 import { Loader2, Phone, Mail, MessageSquare, ShieldCheck, RefreshCw, ChevronLeft } from 'lucide-react';
 import { toast } from 'sonner';
 import logo from '@/assets/logo.png';
-import { sendSms, sendOtpEmail } from '@/lib/notification-service';
+import { sendSms, sendOtpEmail, verifyOtpEmail } from '@/lib/notification-service';
 import { signInWithFirebaseGoogle } from '@/lib/firebase-auth';
 import { isFirebaseConfigured } from '@/lib/firebase';
 import { supabase } from '@/integrations/supabase/client';
@@ -52,6 +52,7 @@ export default function Register() {
   const [step, setStep] = useState(1); // 1 = form, 2 = verification
   const [verificationMethod, setVerificationMethod] = useState<'sms' | 'email'>('sms');
   const [generatedOtp, setGeneratedOtp] = useState('');
+  const [emailChallengeId, setEmailChallengeId] = useState('');
   const [enteredOtp, setEnteredOtp] = useState('');
   const [resendTimer, setResendTimer] = useState(0);
 
@@ -85,6 +86,7 @@ export default function Register() {
       } else {
         const result = await sendOtpEmail(email, fullName.split(' ')[0], otp);
         if (!result.success) throw new Error(result.error);
+        setEmailChallengeId(result.challengeId || '');
         toast.success(`Verification code sent to ${email}!`);
       }
 
@@ -108,7 +110,13 @@ export default function Register() {
 
   const handleVerifyOtp = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (enteredOtp !== generatedOtp && enteredOtp !== "000000") {
+    if (verificationMethod === 'email' && emailChallengeId) {
+      const result = await verifyOtpEmail(email, emailChallengeId, enteredOtp);
+      if (!result.success) {
+        toast.error(result.error || 'Invalid Verification Code. Please try again.');
+        return;
+      }
+    } else if (enteredOtp !== generatedOtp) {
       toast.error('Invalid Verification Code. Please try again.');
       return;
     }
