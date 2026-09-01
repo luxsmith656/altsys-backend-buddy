@@ -386,6 +386,36 @@ export type Database = {
           },
         ]
       }
+      email_otp_challenges: {
+        Row: {
+          attempts: number
+          code_hash: string
+          created_at: string
+          email: string
+          expires_at: string
+          id: string
+          used_at: string | null
+        }
+        Insert: {
+          attempts?: number
+          code_hash: string
+          created_at?: string
+          email: string
+          expires_at: string
+          id?: string
+          used_at?: string | null
+        }
+        Update: {
+          attempts?: number
+          code_hash?: string
+          created_at?: string
+          email?: string
+          expires_at?: string
+          id?: string
+          used_at?: string | null
+        }
+        Relationships: []
+      }
       guide_off_duty_requests: {
         Row: {
           created_at: string
@@ -715,6 +745,48 @@ export type Database = {
         }
         Relationships: []
       }
+      mdrrmo_access_logs: {
+        Row: {
+          access_type: string
+          accessed_at: string
+          booking_id: string | null
+          id: string
+          location_id: string | null
+          mdrrmo_user_id: string
+        }
+        Insert: {
+          access_type?: string
+          accessed_at?: string
+          booking_id?: string | null
+          id?: string
+          location_id?: string | null
+          mdrrmo_user_id: string
+        }
+        Update: {
+          access_type?: string
+          accessed_at?: string
+          booking_id?: string | null
+          id?: string
+          location_id?: string | null
+          mdrrmo_user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "mdrrmo_access_logs_booking_id_fkey"
+            columns: ["booking_id"]
+            isOneToOne: false
+            referencedRelation: "bookings"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "mdrrmo_access_logs_location_id_fkey"
+            columns: ["location_id"]
+            isOneToOne: false
+            referencedRelation: "locations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       profiles: {
         Row: {
           age: number | null
@@ -725,6 +797,8 @@ export type Database = {
           full_name: string
           id: string
           liability_waiver_at: string | null
+          mdrrmo_consent_at: string | null
+          mdrrmo_consent_version: string | null
           onboarding_completed_at: string | null
           phone: string
           privacy_accepted_at: string | null
@@ -741,6 +815,8 @@ export type Database = {
           full_name?: string
           id?: string
           liability_waiver_at?: string | null
+          mdrrmo_consent_at?: string | null
+          mdrrmo_consent_version?: string | null
           onboarding_completed_at?: string | null
           phone?: string
           privacy_accepted_at?: string | null
@@ -757,6 +833,8 @@ export type Database = {
           full_name?: string
           id?: string
           liability_waiver_at?: string | null
+          mdrrmo_consent_at?: string | null
+          mdrrmo_consent_version?: string | null
           onboarding_completed_at?: string | null
           phone?: string
           privacy_accepted_at?: string | null
@@ -1059,6 +1137,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      admin_can_access_location: {
+        Args: { _location_id: string }
+        Returns: boolean
+      }
       ai_attendance_summary: {
         Args: {
           p_end_date: string
@@ -1074,6 +1156,22 @@ export type Database = {
           p_start_date: string
         }
         Returns: Json
+      }
+      guide_can_handover_assignment: {
+        Args: {
+          _booking_id: string
+          _location_id: string
+          _target_guide_id: string
+        }
+        Returns: boolean
+      }
+      guide_can_manage_booking: {
+        Args: { _booking_id: string }
+        Returns: boolean
+      }
+      guide_can_read_booking: {
+        Args: { _booking_id: string }
+        Returns: boolean
       }
       has_role: {
         Args: {
@@ -1096,9 +1194,37 @@ export type Database = {
           title: string
         }[]
       }
+      mdrrmo_daily_booking_directory: {
+        Args: { p_date?: string; p_location_id?: string }
+        Returns: {
+          age: string
+          booking_date: string
+          booking_id: string
+          contact_number: string
+          group_size: number
+          lead_name: string
+          location_id: string
+          location_name: string
+          medical_notes: string
+          people: Json
+          sex: string
+        }[]
+      }
+      mdrrmo_log_access: {
+        Args: { p_booking_ids?: string[]; p_location_id?: string }
+        Returns: number
+      }
+      safe_booking_meta: { Args: { _notes: string }; Returns: Json }
+      session_location_id: { Args: { _session_id: string }; Returns: string }
     }
     Enums: {
-      app_role: "super_admin" | "admin" | "ranger" | "guide" | "hiker"
+      app_role:
+        | "super_admin"
+        | "admin"
+        | "ranger"
+        | "guide"
+        | "hiker"
+        | "mdrrmo"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -1226,7 +1352,7 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
-      app_role: ["super_admin", "admin", "ranger", "guide", "hiker"],
+      app_role: ["super_admin", "admin", "ranger", "guide", "hiker", "mdrrmo"],
     },
   },
 } as const
