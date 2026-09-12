@@ -1,6 +1,7 @@
 // Shared knowledge-base helpers for the unified hiker AI.
 // Content lives in public.kb_chunks with pgvector embeddings; retrieval is
 // similarity search so we never dump the whole corpus into a prompt.
+import { FEE_POLICY_TEXT } from './payments.ts';
 
 export const EMBED_MODEL = "openai/text-embedding-3-small"; // 1536 dims
 
@@ -28,7 +29,7 @@ export const KB_SEED: KbSeed[] = [
     title: "Best season and weather guidance",
     category: "safety",
     content:
-      "The dry season from November to May is the best time to hike. June to October is the rainy season: trails become slippery, especially on descent, and afternoon thunderstorms are common. If rain probability is above 50 percent, recommend an earlier start, the River Trail instead of the Ridge or Summit Trail, or rescheduling. If there is a storm signal, lightning risk or a flood warning, advise not to hike at all.",
+      "The dry season from November to May is the best time to hike. June to October is the rainy season: trails become slippery, especially on descent, and afternoon thunderstorms are common. If rain probability is above 50 percent, warn hikers to bring rain gear and check official advisories. If there is a storm signal, lightning risk or a flood warning, advise caution and follow official safety guidance.",
   },
   {
     title: "Recommended start times",
@@ -46,7 +47,7 @@ export const KB_SEED: KbSeed[] = [
     title: "Fees",
     category: "fees",
     content:
-      "Registration or entry fee is 30 pesos per person. Environmental fee is 20 pesos per person. A guide is mandatory: 1 guide covers 1–5 hikers. The per-guide rate is 800 pesos for morning, 1,000 pesos for night, and 1,600 pesos for overnight; groups above 5 need another guide. Example: a morning group of 6 pays (30 x 6) + (20 x 6) + (800 x 2) = 1,900 pesos. Fees are the same on every trail. Payment is accepted onsite at the registration desk, through GCash, or by bank transfer.",
+      FEE_POLICY_TEXT,
   },
   {
     title: "Guides",

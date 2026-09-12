@@ -1,8 +1,9 @@
 import type { BookingMeta } from '@/types';
+import { HORSE_HIGH_STATION_FEE, HORSE_EMERGENCY_SERVICE_FEE } from './payments';
 
 export const HORSE_HELP_OPTIONS = [
-  { id: 'station-5-3', label: 'Station 5–3', fee: 1000 },
-  { id: 'station-2-1', label: 'Station 2–1', fee: 500 },
+  { id: 'station-5-3', label: 'Station 5–3', fee: HORSE_HIGH_STATION_FEE },
+  { id: 'station-2-1', label: 'Station 2–1', fee: HORSE_EMERGENCY_SERVICE_FEE },
 ] as const;
 
 export type HorseHelpStation = (typeof HORSE_HELP_OPTIONS)[number]['id'];

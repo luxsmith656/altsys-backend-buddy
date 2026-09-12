@@ -1,19 +1,23 @@
-import { expect, type Page, type Request, type Response } from '@playwright/test';
+import { expect, type ConsoleMessage, type Page, type Request, type Response } from '@playwright/test';
 
 const APP_ORIGIN = 'http://127.0.0.1:4173';
 
 type MonitorOptions = {
   allowConsole?: RegExp[];
+  allowConsoleMessage?: (message: ConsoleMessage) => boolean;
   allowResponse?: (response: Response) => boolean;
 };
 
 export function attachRuntimeMonitor(page: Page, options: MonitorOptions = {}) {
   const issues: string[] = [];
+  const pending = new Set<Request>();
+  page.on('request', (request) => { if (mustValidateRequest(request)) pending.add(request); });
+  page.on('requestfinished', (request) => pending.delete(request));
 
   page.on('console', (message) => {
     if (message.type() !== 'error') return;
     const text = message.text();
-    if (!options.allowConsole?.some((pattern) => pattern.test(text))) {
+    if (!options.allowConsoleMessage?.(message) && !options.allowConsole?.some((pattern) => pattern.test(text))) {
       issues.push(`console.error: ${text}`);
     }
   });
@@ -21,6 +25,7 @@ export function attachRuntimeMonitor(page: Page, options: MonitorOptions = {}) {
   page.on('pageerror', (error) => issues.push(`pageerror: ${error.message}`));
 
   page.on('requestfailed', (request) => {
+    pending.delete(request);
     if (!mustValidateRequest(request)) return;
     issues.push(`requestfailed: ${request.method()} ${request.url()} (${request.failure()?.errorText || 'unknown error'})`);
   });
@@ -34,6 +39,12 @@ export function attachRuntimeMonitor(page: Page, options: MonitorOptions = {}) {
 
   return {
     issues,
+    async waitForRequests() {
+      await expect.poll(() => [...pending].map((request) => {
+        const url = new URL(request.url());
+        return `${request.method()} ${url.origin}${url.pathname}`;
+      }), { timeout: 15_000, message: 'Application requests must finish before reload/navigation' }).toEqual([]);
+    },
     assertClean() {
       expect(issues, issues.join('\n')).toEqual([]);
     },

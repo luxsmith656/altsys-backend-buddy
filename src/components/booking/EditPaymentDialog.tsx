@@ -40,6 +40,9 @@ import {
   type PaymentStatus,
 } from '@/lib/payments';
 import { useAuth } from '@/hooks/useAuth';
+import { bookingReceipt } from '@/lib/bookingReceipt';
+import type { BookingMeta } from '@/types';
+import { Plus, Trash2 } from 'lucide-react';
 
 interface EditPaymentDialogProps {
   booking: any | null;
@@ -58,6 +61,7 @@ export default function EditPaymentDialog({
   const [peakHours, setPeakHours] = useState<number>(0);
   const [horseCount, setHorseCount] = useState<number>(0);
   const [customAdjustment, setCustomAdjustment] = useState<number>(0);
+  const [expenses, setExpenses] = useState<NonNullable<BookingMeta['additionalExpenses']>>([]);
   const [paymentStatus, setPaymentStatus] = useState<PaymentStatus>('unpaid');
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('onsite');
   const [amountPaid, setAmountPaid] = useState<string>('');
@@ -71,7 +75,8 @@ export default function EditPaymentDialog({
     const meta = parseMeta(booking.notes);
     setPeakHours(meta.peakExtensionHours || 0);
     setHorseCount(meta.emergencyHorseCount || 0);
-    setCustomAdjustment(0);
+    setCustomAdjustment(meta.priceAdjustments?.at(-1)?.breakdown?.customAdjustment ?? 0);
+    setExpenses(meta.additionalExpenses ?? []);
     setPaymentStatus((meta.paymentStatus as PaymentStatus) || 'unpaid');
     setPaymentMethod((meta.paymentMethod as PaymentMethod) || 'onsite');
     setAmountPaid(meta.amountPaid ? String(meta.amountPaid) : '');
@@ -93,17 +98,23 @@ export default function EditPaymentDialog({
 
   const meta = parseMeta(booking.notes);
   const groupSize = booking.group_size || 1;
-  const currentTotal = Number(booking.total_amount || 0);
+  const currentTotal = bookingReceipt(booking).total;
 
   // Calculate live breakdown with options
   const fees = calculateFees(groupSize, {
+    hikeType: meta.hikeType,
     peakExtensionHours: peakHours,
     emergencyHorseCount: horseCount,
     customAdjustment,
   });
-  const newTotal = fees.totalFee;
+  const horseHelpTotal = (meta.horseHelpRequests ?? []).filter(request => request.status !== 'cancelled').reduce((sum, request) => sum + Number(request.fee || 0), 0);
+  const newTotal = fees.totalFee + horseHelpTotal + expenses.reduce((sum, expense) => sum + expense.amount, 0);
 
   const handleSavePayment = async () => {
+    if (saving) return;
+    if (expenses.some(expense => !expense.label.trim() || !Number.isFinite(expense.amount) || expense.amount <= 0) || !Number.isFinite(newTotal) || newTotal < 0) {
+      toast.error('Each expense needs a name and an amount greater than zero.'); return;
+    }
     if (!reason.trim()) {
       toast.error('Please provide a reason for editing the price / payment details.');
       return;
@@ -152,6 +163,8 @@ export default function EditPaymentDialog({
         envFee: fees.envFee,
         guideFee: fees.guideFee,
         totalFee: newTotal,
+        baseFee: fees.entryFee + fees.envFee + fees.guideFee + fees.customAdjustment,
+        additionalExpenses: expenses.map(expense => ({ ...expense, label: expense.label.trim() })),
         priceAdjustments: updatedPriceHistory,
       });
 
@@ -159,7 +172,6 @@ export default function EditPaymentDialog({
       const { error: updateErr } = await supabase
         .from('bookings')
         .update({
-          total_amount: newTotal,
           notes: updatedMeta,
         } as any)
         .eq('id', booking.id);
@@ -195,7 +207,7 @@ export default function EditPaymentDialog({
 
   return (
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="max-w-lg max-h-[92vh] overflow-y-auto">
+      <DialogContent className="z-[3100] max-w-lg max-h-[92dvh] overflow-y-auto">
         <DialogHeader>
           <div className="flex items-center gap-2">
             <div className="p-2 rounded-xl bg-emerald-500/15 text-emerald-600 dark:text-emerald-400">
@@ -282,6 +294,15 @@ export default function EditPaymentDialog({
               </div>
             </div>
 
+            <div className="space-y-2 border-t pt-3">
+              <p className="text-sm font-medium">Additional expenses</p>
+              {expenses.map((expense, index) => <div key={expense.id} className="flex flex-wrap gap-2 items-center">
+                <Input aria-label={`Expense ${index + 1} name`} placeholder="Water / porter / other" value={expense.label} className="min-w-0 flex-1 basis-32" onChange={event => setExpenses(items => items.map(item => item.id === expense.id ? { ...item, label: event.target.value } : item))} />
+                <Input aria-label={`Expense ${index + 1} amount`} type="number" min="0.01" step="0.01" className="w-24" value={expense.amount || ''} onChange={event => setExpenses(items => items.map(item => item.id === expense.id ? { ...item, amount: Number(event.target.value) } : item))} />
+                <Button type="button" variant="ghost" size="icon" aria-label={`Remove expense ${index + 1}`} title="Remove expense" onClick={() => setExpenses(items => items.filter(item => item.id !== expense.id))}><Trash2 size={16} /></Button>
+              </div>)}
+              <Button type="button" variant="outline" size="sm" onClick={() => setExpenses(items => [...items, { id: crypto.randomUUID(), label: '', amount: 0, recordedAt: new Date().toISOString(), recordedBy: user?.id }])}><Plus size={16} />Add expense</Button>
+            </div>
             {/* Custom Surcharge / Adjustment */}
             <div className="space-y-1 pt-1">
               <Label className="text-xs flex items-center justify-between">
@@ -311,7 +332,7 @@ export default function EditPaymentDialog({
                   <SelectTrigger className="text-xs h-8">
                     <SelectValue placeholder="Status" />
                   </SelectTrigger>
-                  <SelectContent>
+                  <SelectContent className="z-[3200]">
                     <SelectItem value="paid" className="text-xs">✅ Paid in Full</SelectItem>
                     <SelectItem value="partial" className="text-xs">🟡 Partially Paid</SelectItem>
                     <SelectItem value="unpaid" className="text-xs">⏳ Unpaid</SelectItem>
@@ -325,7 +346,7 @@ export default function EditPaymentDialog({
                   <SelectTrigger className="text-xs h-8">
                     <SelectValue placeholder="Method" />
                   </SelectTrigger>
-                  <SelectContent>
+                  <SelectContent className="z-[3200]">
                     <SelectItem value="onsite" className="text-xs">💵 Cash / Onsite</SelectItem>
                     <SelectItem value="gcash" className="text-xs">📱 GCash</SelectItem>
                     <SelectItem value="bank_transfer" className="text-xs">🏦 Bank Transfer</SelectItem>
@@ -361,7 +382,7 @@ export default function EditPaymentDialog({
           {/* Live Recalculated Summary */}
           <div className="p-3.5 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 space-y-2">
             <div className="flex items-center justify-between text-xs">
-              <span className="text-muted-foreground">Base Fees (Reg ₱30 + Env ₱20 + Guide ₱800/1–5 pax):</span>
+              <span className="text-muted-foreground">Base fees ({fees.guidesNeeded} guide(s), {meta.hikeType || 'morning'} hike):</span>
               <span className="font-semibold">{formatPeso(fees.entryFee + fees.envFee + fees.guideFee)}</span>
             </div>
             {fees.peakExtensionFee > 0 && (

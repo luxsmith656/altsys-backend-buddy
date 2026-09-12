@@ -43,8 +43,12 @@ export function GuideOffDutyForm({ guideId, onChange }: { guideId: string; onCha
       </CardHeader>
       <CardContent className="space-y-3">
         <div className="grid grid-cols-2 gap-2">
-          <Input type="date" value={start} onChange={(e) => setStart(e.target.value)} min={new Date().toISOString().slice(0,10)} />
-          <Input type="date" value={end} onChange={(e) => setEnd(e.target.value)} min={start || new Date().toISOString().slice(0,10)} />
+          <label className="min-w-0 space-y-1.5 text-xs text-muted-foreground">From
+            <Input className="min-w-0" aria-label="Off-duty start date" type="date" value={start} onChange={(e) => setStart(e.target.value)} min={new Date().toISOString().slice(0,10)} />
+          </label>
+          <label className="min-w-0 space-y-1.5 text-xs text-muted-foreground">Until
+            <Input className="min-w-0" aria-label="Off-duty end date" type="date" value={end} onChange={(e) => setEnd(e.target.value)} min={start || new Date().toISOString().slice(0,10)} />
+          </label>
         </div>
         <Textarea rows={2} placeholder="Reason (medical, personal, training…)" value={reason} onChange={(e) => setReason(e.target.value)} />
         <Button onClick={submit} disabled={busy} className="w-full">

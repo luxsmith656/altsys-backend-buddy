@@ -29,6 +29,9 @@ export interface WeatherSnapshot {
   minTempC: number;
   rainProbability: number;
   condition: string;
+  sourceName?: string;
+  sourceUrl?: string;
+  fetchedAt?: number;
 }
 
 export interface SmartRecommendations {
@@ -220,6 +223,11 @@ export default function BookingInsightsPanel({
                     <div className="text-[10px] text-muted-foreground uppercase tracking-widest font-semibold">
                       Forecast · {format(date, 'MMMM d, yyyy')}
                     </div>
+                    {weatherInsight.sourceUrl && (
+                      <a href={weatherInsight.sourceUrl} target="_blank" rel="noreferrer" className="text-[10px] text-primary underline underline-offset-2">
+                        Source: {weatherInsight.sourceName ?? 'weather provider'}
+                      </a>
+                    )}
 
                     {/* Weather card */}
                     <div className="rounded-xl bg-background/70 border border-border/20 p-3 space-y-2.5">

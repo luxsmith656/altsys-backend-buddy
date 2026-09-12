@@ -1,13 +1,16 @@
 import { useState, useRef, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Bot, Send, Loader2, Sparkles, WifiOff } from 'lucide-react';
+import { Send, Sparkles, WifiOff } from 'lucide-react';
 import { motion } from 'framer-motion';
 import ReactMarkdown from 'react-markdown';
 import type { ChatMessage } from '@/types';
 import { getOfflineAnswer, learnFromResponse, getCacheSize } from '@/lib/trail-offline-kb';
 import { getProphetAIForecastContext } from '@/lib/ml/prophetDataService';
-import logo from '@/assets/logo.png';
+import KaliAvatar from '@/components/kali/KaliAvatar';
+import { getKaliExpression, getKaliQuickReplies } from '@/lib/kaliPersonality';
+import { getKaliRoleLabel } from '@/lib/kaliContext';
+import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
 
 const CHAT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/trail-chat-rag`;
@@ -21,11 +24,14 @@ const QUICK_QUESTIONS = [
 ];
 
 export default function ChatPage() {
+  const { role, user } = useAuth();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [isOnline, setIsOnline] = useState(navigator.onLine);
   const bottomRef = useRef<HTMLDivElement>(null);
+  const lastReply = [...messages].reverse().find((message) => message.role === 'assistant');
+  const expression = loading ? 'thinking' : input ? 'listening' : getKaliExpression(lastReply?.content ?? '');
 
   useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [messages]);
 
@@ -68,7 +74,8 @@ export default function ChatPage() {
     };
 
     try {
-      const forecastContext = await getProphetAIForecastContext().catch(() => null);
+      const forecastContext = /crowd|forecast|busy|quiet|capacity|demand|projection/i.test(text)
+        ? await getProphetAIForecastContext().catch(() => null) : null;
       const resp = await fetch(CHAT_URL, {
         method: 'POST',
         headers: {
@@ -79,6 +86,8 @@ export default function ChatPage() {
           messages: [...messages, userMsg],
           page_context: 'Trail Chat',
           booking_context: {
+            viewer_role: role ?? 'guest',
+            viewer_name: user?.user_metadata?.full_name ?? null,
             current_page: 'Trail Chat',
             forecasting: forecastContext ? {
               summary: forecastContext.summaryText,
@@ -157,13 +166,11 @@ export default function ChatPage() {
     <div className="h-[100dvh] pt-16 flex flex-col">
       <div className="glass-card-strong border-b border-border/30 px-4 py-3">
         <div className="container mx-auto flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-primary/20 flex items-center justify-center">
-            <Bot className="h-5 w-5 text-primary" />
-          </div>
+          <KaliAvatar expression={expression} activity={loading ? 'thinking' : input ? 'listening' : 'speaking'} size="sm" className="rounded-full" />
           <div>
             <h1 className="font-bold">Trail Assistant</h1>
             <p className="text-xs text-muted-foreground">
-              {isOnline ? 'Mount Kalisungan Expert' : '📴 Offline Mode • Local Knowledge Base'}
+              {isOnline ? `Kali is here for you, ${getKaliRoleLabel(role ?? 'guest')}` : 'Offline guidance'}
             </p>
           </div>
         </div>
@@ -182,11 +189,11 @@ export default function ChatPage() {
         <div className="container max-w-3xl mx-auto space-y-4">
           {messages.length === 0 && (
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="text-center py-12">
-              <img src={logo} alt="Mt. Kalisungan logo" className="h-16 w-16 rounded-full object-cover mx-auto mb-4 bg-white/5" />
+              <KaliAvatar expression="happy" size="lg" className="mx-auto mb-4 rounded-full" />
               <h2 className="text-xl font-bold mb-2">Ask About Mount Kalisungan</h2>
               <p className="text-muted-foreground text-sm mb-8">Get trail info, safety tips, weather updates, and more.</p>
               <div className="flex flex-wrap gap-2 justify-center">
-                {QUICK_QUESTIONS.map((q) => (
+                {[...getKaliQuickReplies(role ?? 'guest'), ...QUICK_QUESTIONS.slice(3)].map((q) => (
                   <Button key={q} variant="outline" size="sm" className="h-auto min-h-9 whitespace-normal py-2 text-xs" onClick={() => send(q)}>
                     <Sparkles className="h-3 w-3 mr-1" /> {q}
                   </Button>
@@ -202,6 +209,7 @@ export default function ChatPage() {
               animate={{ opacity: 1, y: 0 }}
               className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}
             >
+              {m.role === 'assistant' && <KaliAvatar expression={getKaliExpression(m.content)} activity="speaking" animated={i === messages.length - 1} size="sm" className="mr-2 rounded-full" />}
               <div
                 className={`max-w-[88%] break-words rounded-2xl px-4 py-3 text-sm sm:max-w-[80%] ${
                   m.role === 'user'
@@ -222,7 +230,7 @@ export default function ChatPage() {
 
           {loading && messages[messages.length - 1]?.role === 'user' && (
             <div className="flex items-center gap-2 text-muted-foreground text-sm">
-              <Loader2 className="h-4 w-4 animate-spin" /> Thinking...
+              <KaliAvatar expression="thinking" activity="thinking" size="sm" className="rounded-full" /> Thinking...
             </div>
           )}
           <div ref={bottomRef} />
@@ -238,10 +246,11 @@ export default function ChatPage() {
             value={input}
             onChange={(e) => setInput(e.target.value)}
             placeholder="Ask about trails, weather, safety..."
+            aria-label="Ask Kali"
             className="flex-1"
             disabled={loading}
           />
-          <Button type="submit" size="icon" disabled={loading || !input.trim()}>
+          <Button type="submit" size="icon" aria-label="Send message" disabled={loading || !input.trim()}>
             <Send className="h-4 w-4" />
           </Button>
         </form>

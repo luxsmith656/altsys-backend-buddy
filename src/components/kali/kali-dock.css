@@ -1,0 +1,9 @@
+.kali-movable-dock { position: fixed; bottom: calc(env(safe-area-inset-bottom, 0px) + 12px); left: calc(env(safe-area-inset-left, 0px) + 12px); width: 56px; height: 56px; z-index: 2050; }
+.kali-movable-dock [data-kali-drag-handle] { touch-action: none; user-select: none; cursor: grab; }
+.kali-movable-dock [data-kali-drag-handle]:active { cursor: grabbing; }
+@media (max-width: 767px) {
+  .kali-movable-dock[data-above-navigation="true"] { bottom: calc(env(safe-area-inset-bottom, 0px) + 80px); }
+}
+.kali-dock-actions { position: absolute; left: 0; bottom: 64px; display: flex; flex-direction: column-reverse; gap: 10px; width: max-content; max-width: calc(100vw - 24px); max-height: calc(50dvh - 72px); overflow-y: auto; overscroll-behavior: contain; }
+.kali-movable-dock[data-right="true"] .kali-dock-actions { left: auto; right: 0; }
+.kali-movable-dock[data-down="true"] .kali-dock-actions { bottom: auto; top: 64px; flex-direction: column; }

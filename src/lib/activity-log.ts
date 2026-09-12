@@ -1,27 +1,7 @@
-/**
- * Activity log utility for tamper-proof audit trail.
- * 
- * Run this SQL in Supabase to create the table:
- * 
- * CREATE TABLE IF NOT EXISTS admin_logs (
- *   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
- *   created_at timestamptz NOT NULL DEFAULT now(),
- *   actor_id uuid REFERENCES auth.users(id),
- *   action text NOT NULL,
- *   entity_type text NOT NULL,
- *   entity_id text,
- *   before_state jsonb,
- *   after_state jsonb,
- *   metadata jsonb
- * );
- * 
- * ALTER TABLE admin_logs ENABLE ROW LEVEL SECURITY;
- * CREATE POLICY "Admins can read logs" ON admin_logs FOR SELECT USING (true);
- * CREATE POLICY "Service can insert logs" ON admin_logs FOR INSERT WITH CHECK (true);
- * -- No UPDATE or DELETE policies — logs are append-only.
- */
+/** Uses the existing admin_logs table; structured change details belong in metadata. */
 
 import { supabase } from '@/integrations/supabase/client';
+import type { Json } from '@/integrations/supabase/types';
 
 export type LogAction =
   | 'payment_recorded'
@@ -46,15 +26,22 @@ export interface ActivityLogEntry {
 
 export async function writeActivityLog(entry: ActivityLogEntry): Promise<void> {
   try {
-    const { error } = await supabase.from('admin_logs' as any).insert({
-      ...entry,
+    const { data, error: authError } = await supabase.auth.getUser();
+    if (authError || !data.user) throw authError || new Error('An authenticated actor is required for audit logging.');
+    const { error } = await supabase.from('admin_logs').insert({
+      user_id: data.user.id,
+      action: entry.action,
+      entity: entry.entity_type,
+      entity_id: entry.entity_id,
+      metadata: {
+        ...entry.metadata,
+        before_state: entry.before_state,
+        after_state: entry.after_state,
+      } as Json,
       created_at: new Date().toISOString(),
     });
     if (error) {
-      // Table might not exist yet — silently fail so it doesn't break the UI
-      if (error.code !== '42P01') {
-        console.warn('[ActivityLog] Insert failed:', error.message);
-      }
+      console.warn('[ActivityLog] Insert failed:', error.message);
     }
   } catch (err) {
     console.warn('[ActivityLog] Error:', err);
@@ -67,7 +54,7 @@ export async function fetchActivityLogs(
 ): Promise<any[]> {
   try {
     let query = supabase
-      .from('admin_logs' as any)
+      .from('admin_logs')
       .select('*')
       .order('created_at', { ascending: false })
       .limit(limit);
@@ -78,7 +65,10 @@ export async function fetchActivityLogs(
 
     const { data, error } = await query;
     if (error) return [];
-    return data || [];
+    return (data || []).map((row) => {
+      const metadata = row.metadata && typeof row.metadata === 'object' && !Array.isArray(row.metadata) ? row.metadata : {};
+      return { ...row, actor_id: row.user_id, entity_type: row.entity, before_state: metadata.before_state, after_state: metadata.after_state };
+    });
   } catch {
     return [];
   }

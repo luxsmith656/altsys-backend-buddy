@@ -7,6 +7,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { Loader2, Send, CalendarClock } from 'lucide-react';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
+import { canChangeBooking } from '@/lib/bookingReceipt';
 
 interface Msg {
   id: string;
@@ -82,12 +83,23 @@ export default function BookingChat({
   };
 
   const requestReschedule = async () => {
+    if (!canRequestReschedule || sending) return;
     if (!newDate) { toast.error('Pick a new date'); return; }
-    const { error } = await supabase
+    setSending(true);
+    const { data: current, error: readError } = await supabase.from('bookings').select('id,status,notes').eq('id', bookingId).single();
+    const { data: sessions, error: sessionError } = await supabase.from('hiker_sessions').select('status,end_time').eq('booking_id', bookingId);
+    if (readError || sessionError || !current || !canChangeBooking(current, sessions ?? [])) {
+      setSending(false);
+      toast.error(readError?.message || sessionError?.message || 'This hike has started or ended and cannot be rescheduled.');
+      return;
+    }
+    let update = supabase
       .from('bookings')
       .update({ status: 'adjustment_pending', requested_new_date: newDate, requested_at: new Date().toISOString() } as any)
-      .eq('id', bookingId);
-    if (error) { toast.error(error.message); return; }
+      .eq('id', bookingId).eq('status', current.status);
+    update = current.notes == null ? update.is('notes', null) : update.eq('notes', current.notes);
+    const { data: changed, error } = await update.select('id').maybeSingle();
+    if (error || !changed) { setSending(false); toast.error(error?.message || 'Booking changed. Reload before requesting a new date.'); return; }
     await send('reschedule_request', `Hiker requested to reschedule from ${bookingDate} to ${newDate}.`);
     toast.success('Reschedule request sent to admin');
     setNewDate('');
@@ -154,9 +166,9 @@ export default function BookingChat({
               <CalendarClock className="h-3.5 w-3.5" /> Request a new date
             </p>
             <div className="flex gap-2">
-              <Input type="date" value={newDate} min={new Date().toISOString().slice(0,10)}
+              <Input aria-label="Requested hike date" type="date" value={newDate} min={new Date().toISOString().slice(0,10)}
                 onChange={(e) => setNewDate(e.target.value)} />
-              <Button size="sm" variant="outline" onClick={() => void requestReschedule()}>Send request</Button>
+              <Button size="sm" variant="outline" disabled={sending} onClick={() => void requestReschedule()}>Send request</Button>
             </div>
             <p className="text-[11px] text-muted-foreground">Your booking will move to "adjustment pending" until admin approves.</p>
           </div>
@@ -176,7 +188,7 @@ function AdminRescheduleControls({ bookingId, onApprove }: { bookingId: string; 
     supabase.from('bookings').select('id,booking_date,status,requested_new_date').eq('id', bookingId).maybeSingle()
       .then(({ data }) => setB(data));
   }, [bookingId]);
-  if (!b?.requested_new_date) return null;
+  if (!b?.requested_new_date || b.status !== 'adjustment_pending') return null;
   return (
     <div className="border-t pt-3 space-y-2 bg-sky-50 dark:bg-sky-950/30 -mx-6 px-6 py-3">
       <p className="text-sm font-medium">Reschedule request pending</p>

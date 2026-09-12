@@ -1,6 +1,6 @@
 import { useState, useEffect, createContext, useContext, ReactNode, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
-import { User } from '@supabase/supabase-js';
+import { User, type Session } from '@supabase/supabase-js';
 import type { AppRole } from '@/types';
 import { resolveAccountRole, resolveKnownAccountRole } from '@/lib/authRoles';
 
@@ -11,8 +11,7 @@ interface AuthContextType {
   roleError: string | null;
   retryRole: () => Promise<void>;
   signIn: (email: string, password: string) => Promise<{ error: Error | null }>;
-  resendSignupConfirmation: (email: string) => Promise<{ error: Error | null }>;
-  signUp: (email: string, password: string, fullName: string, referralGuideId?: string | null) => Promise<{ error: Error | null }>;
+  signUp: (email: string, password: string, fullName: string, referralGuideId?: string | null) => Promise<{ error: Error | null; session: Session | null }>;
   signOut: () => Promise<void>;
 }
 
@@ -141,17 +140,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return { error: lastError };
   };
 
-  const resendSignupConfirmation = async (email: string) => {
-    const { error } = await supabase.auth.resend({
-      type: 'signup',
-      email: email.trim().toLowerCase(),
-      options: { emailRedirectTo: window.location.origin + '/login' },
-    });
-    return { error: error as Error | null };
-  };
-
   const signUp = async (email: string, password: string, fullName: string, referralGuideId?: string | null) => {
-    const { error } = await supabase.auth.signUp({
+    const { data, error } = await supabase.auth.signUp({
       email,
       password,
       options: {
@@ -159,7 +149,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         emailRedirectTo: window.location.origin,
       },
     });
-    return { error: error as Error | null };
+    return { error: error as Error | null, session: data.session };
   };
 
   const signOut = async () => {
@@ -177,7 +167,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, role, loading, roleError, retryRole, signIn, resendSignupConfirmation, signUp, signOut }}>
+    <AuthContext.Provider value={{ user, role, loading, roleError, retryRole, signIn, signUp, signOut }}>
       {children}
     </AuthContext.Provider>
   );

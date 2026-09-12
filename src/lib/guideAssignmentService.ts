@@ -1,6 +1,7 @@
 import { supabase } from '@/integrations/supabase/client';
 import { encodeMeta, parseMeta } from '@/lib/bookingMeta';
 import { notifyUser } from '@/lib/firestoreNotifications';
+import { confirmReservation } from '@/lib/notification-service';
 
 export interface AcceptAssignmentParams {
   assignmentId: string;
@@ -67,7 +68,7 @@ export async function acceptGuideAssignment({
   hikerUserId,
   bookingDate,
   routeName,
-}: AcceptAssignmentParams): Promise<{ success: boolean; error?: string }> {
+}: AcceptAssignmentParams): Promise<{ success: boolean; error?: string; warnings?: string[] }> {
   try {
     const decidedAt = new Date().toISOString();
 
@@ -102,6 +103,10 @@ export async function acceptGuideAssignment({
       .eq('id', bookingId);
     if (bookingUpdateError) throw bookingUpdateError;
 
+    const warnings: string[] = [];
+    const email = await confirmReservation({ id: bookingId });
+    if (email.success === false) warnings.push(`Confirmation email: ${email.error}`);
+
     const effectiveHikerId = hikerUserId || booking?.user_id;
     const effectiveDate = bookingDate || booking?.booking_date || 'your scheduled date';
 
@@ -113,7 +118,7 @@ export async function acceptGuideAssignment({
       kind: 'system',
       content: `✅ Tour Guide ${guideName} has ACCEPTED this booking for ${effectiveDate}. See you at the trailhead!`,
     } as any);
-    if (messageError) throw messageError;
+    if (messageError) warnings.push(`Booking chat: ${messageError.message}`);
 
     // 4. Notify Hiker
     if (effectiveHikerId) {
@@ -121,10 +126,10 @@ export async function acceptGuideAssignment({
         title: '🎉 Tour Guide Confirmed!',
         body: `Your tour guide ${guideName} has accepted your hike booking for ${effectiveDate}.`,
         category: 'booking',
-      });
+      }).catch(() => warnings.push('In-app notification could not be delivered.'));
     }
 
-    return { success: true };
+    return warnings.length ? { success: true, warnings } : { success: true };
   } catch (err: any) {
     console.error('acceptGuideAssignment error:', err);
     return { success: false, error: err?.message || 'Failed to accept assignment' };

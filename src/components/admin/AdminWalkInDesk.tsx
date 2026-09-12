@@ -171,6 +171,8 @@ export default function AdminWalkInDesk({
         emergencyHorseCount: horseCount > 0 ? horseCount : undefined,
         emergencyHorseFee: fees.emergencyHorseFee > 0 ? fees.emergencyHorseFee : undefined,
         totalFee: totalAmount,
+        baseFee: fees.entryFee + fees.envFee + fees.guideFee,
+        originalQuote: { total: totalAmount, capturedAt: new Date().toISOString() },
       });
 
       // 1. Insert confirmed booking record

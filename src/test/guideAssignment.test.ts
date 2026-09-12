@@ -16,6 +16,7 @@ type Operation = {
 const mockState = vi.hoisted(() => ({
   from: vi.fn(),
   notifyUser: vi.fn(),
+  confirmReservation: vi.fn(),
   operations: [] as Operation[],
   bookingFetchError: null as Error | null,
   failInsertTable: null as string | null,
@@ -28,6 +29,7 @@ vi.mock('@/integrations/supabase/client', () => ({
 vi.mock('@/lib/firestoreNotifications', () => ({
   notifyUser: mockState.notifyUser,
 }));
+vi.mock('@/lib/notification-service', () => ({ confirmReservation: mockState.confirmReservation }));
 
 function createQueryChain() {
   const chain = {} as Record<string, ReturnType<typeof vi.fn>>;
@@ -58,6 +60,11 @@ describe('Guide Assignment & Confirmation Service', () => {
     mockState.from.mockReset();
     mockState.notifyUser.mockReset();
     mockState.notifyUser.mockResolvedValue('notif-id-123');
+    mockState.confirmReservation.mockReset();
+    mockState.confirmReservation.mockImplementation(async () => {
+      expect(mockState.operations).toContainEqual(expect.objectContaining({ table: 'bookings', method: 'update', payload: expect.objectContaining({ status: 'confirmed' }) }));
+      return { success: true, status: 'sent' };
+    });
     mockState.from.mockImplementation((table: string) => {
       const chain = createQueryChain();
       chain.update = vi.fn((payload: unknown) => {
@@ -98,6 +105,13 @@ describe('Guide Assignment & Confirmation Service', () => {
     expect(bookingUpdate).toBeDefined();
     expect(parseMeta((bookingUpdate?.payload as { notes: string }).notes)).toMatchObject({ assignedGuideId: 'guide-1', guideStatus: 'accepted' });
     expect(mockState.notifyUser).toHaveBeenCalledWith('user-hiker-1', expect.objectContaining({ category: 'booking' }));
+    expect(mockState.confirmReservation).toHaveBeenCalledExactlyOnceWith({ id: 'booking-123' });
+  });
+
+  it('preserves confirmed status and reports a delivery warning when confirmation email fails', async () => {
+    mockState.confirmReservation.mockResolvedValue({ success: false, error: 'Recipient configuration missing' });
+    const result = await acceptGuideAssignment({ assignmentId: 'assign-1', bookingId: 'booking-123', guideId: 'guide-1', guideName: 'Juan' });
+    expect(result).toMatchObject({ success: true, warnings: expect.arrayContaining([expect.stringContaining('Recipient configuration missing')]) });
   });
 
   it('does not report acceptance success when the assigned booking cannot be read', async () => {

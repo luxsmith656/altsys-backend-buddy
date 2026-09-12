@@ -1,0 +1,56 @@
+.mountain-mist {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+  mask-image: linear-gradient(to bottom, transparent, #000 8%, #000 88%, transparent);
+}
+.mountain-mist-layer {
+  position: absolute;
+  z-index: 1;
+  left: 0;
+  width: 100%;
+  height: 65%;
+  pointer-events: none;
+}
+.mountain-mist-track {
+  position: absolute;
+  display: flex;
+  left: -280%;
+  width: 560%;
+  height: 100%;
+  animation: mountain-mist-right 64s linear infinite;
+  animation-play-state: paused;
+}
+.mountain-mist-track img {
+  flex: 0 0 calc(100% * 2 / 7);
+  width: calc(100% * 2 / 7);
+  margin-right: calc(-100% / 28);
+  max-width: none;
+  height: 100%;
+  object-fit: fill;
+  mask-image: linear-gradient(to right, transparent, #000 12.5%, #000 87.5%, transparent);
+}
+.mountain-mist-far {
+  top: 4%;
+  opacity: .36;
+  mask-image: linear-gradient(to bottom, transparent, #000 12%, #000 52%, transparent 74%);
+}
+.mountain-mist-near {
+  bottom: -12%;
+  opacity: .22;
+  mask-image: linear-gradient(to bottom, transparent 12%, #000 35%, #000 78%, transparent);
+}
+.mountain-mist-near .mountain-mist-track { animation-name: mountain-mist-left; animation-duration: 83s; }
+.mountain-mist[data-moving=true] .mountain-mist-track { animation-play-state: running; }
+#learn-more { scroll-margin-top: calc(80px + env(safe-area-inset-top, 0px)); }
+/* Blend only the texture tails. Four tiles cover both boundaries throughout a
+   one-period translation, without fading the lane or stacking entire banks. */
+@keyframes mountain-mist-right {
+  from { transform: translate3d(0, 0, 0); }
+  to { transform: translate3d(25%, 0, 0); }
+}
+@keyframes mountain-mist-left {
+  from { transform: translate3d(25%, 0, 0); }
+  to { transform: translate3d(0, 0, 0); }
+}

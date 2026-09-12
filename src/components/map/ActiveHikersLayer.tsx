@@ -190,6 +190,8 @@ interface ActiveHikersLayerProps {
   onSimulationControlsOpenChange?: (open: boolean) => void;
   filterMode?: MapHikerFilterMode;
   onlyActive?: boolean;
+  controlsEmbedded?: boolean;
+  controlsContainer?: HTMLElement | null;
 }
 
 export default function ActiveHikersLayer({
@@ -201,6 +203,8 @@ export default function ActiveHikersLayer({
   onSimulationControlsOpenChange,
   filterMode = 'group',
   onlyActive = true,
+  controlsEmbedded = false,
+  controlsContainer = null,
 }: ActiveHikersLayerProps) {
   const simulationPath = routePath && routePath.length >= 2 ? routePath : SUMMIT_TRAIL_PATH;
   const simulationStations = useMemo<SimulationStation[]>(() => {
@@ -755,8 +759,8 @@ export default function ActiveHikersLayer({
       })}
 
       {/* 3. Floating Simulation Controller Portal (Renders nicely on top of Map Page) */}
-      {showDashboard && createPortal(
-        <div className="fixed bottom-3 right-3 z-[1200] flex max-h-[58dvh] w-[calc(100%-1.5rem)] flex-col gap-3 rounded-xl border border-border bg-background/95 p-4 font-sans text-xs shadow-2xl backdrop-blur-md sm:top-[9.25rem] sm:bottom-auto sm:right-4 sm:max-h-[calc(100dvh-10.25rem)] sm:max-w-[340px]">
+      {showDashboard && (!controlsEmbedded || controlsContainer) && createPortal(
+        <div className={controlsEmbedded ? 'live-map-simulation-controls flex flex-col gap-3 text-xs' : "fixed bottom-3 right-3 z-[1200] flex max-h-[58dvh] w-[calc(100%-1.5rem)] flex-col gap-3 rounded-lg border border-border bg-background/95 p-4 font-sans text-xs shadow-2xl sm:top-[9.25rem] sm:bottom-auto sm:right-4 sm:max-h-[calc(100dvh-10.25rem)] sm:max-w-[340px]"}>
           {/* Dashboard Header */}
           <div className="flex items-center justify-between border-b pb-2">
             <div className="flex items-center gap-1.5">
@@ -776,7 +780,7 @@ export default function ActiveHikersLayer({
           </div>
 
           {/* Controller buttons */}
-          <div className="flex items-center justify-between gap-2">
+          <div className="flex flex-wrap items-center justify-between gap-2">
             <div className="flex gap-1.5">
               <button
                 type="button"
@@ -806,6 +810,7 @@ export default function ActiveHikersLayer({
                 <button
                   key={spd}
                   onClick={() => setSimSpeed(spd)}
+                  aria-pressed={simSpeed === spd}
                   className={`px-1.5 py-1 rounded text-[10px] font-bold ${
                     simSpeed === spd ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground'
                   }`}
@@ -899,11 +904,11 @@ export default function ActiveHikersLayer({
             Click hiker markers on the map to view detailed emergency profile & pings.
           </div>
         </div>,
-        document.body
+        controlsContainer ?? document.body
       )}
 
       {/* Floating Button to restore Dashboard if closed */}
-      {!showDashboard && createPortal(
+      {!showDashboard && !controlsEmbedded && createPortal(
         <button
           onClick={() => setShowDashboard(true)}
           className="fixed top-[10.5rem] right-3 z-[1200] inline-flex h-11 w-11 items-center justify-center rounded-xl border border-border bg-primary text-primary-foreground shadow-xl hover:bg-primary/90 sm:top-[9.25rem] sm:right-4 sm:w-auto sm:gap-1.5 sm:px-3 sm:font-bold"

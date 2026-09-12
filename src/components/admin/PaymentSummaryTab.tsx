@@ -2,6 +2,7 @@ import { useEffect, useState, useMemo } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { parseMeta } from '@/lib/bookingMeta';
 import { calculateFees, formatPeso } from '@/lib/payments';
+import { bookingReceipt } from '@/lib/bookingReceipt';
 import { exportToExcelMultiSheet } from '@/lib/excel-export';
 import { fetchActivityLogs } from '@/lib/activity-log';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -54,7 +55,7 @@ export default function PaymentSummaryTab() {
 
     const payments: PaymentRow[] = (data || []).map((b) => {
       const meta = parseMeta(b.notes);
-      const fees = calculateFees(b.group_size);
+      const receipt = bookingReceipt(b);
       const d = new Date(b.booking_date);
       return {
         bookingId: b.id,
@@ -64,8 +65,8 @@ export default function PaymentSummaryTab() {
         groupSize: b.group_size,
         paymentStatus: meta.paymentStatus || 'unpaid',
         paymentMethod: meta.paymentMethod || '—',
-        amountPaid: meta.amountPaid ?? 0,
-        totalFee: meta.totalFee ?? fees.totalFee,
+        amountPaid: receipt.paid,
+        totalFee: receipt.total,
         transactionId: meta.transactionId || '',
         createdAt: b.created_at,
         month: format(d, 'yyyy-MM'),

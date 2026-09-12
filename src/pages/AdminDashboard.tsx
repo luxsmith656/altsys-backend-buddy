@@ -100,9 +100,10 @@ import { parseMeta, encodeMeta } from '@/lib/bookingMeta';
 import { calculateFees, calculatePeakExtensionFee, formatPeso, PAYMENT_METHOD_LABELS, type PaymentMethod } from '@/lib/payments';
 import { addAnnouncement, loadAnnouncements, removeAnnouncement, type AdminAnnouncement } from '@/lib/announcements';
 import { writeActivityLog } from '@/lib/activity-log';
+import { confirmReservation } from '@/lib/notification-service';
 import { motion } from 'framer-motion';
 import { toast } from 'sonner';
-import { TRAILS } from '@/lib/map-data';
+import { officialRoutesForLocation as filterOfficialRoutes, selectAssignedOfficialRoute } from '@/lib/officialRoutes';
 import { loadGuideRatings, renderStars, type GuideRating } from '@/lib/guideRatings';
 import { getHikeTypeLabel } from '@/lib/hikeSchedule';
 import {
@@ -126,6 +127,7 @@ import PaymentSummaryTab from '@/components/admin/PaymentSummaryTab';
 import ForecastingTab from '@/components/admin/forecasting/ForecastingTab';
 import AdminWalkInRegistrationDialog from '@/components/admin/AdminWalkInRegistrationDialog';
 import EditPaymentDialog from '@/components/booking/EditPaymentDialog';
+import { bookingReceipt } from '@/lib/bookingReceipt';
 import EndHikeSettlementDialog from '@/components/admin/EndHikeSettlementDialog';
 import AppDownloadButton from '@/components/AppDownloadButton';
 import { usePullToRefresh } from '@/hooks/usePullToRefresh';
@@ -135,6 +137,7 @@ import { format } from 'date-fns';
 import { QRCodeSVG } from 'qrcode.react';
 
 const COLORS = ['#22c55e', '#3b82f6', '#f59e0b', '#ef4444', '#a855f7'];
+const DISPATCH_ROUTE_FIELDS = 'id,location_id,name,status,is_official,review_status,coordinates_json,difficulty,max_capacity';
 
 /* ── Mock guide data (replace with Supabase when guide profiles table is ready) ── */
 const MOCK_GUIDES = [
@@ -188,7 +191,6 @@ export default function AdminDashboard() {
       : 'guides';
   });
   /* ── Overview state ── */
-  const [stats, setStats] = useState({ totalBookings: 0, activeHikers: 0, totalZones: 5, todayVisitors: 0 });
   const [bookings, setBookings] = useState<any[]>([]);
   const [zones, setZones] = useState<any[]>([]);
 
@@ -204,7 +206,7 @@ export default function AdminDashboard() {
 
   /* ── Guide state ── */
   /* ── Real guides loaded from DB, mapped to the legacy UI shape ── */
-  const { activeLocationId, isSuperAdmin, locations, setActiveLocationId } = useLocations();
+  const { activeLocationId, isSuperAdmin, locations, setActiveLocationId, loading: locationsLoading } = useLocations();
   const { user: adminUser, role, signOut } = useAuth();
   const navigate = useNavigate();
   const { theme, toggleTheme } = useTheme();
@@ -432,6 +434,7 @@ export default function AdminDashboard() {
   }, [guides, guideSearch]);
 
   useEffect(() => {
+    if (locationsLoading || (!isSuperAdmin && !activeLocationId)) return;
     void loadData();
     void loadAllTabBookings();
     void loadPendingBookings();
@@ -485,7 +488,7 @@ export default function AdminDashboard() {
       supabase.removeChannel(ch);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeLocationId]);
+  }, [activeLocationId, locationsLoading, isSuperAdmin]);
 
   useEffect(() => {
     if (!scannedBooking) {
@@ -579,6 +582,7 @@ export default function AdminDashboard() {
 
   /* ── QR Scan: lookup booking ── */
   const handleQrLookup = async (overrideValue?: string) => {
+    if (locationsLoading) { toast.info('Your assigned location is still loading.'); return; }
     const raw = (typeof overrideValue === 'string' ? overrideValue : qrInput).trim();
     if (!raw) { toast.error('Enter QR code data, booking ID, or hiker name.'); return; }
     let q = raw;
@@ -647,8 +651,18 @@ export default function AdminDashboard() {
       return;
     }
     setStartingHike(true);
-    const routeInfo = resolveAssignedTrail(scannedBooking);
     const meta = parseMeta(scannedBooking.notes);
+    // Check-in must validate the latest published route, even on a direct QR-page load.
+    const { data: publishedZones, error: routeError } = await supabase.from('trail_zones')
+      .select(DISPATCH_ROUTE_FIELDS).eq('location_id', scannedBooking.location_id ?? activeLocationId ?? '')
+      .eq('status', 'active').eq('is_official', true).eq('review_status', 'approved');
+    if (routeError) {
+      toast.error('Could not verify the official route: ' + routeError.message);
+      setStartingHike(false);
+      return;
+    }
+    const routes = filterOfficialRoutes(publishedZones || [], scannedBooking.location_id ?? activeLocationId);
+    const routeInfo = { routes, route: selectAssignedOfficialRoute(routes, meta.assignedTrailZoneId), auto: !meta.assignedTrailZoneId && routes.length === 1 };
     if (routeInfo.routes.length > 1 && !routeInfo.route) {
       toast.error('Assign one official route to this booking before starting the hike.');
       setStartingHike(false);
@@ -792,37 +806,7 @@ export default function AdminDashboard() {
         assignedTrailAuto: routeInfo.auto || meta.assignedTrailAuto,
       });
       await supabase.from('bookings').update({ notes: updatedNotes }).eq('id', scannedBooking.id);
-      const routePoints = Array.isArray(routeInfo.route.coordinates_json) ? routeInfo.route.coordinates_json : [];
-      const firstPoint = routePoints[0] as { lat?: number; lng?: number } | undefined;
-      if (firstPoint && Number.isFinite(Number(firstPoint.lat)) && Number.isFinite(Number(firstPoint.lng))) {
-        const startPoints = [session?.id, guideSession?.id]
-          .filter(Boolean)
-          .map((sessionId) => ({
-            session_id: sessionId,
-            latitude: Number(firstPoint.lat),
-            longitude: Number(firstPoint.lng),
-            altitude: null,
-            accuracy: 5,
-            speed_m_s: 0,
-            heading: null,
-            segment: 'ascent',
-            timestamp: startTime,
-          }));
-        if (startPoints.length) {
-          const { error: startPointError } = await supabase.from('hiker_locations').insert(startPoints as any);
-          if (startPointError) {
-            const legacyPoints = startPoints.map(({ session_id, latitude, longitude, altitude, timestamp }) => ({
-              session_id,
-              latitude,
-              longitude,
-              altitude,
-              timestamp,
-            }));
-            const { error: legacyStartPointError } = await supabase.from('hiker_locations').insert(legacyPoints as any);
-            if (legacyStartPointError) console.warn('Could not seed trailhead location', legacyStartPointError);
-          }
-        }
-      }
+      // The participant's device supplies GPS. Check-in is authorization, not a measured position.
       toast.success(`✅ Hike started for ${meta.fullName || 'hiker'}! Session is now active.`);
       setHikeStarted(true);
       setScannedBooking({ ...scannedBooking, notes: updatedNotes });
@@ -967,7 +951,8 @@ export default function AdminDashboard() {
     const meta = parseMeta(scannedBooking.notes);
     const { entryFee, envFee, guideFee, totalFee: baseTotalFee } = calculateFees(scannedBooking.group_size, { hikeType: meta.hikeType });
     const peakExtensionFee = calculatePeakExtensionFee(meta.peakExtensionHours);
-    const totalFee = baseTotalFee + peakExtensionFee;
+    const receipt = bookingReceipt(scannedBooking);
+    const totalFee = receipt.total;
     const paid = Number(scanPayAmount);
     const refundAmount = paid > totalFee ? paid - totalFee : 0;
     const paymentStatus = paid >= totalFee ? 'paid' : paid > 0 ? 'partial' : 'unpaid';
@@ -983,6 +968,7 @@ export default function AdminDashboard() {
       guideFee,
       peakExtensionFee: peakExtensionFee || undefined,
       totalFee,
+      baseFee: receipt.base,
       refundAmount: refundAmount > 0 ? refundAmount : undefined,
       refundReason: refundAmount > 0 ? `Overpayment: ${formatPeso(refundAmount)}` : undefined,
     });
@@ -1016,6 +1002,7 @@ export default function AdminDashboard() {
 
   /* ── Capacity Management ── */
   const loadUpcomingCapacities = async () => {
+    if (locationsLoading || (!isSuperAdmin && !activeLocationId)) return;
     const today = format(new Date(), 'yyyy-MM-dd');
     let capacityQuery: any = supabase
       .from('daily_capacity')
@@ -1327,35 +1314,14 @@ export default function AdminDashboard() {
       if (isSuperAdmin) return q;
       return q.eq('location_id', activeLocationId || '00000000-0000-0000-0000-000000000000');
     };
-    let activeHikersQuery = supabase
-      .from('hiker_sessions')
-      .select('*', { count: 'exact', head: true })
-      .eq('status', 'active')
-      .like('client_session_id', `${ADMIN_CHECKIN_TOKEN_PREFIX}%`);
-    if (!isSuperAdmin) {
-      activeHikersQuery = activeHikersQuery.eq('location_id', activeLocationId || '00000000-0000-0000-0000-000000000000');
-    }
     const [
-      { count: totalBookings },
-      { count: activeHikers },
       { data: bookingsData },
       { data: zonesData },
     ] = await Promise.all([
-      scopeBookings(supabase.from('bookings').select('*', { count: 'exact', head: true })),
-      activeHikersQuery,
       scopeBookings(supabase.from('bookings').select('*').order('created_at', { ascending: false }).limit(20)),
-      supabase.from('trail_zones').select('*'),
+      supabase.from('trail_zones').select(DISPATCH_ROUTE_FIELDS),
     ]);
 
-    setStats({
-      totalBookings: totalBookings || 0,
-      activeHikers: activeHikers || 0,
-      totalZones: zonesData?.length || 5,
-      todayVisitors:
-        bookingsData?.filter(
-          (b: any) => b.booking_date === new Date().toISOString().split('T')[0],
-        ).length || 0,
-    });
     setBookings(bookingsData || []);
     setZones((zonesData || []).filter((zone: any) => zone.status !== 'deleted' && zone.review_status !== 'deleted'));
   };
@@ -1565,13 +1531,6 @@ export default function AdminDashboard() {
     color: COLORS[i % COLORS.length],
   }));
 
-  const statCards = [
-    { label: 'Total Bookings', value: stats.totalBookings, icon: CalendarCheck, color: 'text-primary' },
-    { label: 'Active Hikers', value: stats.activeHikers, icon: Activity, color: 'text-sky-500' },
-    { label: 'Today Visitors', value: stats.todayVisitors, icon: Users, color: 'text-warning' },
-    { label: 'Trail Zones', value: stats.totalZones, icon: Mountain, color: 'text-primary' },
-  ];
-
   /* ─── Booking display helpers ─── */
   const getDisplayStatus = (b: any) => {
     const meta = parseMeta(b.notes);
@@ -1583,44 +1542,15 @@ export default function AdminDashboard() {
   };
 
   const officialRoutesForLocation = useCallback((locationId?: string | null) => {
-    // 1. Database trail_zones matching location (or unassigned location)
-    const matched = (zones ?? []).filter((z: any) => {
-      const isNotDeleted = z.status !== 'deleted' && z.review_status !== 'deleted';
-      const isOfficialOrActive = z.is_official === true || z.status === 'active' || z.status === 'published';
-      return isNotDeleted && isOfficialOrActive && (!locationId || !z.location_id || z.location_id === locationId);
-    });
-    if (matched.length > 0) return matched;
-
-    // 2. Any active or published routes in zones
-    const allActive = (zones ?? []).filter((z: any) => {
-      const isNotDeleted = z.status !== 'deleted' && z.review_status !== 'deleted';
-      return isNotDeleted && (z.is_official === true || z.status === 'active' || z.status === 'published' || Boolean(z.name));
-    });
-    if (allActive.length > 0) return allActive;
-
-    // 3. Fallback to standard official published routes (Summit Trail, River Trail, Ridge Trail)
-    return TRAILS.map((t, idx) => ({
-      id: `default-route-${idx + 1}`,
-      name: t.name,
-      difficulty: t.difficulty,
-      status: 'active',
-      is_official: true,
-      elevation_meters: parseInt(t.elevation, 10) || 622,
-    }));
+    return filterOfficialRoutes(zones ?? [], locationId);
   }, [zones]);
 
   const resolveAssignedTrail = useCallback((booking: any, requestedId?: string) => {
     const meta = parseMeta(booking?.notes);
     const routes = officialRoutesForLocation(booking?.location_id ?? activeLocationId);
-    const route = requestedId
-      ? routes.find((r: any) => r.id === requestedId)
-      : meta.assignedTrailZoneId
-        ? routes.find((r: any) => r.id === meta.assignedTrailZoneId)
-        : routes.length >= 1
-          ? routes[0]
-          : null;
+    const route = selectAssignedOfficialRoute(routes, requestedId || meta.assignedTrailZoneId);
     return {
-      route: route ?? (routes.length ? routes[0] : null),
+      route,
       routes,
       auto: !requestedId && !meta.assignedTrailZoneId && routes.length <= 1,
     };
@@ -1841,7 +1771,7 @@ export default function AdminDashboard() {
               <div className="mb-4 overflow-x-auto pb-2">
                 <TabsList className="glass-card">
                   <TabsTrigger value="requests">Bookings</TabsTrigger>
-                  <TabsTrigger value="scan">QR Check-in</TabsTrigger>
+                  <TabsTrigger value="scan">Check in</TabsTrigger>
                   <TabsTrigger value="live-map">Live Map</TabsTrigger>
                 </TabsList>
               </div>
@@ -2288,7 +2218,7 @@ export default function AdminDashboard() {
           </TabsContent>
               <TabsContent value="scan" className="space-y-6 mt-0">
             <div>
-              <h2 className="text-lg font-semibold">Onsite QR Check-in</h2>
+              <h2 className="text-lg font-semibold">Onsite check in</h2>
               <p className="text-sm text-muted-foreground">
                 Scan QR code with camera, or search by Booking ID or hiker's full name. Payment recording is also done here.
               </p>
@@ -2306,14 +2236,14 @@ export default function AdminDashboard() {
                   manualInput={qrInput}
                   onManualInputChange={setQrInput}
                   onManualSubmit={() => void handleQrLookup()}
-                  loading={scanLoading}
+                  loading={scanLoading || locationsLoading}
                 />
 
                 {scannedBooking && (() => {
                   const meta = parseMeta(scannedBooking.notes);
                   const { totalFee: baseTotalFee } = calculateFees(scannedBooking.group_size, { hikeType: meta.hikeType });
                   const peakExtensionFee = calculatePeakExtensionFee(meta.peakExtensionHours);
-                  const totalFee = baseTotalFee + peakExtensionFee;
+                  const totalFee = bookingReceipt(scannedBooking).total;
                   const payStatus = meta.paymentStatus ?? 'unpaid';
                   return (
                     <div className="rounded-2xl border border-primary/30 bg-primary/5 p-5 space-y-5">
@@ -2757,15 +2687,18 @@ export default function AdminDashboard() {
                               size="sm"
                               variant="secondary"
                               onClick={async () => {
+                                if (!meta.assignedGuideId) { toast.error('Assign a guide before confirming this booking.'); return; }
                                 const updatedMeta = encodeMeta({ ...meta, guideStatus: 'accepted' });
-                                await supabase.from('bookings').update({ status: 'confirmed', notes: updatedMeta }).eq('id', scannedBooking.id);
-                                if (meta.assignedGuideId) {
-                                  await supabase.from('booking_assignments' as any)
+                                const { error: assignmentError } = await supabase.from('booking_assignments' as any)
                                     .update({ status: 'accepted', decided_at: new Date().toISOString() } as any)
-                                    .eq('booking_id', scannedBooking.id);
-                                }
+                                    .eq('booking_id', scannedBooking.id).eq('guide_id', meta.assignedGuideId);
+                                if (assignmentError) { toast.error(assignmentError.message); return; }
+                                const { error } = await supabase.from('bookings').update({ status: 'confirmed', notes: updatedMeta }).eq('id', scannedBooking.id);
+                                if (error) { toast.error(error.message); return; }
                                 toast.success('Admin confirmed booking! Check-in is now unlocked.');
                                 setScannedBooking((prev: any) => prev ? { ...prev, status: 'confirmed', notes: updatedMeta } : null);
+                                const result = await confirmReservation({ id: scannedBooking.id });
+                                if (result.success === false) toast.warning(`Booking confirmed, but email was not sent: ${result.error}`);
                               }}
                               className="text-xs h-7 gap-1 font-semibold"
                             >

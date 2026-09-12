@@ -1,14 +1,17 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Button } from '@/components/ui/button';
-import { MessageSquare, X, Send, Users, Calendar, Mountain } from 'lucide-react';
+import { X, Send, Users, Calendar, Mountain } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
 import { supabase } from '@/integrations/supabase/client';
 import { getProphetAIForecastContext } from '@/lib/ml/prophetDataService';
 import { getHikeTypeLabel, type HikeType } from '@/lib/hikeSchedule';
 import KaliAvatar from '@/components/kali/KaliAvatar';
-import type { KaliExpression } from '@/lib/kaliContext';
+import { getKaliExpression, getKaliQuickReplies } from '@/lib/kaliPersonality';
+import { getKaliRoleLabel } from '@/lib/kaliContext';
+import { useAuth } from '@/hooks/useAuth';
+import ReactMarkdown from 'react-markdown';
 
 
 interface WeatherSnapshot {
@@ -63,7 +66,6 @@ interface BookingAIChatProps {
 }
 
 
-const TYPING_DELAY = 750;
 const CHAT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/trail-chat-rag`;
 const APPLY_RE = /\[\[APPLY\s*(\{[\s\S]*?\})\s*\]\]/;
 
@@ -94,13 +96,6 @@ function extractSuggestion(text: string): { clean: string; suggestion?: BookingS
 
 function generateId() {
   return Math.random().toString(36).slice(2, 9);
-}
-
-function assistantExpression(content: string): KaliExpression {
-  if (/(warning|storm|minor|verify|descend|no lodging|not provided)/i.test(content)) return 'alert';
-  if (/(recommend|bring|prepare|plan|time)/i.test(content)) return 'thinking';
-  if (/(great|perfect|ready|enjoy|welcome)/i.test(content)) return 'happy';
-  return 'map';
 }
 
 /* ── Weather-aware hike advice ── */
@@ -519,6 +514,7 @@ export default function BookingAIChat({
   applyLabel,
   showLauncher = false,
 }: BookingAIChatProps) {
+  const { role, user } = useAuth();
   const [isOpen, setIsOpen] = useState(false);
   const [messages, setMessages] = useState<ChatMsg[]>([]);
   const [input, setInput] = useState('');
@@ -527,6 +523,11 @@ export default function BookingAIChat({
   const inputRef = useRef<HTMLInputElement>(null);
   const touchStartX = useRef<number | null>(null);
   const previousDateKey = useRef<string | null>(null);
+  const inFlight = useRef(false);
+  const contextGuidance = useRef<Array<{ title: string; message: string }>>([]);
+  const [basicGuidance, setBasicGuidance] = useState(false);
+  const latestReply = [...messages].reverse().find((message) => message.role === 'assistant');
+  const expression = isTyping ? 'thinking' : input ? 'listening' : getKaliExpression(latestReply?.content ?? '');
 
   const scrollToBottom = useCallback(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -538,14 +539,10 @@ export default function BookingAIChat({
 
   const addAIMessage = useCallback(
     (content: string, quickReplies?: string[], suggestion?: BookingSuggestion) => {
-      setIsTyping(true);
-      setTimeout(() => {
-        setIsTyping(false);
-        setMessages((prev) => [
-          ...prev,
-          { id: generateId(), role: 'assistant', content, quickReplies, suggestion },
-        ]);
-      }, TYPING_DELAY);
+      setMessages((prev) => [
+        ...prev,
+        { id: generateId(), role: 'assistant', content, quickReplies, suggestion },
+      ]);
     },
     [],
   );
@@ -559,10 +556,10 @@ export default function BookingAIChat({
       `Current setup: ${date ? format(date, 'MMM d, yyyy') : 'No date yet'} · ${getHikeTypeLabel(hikeType)} hike · ${groupSize} pax.\n\n` +
       `What should we adjust first?`),
       greeting
-        ? ['Help me book a hike', 'What can I do on this page?', 'Weather and best time', 'What should I bring?']
+        ? getKaliQuickReplies(role ?? 'guest')
         : ['Pick best date', 'Recommend time', 'Set group size tips', 'Check weather for my date'],
     );
-  }, [isOpen, messages.length, date, hikeType, groupSize, addAIMessage, greeting]);
+  }, [isOpen, messages.length, date, hikeType, groupSize, addAIMessage, greeting, role]);
 
   useEffect(() => {
     const nextDateKey = date ? format(date, 'yyyy-MM-dd') : null;
@@ -585,7 +582,8 @@ export default function BookingAIChat({
         ...messages.map((m) => ({ role: m.role, content: m.content })),
         { role: 'user' as const, content: text },
       ];
-      const forecastContext = await getProphetAIForecastContext().catch(() => null);
+      const forecastContext = /crowd|forecast|busy|quiet|capacity|demand|projection/i.test(text)
+        ? await getProphetAIForecastContext().catch(() => null) : null;
       const resp = await fetch(CHAT_URL, {
         method: 'POST',
         headers: {
@@ -596,6 +594,9 @@ export default function BookingAIChat({
           messages: thread,
           page_context: pageContext ?? 'Book a Hike',
           booking_context: {
+            viewer_role: role ?? 'guest',
+            viewer_name: user?.user_metadata?.full_name ?? null,
+            current_guidance: contextGuidance.current,
             current_page: pageContext ?? 'Book a Hike',
             selected_date: date ? format(date, 'yyyy-MM-dd') : null,
             selected_start_time: hikeTime ?? null,
@@ -650,49 +651,52 @@ export default function BookingAIChat({
     } catch {
       return null;
     }
-  }, [messages, date, hikeTime, groupSize, hikeType, groupComposition, weatherInsight, pageContext]);
+  }, [messages, date, hikeTime, groupSize, hikeType, groupComposition, weatherInsight, pageContext, role, user]);
 
   const sendMessage = useCallback(
     async (text: string) => {
-      if (!text.trim()) return;
+      if (!text.trim() || inFlight.current) return;
+      inFlight.current = true;
+      setIsTyping(true);
       const userMsg: ChatMsg = { id: generateId(), role: 'user', content: text };
       setMessages((prev) => [...prev, userMsg]);
       setInput('');
 
-      const onlineAnswer = await getOnlineAnswer(text);
-      if (onlineAnswer) {
-        const { clean, suggestion } = extractSuggestion(onlineAnswer);
-        addAIMessage(clean, undefined, suggestion);
-        setTimeout(() => inputRef.current?.focus(), 100);
-        return;
-      }
-      if (navigator.onLine) {
-        addAIMessage(
-          "I couldn't reach the assistant just now — we're fixing it, please try again in a few minutes. Meanwhile I can still help with the basics below.",
-        );
-      }
+      try {
+        const onlineAnswer = await getOnlineAnswer(text);
+        setBasicGuidance(!onlineAnswer);
+        if (onlineAnswer) {
+          const { clean, suggestion } = extractSuggestion(onlineAnswer);
+          addAIMessage(clean, undefined, suggestion);
+          setTimeout(() => inputRef.current?.focus(), 100);
+          return;
+        }
+        if (navigator.onLine) {
+          addAIMessage(
+            "I couldn't reach live AI. Here is basic guidance from the app; I can't verify current availability or trail conditions.",
+          );
+        }
 
-      const response = generateResponse(
-        text,
-        { date, groupSize, hikeType, weatherInsight, groupComposition },
-        (comp) => onGroupCompositionSet?.(comp),
-      );
-      addAIMessage(response.content, response.quickReplies);
-      setTimeout(() => inputRef.current?.focus(), 100);
+        const response = generateResponse(
+          text,
+          { date, groupSize, hikeType, weatherInsight, groupComposition },
+          (comp) => onGroupCompositionSet?.(comp),
+        );
+        addAIMessage(response.content, response.quickReplies);
+        setTimeout(() => inputRef.current?.focus(), 100);
+      } finally {
+        inFlight.current = false;
+        setIsTyping(false);
+      }
     },
     [date, groupSize, hikeType, weatherInsight, groupComposition, onGroupCompositionSet, addAIMessage, getOnlineAnswer],
   );
 
-  const handleMarkdown = (text: string) =>
-    text
-      .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-      .replace(/\*(.*?)\*/g, '<em>$1</em>')
-      .replace(/\n/g, '<br/>');
-
   useEffect(() => {
     const openAssistant = (e?: Event) => {
       setIsOpen(true);
-      const customEvent = e as CustomEvent<{ prompt?: string }>;
+      const customEvent = e as CustomEvent<{ prompt?: string; guidance?: Array<{ title: string; message: string }> }>;
+      if (customEvent?.detail?.guidance) contextGuidance.current = customEvent.detail.guidance;
       if (customEvent?.detail?.prompt) {
         setTimeout(() => {
           void sendMessage(customEvent.detail.prompt!);
@@ -717,7 +721,7 @@ export default function BookingAIChat({
           whileTap={{ scale: 0.96 }}
           aria-label="Open AI Chat"
         >
-            <MessageSquare className="h-4 w-4" />
+            <KaliAvatar expression="happy" size="sm" className="rounded-full" />
             <span>AI Assistant</span>
             {messages.length === 0 && (
               <span className="absolute -top-1.5 -right-1.5 w-3 h-3 bg-amber-400 rounded-full animate-pulse" />
@@ -729,6 +733,8 @@ export default function BookingAIChat({
       <AnimatePresence>
         {isOpen && (
           <motion.div
+            role="dialog"
+            aria-label="Chat with Kali"
             initial={{ opacity: 0, x: -400 }}
             animate={{ opacity: 1, x: 0 }}
             exit={{ opacity: 0, x: -400 }}
@@ -747,12 +753,12 @@ export default function BookingAIChat({
           >
             {/* Header */}
             <div className="flex items-center gap-3 p-4 border-b border-border/30 bg-primary/5">
-              <KaliAvatar expression="happy" size="sm" className="h-9 w-9 rounded-full" />
+              <KaliAvatar key={latestReply?.id ?? 'greeting'} expression={expression} activity={isTyping ? 'thinking' : input ? 'listening' : 'speaking'} size="sm" className="h-11 w-11 rounded-full" />
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-bold">Kali — AI Trail Assistant</p>
                 <p className="text-xs text-muted-foreground flex items-center gap-1.5">
                   <span className="w-1.5 h-1.5 bg-emerald-400 rounded-full inline-block" />
-                  Online · Mt. Kalisungan
+                  {isTyping ? 'Thinking about your question...' : basicGuidance ? 'Basic guidance' : `Here for you, ${getKaliRoleLabel(role ?? 'guest')}`}
                 </p>
               </div>
               <Button
@@ -790,13 +796,13 @@ export default function BookingAIChat({
 
             {/* Messages */}
             <div className="flex-1 overscroll-contain overflow-y-auto px-3 py-4 space-y-3">
-              {messages.map((msg) => (
+              {messages.map((msg, index) => (
                 <div
                   key={msg.id}
                   className={cn('flex gap-2', msg.role === 'user' ? 'justify-end' : 'justify-start')}
                 >
                   {msg.role === 'assistant' && (
-                    <KaliAvatar expression={assistantExpression(msg.content)} size="sm" className="mt-0.5 h-7 w-7 rounded-full" />
+                    <KaliAvatar expression={getKaliExpression(msg.content)} activity="speaking" animated={index === messages.length - 1} size="sm" className="mt-0.5 h-8 w-8 rounded-full" />
                   )}
                   <div
                     className={cn(
@@ -806,10 +812,9 @@ export default function BookingAIChat({
                         : 'bg-primary text-primary-foreground rounded-tr-sm',
                     )}
                   >
-                    <span
-                      className="whitespace-pre-wrap"
-                      dangerouslySetInnerHTML={{ __html: handleMarkdown(msg.content) }}
-                    />
+                    <div className="whitespace-pre-wrap break-words [&_p]:mb-2 [&_p:last-child]:mb-0">
+                      <ReactMarkdown>{msg.content}</ReactMarkdown>
+                    </div>
                     {msg.suggestion && onApplySuggestion && (
                       <button
                         onClick={() => onApplySuggestion(msg.suggestion!)}
@@ -838,7 +843,7 @@ export default function BookingAIChat({
               {/* Typing indicator */}
               {isTyping && (
                 <div className="flex gap-2 items-center">
-                  <KaliAvatar expression="thinking" size="sm" className="h-7 w-7 rounded-full" />
+                  <KaliAvatar expression="thinking" activity="thinking" size="sm" className="h-8 w-8 rounded-full" />
                   <div className="bg-secondary/60 rounded-2xl rounded-tl-sm px-3 py-2.5 flex gap-1.5">
                     {[0, 0.15, 0.3].map((delay, i) => (
                       <motion.span
@@ -868,6 +873,7 @@ export default function BookingAIChat({
                   value={input}
                   onChange={(e) => setInput(e.target.value)}
                   placeholder="Ask about the trail…"
+                  aria-label="Ask Kali"
                   className="flex-1 bg-secondary/40 border border-border/30 rounded-xl px-3 py-2 text-xs outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/20 transition-all"
                 />
                 <Button

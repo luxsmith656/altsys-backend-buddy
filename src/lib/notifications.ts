@@ -1,13 +1,20 @@
 const keyFor = (userId: string) => `mtk_seen_notifications_${userId}`;
 const removedKeyFor = (userId: string) => `mtk_removed_notifications_${userId}`;
 
+function withLegacyFirestoreAliases(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  // Older releases saved bare Firestore IDs; keep them valid after fs: namespacing.
+  return [...new Set(value.filter((id): id is string => typeof id === 'string')
+    .flatMap((id) => id.includes(':') ? [id] : [id, `fs:${id}`]))];
+}
+
 export function loadSeenNotificationIds(userId: string): string[] {
   if (typeof window === 'undefined') return [];
   try {
     const raw = localStorage.getItem(keyFor(userId));
     if (!raw) return [];
     const parsed = JSON.parse(raw) as string[];
-    return Array.isArray(parsed) ? parsed : [];
+    return withLegacyFirestoreAliases(parsed);
   } catch {
     return [];
   }
@@ -30,7 +37,7 @@ export function loadRemovedNotificationIds(userId: string): string[] {
     const raw = localStorage.getItem(removedKeyFor(userId));
     if (!raw) return [];
     const parsed = JSON.parse(raw) as string[];
-    return Array.isArray(parsed) ? parsed : [];
+    return withLegacyFirestoreAliases(parsed);
   } catch {
     return [];
   }

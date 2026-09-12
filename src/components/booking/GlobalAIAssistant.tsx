@@ -2,8 +2,12 @@ import { useMemo, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import BookingAIChat, { type BookingSuggestion } from '@/components/booking/BookingAIChat';
-import { Bot, CalendarCheck, QrCode, Download, X, Sparkles } from 'lucide-react';
+import { CalendarCheck, QrCode, X } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
+import KaliAvatar from '@/components/kali/KaliAvatar';
+import DraggableKaliDock from '@/components/kali/DraggableKaliDock';
+import '@/components/kali/kali-dock.css';
+import { getKaliRoleLabel } from '@/lib/kaliContext';
 
 /** Human label + short description for each route so the assistant can answer page questions. */
 const PAGE_INFO: Record<string, { label: string; blurb: string }> = {
@@ -18,6 +22,7 @@ const PAGE_INFO: Record<string, { label: string; blurb: string }> = {
   '/ranger': { label: 'Ranger Dashboard', blurb: 'the ranger dashboard with check-ins and monitoring' },
   '/admin': { label: 'Admin Dashboard', blurb: 'the admin dashboard for bookings, guides and monitoring' },
   '/central': { label: 'Central Dashboard', blurb: 'the multi-location central dashboard' },
+  '/mdrrmo': { label: 'MDRRMO Dashboard', blurb: 'emergency monitoring and last-known hiking group locations' },
 };
 
 /** Routes where the floating assistant should not appear. */
@@ -37,8 +42,8 @@ export default function GlobalAIAssistant() {
     () =>
       `Hi! I'm **Kali**, your Mount Kalisungan assistant. 🏔️\n\n` +
       `You're on **${info.label}** — ${info.blurb}.\n\n` +
-      `Ask me anything about this page, the trails, weather or safety — or tell me when you'd like to hike and I'll set up your booking for you.`,
-    [info.label, info.blurb],
+      `I'll tailor suggestions to your work as a ${getKaliRoleLabel(role ?? 'guest')}. What would you like help with?`,
+    [info.label, info.blurb, role],
   );
 
   if (hidden) return null;
@@ -62,9 +67,9 @@ export default function GlobalAIAssistant() {
 
   return (
     <>
-      <div className="fixed bottom-[calc(env(safe-area-inset-bottom)+5.5rem)] md:bottom-6 left-3 md:left-6 z-[2050] flex flex-col items-start gap-2">
+      <DraggableKaliDock aboveNavigation={location.pathname === '/guide'}>
         {actionsOpen && (
-          <div className="flex flex-col-reverse items-start gap-2.5 animate-in fade-in slide-in-from-bottom-3 duration-200">
+          <div className="kali-dock-actions">
             {/* Quick Check-In / QR Permit */}
             <button
               type="button"
@@ -73,7 +78,7 @@ export default function GlobalAIAssistant() {
                 if (isAdmin) {
                   navigate('/admin?tab=scan');
                 } else {
-                  navigate('/hiker');
+                  navigate(role === 'guide' ? '/guide' : '/hiker');
                 }
               }}
               className="flex items-center gap-2.5 px-3.5 py-2 rounded-2xl border border-border/40 bg-card/95 text-foreground shadow-2xl backdrop-blur-md hover:bg-secondary/60 transition-all text-xs font-semibold"
@@ -81,7 +86,7 @@ export default function GlobalAIAssistant() {
               <div className="grid h-8 w-8 place-items-center rounded-xl bg-amber-500/15 text-amber-600 dark:text-amber-400 shrink-0">
                 <QrCode className="h-4 w-4" />
               </div>
-              <span className="whitespace-nowrap">{isAdmin ? 'QR Check-in Scanner' : 'My QR Permit'}</span>
+              <span className="whitespace-nowrap">{isAdmin ? 'Check-in scanner' : role === 'guide' ? 'My assignments' : 'My QR Permit'}</span>
             </button>
 
             {/* Book a Hike / Walk-in */}
@@ -89,24 +94,25 @@ export default function GlobalAIAssistant() {
               type="button"
               onClick={() => {
                 setActionsOpen(false);
-                navigate('/booking');
+                navigate(role === 'guide' ? '/map' : '/booking');
               }}
               className="flex items-center gap-2.5 px-3.5 py-2 rounded-2xl border border-border/40 bg-card/95 text-foreground shadow-2xl backdrop-blur-md hover:bg-secondary/60 transition-all text-xs font-semibold"
             >
               <div className="grid h-8 w-8 place-items-center rounded-xl bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 shrink-0">
                 <CalendarCheck className="h-4 w-4" />
               </div>
-              <span className="whitespace-nowrap">{isAdmin ? 'Walk-In Desk' : 'Book a Hike'}</span>
+              <span className="whitespace-nowrap">{isAdmin ? 'Walk-In Desk' : role === 'guide' ? 'Trail map' : 'Book a Hike'}</span>
             </button>
 
             {/* Ask Kali AI */}
             <button
               type="button"
               onClick={openAssistant}
+              aria-label="Ask Kali AI"
               className="flex items-center gap-2.5 px-3.5 py-2 rounded-2xl border border-primary/30 bg-primary text-primary-foreground shadow-2xl hover:bg-primary/90 transition-all text-xs font-semibold"
             >
               <div className="grid h-8 w-8 place-items-center rounded-xl bg-white/20 text-white shrink-0">
-                <Bot className="h-4 w-4" />
+                <KaliAvatar expression="listening" size="sm" className="h-8 w-8 rounded-full" />
               </div>
               <span className="whitespace-nowrap">Ask Kali AI</span>
             </button>
@@ -116,14 +122,15 @@ export default function GlobalAIAssistant() {
         <button
           type="button"
           onClick={() => setActionsOpen((open) => !open)}
+          data-kali-drag-handle
           aria-label={actionsOpen ? 'Close quick actions' : 'Open quick actions'}
           title={actionsOpen ? 'Close quick actions' : 'Open quick actions'}
           aria-expanded={actionsOpen}
-          className="grid h-13 w-13 p-3.5 place-items-center rounded-full bg-primary text-primary-foreground shadow-xl shadow-primary/30 transition-transform active:scale-95 border-2 border-primary-foreground/20"
+          className="grid h-14 w-14 p-1 place-items-center rounded-full bg-primary text-primary-foreground shadow-xl shadow-primary/30 transition-transform active:scale-95 border-2 border-primary-foreground/20"
         >
-          {actionsOpen ? <X className="h-6 w-6" /> : <Bot className="h-6 w-6" />}
+          {actionsOpen ? <X className="h-6 w-6" /> : <KaliAvatar expression="happy" size="sm" className="h-10 w-10 rounded-full border-0" />}
         </button>
-      </div>
+      </DraggableKaliDock>
     <BookingAIChat
       key={location.pathname}
       groupSize={1}

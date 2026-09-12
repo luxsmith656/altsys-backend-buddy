@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { parseMeta, encodeMeta } from '@/lib/bookingMeta';
 import { calculateFees, calculatePeakExtensionFee, formatPeso } from '@/lib/payments';
+import { bookingReceipt } from '@/lib/bookingReceipt';
 import {
   Dialog,
   DialogContent,
@@ -50,7 +51,7 @@ export default function EndHikeSettlementDialog({
   const [loading, setLoading] = useState(false);
   const [cashTendered, setCashTendered] = useState<string>('');
   const [checkoutHeadcount, setCheckoutHeadcount] = useState<string>('');
-  const [headcountVerified, setHeadcountVerified] = useState<boolean>(true);
+  const [headcountVerified, setHeadcountVerified] = useState<boolean>(false);
 
   const meta = parseMeta(booking?.notes);
   const groupSize = Number(booking?.group_size || meta.actualGroupSize || 1);
@@ -63,10 +64,11 @@ export default function EndHikeSettlementDialog({
   const horseHelpFee = (meta.horseHelpRequests ?? [])
     .filter((request) => request.status !== 'cancelled')
     .reduce((sum, request) => sum + Number(request.fee || 0), 0);
-  const totalAmountDue = (meta.totalFee ?? baseTotalFee) + peakExtensionFee + emergencyHorseFee + horseHelpFee;
+  const receipt = bookingReceipt(booking ?? {});
+  const totalAmountDue = receipt.total;
 
   // Payment Status
-  const alreadyPaid = Number(meta.amountPaid ?? (booking?.payment_status === 'paid' ? totalAmountDue : 0));
+  const alreadyPaid = receipt.paid;
   const remainingBalance = Math.max(0, totalAmountDue - alreadyPaid);
 
   const isOnlinePayment =
@@ -82,7 +84,7 @@ export default function EndHikeSettlementDialog({
   useEffect(() => {
     if (open && booking) {
       setCheckoutHeadcount(String(groupSize));
-      setHeadcountVerified(true);
+      setHeadcountVerified(false);
       setCashTendered(remainingBalance > 0 ? String(remainingBalance) : '0');
     }
   }, [open, booking, groupSize, remainingBalance]);
@@ -93,7 +95,7 @@ export default function EndHikeSettlementDialog({
   const isCashSufficient = isFullySettled || parsedCash >= remainingBalance;
 
   const handleEndHike = async () => {
-    if (!booking) return;
+    if (!booking || loading) return;
 
     if (!headcountVerified || Number(checkoutHeadcount) !== groupSize) {
       toast.error(`Please verify that all ${groupSize} returning hikers are accounted for.`);
@@ -124,19 +126,16 @@ export default function EndHikeSettlementDialog({
       });
 
       // 1. Update Hiker Sessions to completed
-      try {
-        await supabase
+      const { error: sessionError } = await supabase
           .from('hiker_sessions')
           .update({
             status: 'completed',
             tracking_phase: 'completed',
             end_time: now,
-          } as any)
+          })
           .eq('booking_id', booking.id)
           .eq('status', 'active');
-      } catch (e) {
-        console.warn('Non-fatal: hiker session update warning', e);
-      }
+      if (sessionError) throw sessionError;
 
       // 2. Update Booking Status & Notes (payment_status is embedded in notes metadata)
       const { error: bookingError } = await supabase
@@ -150,33 +149,34 @@ export default function EndHikeSettlementDialog({
       if (bookingError) throw bookingError;
 
       // 3. Complete Guide Assignment if one exists
-      try {
-        await supabase
-          .from('booking_assignments' as any)
-          .update({ status: 'completed', decided_at: now } as any)
+      const { error: assignmentError } = await supabase
+          .from('booking_assignments')
+          .update({ status: 'completed', decided_at: now })
           .eq('booking_id', booking.id);
-      } catch (e) {
-        console.warn('Non-fatal: booking assignment update warning', e);
-      }
+      // The payment is committed at this point. Never offer another collection
+      // because a subsequent guide update failed; refresh and report partial sync.
+      const syncWarnings: string[] = [];
+      if (assignmentError) syncWarnings.push(`Guide assignment: ${assignmentError.message}`);
 
       // 4. If guide assigned, update guide roster availability
       try {
-        if (meta.assignedGuideId || meta.assignedGuide) {
+        if (!assignmentError && (meta.assignedGuideId || meta.assignedGuide)) {
           let guideQuery = supabase.from('guides' as any).update({ status: 'available' });
           if (meta.assignedGuideId) {
             guideQuery = guideQuery.eq('id', meta.assignedGuideId);
           } else if (meta.assignedGuide) {
             guideQuery = guideQuery.ilike('full_name', meta.assignedGuide);
           }
-          await guideQuery;
+          const { error: rosterError } = await guideQuery;
+          if (rosterError) syncWarnings.push(`Guide availability: ${rosterError.message}`);
         }
       } catch (e) {
-        console.warn('Non-fatal: guide roster update warning', e);
+        syncWarnings.push(`Guide availability: ${e instanceof Error ? e.message : 'Update failed'}`);
       }
 
       // 5. Log Audit Activity
       try {
-        await supabase.from('admin_logs').insert({
+        const { error: auditError } = await supabase.from('admin_logs').insert({
           action: 'hike_completed',
           entity: 'booking',
           entity_id: booking.id,
@@ -189,13 +189,19 @@ export default function EndHikeSettlementDialog({
             cashTendered: parsedCash,
             changeReturned: Math.max(0, changeDue),
             hikerName: meta.fullName || booking.emergency_contact_name,
+            syncWarnings,
           },
         } as any);
+        if (auditError) syncWarnings.push(`Audit log: ${auditError.message}`);
       } catch (e) {
-        console.warn('Non-fatal: activity log insert warning', e);
+        syncWarnings.push(`Audit log: ${e instanceof Error ? e.message : 'Update failed'}`);
       }
 
-      toast.success(`🎉 Hike ended for ${meta.fullName || 'group'}! Session marked completed.`);
+      if (syncWarnings.length) {
+        toast.warning(`Payment saved and hike ended. Do not collect again. Follow-up needed: ${syncWarnings.join('; ')}`);
+      } else {
+        toast.success(`🎉 Hike ended for ${meta.fullName || 'group'}! Session marked completed.`);
+      }
       onHikeEnded();
       onClose();
     } catch (err: any) {
@@ -311,7 +317,7 @@ export default function EndHikeSettlementDialog({
                 <span className="font-semibold text-foreground">{formatPeso(guideFee)}</span>
               </div>
               <div className="flex justify-between text-muted-foreground">
-                <span>Registration & Environmental Fee ({groupSize} × ₱30)</span>
+                  <span>Registration & Environmental Fee ({groupSize} × {formatPeso(registrationAndEnvironmentalFee / groupSize)})</span>
                 <span className="font-semibold text-foreground">{formatPeso(registrationAndEnvironmentalFee)}</span>
               </div>
               {peakExtensionFee > 0 && (
@@ -332,6 +338,8 @@ export default function EndHikeSettlementDialog({
                   <span className="font-semibold">{formatPeso(horseHelpFee)}</span>
                 </div>
               )}
+              {(meta.additionalExpenses ?? []).map(expense => <div key={expense.id} className="flex justify-between gap-3"><span>{expense.label}</span><span>{formatPeso(expense.amount)}</span></div>)}
+              {receipt.base !== registrationAndEnvironmentalFee + guideFee && <div className="flex justify-between gap-3"><span>Booking adjustment</span><span>{formatPeso(receipt.base - registrationAndEnvironmentalFee - guideFee)}</span></div>}
 
               <div className="border-t border-border/30 pt-2 flex justify-between text-sm font-bold">
                 <span>Total Fee</span>

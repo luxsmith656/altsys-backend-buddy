@@ -29,7 +29,7 @@ export default function TrailGallery() {
   };
 
   return (
-    <section id="learn-more" className="py-24 px-4 relative overflow-hidden section-warm-overlay">
+    <section id="trail-gallery" className="py-24 px-4 relative overflow-hidden section-warm-overlay">
       {/* Decorative background elements */}
       <div className="absolute top-0 right-0 w-96 h-96 bg-gradient-to-bl from-primary/5 to-transparent rounded-full blur-3xl pointer-events-none" />
       <div className="absolute bottom-0 left-0 w-80 h-80 bg-gradient-to-tr from-accent/5 to-transparent rounded-full blur-3xl pointer-events-none" />

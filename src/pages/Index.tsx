@@ -2,7 +2,8 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Mountain, ArrowUpRight, Wind, Trees, MapPin } from 'lucide-react';
-import { motion } from 'framer-motion';
+import { motion, useReducedMotion } from 'framer-motion';
+import MountainMist from '@/components/landing/MountainMist';
 import heroImage from '@/assets/mt-kalisungan-hero.jpg';
 import logo from '@/assets/logo.png';
 import TrailGallery from '@/components/landing/TrailGallery';
@@ -166,11 +167,12 @@ function WaveDivider({ className = '' }: { className?: string }) {
 
 export default function Index() {
   const { weather, loading, error } = useLiveWeather();
+  const reduceMotion = useReducedMotion();
   const { user } = useAuth();
   const navigate = useNavigate();
 
   const handleLearnMore = () => {
-    document.getElementById('learn-more')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    document.getElementById('learn-more')?.scrollIntoView({ behavior: reduceMotion ? 'auto' : 'smooth', block: 'start' });
   };
 
   const handleBookNow = () => {
@@ -184,7 +186,7 @@ export default function Index() {
   return (
     <div className="min-h-screen">
       {/* Hero */}
-      <section className="relative min-h-screen flex items-center justify-center overflow-hidden">
+      <section aria-label="Mt. Kalisungan" className="relative min-h-screen flex items-center justify-center overflow-hidden">
         <div className="absolute inset-0">
           <img
             src={heroImage}
@@ -193,6 +195,7 @@ export default function Index() {
             loading="eager"
           />
           <div className="absolute inset-0 bg-gradient-to-b from-black/60 via-black/50 to-black/10 dark:to-background" />
+          <MountainMist />
         </div>
 
         <motion.div

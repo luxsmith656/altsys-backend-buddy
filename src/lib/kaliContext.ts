@@ -1,7 +1,7 @@
 export type KaliRole = 'hiker' | 'guide' | 'admin' | 'super_admin' | 'ranger' | 'mdrrmo' | 'guest';
 export type KaliInsightKind = 'age-review' | 'minor-review' | 'weather' | 'group-guidance' | 'booking-reminder' | 'hike-type';
 export type KaliSeverity = 'info' | 'medium' | 'high';
-export type KaliExpression = 'alert' | 'review' | 'map' | 'happy' | 'thinking';
+export type KaliExpression = 'alert' | 'review' | 'map' | 'happy' | 'thinking' | 'listening' | 'explaining' | 'celebrating' | 'encouraging' | 'reassuring';
 
 export interface KaliWeatherInput {
   condition: string;
@@ -223,7 +223,7 @@ function weatherInsight(input: KaliContextInput): KaliInsight | null {
     expression: severe ? 'alert' : caution ? 'thinking' : 'happy',
     title: severe ? 'Strong weather warning' : caution ? 'Weather caution' : 'Weather window',
     message: severe
-        ? `Strong weather risk is expected${dateNote} (${weather.condition}). We strongly recommend rescheduling for safety.${forecastNote}${timeNote}`
+        ? `Strong weather risk is expected${dateNote} (${weather.condition}). This is a safety warning: check official advisories and prepare for hazardous conditions.${forecastNote}${timeNote}`
       : caution
         ? `${weather.condition} is possible${dateNote} for this hike. Proceed with care, rain gear, and a flexible turnaround plan.${forecastNote}${timeNote}`
         : `${weather.condition} looks favorable${dateNote} for the selected hike window. Continue checking the forecast because mountain weather can change.${timeNote}`,

@@ -1,49 +1,40 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-
-const invoke = vi.fn();
-const send = vi.fn();
-
-vi.mock('@/integrations/supabase/client', () => ({
-  supabase: { functions: { invoke } },
-}));
-
-vi.mock('@emailjs/browser', () => ({
-  default: { send },
-}));
-
-describe('email OTP delivery', () => {
-  beforeEach(() => {
-    invoke.mockReset();
-    send.mockReset();
+import { confirmReservation } from '@/lib/notification-service';
+const state = vi.hoisted(() => ({ invoke: vi.fn() }));
+vi.mock('@/integrations/supabase/client', () => ({ supabase: { functions: { invoke: state.invoke } } }));
+beforeEach(() => vi.clearAllMocks());
+describe('server-only booking email client', () => {
+  it('passes only the booking ID, not a client recipient, content or key', async () => {
+    state.invoke.mockResolvedValue({ data: { success: true, status: 'sent' }, error: null });
+    expect(await confirmReservation({ id: 'booking' })).toEqual({ success: true, status: 'sent' });
+    expect(state.invoke).toHaveBeenCalledExactlyOnceWith('send-booking-confirmation', { body: { bookingId: 'booking' } });
   });
-
-  it('uses the Resend-backed edge function before browser email providers', async () => {
-    invoke.mockResolvedValue({ data: { success: true, challengeId: 'challenge-1' }, error: null });
-    const { sendOtpEmail } = await import('@/lib/notification-service');
-
-    await expect(sendOtpEmail('hiker@example.com', 'Hiker', '123456')).resolves.toEqual({ success: true, challengeId: 'challenge-1' });
-    expect(invoke).toHaveBeenCalledWith('send-email-otp', {
-      body: { email: 'hiker@example.com', name: 'Hiker' },
-    });
-    expect(send).not.toHaveBeenCalled();
+  it.each([null, {}, { success: true }, { success: true, status: 'queued' }])('rejects invalid server result %j', async data => {
+    state.invoke.mockResolvedValue({ data, error: null });
+    expect(await confirmReservation({ id: 'booking' })).toMatchObject({ success: false, code: 'invalid_response' });
   });
-
-  it('verifies the email code through the server-side challenge', async () => {
-    invoke.mockResolvedValue({ data: { success: true }, error: null });
-    const { verifyOtpEmail } = await import('@/lib/notification-service');
-
-    await expect(verifyOtpEmail('hiker@example.com', 'challenge-1', '123456')).resolves.toEqual({ success: true });
-    expect(invoke).toHaveBeenCalledWith('verify-email-otp', {
-      body: { email: 'hiker@example.com', challengeId: 'challenge-1', otp: '123456' },
-    });
+  it('keeps queued work distinct from sent mail', async () => {
+    state.invoke.mockResolvedValue({ data: { success: false, code: 'queued', error: 'Retry queued' }, error: null });
+    expect(await confirmReservation({ id: 'booking' })).toMatchObject({ success: false, code: 'queued' });
   });
-
-  it('falls back to EmailJS only when the server delivery is unavailable', async () => {
-    invoke.mockResolvedValue({ data: null, error: new Error('function unavailable') });
-    send.mockResolvedValue({ status: 200 });
-    const { sendOtpEmail } = await import('@/lib/notification-service');
-
-    await expect(sendOtpEmail('hiker@example.com', 'Hiker', '123456')).resolves.toEqual({ success: true });
-    expect(send).toHaveBeenCalled();
+  it('surfaces non-2xx server errors', async () => {
+    state.invoke.mockResolvedValue({ data: null, error: { context: new Response(JSON.stringify({ success: false, code: 'not_configured', error: 'Sender missing' }), { status: 503 }) } });
+    expect(await confirmReservation({ id: 'booking' })).toMatchObject({ success: false, error: 'Sender missing' });
+  });
+  it('reports network failure and allows retry', async () => {
+    state.invoke.mockRejectedValueOnce(new Error('offline')).mockResolvedValueOnce({ data: { success: true, status: 'already_sent' }, error: null });
+    expect(await confirmReservation({ id: 'booking' })).toMatchObject({ success: false });
+    expect(await confirmReservation({ id: 'booking' })).toMatchObject({ success: true, status: 'already_sent' });
+  });
+  it('coalesces concurrent clicks but consults durable server status after reload', async () => {
+    let finish!: (value: unknown) => void;
+    state.invoke.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+    const first = confirmReservation({ id: 'booking' }); const second = confirmReservation({ id: 'booking' });
+    expect(state.invoke).toHaveBeenCalledTimes(1);
+    finish({ data: { success: true, status: 'sent' }, error: null });
+    await expect(first).resolves.toMatchObject({ success: true }); await second;
+    state.invoke.mockResolvedValue({ data: { success: true, status: 'already_sent' }, error: null });
+    await confirmReservation({ id: 'booking' });
+    expect(state.invoke).toHaveBeenCalledTimes(2);
   });
 });

@@ -1,12 +1,14 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { supabase } from '@/integrations/supabase/client';
+import { officialRoutesForLocation, type OfficialRouteCandidate } from '@/lib/officialRoutes';
 import { ADMIN_CHECKIN_TOKEN_PREFIX } from '@/lib/tracking/sessionAuthorization';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Activity, MapPin, Users, Plus, Loader2, Layers, User, Clock, WifiOff, Wifi } from 'lucide-react';
+import { Activity, Plus, Minus, Loader2, Navigation, MapPin } from 'lucide-react';
+import MapWorkspace from '@/components/map/MapWorkspace';
+import LiveGroupDetails from '@/components/map/LiveGroupDetails';
+import { gpsPresentation, type LiveMapGroup } from '@/lib/liveMapPresentation';
 import { toast } from 'sonner';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -14,7 +16,6 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { useLocations } from '@/hooks/useLocations';
 import { parseMeta } from '@/lib/bookingMeta';
 import { routeStationsFromMetadata } from '@/lib/map-data';
-import { getLocationAgeLabel } from '@/lib/tracking/locationAge';
 import type { CompanionDetail } from '@/types';
 
 interface Props {
@@ -22,6 +23,8 @@ interface Props {
   locationId: string | null;
   /** Allow admin/super_admin to add checkpoints by clicking the map. */
   canAddCheckpoints?: boolean;
+  tools?: ReactNode;
+  routeActions?: ReactNode;
 }
 
 interface ActiveSession {
@@ -85,7 +88,11 @@ const esc = (value: unknown) =>
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#039;');
 
-export default function RealtimeMonitorMap({ locationId, canAddCheckpoints = false }: Props) {
+export default function RealtimeMonitorMap(props: Props) {
+  return <ScopedMonitorMap key={props.locationId ?? 'all'} {...props} />;
+}
+
+function ScopedMonitorMap({ locationId, canAddCheckpoints = false, tools, routeActions }: Props) {
   const { locations } = useLocations();
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<L.Map | null>(null);
@@ -99,6 +106,13 @@ export default function RealtimeMonitorMap({ locationId, canAddCheckpoints = fal
   const [officialRoutes, setOfficialRoutes] = useState<TrailZoneRef[]>([]);
   const [progress, setProgress] = useState<Record<string, { checkpoint_id: string; created_at: string }[]>>({});
   const [loading, setLoading] = useState(true);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [panelOpen, setPanelOpen] = useState(false);
+  const [placingCheckpoint, setPlacingCheckpoint] = useState(false);
+  const placingRef = useRef(false);
+  placingRef.current = placingCheckpoint;
+  const loadVersion = useRef(0);
+  const [loadError, setLoadError] = useState(false);
   const [viewMode, setViewMode] = useState<'cluster' | 'individual'>('cluster');
   const [clock, setClock] = useState(() => Date.now());
 
@@ -128,7 +142,9 @@ export default function RealtimeMonitorMap({ locationId, canAddCheckpoints = fal
     mapRef.current = L.map(containerRef.current, {
       center,
       zoom: 14,
-      zoomControl: true,
+      zoomControl: false,
+      // Leaflet's delayed CSS zoom completion can outlive a tracker/simulation switch.
+      zoomAnimation: false,
     });
     L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
       attribution: '© OpenStreetMap',
@@ -140,13 +156,19 @@ export default function RealtimeMonitorMap({ locationId, canAddCheckpoints = fal
 
     if (canAddCheckpoints) {
       mapRef.current.on('click', (e) => {
+        if (!placingRef.current) return;
         setPendingCp({ lat: e.latlng.lat, lng: e.latlng.lng });
+        setPlacingCheckpoint(false);
         setCpName('');
         setCpDesc('');
         setCpRadius(30);
       });
     }
+    const observer = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(() => mapRef.current?.invalidateSize({ pan: false })) : null;
+    observer?.observe(containerRef.current);
     return () => {
+      loadVersion.current++;
+      observer?.disconnect();
       mapRef.current?.remove();
       mapRef.current = null;
     };
@@ -160,29 +182,44 @@ export default function RealtimeMonitorMap({ locationId, canAddCheckpoints = fal
 
   /* ── load checkpoints + active sessions + survey progress ── */
   const loadData = async () => {
+    const version = ++loadVersion.current;
     setLoading(true);
+    setLoadError(false);
 
     let cpQuery = supabase.from('checkpoints' as any).select('*').order('order_index');
     if (locationId) cpQuery = cpQuery.eq('location_id', locationId);
-    const { data: cpData } = await cpQuery;
-    setCheckpoints(((cpData as unknown as Checkpoint[]) ?? []));
+    const { data: cpData, error: cpError } = await cpQuery;
+    if (version !== loadVersion.current) return;
 
     let routeQuery = supabase
       .from('trail_zones' as any)
-      .select('id,location_id,name,coordinates_json,recording_metadata')
+      .select('id,location_id,name,coordinates_json,recording_metadata,status,is_official,review_status')
       .eq('status', 'active')
       .eq('is_official', true)
+      .eq('review_status', 'approved')
       .order('created_at', { ascending: true });
     if (locationId) routeQuery = routeQuery.eq('location_id', locationId);
-    const { data: routeData } = await routeQuery;
-    setOfficialRoutes(((routeData as unknown as TrailZoneRef[]) ?? []));
+    const { data: routeData, error: routeError } = await routeQuery;
+    if (version !== loadVersion.current) return;
+    // Published geometry must not depend on session/location telemetry succeeding.
+    // Keep the last validated route on a failed refresh; a successful empty result
+    // still clears it when a route is unpublished. Scope changes remount this map.
+    if (!routeError) setOfficialRoutes(officialRoutesForLocation((routeData as unknown as (TrailZoneRef & OfficialRouteCandidate)[]) ?? [], locationId));
+    if (!cpError) setCheckpoints((cpData as unknown as Checkpoint[]) ?? []);
 
     const sessQuery = supabase
       .from('hiker_sessions' as any)
       .select('id,user_id,booking_id,trail_zone_id,location_id,participant_role,tracking_phase,total_distance_km,moving_time_sec,resting_time_sec,peak_reached_at,descent_started_at,start_time,client_session_id')
       .eq('status', 'active')
       .like('client_session_id', `${ADMIN_CHECKIN_TOKEN_PREFIX}%`);
-    const { data: sessData } = await sessQuery;
+    const { data: sessData, error: sessionError } = await sessQuery;
+    if (version !== loadVersion.current) return;
+    if (sessionError) {
+      setLoadError(true);
+      setRawSessions([]);
+      setLoading(false);
+      return;
+    }
     let sessList = ((sessData as any[]) ?? []) as ActiveSession[];
 
     const trailZoneIds = Array.from(new Set(sessList.map((s) => s.trail_zone_id).filter(Boolean))) as string[];
@@ -221,8 +258,8 @@ export default function RealtimeMonitorMap({ locationId, canAddCheckpoints = fal
         const meta = parseMeta(booking.notes);
         s.location_id = booking.location_id;
         s.groupSize = booking.group_size;
-        s.hiker_name = meta.fullName || booking.emergency_contact_name || s.hiker_name || 'Hiker Lead';
-        s.guideName = meta.assignedGuide || meta.preferredGuide || 'Not assigned';
+        s.hiker_name = meta.fullName || s.hiker_name;
+        s.guideName = meta.assignedGuide || 'Not assigned';
         s.guidePhone = meta.guidePhone;
         s.hikerPhone = meta.phoneNumber || booking.emergency_contact_phone;
         s.emergencyContact = booking.emergency_contact_name
@@ -245,6 +282,8 @@ export default function RealtimeMonitorMap({ locationId, canAddCheckpoints = fal
       });
     }
 
+    let nextProgress: Record<string, { checkpoint_id: string; created_at: string }[]> = {};
+
     // Get latest location for each session
     if (sessList.length > 0) {
       const ids = sessList.map((s) => s.id);
@@ -256,7 +295,7 @@ export default function RealtimeMonitorMap({ locationId, canAddCheckpoints = fal
         .limit(500);
       const latest: Record<string, { lat: number; lng: number; ts: string }> = {};
       ((locData as any[]) ?? []).forEach((row) => {
-        if (!latest[row.session_id]) {
+        if (row.latitude != null && row.longitude != null && gpsPresentation({ lat: Number(row.latitude), lng: Number(row.longitude), timestamp: row.timestamp }, Date.now()).hasFix && !latest[row.session_id]) {
           latest[row.session_id] = { lat: Number(row.latitude), lng: Number(row.longitude), ts: row.timestamp };
         }
       });
@@ -277,7 +316,9 @@ export default function RealtimeMonitorMap({ locationId, canAddCheckpoints = fal
         .limit(1500);
       const paths: Record<string, [number, number][]> = {};
       ((pathData as any[]) ?? []).forEach((row) => {
-        (paths[row.session_id] ??= []).push([Number(row.latitude), Number(row.longitude)]);
+        if (row.latitude != null && row.longitude != null && gpsPresentation({ lat: Number(row.latitude), lng: Number(row.longitude), timestamp: row.timestamp }, Date.now()).hasFix) {
+          (paths[row.session_id] ??= []).push([Number(row.latitude), Number(row.longitude)]);
+        }
       });
       sessList.forEach((s) => { s.path = paths[s.id] ?? []; });
 
@@ -289,7 +330,11 @@ export default function RealtimeMonitorMap({ locationId, canAddCheckpoints = fal
         .in('user_id', userIds);
       const nameMap: Record<string, string> = {};
       (profs ?? []).forEach((p: any) => { nameMap[p.user_id] = p.full_name; });
-      sessList.forEach((s) => { s.hiker_name = s.hiker_name || nameMap[s.user_id] || 'Hiker Lead'; });
+      sessList.forEach((session) => {
+        session.hiker_name = session.hiker_name || nameMap[session.user_id] || 'Hiker Lead';
+        const guide = sessList.find((candidate) => candidate.booking_id === session.booking_id && session.booking_id && candidate.participant_role === 'guide');
+        if (guide && nameMap[guide.user_id]) session.guideName = nameMap[guide.user_id];
+      });
 
       // Survey progress per session
       const { data: surveys } = await supabase
@@ -301,9 +346,12 @@ export default function RealtimeMonitorMap({ locationId, canAddCheckpoints = fal
         if (!row.session_id) return;
         (map[row.session_id] ??= []).push({ checkpoint_id: row.checkpoint_id, created_at: row.created_at });
       });
-      setProgress(map);
+      nextProgress = map;
     }
 
+    if (version !== loadVersion.current) return;
+    setProgress(nextProgress);
+    setLoadError(Boolean(cpError || routeError));
     setRawSessions(sessList);
     setLoading(false);
   };
@@ -328,7 +376,8 @@ export default function RealtimeMonitorMap({ locationId, canAddCheckpoints = fal
     });
 
     bookingGroupMap.forEach((group) => {
-      const primary = group.find((s) => s.participant_role === 'guide') || group[0];
+      const primary = group.find((s) => s.participant_role === 'guide' && s.lastTs)
+        || group.find((s) => s.lastTs) || group[0];
       grouped.push(primary);
     });
 
@@ -415,7 +464,7 @@ export default function RealtimeMonitorMap({ locationId, canAddCheckpoints = fal
           iconSize: [26, 26],
           iconAnchor: [13, 13],
         }),
-      }).bindPopup(`<strong>${cp.name}</strong><br/>${cp.description || ''}<br/><small>Trigger radius: ${cp.trigger_radius_m}m</small>`);
+      }).bindPopup(`<strong>${esc(cp.name)}</strong><br/>${esc(cp.description)}<br/><small>Trigger radius: ${cp.trigger_radius_m}m</small>`);
       checkpointLayer.current!.addLayer(marker);
       L.circle([cp.latitude, cp.longitude], {
         radius: cp.trigger_radius_m,
@@ -427,10 +476,9 @@ export default function RealtimeMonitorMap({ locationId, canAddCheckpoints = fal
 
     // hikers / groups
     sessions.forEach((s) => {
-      if (s.lastLat == null || s.lastLng == null) return;
+      if (s.lastLat == null || s.lastLng == null || !gpsPresentation({ lat: s.lastLat, lng: s.lastLng, timestamp: s.lastTs }, clock).hasFix) return;
       const ageMin = s.lastTs ? Math.round((clock - new Date(s.lastTs).getTime()) / 60000) : null;
       const isOffline = ageMin == null || ageMin >= 5; // five minutes without a ping is a stale mobile position
-      const reached = (progress[s.id] ?? []).length;
       const role = s.participant_role ?? 'hiker';
       const isCluster = viewMode === 'cluster' && (s.groupSize ?? 1) > 1;
 
@@ -444,11 +492,6 @@ export default function RealtimeMonitorMap({ locationId, canAddCheckpoints = fal
         : isCluster
         ? '#059669' // Emerald cluster
         : '#22c55e'; // Green for hiker
-
-      const distanceKm = Number(s.total_distance_km ?? 0);
-      const movingMin = Math.round(Number(s.moving_time_sec ?? 0) / 60);
-      const pace = distanceKm > 0 && movingMin > 0 ? movingMin / distanceKm : null;
-      const etaMin = pace && distanceKm < 8 ? Math.round((8 - distanceKm) * pace) : null;
 
       if ((s.path?.length ?? 0) > 1) {
         L.polyline(s.path!, {
@@ -470,72 +513,13 @@ export default function RealtimeMonitorMap({ locationId, canAddCheckpoints = fal
         }).addTo(hikerLayer.current!);
       }
 
-      const companionRows = s.companionDetails?.length
-        ? s.companionDetails.map((c, i) =>
-          `<li>${esc(c.name || `Companion ${i + 1}`)}${c.age ? `, ${esc(c.age)}` : ''}${c.city ? ` - ${esc(c.city)}` : ''}</li>`,
-        ).join('')
-        : (s.companions ?? []).map((c) => `<li>${esc(c)}</li>`).join('');
-
-      const lastSeenFormatted = s.lastTs
-        ? new Date(s.lastTs).toLocaleTimeString('en-PH', { timeZone: 'Asia/Manila', hour: '2-digit', minute: '2-digit' })
-        : 'Unknown';
-      const locationAgeLabel = getLocationAgeLabel(ageMin);
-
-      const popupHtml = `
-        <div style="min-width:250px;max-width:320px;font-family:system-ui,-apple-system,sans-serif">
-          <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;border-bottom:1px solid rgba(0,0,0,0.1);padding-bottom:6px">
-            <strong style="font-size:14px">${isCluster ? `🏔️ ${esc(s.hiker_name)}'s Group` : esc(s.hiker_name)}</strong>
-            <span style="font-size:10px;font-weight:700;padding:2px 6px;border-radius:999px;background:${isOffline ? 'rgba(249,115,22,0.15);color:#ea580c' : 'rgba(34,197,94,0.15);color:#16a34a'}">
-              ${isOffline ? `⏸️ ${locationAgeLabel}` : `🟢 LIVE`}
-            </span>
-          </div>
-
-          ${isOffline ? `
-            <div style="margin-top:6px;padding:6px 8px;background:rgba(249,115,22,0.1);border-radius:6px;font-size:11px;color:#c2410c">
-              <b>⏸️ ${locationAgeLabel} · ${lastSeenFormatted} PHT (${ageMin}m ago)</b><br/>
-              <span>Position is paused at last recorded GPS coordinates. Cached trail points will sync when device reconnects.</span>
-            </div>
-          ` : ''}
-
-          <div style="margin-top:6px;font-size:12px;line-height:1.45">
-            <div><b>Role / Phase:</b> ${esc(role.toUpperCase())} · <span style="text-transform:capitalize">${esc(s.tracking_phase ?? 'ascent')}</span></div>
-            ${(s as any).trail_zone_name ? `<div><b>Trail Route:</b> ${esc((s as any).trail_zone_name)}</div>` : ''}
-            <div><b>Group Size:</b> <strong>${s.groupSize ?? 1} Hiker${(s.groupSize ?? 1) === 1 ? '' : 's'}</strong></div>
-            <div><b>Assigned Guide:</b> ${esc(s.guideName || 'Not assigned')}</div>
-            ${s.guidePhone ? `<div><b>Guide Phone:</b> ${esc(s.guidePhone)}</div>` : ''}
-            ${s.hikerPhone ? `<div><b>Lead Phone:</b> ${esc(s.hikerPhone)}</div>` : ''}
-            <div><b>Distance:</b> ${distanceKm.toFixed(2)} km · <b>Moving:</b> ${movingMin} min</div>
-            <div><b>Last location:</b> ${lastSeenFormatted} PHT · ${locationAgeLabel}</div>
-            ${s.tracking_phase === 'peak' ? `
-              <div style="margin-top:4px;padding:4px;background:rgba(234,179,8,0.1);border-radius:4px">
-                <b style="color:#eab308">At Summit / Peak</b><br/>
-                <div>Reached: ${s.peak_reached_at ? new Date(s.peak_reached_at).toLocaleTimeString() : 'Unknown'}</div>
-                ${s.peakDeadlineAt ? `<div>Descend deadline: ${new Date(s.peakDeadlineAt).toLocaleTimeString('en-PH', { timeZone: 'Asia/Manila', hour: '2-digit', minute: '2-digit' })} PHT</div>` : ''}
-              </div>
-            ` : `
-              <div><b>${s.tracking_phase === 'descent' ? 'ETA Basecamp' : 'ETA Summit'}:</b> ${etaMin == null ? 'Calculating...' : `${Math.floor(etaMin / 60)}h ${etaMin % 60}m`}</div>
-            `}
-            <div><b>Checkpoints Verified:</b> ${reached}/${checkpoints.length}</div>
-            ${s.hasMinors ? `<div style="color:#b45309"><b>Minors:</b> ${s.minorCount ?? 1}</div>` : ''}
-            ${s.medicalNotes ? `<div style="color:#dc2626"><b>Medical:</b> ${esc(s.medicalNotes)}</div>` : ''}
-            ${companionRows ? `<div style="margin-top:6px"><b>Group Companions (${(s.companions ?? []).length}):</b><ul style="margin:3px 0 0 16px;padding:0">${companionRows}</ul></div>` : ''}
-          </div>
-        </div>
-      `;
-
-      const iconHtml = isCluster
-        ? `<div style="background:${markerColor};color:white;min-width:32px;height:24px;padding:0 6px;border-radius:12px;border:2px solid white;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:bold;box-shadow:0 2px 6px rgba(0,0,0,.35)">👥 ${s.groupSize ?? 1}</div>`
-        : `<div style="background:${markerColor};width:${role === 'guide' ? 18 : 16}px;height:${role === 'guide' ? 18 : 16}px;border-radius:${role === 'guide' ? '4px' : '50%'};border:3px solid white;box-shadow:0 0 0 3px ${isOffline ? 'rgba(249,115,22,.3)' : 'rgba(34,197,94,.3)'}"></div>`;
-
-      const m = L.marker([s.lastLat, s.lastLng], {
-        zIndexOffset: role === 'guide' ? 1800 : 2000,
-        icon: L.divIcon({
-          className: '',
-          html: iconHtml,
-          iconSize: isCluster ? [40, 24] : [16, 16],
-          iconAnchor: isCluster ? [20, 12] : [8, 8],
-        }),
-      }).bindPopup(popupHtml);
+      const iconHtml = `<span style="--marker-color:${markerColor}">${isCluster ? s.groupSize ?? 1 : role === 'guide' ? 'G' : 'H'}</span>`;
+      const m = L.marker([s.lastLat!, s.lastLng!], {
+        title: `${s.hiker_name ?? 'Hiker Lead'} - select group`,
+        alt: `${s.hiker_name ?? 'Hiker Lead'} - select group`,
+        zIndexOffset: 2000,
+        icon: L.divIcon({ className: 'live-map-marker', html: iconHtml, iconSize: [44, 44], iconAnchor: [22, 22] }),
+      }).on('click', () => { setSelectedId(s.id); setPanelOpen(true); });
       hikerLayer.current!.addLayer(m);
     });
   }, [sessions, checkpoints, progress, officialRoutes, viewMode, clock]);
@@ -591,104 +575,73 @@ export default function RealtimeMonitorMap({ locationId, canAddCheckpoints = fal
     void loadData();
   };
 
-  const totalActive = rawSessions.length;
-  const offlineCount = rawSessions.filter((s) => {
-    if (!s.lastTs) return true;
-    return (Date.now() - new Date(s.lastTs).getTime()) / 60000 >= 2;
-  }).length;
+  const groups: LiveMapGroup[] = sessions.map((session) => ({
+    id: session.id, lead: session.hiker_name || 'Hiker Lead', guide: session.guideName,
+    pax: session.groupSize, phase: session.tracking_phase,
+    route: officialRoutes.find((route) => route.id === session.trail_zone_id)?.name,
+    lat: session.lastLat, lng: session.lastLng, timestamp: session.lastTs,
+    distanceKm: session.total_distance_km,
+    companions: session.companionDetails?.length
+      ? session.companionDetails.map((companion) => companion.name || 'Unnamed companion')
+      : session.companions ?? [],
+    phone: session.guidePhone, emergencyContact: session.emergencyContact, medicalNotes: session.medicalNotes,
+  }));
+  const selected = groups.find((group) => group.id === selectedId);
+  const locate = (group: LiveMapGroup) => {
+    if (gpsPresentation(group, clock).hasFix) mapRef.current?.setView([group.lat!, group.lng!], 17);
+  };
 
   return (
-    <Card className="glass-card">
-      <CardHeader className="pb-3">
-        <div className="flex items-center justify-between flex-wrap gap-3">
-          <CardTitle className="flex items-center gap-2 text-lg">
-            <Activity className="h-5 w-5 text-primary" /> Real-time Hiker Monitor
-            {loading && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
-          </CardTitle>
-          <div className="flex items-center gap-2 text-xs flex-wrap">
-            {/* View Mode Filter Switcher */}
-            <div className="inline-flex rounded-xl bg-secondary/60 p-0.5 border border-border/40">
-              <button
-                type="button"
-                onClick={() => setViewMode('cluster')}
-                className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold transition-all ${
-                  viewMode === 'cluster' ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'
-                }`}
-              >
-                <Layers className="h-3.5 w-3.5" /> Group Clusters
-              </button>
-              <button
-                type="button"
-                onClick={() => setViewMode('individual')}
-                className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold transition-all ${
-                  viewMode === 'individual' ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'
-                }`}
-              >
-                <User className="h-3.5 w-3.5" /> Individual Hikers
-              </button>
-            </div>
-
-            <Badge variant="outline" className="gap-1 bg-background/60">
-              <Users className="h-3 w-3" /> {totalActive} Active
-            </Badge>
-            {offlineCount > 0 && (
-              <Badge variant="outline" className="gap-1 text-orange-600 dark:text-orange-400 border-orange-500/30 bg-orange-500/10">
-                <WifiOff className="h-3 w-3" /> {offlineCount} Offline (Paused)
-              </Badge>
-            )}
-            <Badge variant="outline" className="gap-1 bg-background/60">
-              <MapPin className="h-3 w-3" /> {checkpoints.length} Checkpoints
-            </Badge>
-          </div>
+    <section className="live-map-monitor" aria-label="Live hiking map">
+      <MapWorkspace open={panelOpen} onOpenChange={setPanelOpen}
+        routes={<>
+          <ul className="live-map-route-list">
+            {officialRoutes.map(route => <li key={route.id}><button type="button" aria-label={`Show ${route.name} on map`} onClick={() => {
+              const path = route.coordinates_json as { lat: number; lng: number }[];
+              const map = mapRef.current;
+              map?.fitBounds(path.map(point => [point.lat, point.lng] as [number, number]), { paddingTopLeft: [30, 30], paddingBottomRight: [60, Math.min(map.getSize().y * .4, 260)], maxZoom: 17, animate: false });
+            }}><strong>{route.name}</strong><small>Official published route</small></button></li>)}
+          </ul>
+          {!officialRoutes.length && <p className="live-map-empty">No published routes available.</p>}
+          {routeActions}
+        </>}
+        tools={<>
+      <header className="live-map-toolbar">
+        <h2 className="sr-only">Live hiking map</h2>
+        {loading && <Loader2 size={16} className="animate-spin" aria-label="Loading live groups" />}
+        <label className="sr-only" htmlFor="live-map-view">Map grouping</label>
+        <select id="live-map-view" value={viewMode} onChange={(event) => setViewMode(event.target.value as typeof viewMode)}>
+          <option value="cluster">Groups</option><option value="individual">Individuals</option>
+        </select>
+        {canAddCheckpoints && <button type="button" className="live-map-icon" disabled={!locationId}
+          aria-pressed={placingCheckpoint} aria-label="Place checkpoint" title="Place checkpoint"
+          onClick={() => setPlacingCheckpoint(!placingCheckpoint)}><MapPin size={18} /></button>}
+      </header>
+          {tools}
+        </>}
+        panel={<>
+        {loadError && <p role="alert" className="live-map-empty">Live data could not be fully loaded. <button type="button" onClick={() => void loadData()}>Retry</button></p>}
+        <ul className="live-map-group-list" aria-label="Active groups">
+          {groups.map((group) => {
+            const gps = gpsPresentation(group, clock);
+            return <li key={group.id}><button type="button" className="live-map-group-row" aria-pressed={selectedId === group.id}
+              onClick={() => setSelectedId(group.id)}>
+              <strong>{group.lead} · {group.pax == null ? 'Party unknown' : `${group.pax} pax`}</strong>
+              <small>{group.phase || 'Phase not recorded'} · {gps.hasFix ? `${gps.stale ? 'Last fix' : 'GPS'} ${gps.ageLabel}` : 'Awaiting GPS'}</small>
+            </button></li>;
+          })}
+        </ul>
+        {!loading && !groups.length && !loadError && <p className="live-map-empty">No active groups at this location.</p>}
+        {selected ? <LiveGroupDetails group={selected} now={clock} onLocate={() => locate(selected)} />
+          : groups.length > 0 && <p className="live-map-empty live-map-muted">No group selected</p>}
+      </>}>
+        <div ref={containerRef} className="live-map-surface" aria-label="Live group positions" />
+        <div className="live-map-tools" role="group" aria-label="Map controls">
+          <button type="button" className="live-map-icon" aria-label="Zoom in" title="Zoom in" onClick={() => mapRef.current?.zoomIn()}><Plus size={18} /></button>
+          <button type="button" className="live-map-icon" aria-label="Zoom out" title="Zoom out" onClick={() => mapRef.current?.zoomOut()}><Minus size={18} /></button>
+          <button type="button" className="live-map-icon" aria-label="Recenter location" title="Recenter location" onClick={() => mapRef.current?.setView(center, 14)}><Navigation size={18} /></button>
         </div>
-        {canAddCheckpoints && (
-          <p className="text-xs text-muted-foreground mt-2 flex items-center gap-1">
-            <Plus className="h-3 w-3" /> Click anywhere on the map to add a checkpoint at that point.
-          </p>
-        )}
-      </CardHeader>
-      <CardContent className="space-y-3">
-        <div ref={containerRef} className="h-[min(55dvh,460px)] min-h-[340px] w-full overflow-hidden rounded-xl border border-border/30 shadow-inner" style={{ zIndex: 0 }} />
-
-        {sessions.length > 0 && (
-          <div className="space-y-2 max-h-[220px] overflow-y-auto pr-1">
-            <div className="flex items-center justify-between">
-              <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-                {viewMode === 'cluster' ? 'Active Group Clusters' : 'Individual Hiker Beacons'}
-              </h4>
-              <span className="text-[11px] text-muted-foreground">Showing {sessions.length} tracked entities</span>
-            </div>
-            {sessions.map((s) => {
-              const reached = (progress[s.id] ?? []).length;
-              const ageMin = s.lastTs ? Math.round((clock - new Date(s.lastTs).getTime()) / 60000) : null;
-              const isOffline = ageMin == null || ageMin >= 5;
-              const isCluster = viewMode === 'cluster' && (s.groupSize ?? 1) > 1;
-
-              return (
-                <div key={s.id} className="flex flex-col items-start gap-2 rounded-xl bg-secondary/30 border border-border/20 p-2.5 text-xs sm:flex-row sm:items-center sm:justify-between sm:gap-3">
-                  <div className="flex items-center gap-2 min-w-0">
-                    <div className={`w-2.5 h-2.5 rounded-full shrink-0 ${isOffline ? 'bg-orange-500' : 'bg-emerald-500 animate-pulse'}`} />
-                    <span className="font-bold truncate text-foreground">
-                      {isCluster ? `${s.hiker_name}'s Group (${s.groupSize} pax)` : s.hiker_name}
-                    </span>
-                    <span className="text-[10px] uppercase font-semibold text-muted-foreground bg-background px-1.5 py-0.5 rounded border border-border/30">
-                      {s.participant_role ?? 'hiker'}
-                    </span>
-                  </div>
-                  <div className="flex w-full flex-wrap items-center gap-x-3 gap-y-1 text-muted-foreground sm:w-auto sm:justify-end">
-                    <span>📍 {reached}/{checkpoints.length} CP</span>
-                    <span className="capitalize font-medium text-foreground">{s.tracking_phase ?? 'ascent'}</span>
-                    <span className={`flex items-center gap-1 font-mono text-[11px] ${isOffline ? 'text-orange-600 dark:text-orange-400 font-semibold' : 'text-emerald-600 dark:text-emerald-400'}`}>
-                      {isOffline ? <WifiOff className="h-3 w-3" /> : <Wifi className="h-3 w-3" />}
-                      {isOffline ? `Paused (${ageMin ?? '?'}m ago)` : 'Live'}
-                    </span>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </CardContent>
+      </MapWorkspace>
 
       <Dialog open={!!pendingCp} onOpenChange={(o) => !o && setPendingCp(null)}>
         <DialogContent className="z-[3100]">
@@ -722,6 +675,6 @@ export default function RealtimeMonitorMap({ locationId, canAddCheckpoints = fal
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </Card>
+    </section>
   );
 }

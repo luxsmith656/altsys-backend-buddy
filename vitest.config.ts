@@ -23,6 +23,9 @@ export default defineConfig({
         "src/lib/tracking/gpsFilter.ts",
         "src/lib/tracking/sessionAuthorization.ts",
         "src/lib/monitoring/systemHealthEngine.ts",
+        "src/lib/notification-service.ts",
+        "supabase/functions/_shared/booking-email.ts",
+        "supabase/functions/send-booking-confirmation/handler.ts",
       ],
       thresholds: {
         lines: 45,

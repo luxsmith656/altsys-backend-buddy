@@ -288,7 +288,7 @@ export default function Onboarding() {
                 I confirm that the information I provide is accurate and that I am responsible
                 for keeping my account credentials confidential. I consent to receive
                 service-related communications (booking confirmations, safety alerts, trail
-                advisories, and account notifications) via the platform, email, or SMS.
+                advisories, and account notifications) in the platform, with booking confirmations by email.
               </p>
             </section>
 

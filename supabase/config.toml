@@ -1,1 +1,6 @@
 project_id = "evcqnlbumsfgbfddoonv"
+
+[functions.send-booking-confirmation]
+# The handler validates user JWTs with Auth.getUser, or the dedicated cron secret.
+# The cron request is not an end-user JWT and must reach that handler.
+verify_jwt = false

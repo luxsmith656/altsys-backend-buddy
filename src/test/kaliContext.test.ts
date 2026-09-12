@@ -90,7 +90,7 @@ describe('buildKaliContext', () => {
 
     expect(insight.kind).toBe('weather');
     expect(insight.severity).toBe('high');
-    expect(insight.message).toContain('resched');
+    expect(insight.message).toContain('safety warning');
     expect(insight.meta?.forecastStatus).toBe('stale');
   });
 

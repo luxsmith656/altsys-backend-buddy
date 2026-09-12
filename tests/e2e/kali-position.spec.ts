@@ -1,0 +1,57 @@
+import { expect, test } from '@playwright/test';
+import { attachRuntimeMonitor, expectRenderedPage } from '../support/runtime-monitor';
+
+test('Kali can be dragged without opening, stays reachable, and resets after reload', async ({ page }) => {
+  const monitor = attachRuntimeMonitor(page);
+  await page.setViewportSize({ width: 390, height: 780 });
+  await page.goto('/map');
+  await expectRenderedPage(page, 'map', 'Check in at your jump-off');
+  const bubble = page.getByRole('button', { name: 'Open quick actions', exact: true });
+  const start = (await bubble.boundingBox())!;
+  await page.mouse.move(start.x + 24, start.y + 24);
+  await page.mouse.down();
+  await page.mouse.move(325, 300, { steps: 12 });
+  await page.mouse.up();
+  const moved = (await bubble.boundingBox())!;
+  expect(moved.x).toBeGreaterThan(start.x + 100);
+  expect(moved.y).toBeLessThan(start.y - 100);
+  await expect(bubble).toHaveAttribute('aria-expanded', 'false');
+  await bubble.click();
+  await expect(page.getByRole('button', { name: 'Ask Kali AI', exact: true })).toBeInViewport();
+  await page.getByRole('button', { name: 'Close quick actions' }).click();
+  await page.setViewportSize({ width: 320, height: 480 });
+  await expect(page.getByRole('button', { name: 'Open quick actions', exact: true })).toBeInViewport();
+  await page.setViewportSize({ width: 390, height: 780 });
+  await monitor.waitForRequests();
+  await page.reload();
+  const reset = (await bubble.boundingBox())!;
+  expect(reset.x).toBeLessThan(25);
+  expect(reset.y).toBeGreaterThan(650);
+  monitor.assertClean();
+});
+
+test('touch dragging Kali does not pan the page or activate its menu', async ({ page, context }) => {
+  await page.setViewportSize({ width: 390, height: 780 });
+  const monitor = attachRuntimeMonitor(page);
+  await page.goto('/map');
+  const bubble = page.getByRole('button', { name: 'Open quick actions', exact: true });
+  await expect(bubble).toBeVisible();
+  const start = (await bubble.boundingBox())!;
+  const touch = await context.newCDPSession(page);
+  await touch.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: start.x + 28, y: start.y + 28 }] });
+  await touch.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x: 290, y: 190 }] });
+  await touch.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+  await expect(bubble).toHaveAttribute('aria-expanded', 'false');
+  expect((await bubble.boundingBox())!.y).toBeLessThan(220);
+  expect(await page.evaluate(() => window.scrollY)).toBe(0);
+  await bubble.click();
+  await expect(page.getByRole('button', { name: 'Ask Kali AI', exact: true })).toBeInViewport();
+  await page.getByRole('button', { name: 'Close quick actions' }).click();
+  await bubble.focus();
+  await page.keyboard.press('Home');
+  expect((await bubble.boundingBox())!.x).toBeLessThan(25);
+  await page.keyboard.press('ArrowRight');
+  expect((await bubble.boundingBox())!.x).toBeGreaterThan(25);
+  await touch.detach();
+  monitor.assertClean();
+});

@@ -1,7 +1,9 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useLocations } from '@/hooks/useLocations';
 import { supabase } from '@/integrations/supabase/client';
 import { ADMIN_CHECKIN_TOKEN_PREFIX } from '@/lib/tracking/sessionAuthorization';
+import { parseMeta } from '@/lib/bookingMeta';
+import { getRecordedRevenue } from '@/lib/payments';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -28,28 +30,33 @@ export default function CentralDashboard() {
   const [stats, setStats] = useState<LocStats[]>([]);
   const [loading, setLoading] = useState(true);
   const [walkInOpen, setWalkInOpen] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
-  const loadStats = async () => {
+  const loadStats = useCallback(async () => {
     setLoading(true);
+    setLoadError(null);
     const monthStart = format(startOfMonth(new Date()), 'yyyy-MM-dd');
 
-    const { data: bookings } = await supabase
+    try {
+    const { data: bookings, error: bookingError } = await supabase
       .from('bookings')
-      .select('id,location_id,booking_date,total_amount,status,created_at');
+      .select('id,location_id,booking_date,notes,status,created_at');
+    if (bookingError) throw bookingError;
 
-    const { data: sessions } = await supabase
-      .from('hiker_sessions' as any)
-      .select('id,location_id,status')
+    const { data: sessions, error: sessionError } = await supabase
+      .from('hiker_sessions')
+      .select('id,location_id,status,participant_role')
       .eq('status', 'active')
       .like('client_session_id', `${ADMIN_CHECKIN_TOKEN_PREFIX}%`);
+    if (sessionError) throw sessionError;
 
     const grouped: LocStats[] = locations.map((loc) => {
-      const locBookings = (bookings ?? []).filter((b: any) => b.location_id === loc.id);
-      const monthBookings = locBookings.filter((b: any) => b.booking_date >= monthStart);
+      const locBookings = (bookings ?? []).filter((b) => b.location_id === loc.id);
+      const monthBookings = locBookings.filter((b) => b.booking_date >= monthStart);
       const revenue = locBookings
-        .filter((b: any) => b.status !== 'cancelled')
-        .reduce((sum: number, b: any) => sum + Number(b.total_amount || 0), 0);
-      const active = ((sessions as any[]) ?? []).filter((s) => s.location_id === loc.id).length;
+        .filter((b) => b.status !== 'cancelled')
+        .reduce((sum, b) => sum + getRecordedRevenue(parseMeta(b.notes)), 0);
+      const active = (sessions ?? []).filter((s) => s.location_id === loc.id && s.participant_role !== 'guide').length;
       return {
         id: loc.id,
         name: loc.name,
@@ -62,10 +69,15 @@ export default function CentralDashboard() {
     });
 
     setStats(grouped);
-    setLoading(false);
-  };
+    } catch (error: unknown) {
+      setLoadError(error instanceof Error ? error.message : 'Could not load booking and session totals. Please retry.');
+      setStats([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [locations]);
 
-  useEffect(() => { void loadStats(); }, [locations]);
+  useEffect(() => { void loadStats(); }, [loadStats]);
 
   const totals = stats.reduce(
     (acc, s) => ({
@@ -107,6 +119,7 @@ export default function CentralDashboard() {
           </div>
         </motion.div>
 
+        {loadError && <div role="alert" className="mb-4 flex items-center gap-2 rounded-md border border-destructive/40 p-3 text-sm text-destructive"><AlertTriangle className="h-4 w-4 shrink-0" />{loadError}</div>}
         {/* KPIs */}
         <div className="mb-6 grid grid-cols-1 gap-3 min-[360px]:grid-cols-2 md:grid-cols-4 md:gap-4">
           {[
@@ -121,7 +134,7 @@ export default function CentralDashboard() {
                   <s.icon className={`h-7 w-7 ${s.color} opacity-60`} />
                   <div className="min-w-0">
                     <p className="text-xs text-muted-foreground">{s.label}</p>
-                    <p className="break-words text-lg font-bold sm:text-xl">{s.value}</p>
+                    <p className="break-words text-lg font-bold sm:text-xl">{loading ? 'Loading...' : loadError ? 'Unavailable' : s.value}</p>
                   </div>
                 </CardContent>
               </Card>

@@ -92,7 +92,7 @@ describe('Guide Earnings Calculator', () => {
     ];
 
     const result = calculateGuideEarnings(mockAssignments, 1000);
-    expect(result.lifetimeEarned).toBe(1000);
+    expect(result.lifetimeEarned).toBe(800);
     expect(result.completedHikesCount).toBe(1);
   });
 

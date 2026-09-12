@@ -1,5 +1,6 @@
 // Offline knowledge base for Mt. Kalisungan trail assistant
 // Static entries + dynamic learning cache from previous AI responses
+import { FEE_POLICY_TEXT } from './payments';
 
 const CACHE_KEY = 'kalisungan_learned_cache';
 const CACHE_MAX = 200;
@@ -10,6 +11,7 @@ interface KBEntry {
 }
 
 const KB: KBEntry[] = [
+  { keywords: ['fee', 'fees', 'price', 'cost', 'rate', 'guide fee', 'walk-in', 'porter', 'horse'], answer: FEE_POLICY_TEXT },
   // ─── TRAILS ───
   {
     keywords: ['trail', 'available', 'trails', 'route', 'routes', 'path', 'which'],

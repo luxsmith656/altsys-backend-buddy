@@ -38,21 +38,7 @@ export const HIKE_TIME_OPTIONS: Record<HikeType, HikeTimeOption[]> = {
   ],
 };
 
-export const GUIDE_FEE_BY_HIKE_TYPE = {
-  morning: 800,
-  night: 1000,
-  overnight: 1600,
-} as const;
-
-export function normalizeHikeType(value?: string | null): keyof typeof GUIDE_FEE_BY_HIKE_TYPE {
-  if (value === 'night') return 'night';
-  if (value === 'overnight') return 'overnight';
-  return 'morning';
-}
-
-export function getGuideFeePerGuide(value?: string | null): number {
-  return GUIDE_FEE_BY_HIKE_TYPE[normalizeHikeType(value)];
-}
+export { GUIDE_FEE_BY_HIKE_TYPE, normalizeHikeType, getGuideFeePerGuide } from '../../supabase/functions/_shared/hike-fees';
 
 export function isValidHikeTime(type: HikeType, time: string): boolean {
   if (type === 'day') return HIKE_TIME_OPTIONS.morning.some((option) => option.time === time);

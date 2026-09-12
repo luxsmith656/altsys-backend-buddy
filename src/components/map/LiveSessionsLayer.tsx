@@ -36,7 +36,7 @@ type Props = {
   userId: string;
   userRole: string | null;
   locationId?: string | null;
-  onSelfLocationChange?: (location: { lat: number; lng: number } | null) => void;
+  onSelfLocationChange?: (location: { lat: number; lng: number; timestamp?: string } | null) => void;
 };
 
 const roleColor: Record<string, string> = {
@@ -227,11 +227,11 @@ export default function LiveSessionsLayer({
   useEffect(() => {
     if (mode !== 'self') return;
     const latestLocal = localSnapshot?.lastFix
-      ? { lat: localSnapshot.lastFix.lat, lng: localSnapshot.lastFix.lng }
+      ? { lat: localSnapshot.lastFix.lat, lng: localSnapshot.lastFix.lng, timestamp: new Date(localSnapshot.lastFix.ts).toISOString() }
       : null;
     const points = selfSession ? renderedPaths[selfSession.id] ?? [] : [];
     const latestServer = points.length
-      ? { lat: points[points.length - 1].latitude, lng: points[points.length - 1].longitude }
+      ? { lat: points[points.length - 1].latitude, lng: points[points.length - 1].longitude, timestamp: points[points.length - 1].timestamp }
       : null;
     const location = latestLocal ?? latestServer;
     onSelfLocationChange?.(location);

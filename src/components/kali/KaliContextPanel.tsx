@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { AlertTriangle, BellRing, Check, Info, MessageCircle, ShieldAlert, X } from 'lucide-react';
+import { AlertTriangle, BellRing, Check, Info, MessageCircle, Send, ShieldAlert, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { getKaliRoleLabel, type KaliInsight, type KaliRole } from '@/lib/kaliContext';
 import KaliAvatar from './KaliAvatar';
@@ -34,6 +34,7 @@ function followUpPrompt(insight: KaliInsight): string {
 
 export default function KaliContextPanel({ role, insights }: KaliContextPanelProps) {
   const [open, setOpen] = useState(false);
+  const [reply, setReply] = useState('');
   const [dismissedInsightIds, setDismissedInsightIds] = useState<string[]>([]);
   const previousInsightIds = useRef<string[]>([]);
   const sortedInsights = useMemo(
@@ -67,9 +68,13 @@ export default function KaliContextPanel({ role, insights }: KaliContextPanelPro
   if (!insight) return null;
 
   const label = `${insight.title}: ${insight.message}`;
-  const askKali = () => {
+  const askKali = (prompt = followUpPrompt(insight)) => {
     setOpen(false);
-    window.dispatchEvent(new CustomEvent('open-global-ai-assistant', { detail: { prompt: followUpPrompt(insight) } }));
+    setReply('');
+    window.dispatchEvent(new CustomEvent('open-global-ai-assistant', { detail: {
+      prompt,
+      guidance: visibleInsights.map(({ title, message }) => ({ title, message })),
+    } }));
   };
 
   const viewMinorRequirements = () => {
@@ -95,7 +100,7 @@ export default function KaliContextPanel({ role, insights }: KaliContextPanelPro
           className="pointer-events-auto absolute bottom-16 right-0 w-[min(22rem,calc(100vw-1.5rem))] transform-gpu overflow-hidden rounded-3xl border border-border/50 bg-card/95 shadow-2xl backdrop-blur-md sm:bottom-16"
         >
           <header className="flex items-center gap-3 border-b border-border/30 px-4 py-3">
-            <KaliAvatar expression={insight?.expression ?? 'happy'} size="sm" />
+            <KaliAvatar expression={reply ? 'listening' : insight.expression} activity={reply ? 'listening' : 'speaking'} size="sm" />
             <div className="min-w-0 flex-1">
               <p className="text-sm font-bold">Kali guidance</p>
               <p className="truncate text-[11px] text-muted-foreground">For {getKaliRoleLabel(role)}</p>
@@ -138,11 +143,15 @@ export default function KaliContextPanel({ role, insights }: KaliContextPanelPro
             </p>
             <button
               type="button"
-              onClick={askKali}
+              onClick={() => askKali()}
               className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-primary px-3 py-2.5 text-xs font-bold text-primary-foreground shadow-sm transition-colors hover:bg-primary/90"
             >
               <MessageCircle className="h-4 w-4" /> Ask Kali in chat
             </button>
+            <form className="flex gap-2" onSubmit={(event) => { event.preventDefault(); if (reply.trim()) askKali(reply.trim()); }}>
+              <input aria-label="Reply to Kali reminder" placeholder="Ask me about this..." value={reply} onChange={(event) => setReply(event.target.value)} className="min-w-0 flex-1 rounded-md border border-border bg-background px-3 py-2 text-sm" />
+              <button type="submit" disabled={!reply.trim()} aria-label="Send reply to Kali" className="grid h-11 w-11 shrink-0 place-items-center rounded-md bg-primary text-primary-foreground disabled:opacity-50"><Send className="h-4 w-4" /></button>
+            </form>
           </div>
         </section>
       )}

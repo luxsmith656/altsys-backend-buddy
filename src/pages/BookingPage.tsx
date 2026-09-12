@@ -51,7 +51,6 @@ import { toast } from 'sonner';
 import { motion, AnimatePresence } from 'framer-motion';
 import { format } from 'date-fns';
 import { encodeMeta } from '@/lib/bookingMeta';
-import { confirmReservation } from '@/lib/notification-service';
 import { CapacityCalendar, type DayCapacityMap } from '@/components/booking/CapacityCalendar';
 import BookingAIChat, { type GroupComposition } from '@/components/booking/BookingAIChat';
 import { cn } from '@/lib/utils';
@@ -88,6 +87,8 @@ interface WeatherSnapshot {
   minTempC: number;
   rainProbability: number;
   condition: string;
+  sourceName?: string;
+  sourceUrl?: string;
   fetchedAt?: number;
 }
 
@@ -226,7 +227,9 @@ export default function BookingPage() {
       setStep(2);
       toast.info('Review your details, then accept the reminders and agreements to finish.');
     }
-    setSearchParams({}, { replace: true });
+    const remainingParams = new URLSearchParams(searchParams);
+    ['date', 'time', 'pax', 'type', 'ready'].forEach((key) => remainingParams.delete(key));
+    setSearchParams(remainingParams, { replace: true });
   }, [searchParams, setSearchParams]);
   const [monthCapacity, setMonthCapacity] = useState<DayCapacityMap>({});
   const [smartGuideEnabled, setSmartGuideEnabled] = useState(true);
@@ -258,6 +261,7 @@ export default function BookingPage() {
   const [dbGuides, setDbGuides] = useState<Array<{ id: string; full_name: string; location_id: string; per_trip_fee: number }>>([]);
   const [preferredGuideId, setPreferredGuideId] = useState<string>('');
   const referralGuideId = searchParams.get('guide') || String(user?.user_metadata?.referral_guide_id || '');
+  const appliedReferralId = useRef<string | null>(null);
 
   // ── Guide dropdown options ──
   const [guideOptions, setGuideOptions] = useState<string[]>([]);
@@ -393,9 +397,10 @@ export default function BookingPage() {
   );
 
   useEffect(() => {
-    if (!referralGuideId || preferredGuideId || !dbGuides.length) return;
+    if (!referralGuideId || appliedReferralId.current === referralGuideId || !dbGuides.length) return;
     const referredGuide = dbGuides.find((guide) => guide.id === referralGuideId);
     if (!referredGuide) return;
+    appliedReferralId.current = referralGuideId;
     if (referredGuide.location_id && referredGuide.location_id !== startLocationId) setStartLocationId(referredGuide.location_id);
     setPreferredGuideId(referredGuide.id);
     setPreferredGuide(referredGuide.full_name);
@@ -545,6 +550,8 @@ export default function BookingPage() {
           minTempC: selected.day.mintemp_c,
           rainProbability: Number(selected.day.daily_chance_of_rain ?? 0),
           condition: selected.day.condition?.text ?? 'Forecast available',
+          sourceName: 'WeatherAPI',
+          sourceUrl: 'https://www.weatherapi.com/',
           fetchedAt: Date.now(),
         });
         return;
@@ -572,6 +579,8 @@ export default function BookingPage() {
         minTempC: payload.daily.temperature_2m_min[idx],
         rainProbability: payload.daily.precipitation_probability_max[idx] ?? 0,
         condition: weatherCodeToLabel(payload.daily.weathercode[idx] ?? -1),
+        sourceName: 'Open-Meteo',
+        sourceUrl: 'https://open-meteo.com/',
         fetchedAt: Date.now(),
       });
     } catch (err: unknown) {
@@ -585,7 +594,7 @@ export default function BookingPage() {
   }, []);
 
   useEffect(() => {
-    if (!smartGuideEnabled || !date) {
+    if (!date) {
       weatherRequestId.current += 1;
       setWeatherInsight(null);
       setWeatherLoading(false);
@@ -593,7 +602,7 @@ export default function BookingPage() {
     }
     setWeatherInsight(null);
     void fetchSmartWeather(date);
-  }, [smartGuideEnabled, date, fetchSmartWeather]);
+  }, [date, fetchSmartWeather]);
 
   const handleClearInsights = useCallback(() => {
     setSmartGuideEnabled(false);
@@ -831,6 +840,8 @@ export default function BookingPage() {
       envFee: fees.envFee,
       guideFee: fees.guideFee,
       totalFee: fees.totalFee,
+      baseFee: fees.totalFee,
+      originalQuote: { total: fees.totalFee, capturedAt: new Date().toISOString() },
     });
 
     const { data, error } = await supabase
@@ -884,22 +895,12 @@ export default function BookingPage() {
       // Clear saved draft on successful booking
       try { localStorage.removeItem(DRAFT_KEY); } catch { /* ignore */ }
       toast.success('Booking submitted! Awaiting admin approval.');
-      confirmReservation({
-        id: data.id.toString(),
-        visitorName: fullName,
-        email: emailAddress || user.email || '',
-        phone: phoneNumber,
-        hikeDate: dateStr,
-        trail: 'Mt. Kalisungan Summit',
-        hikeTime,
-      });
-
       if (isFirebaseConfigured() && user?.id) {
         void createUserNotification(user.id, {
           title: 'Booking submitted',
           body: `Your booking for ${dateStr} is now pending admin approval.`,
           category: 'booking',
-        });
+        }).catch(() => toast.warning('Booking saved. The in-app notification could not be delivered. Your booking remains available in My Bookings.'));
       }
       try { localStorage.setItem(`${LAST_BOOKING_AGE_PREFIX}${user.id}`, age); } catch { /* storage unavailable */ }
       try {
@@ -930,7 +931,7 @@ export default function BookingPage() {
             </div>
             <h2 className="text-gradient text-2xl font-bold">Booking Submitted!</h2>
             <p className="text-muted-foreground text-sm mt-1">
-              Your reservation is pending admin approval. You'll be notified via Email &amp; SMS once reviewed.
+              Your reservation is pending admin approval. A booking confirmation email will follow once your guide accepts and your booking is confirmed.
             </p>
           </CardHeader>
           <CardContent className="space-y-5">
@@ -1565,7 +1566,7 @@ export default function BookingPage() {
                         </Label>
                         <Select
                           value={startLocationId}
-                          onValueChange={(v) => { setStartLocationId(v); setPreferredGuideId(''); }}
+                          onValueChange={(v) => { setStartLocationId(v); setPreferredGuideId(''); setPreferredGuide(''); }}
                         >
                           <SelectTrigger id="startLocation">
                             <SelectValue placeholder="Choose where you'll start hiking" />

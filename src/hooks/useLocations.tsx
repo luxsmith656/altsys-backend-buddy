@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, createContext, useContext, ReactNode } from 'react';
+import { useState, useEffect, useCallback, useRef, createContext, useContext, ReactNode } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 
@@ -38,6 +38,9 @@ export function LocationsProvider({ children }: { children: ReactNode }) {
   const [myLocationIds, setMyLocationIds] = useState<string[]>([]);
   const [activeLocationId, _setActiveLocationId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const requestVersion = useRef(0);
+  const resolvedIdentity = useRef<string | null>(null);
+  const identity = `${user?.id || 'guest'}:${role || ''}`;
 
   const isSuperAdmin = role === 'super_admin';
   const isAllLocationRole = role === 'super_admin' || role === 'mdrrmo';
@@ -50,11 +53,13 @@ export function LocationsProvider({ children }: { children: ReactNode }) {
   };
 
   const refresh = useCallback(async () => {
+    const version = ++requestVersion.current;
     setLoading(true);
     const { data: locs } = await supabase
       .from('locations' as any)
       .select('*')
       .order('name');
+    if (version !== requestVersion.current) return;
 
     const list = (locs as unknown as LocationRow[] | null) ?? [];
     setLocations(list);
@@ -64,6 +69,7 @@ export function LocationsProvider({ children }: { children: ReactNode }) {
         .from('user_locations' as any)
         .select('location_id')
         .eq('user_id', user.id);
+      if (version !== requestVersion.current) return;
       const ids = ((maps as any[] | null) ?? []).map((m) => m.location_id);
       setMyLocationIds(ids);
 
@@ -84,15 +90,16 @@ export function LocationsProvider({ children }: { children: ReactNode }) {
       setMyLocationIds([]);
       if (list.length > 0) _setActiveLocationId(list[0].id);
     }
+    resolvedIdentity.current = identity;
     setLoading(false);
-  }, [user, role, isSuperAdmin]);
+  }, [user, identity, isAllLocationRole, isMappedLocationRole]);
 
   useEffect(() => { void refresh(); }, [refresh]);
 
   const myLocations = locations.filter((l) => myLocationIds.includes(l.id));
 
   return (
-    <Ctx.Provider value={{ locations, myLocations, activeLocationId, setActiveLocationId, isSuperAdmin, loading, refresh }}>
+    <Ctx.Provider value={{ locations, myLocations, activeLocationId, setActiveLocationId, isSuperAdmin, loading: loading || resolvedIdentity.current !== identity, refresh }}>
       {children}
     </Ctx.Provider>
   );

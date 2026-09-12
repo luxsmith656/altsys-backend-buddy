@@ -17,9 +17,7 @@ export default function Login() {
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
-  const [confirmationEmail, setConfirmationEmail] = useState('');
-  const [resendingConfirmation, setResendingConfirmation] = useState(false);
-  const { signIn, resendSignupConfirmation } = useAuth();
+  const { signIn } = useAuth();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
 
@@ -29,9 +27,6 @@ export default function Login() {
     const { error } = await signIn(email, password);
     setLoading(false);
     if (error) {
-      if (/email not confirmed|confirm your email/i.test(error.message)) {
-        setConfirmationEmail(email.trim().toLowerCase());
-      }
       toast.error(error.message);
     } else {
       const redirectPath = searchParams.get('redirect');
@@ -47,23 +42,11 @@ export default function Login() {
     const { error } = await signIn(qEmail, qPassword);
     setLoading(false);
     if (error) {
-      if (/email not confirmed|confirm your email/i.test(error.message)) {
-        setConfirmationEmail(qEmail.trim().toLowerCase());
-      }
       toast.error(`${error.message}. Try "Reset test accounts" below.`);
       return;
     }
     const redirectPath = searchParams.get('redirect');
     navigate(redirectPath || '/dashboard');
-  };
-
-  const resendConfirmation = async () => {
-    if (!confirmationEmail || resendingConfirmation) return;
-    setResendingConfirmation(true);
-    const { error } = await resendSignupConfirmation(confirmationEmail);
-    setResendingConfirmation(false);
-    if (error) toast.error(error.message);
-    else toast.success(`Confirmation email sent to ${confirmationEmail}`);
   };
 
   const [reseeding, setReseeding] = useState(false);
@@ -188,12 +171,6 @@ export default function Login() {
               Sign Up
             </Link>
           </div>
-          {confirmationEmail && (
-            <Button type="button" variant="ghost" className="w-full mt-2 text-xs" onClick={resendConfirmation} disabled={resendingConfirmation}>
-              {resendingConfirmation ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : null}
-              Resend confirmation email
-            </Button>
-          )}
         </div>
 
         {/* Quick login buttons for testing */}

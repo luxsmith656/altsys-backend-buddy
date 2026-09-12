@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.48.0";
 import { embed } from "../_shared/kb.ts";
+import { FEE_POLICY_TEXT } from '../_shared/payments.ts';
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -25,10 +26,7 @@ const TRAIL_INTENT_RE =
   /\b(trail|trails|route|routes|summit|ridge|river|condition|conditions|closed|closure|open|status|muddy|slippery|landslide)\b/i;
 
 const FEE_SCHEDULE = `PUBLISHED FEE SCHEDULE (Mount Kalisungan, Philippine Peso):
-- Registration/entry fee: ₱30 per person
-- Environmental fee: ₱20 per person
-- Guide fee: mandatory for every group; 1 guide covers 1–5 pax. The per-guide rate is ₱800 morning, ₱1,000 night, or ₱1,600 overnight. If more than 5 hikers, an additional guide is required (e.g. 1–5 pax = 1 guide, 6–10 pax = 2 guides).
-- Example: a group of 4 = (₱30 × 4) + (₱20 × 4) + ₱800 = ₱1,000 total
+${FEE_POLICY_TEXT}
 - Fees are the same regardless of which trail or jump-off point is used; transport to/from the jump-off is arranged by the hiker.
 - Accepted payment methods: onsite (at the registration desk), GCash, or bank transfer.
 You MAY compute and explain these costs for the person asking. You MUST NEVER reveal what any other hiker paid, payment records, receipts, reference numbers, refunds, collections or total revenue — for those reply: "I can only help with what your own hike would cost. Other people's payment details aren't available here."`;

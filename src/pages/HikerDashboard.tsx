@@ -52,6 +52,8 @@ import {
   AlertTriangle,
 } from 'lucide-react';
 import BookingChat from '@/components/booking/BookingChat';
+import BookingReceipt from '@/components/booking/BookingReceipt';
+import { bookingReceipt, canChangeBooking } from '@/lib/bookingReceipt';
 import { QRCodeSVG } from 'qrcode.react';
 import { toast } from 'sonner';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -104,6 +106,9 @@ export default function HikerDashboard() {
   const [submittingReview, setSubmittingReview] = useState(false);
   const [chatBooking, setChatBooking] = useState<{ id: string; date: string } | null>(null);
   const [companionQrBooking, setCompanionQrBooking] = useState<any | null>(null);
+  const [receiptBookingId, setReceiptBookingId] = useState<string | null>(null);
+  const receiptBooking = bookings.find(booking => booking.id === receiptBookingId);
+  const canChange = (booking: (typeof bookings)[number]) => canChangeBooking(booking, sessions.filter(session => session.booking_id === booking.id));
 
   useEffect(() => {
     if (!user) return;
@@ -196,6 +201,7 @@ export default function HikerDashboard() {
 
   /* ── Cancel booking ── */
   const handleCancelBooking = async (booking: any) => {
+    if (!canChange(booking)) { toast.error('This hike can no longer be changed.'); return; }
     if (cancelConfirmation.trim().toUpperCase() !== 'CANCEL') {
       toast.error('Type CANCEL to confirm this booking cancellation.');
       return;
@@ -819,6 +825,7 @@ export default function HikerDashboard() {
               <div className="grid grid-cols-2 gap-3 sm:grid-cols-2 lg:grid-cols-3 lg:gap-4">
                 {bookings.map((b) => {
                   const meta = parseMeta(b.notes);
+                  const receipt = bookingReceipt(b);
                   return (
                     <div
                       key={b.id}
@@ -876,7 +883,7 @@ export default function HikerDashboard() {
 
                         <div className="pt-1 text-center">
                           <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400">
-                            {formatPeso(Number(b.total_amount || 0))}
+                            {formatPeso(receipt.total)}
                           </span>
                           {meta.paymentStatus && (
                             <span className="text-[10px] text-muted-foreground ml-1 font-medium uppercase">
@@ -930,7 +937,7 @@ export default function HikerDashboard() {
                       )}
 
                       {/* Cancel — only for non-cancelled, pending/confirmed, upcoming */}
-                      {b.status !== 'cancelled' &&
+                      {canChange(b) &&
                         b.status !== 'adjustment_pending' &&
                         new Date(b.booking_date) >= new Date() && (
                           <AlertDialog>
@@ -996,7 +1003,11 @@ export default function HikerDashboard() {
                         </Button>
                       )}
 
-                      {/* Reschedule / message admin */}
+                      <Button size="sm" variant="outline" className="w-full gap-1 px-2 text-[11px]" onClick={() => setReceiptBookingId(b.id)}>
+                        <CalendarCheck className="h-3.5 w-3.5" /> Details / receipt
+                      </Button>
+                      {/* Only unstarted bookings can request a different date. */}
+                      {canChange(b) && (
                       <Button
                         size="sm"
                         variant="outline"
@@ -1005,6 +1016,7 @@ export default function HikerDashboard() {
                       >
                         <CalendarClock className="h-3.5 w-3.5" /> Reschedule
                       </Button>
+                      )}
                     </div>
                   );
                 })}
@@ -1059,13 +1071,19 @@ export default function HikerDashboard() {
         </Dialog>
       </div>
 
+      <Dialog open={!!receiptBooking} onOpenChange={(open) => !open && setReceiptBookingId(null)}>
+        <DialogContent className="z-[3100] max-w-lg max-h-[85dvh] overflow-y-auto">
+          <DialogHeader className="pr-10"><DialogTitle>Booking details &amp; receipt</DialogTitle><DialogDescription>Booking #{receiptBooking?.id.slice(0, 8)}</DialogDescription></DialogHeader>
+          {receiptBooking && <BookingReceipt booking={receiptBooking} />}
+        </DialogContent>
+      </Dialog>
       {chatBooking && (
         <BookingChat
           bookingId={chatBooking.id}
           bookingDate={chatBooking.date}
           open={!!chatBooking}
           onOpenChange={(o) => !o && setChatBooking(null)}
-          canRequestReschedule
+          canRequestReschedule={Boolean(bookings.find(b => b.id === chatBooking.id && canChange(b)))}
           onAfterReschedule={() => { setChatBooking(null); window.location.reload(); }}
         />
       )}

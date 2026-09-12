@@ -13,6 +13,10 @@ export interface CompanionDetail {
 
 /** Structured data stored as JSON in the bookings.notes field */
 export interface BookingMeta {
+  originalQuote?: { total: number; capturedAt: string };
+  /** Base booking charges only, excluding separately itemized hike expenses. */
+  baseFee?: number;
+  additionalExpenses?: { id: string; label: string; amount: number; recordedAt: string; recordedBy?: string }[];
   userNotes?: string;
   assignedGuide?: string;       // Guide name assigned by admin
   assignedGuideId?: string;

@@ -28,7 +28,7 @@ export default function Navbar() {
   const navLinks = user
     ? [
         { to: dashboardPath, label: 'Dashboard', icon: LayoutDashboard },
-        { to: '/booking', label: 'Book Hike', icon: CalendarCheck },
+        ...(role === 'guide' ? [] : [{ to: '/booking', label: 'Book Hike', icon: CalendarCheck }]),
         { to: '/map', label: 'Map', icon: Map },
       ]
     : [];
@@ -44,16 +44,17 @@ export default function Navbar() {
   }, [user]);
 
   const [fsNotifs, setFsNotifs] = useState<FsNotification[]>([]);
+  const userId = user?.id;
 
   // Subscribe to Firestore notifications for this user (realtime).
   useEffect(() => {
-    if (!user) {
+    if (!userId) {
       setFsNotifs([]);
       return;
     }
-    const unsub = subscribeUserNotifications(user.id, setFsNotifs);
+    const unsub = subscribeUserNotifications(userId, setFsNotifs);
     return () => unsub();
-  }, [user]);
+  }, [userId]);
 
   useEffect(() => {
     if (!user) {
@@ -63,13 +64,13 @@ export default function Navbar() {
     }
 
     if (isFirebaseConfigured()) {
-      const unsubscribe = subscribeUserNotifications(user.id, (items) => {
-        const removed = new Set(loadRemovedNotificationIds(user.id));
-        const unseen = items.filter((item) => !removed.has(item.id)).length;
-        setNotifCount(unseen);
-        setNotifPreview(items.slice(0, 4));
-      });
-      return unsubscribe;
+      const removed = new Set(loadRemovedNotificationIds(user.id));
+      const seen = new Set(loadSeenNotificationIds(user.id));
+      const items = fsNotifs.map((item) => ({ ...item, id: `fs:${item.id}` }))
+        .filter((item) => !removed.has(item.id));
+      setNotifCount(items.filter((item) => !item.read && !seen.has(item.id)).length);
+      setNotifPreview(items.slice(0, 4));
+      return;
     }
 
     const loadNotifData = async () => {

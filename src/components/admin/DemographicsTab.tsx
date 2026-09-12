@@ -44,7 +44,7 @@ function toChartData(record: Record<string, number>, limit = 10) {
     .map(([name, value]) => ({ name, value }));
 }
 
-export default function DemographicsTab() {
+export default function DemographicsTab({ locationId }: { locationId?: string | null } = {}) {
   const [loading, setLoading] = useState(false);
   const [stats, setStats] = useState<DemoStats | null>(null);
   const [rawRows, setRawRows] = useState<any[]>([]);
@@ -56,11 +56,13 @@ export default function DemographicsTab() {
       const minDate = new Date();
       minDate.setDate(minDate.getDate() - 90);
 
-      const { data, error } = await supabase
+      let query = supabase
         .from('bookings')
         .select('*')
         .gte('booking_date', minDate.toISOString().slice(0, 10))
-        .in('status', ['approved', 'completed', 'active']);
+        .in('status', ['confirmed', 'approved', 'completed', 'active']);
+      if (locationId) query = query.eq('location_id', locationId);
+      const { data, error } = await query;
 
       if (error) throw error;
 
@@ -114,7 +116,7 @@ export default function DemographicsTab() {
 
   useEffect(() => {
     load();
-  }, []);
+  }, [locationId]);
 
   const handleExport = () => {
     if (!stats || rawRows.length === 0) return;

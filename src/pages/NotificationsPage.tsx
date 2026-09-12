@@ -24,16 +24,17 @@ export default function NotificationsPage() {
   const [removed, setRemoved] = useState<string[]>([]);
 
   const [fsNotifs, setFsNotifs] = useState<FsNotification[]>([]);
+  const userId = user?.id;
 
   // Realtime Firestore subscription
   useEffect(() => {
-    if (!user) {
+    if (!userId) {
       setFsNotifs([]);
       return;
     }
-    const unsub = subscribeUserNotifications(user.id, setFsNotifs);
+    const unsub = subscribeUserNotifications(userId, setFsNotifs);
     return () => unsub();
-  }, [user]);
+  }, [userId]);
 
   useEffect(() => {
     if (!user) return;
@@ -41,11 +42,14 @@ export default function NotificationsPage() {
     setRemoved(loadRemovedNotificationIds(user.id));
 
     if (isFirebaseConfigured()) {
-      const unsubscribe = subscribeUserNotifications(user.id, (firestoreItems) => {
-        const removedIds = new Set(loadRemovedNotificationIds(user.id));
-        setItems(firestoreItems.filter((item) => !removedIds.has(item.id)));
-      });
-      return unsubscribe;
+      const removedIds = new Set(loadRemovedNotificationIds(user.id));
+      const notifications = fsNotifs.map((item) => ({ ...item, id: `fs:${item.id}` }));
+      setItems(notifications.filter((item) => !removedIds.has(item.id)));
+      setSeen([...new Set([
+        ...loadSeenNotificationIds(user.id),
+        ...notifications.filter((item) => item.read).map((item) => item.id),
+      ])]);
+      return;
     }
 
     const loadAll = async () => {

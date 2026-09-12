@@ -39,7 +39,6 @@ export function calculateGuideEarnings(
   assignments: any[],
   customPerTripFee?: number | null
 ): GuideEarningsSummary {
-  const baseRate = Number(customPerTripFee) > 0 ? Number(customPerTripFee) : 800;
   const now = new Date();
 
   let lifetimeEarned = 0;
@@ -64,9 +63,7 @@ export function calculateGuideEarnings(
     const bookingGuideFee = Number(meta.guideFee) > 0
       ? Number(meta.guideFee)
       : feeCalculation.guideFee;
-    const fee = baseRate === 800
-      ? Math.round(bookingGuideFee / guideCount)
-      : baseRate;
+    const fee = Math.round(bookingGuideFee / guideCount);
 
     const assignmentStatus = a.status || 'pending';
     const isCompleted =

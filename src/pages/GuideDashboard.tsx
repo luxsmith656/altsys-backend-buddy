@@ -38,12 +38,14 @@ import {
   Wallet,
   Calendar,
   RefreshCw,
+  Settings2,
 } from 'lucide-react';
 import { motion } from 'framer-motion';
+import './guide-dashboard.css';
 import { parseMeta } from '@/lib/bookingMeta';
 import { format } from 'date-fns';
 import { toast } from 'sonner';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import {
   Select,
   SelectContent,
@@ -58,6 +60,7 @@ import BookingChat from '@/components/booking/BookingChat';
 import { acceptGuideAssignment } from '@/lib/guideAssignmentService';
 import { calculateGuideEarnings, GuideEarningsSummary } from '@/lib/guideEarnings';
 import { formatPeso } from '@/lib/payments';
+import BookingReceipt from '@/components/booking/BookingReceipt';
 import { addHorseHelpRequest, getHorseHelpOption, HORSE_HELP_OPTIONS, type HorseHelpStation } from '@/lib/hikeSupport';
 import { notifyUser } from '@/lib/firestoreNotifications';
 
@@ -100,6 +103,9 @@ export default function GuideDashboard() {
   const [loadWarnings, setLoadWarnings] = useState<string[]>([]);
   const [horseHelpStation, setHorseHelpStation] = useState<HorseHelpStation>('station-5-3');
   const [horseHelpSaving, setHorseHelpSaving] = useState(false);
+  const [profileOpen, setProfileOpen] = useState(false);
+  // The existing profile migration adds photo_url and guide_reviews together.
+  const reviewsAvailable = Boolean(guideRow && Object.prototype.hasOwnProperty.call(guideRow, 'photo_url'));
 
   useEffect(() => {
     if (!user) return;
@@ -110,7 +116,6 @@ export default function GuideDashboard() {
       .channel('guide-assignments-realtime')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'booking_assignments' }, () => void load())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'bookings' }, () => void load())
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'guide_reviews' }, () => void load())
       .on(
         'postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'hiker_sessions', filter: `user_id=eq.${user.id}` },
@@ -139,6 +144,16 @@ export default function GuideDashboard() {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user]);
+
+  useEffect(() => {
+    if (!reviewsAvailable || !guideRow?.id) return;
+    const channel = supabase.channel(`guide-reviews-${guideRow.id}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'guide_reviews', filter: `guide_id=eq.${guideRow.id}` }, () => void load())
+      .subscribe();
+    return () => { void supabase.removeChannel(channel); };
+    // load refreshes the dashboard; subscriptions are keyed by guide identity.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [guideRow?.id, reviewsAvailable]);
 
   const load = async () => {
     setLoading(true);
@@ -189,12 +204,12 @@ export default function GuideDashboard() {
           .eq('location_id', me.location_id)
           .eq('is_active', true)
           .not('user_id', 'is', null),
-        supabase
+        Object.prototype.hasOwnProperty.call(me, 'photo_url') ? supabase
           .from('guide_reviews' as any)
           .select('*')
           .eq('guide_id', me.id)
           .eq('is_approved', true)
-          .order('created_at', { ascending: false }),
+          .order('created_at', { ascending: false }) : Promise.resolve({ data: [], error: null }),
       ]);
 
       if (assignmentResult.error) throw assignmentResult.error;
@@ -319,6 +334,7 @@ export default function GuideDashboard() {
 
   /* ── Accept assignment ── */
   const handleAccept = async (a: AssignmentRow) => {
+    if (acceptingId) return;
     if (a.booking?.booking_date) {
       // Check quota limit
       const sameDay = assignments.filter(
@@ -345,7 +361,8 @@ export default function GuideDashboard() {
       });
 
       if (res.success) {
-        toast.success(`✅ Booking accepted! Hiker and admin have been notified.`);
+        if (res.warnings?.length) toast.warning(`Booking confirmed. ${res.warnings.join(' ')}`);
+        else toast.success('Booking confirmed. Confirmation email sent.');
         void load();
       } else {
         toast.error(res.error || 'Failed to accept booking');
@@ -426,12 +443,12 @@ export default function GuideDashboard() {
   const copyGuideLink = async (kind: 'profile' | 'booking') => {
     if (!guideRow) return;
     const url = `${window.location.origin}/${
-      kind === 'profile' ? `guide/${guideRow.id}` : `register?guide=${guideRow.id}`
+      kind === 'profile' ? `guide/${guideRow.id}` : `booking?guide=${encodeURIComponent(guideRow.id)}`
     }`;
     try {
       await navigator.clipboard.writeText(url);
       toast.success(
-        kind === 'profile' ? 'Guide profile link copied' : 'Registration referral link copied'
+        kind === 'profile' ? 'Guide profile link copied' : 'Referral link copied. Your guide profile will be selected.'
       );
     } catch {
       window.prompt('Copy this link:', url);
@@ -501,14 +518,14 @@ export default function GuideDashboard() {
   }
 
   return (
-    <div className="min-h-screen px-3 pb-12 pt-20 sm:px-4">
-      <div className="container max-w-6xl mx-auto space-y-6">
+    <div className="guide-workspace">
+      <div className="guide-container">
         {/* Active Hike Session Notification Banner */}
         {activeSession && (
           <motion.div
             initial={{ opacity: 0, y: -10 }}
             animate={{ opacity: 1, y: 0 }}
-            className="p-4 rounded-2xl bg-emerald-500/15 border border-emerald-500/30 backdrop-blur-md flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-lg"
+            className="guide-live-banner"
           >
             <div className="flex items-center gap-3">
               <div className="h-10 w-10 rounded-xl bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 grid place-items-center shrink-0">
@@ -517,11 +534,9 @@ export default function GuideDashboard() {
               <div>
                 <p className="font-semibold text-sm text-foreground flex items-center gap-1.5">
                   Live Hike Session Active
-                  <Badge className="bg-emerald-500 text-white text-[10px] py-0">GPS Tracking On</Badge>
+                  <Badge className="bg-emerald-500 text-white text-[10px] py-0">Checked in</Badge>
                 </p>
-                <p className="text-xs text-muted-foreground mt-0.5">
-                  Your guided group check-in is currently running on Mount Kalisungan.
-                </p>
+                <p className="text-xs text-muted-foreground mt-0.5">Your group is checked in at the jump-off.</p>
               </div>
             </div>
             <div className="flex items-center gap-2 shrink-0">
@@ -537,84 +552,39 @@ export default function GuideDashboard() {
           </motion.div>
         )}
 
-        <motion.section
-          initial={{ opacity: 0, y: 12 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="border-b border-border/50 pb-5"
-        >
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-            <div className="flex min-w-0 items-center gap-3">
-              {guideRow.photo_url ? (
-                <img
-                  src={guideRow.photo_url}
-                  alt={guideRow.full_name}
-                  className="h-12 w-12 shrink-0 rounded-md border border-border/50 object-cover"
-                />
-              ) : (
-                <div className="grid h-12 w-12 shrink-0 place-items-center rounded-md border border-primary/25 bg-primary/10 text-lg font-bold text-primary">
-                  {guideRow.full_name?.slice(0, 1)?.toUpperCase() || 'G'}
-                </div>
-              )}
-              <div className="min-w-0">
-                <div className="flex flex-wrap items-center gap-2">
-                  <h1 className="text-xl font-bold sm:text-2xl">Guide Operations</h1>
-                  <Badge variant="outline" className="border-primary/30 text-[10px] text-primary">
-                    {guideRow.full_name}
-                  </Badge>
-                  {averageRating && (
-                    <span className="inline-flex items-center gap-1 text-xs font-semibold text-amber-500">
-                      <Star className="h-3.5 w-3.5 fill-current" />
-                      {averageRating} ({reviews.length})
-                    </span>
-                  )}
-                </div>
-                <p className="mt-1 text-xs text-muted-foreground sm:text-sm">
-                  Assigned groups, duty status, trail activity, and earnings.
-                </p>
-              </div>
-            </div>
-
-            <div className="flex flex-wrap items-center gap-2">
-              <Select
-                value={guideRow.status || 'available'}
-                onValueChange={(value) => void handleDutyStatusChange(value)}
-                disabled={statusUpdating}
-              >
-                <SelectTrigger className="h-9 w-[150px] text-xs font-semibold">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="available">Available</SelectItem>
-                  <SelectItem value="on_duty">On duty</SelectItem>
-                  <SelectItem value="off_duty">Off duty</SelectItem>
-                </SelectContent>
-              </Select>
-              <Button size="sm" variant="outline" className="gap-1.5" onClick={() => navigate('/map')}>
-                <Mountain className="h-4 w-4" />
-                Map
-              </Button>
-              <label className="inline-flex h-9 cursor-pointer items-center justify-center gap-1.5 rounded-md border border-input bg-background px-3 text-xs font-medium hover:bg-accent">
-                {uploadingPhoto ? <Loader2 className="h-4 w-4 animate-spin" /> : <ImageUp className="h-4 w-4" />}
-                Photo
-                <input
-                  className="sr-only"
-                  type="file"
-                  accept="image/*"
-                  disabled={uploadingPhoto}
-                  onChange={(event) => void handlePhotoUpload(event.target.files?.[0])}
-                />
-              </label>
-              <Button size="sm" variant="outline" className="gap-1.5" onClick={() => void copyGuideLink('profile')}>
-                <Share2 className="h-4 w-4" />
-                Profile
-              </Button>
-              <Button size="sm" className="gap-1.5" onClick={() => void copyGuideLink('booking')}>
-                <Copy className="h-4 w-4" />
-                Referral
-              </Button>
+        <header className="guide-header">
+          <div className="guide-identity">
+            {guideRow.photo_url ? (
+              <img src={guideRow.photo_url} alt={guideRow.full_name} className="guide-avatar" />
+            ) : (
+              <div className="guide-avatar guide-initial">{guideRow.full_name?.slice(0, 1)?.toUpperCase() || 'G'}</div>
+            )}
+            <div className="min-w-0">
+              <p className="guide-eyebrow">MT. KALISUNGAN / LOCAL GUIDE</p>
+              <h1>{guideRow.full_name}</h1>
+              <p className="guide-byline">
+                {guideRow.specialty || 'Mountain guide'}
+                {averageRating && <span><Star className="h-3.5 w-3.5 text-amber-500" /> {averageRating} · {reviews.length} {reviews.length === 1 ? 'review' : 'reviews'}</span>}
+              </p>
             </div>
           </div>
-        </motion.section>
+          <div className="guide-header-actions">
+            <Select value={guideRow.status || 'available'} onValueChange={(value) => void handleDutyStatusChange(value)} disabled={statusUpdating}>
+              <SelectTrigger aria-label="Duty status" className="guide-duty"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="available">Available</SelectItem>
+                <SelectItem value="on_duty">On duty</SelectItem>
+                <SelectItem value="off_duty">Off duty</SelectItem>
+              </SelectContent>
+            </Select>
+            <Button variant="outline" size="icon" aria-label="Guide profile and sharing" title="Guide profile and sharing" onClick={() => setProfileOpen(true)}>
+              <Settings2 className="h-4 w-4" />
+            </Button>
+            <Button className="gap-2" onClick={() => void copyGuideLink('booking')}>
+              <Share2 className="h-4 w-4" /> Referral
+            </Button>
+          </div>
+        </header>
 
         {loadError && (
           <div role="alert" className="flex flex-col gap-3 rounded-md border border-destructive/30 bg-destructive/5 p-4 sm:flex-row sm:items-center sm:justify-between">
@@ -639,7 +609,7 @@ export default function GuideDashboard() {
           </div>
         )}
 
-        <section aria-label="Guide work summary" className="grid grid-cols-2 divide-x divide-y overflow-hidden rounded-md border border-border/60 bg-card/35 sm:grid-cols-4 sm:divide-y-0">
+        <section aria-label="Guide work summary" className="guide-summary">
           {[
             { label: 'Needs response', value: counts.pending, icon: Inbox, color: 'text-amber-500' },
             { label: 'Upcoming', value: counts.accepted, icon: CalendarCheck, color: 'text-primary' },
@@ -657,9 +627,10 @@ export default function GuideDashboard() {
         </section>
 
         {/* Main Tabs */}
-        <Tabs defaultValue="my" className="space-y-4">
-          <div className="-mx-3 overflow-x-auto px-3 pb-1 sm:mx-0 sm:px-0">
-            <TabsList className="h-10 w-max min-w-full justify-start rounded-md bg-muted/70 p-1">
+        <Tabs defaultValue="my" className="guide-layout">
+          <aside className="guide-nav">
+            <p className="guide-nav-caption">Your workspace</p>
+            <TabsList aria-label="Guide workspace" className="guide-tabs">
               <TabsTrigger value="my" className="gap-1.5 text-xs">
                 <Inbox className="h-3.5 w-3.5" />
                 Assignments
@@ -675,47 +646,48 @@ export default function GuideDashboard() {
               </TabsTrigger>
               <TabsTrigger value="reviews" className="gap-1.5 text-xs">
                 <Star className="h-3.5 w-3.5" />
-                Reviews ({reviews.length})
+                Reviews
               </TabsTrigger>
               <TabsTrigger value="peers" className="gap-1.5 text-xs">
                 <Users className="h-3.5 w-3.5" />
-                Team ({peerGuides.length})
+                Team
               </TabsTrigger>
               <TabsTrigger value="off" className="gap-1.5 text-xs">
                 <Clock className="h-3.5 w-3.5" />
                 Schedule
               </TabsTrigger>
             </TabsList>
-          </div>
+            <div className="guide-nav-footer"><MapPin className="h-4 w-4" /><span>Mt. Kalisungan<br /><span className="text-muted-foreground">Calauan, Laguna</span></span></div>
+          </aside>
 
           {/* Tab 1: My Assignments */}
-          <TabsContent value="my" className="space-y-4 mt-0">
-            {/* Filter Pills */}
-            <div className="flex gap-1.5 flex-wrap">
-              {(['all', 'pending', 'accepted', 'completed', 'declined'] as const).map((f) => (
-                <Button
-                  key={f}
-                  size="sm"
-                  variant={filter === f ? 'default' : 'outline'}
-                  onClick={() => setFilter(f)}
-                  className="capitalize text-xs h-8 rounded-xl"
-                >
-                  {f === 'pending'
-                    ? `Pending Confirmation (${counts.pending})`
-                    : f === 'accepted'
-                    ? `Confirmed (${counts.accepted})`
-                    : f}
-                </Button>
-              ))}
+          <TabsContent value="my" className="guide-panel space-y-5">
+            <div className="guide-panel-heading">
+              <div><p className="guide-eyebrow">{format(new Date(), 'EEEE, MMMM d')}</p><h2>Assignments</h2></div>
+              <Button variant="ghost" size="icon" aria-label="Refresh assignments" title="Refresh assignments" onClick={() => void load()}><RefreshCw className="h-4 w-4" /></Button>
+            </div>
+            <div className="guide-filter">
+              <label htmlFor="guide-assignment-filter">Show</label>
+              <Select value={filter} onValueChange={(value) => setFilter(value as typeof filter)}>
+                <SelectTrigger id="guide-assignment-filter"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All assignments</SelectItem>
+                  <SelectItem value="pending">Needs response ({counts.pending})</SelectItem>
+                  <SelectItem value="accepted">Confirmed ({counts.accepted})</SelectItem>
+                  <SelectItem value="completed">Completed</SelectItem>
+                  <SelectItem value="declined">Declined</SelectItem>
+                </SelectContent>
+              </Select>
+              <span>{filteredAssignments.length} {filteredAssignments.length === 1 ? 'hike' : 'hikes'}</span>
             </div>
 
             {filteredAssignments.length === 0 ? (
-              <Card className="glass-card">
+              <Card className="guide-section">
                 <CardContent className="text-center py-14 text-muted-foreground text-sm space-y-2">
                   <Inbox className="h-10 w-10 mx-auto opacity-30" />
                   <p className="font-semibold text-foreground">No bookings found in this view</p>
                   <p className="text-xs text-muted-foreground">
-                    When hikers book Mount Kalisungan and you are assigned, they will appear here in real-time.
+                    No assignments match this status.
                   </p>
                 </CardContent>
               </Card>
@@ -737,9 +709,9 @@ export default function GuideDashboard() {
                   return (
                     <Card
                       key={a.id}
-                      className={`glass-card transition-all ${
+                      className={`guide-assignment ${
                         isPending
-                          ? 'border-amber-500/40 bg-amber-500/5 shadow-md'
+                          ? 'guide-assignment-pending'
                           : isAccepted
                           ? 'border-primary/30'
                           : ''
@@ -762,12 +734,12 @@ export default function GuideDashboard() {
                                 }
                               >
                                 {isPending
-                                  ? '⏳ Action Required: Pending Your Acceptance'
+                                  ? 'Needs response'
                                   : isAccepted
-                                  ? '✅ Confirmed & Assigned to You'
+                                  ? 'Confirmed'
                                   : isCompleted
-                                  ? '🏁 Hike Completed'
-                                  : '❌ Declined'}
+                                  ? 'Completed'
+                                  : 'Declined'}
                               </Badge>
                               <span className="text-xs text-muted-foreground">
                                 Booking #{a.booking_id ? a.booking_id.slice(0, 8) : a.id.slice(0, 8)}
@@ -797,8 +769,8 @@ export default function GuideDashboard() {
                               />
                               <Field
                                 icon={MapPin}
-                                label="Trail / Start Time"
-                                value={meta.assignedTrailName || meta.hikeTime || 'Morning Standard'}
+                                label="Route & start"
+                                value={[meta.assignedTrailName, meta.hikeTime].filter(Boolean).join(' · ') || 'Not set'}
                               />
                               <Field
                                 icon={Phone}
@@ -848,7 +820,7 @@ export default function GuideDashboard() {
                           </div>
 
                           {/* Action Buttons */}
-                          <div className="grid w-full grid-cols-2 gap-2 border-t border-border/20 pt-2 lg:w-auto lg:shrink-0 lg:grid-cols-1 lg:border-t-0 lg:pt-0">
+                          <div className="guide-assignment-actions">
                             {isPending && (
                               <>
                                 <Button
@@ -871,7 +843,7 @@ export default function GuideDashboard() {
                                   className="text-xs h-9 gap-1.5 text-destructive hover:bg-destructive/10"
                                 >
                                   <XCircle className="h-3.5 w-3.5" />
-                                  Decline / Pass
+                                  Decline
                                 </Button>
                               </>
                             )}
@@ -893,7 +865,7 @@ export default function GuideDashboard() {
                                   onClick={() => setDeclineOpen(a)}
                                   className="text-xs h-8 text-muted-foreground hover:text-destructive"
                                 >
-                                  Reassign to Peer
+                                  Request reassignment
                                 </Button>
                               </>
                             )}
@@ -906,7 +878,7 @@ export default function GuideDashboard() {
                               className="text-xs h-8 gap-1.5 text-primary border-primary/30"
                             >
                               <MessageCircle className="h-3.5 w-3.5" />
-                              Chat with Hiker
+                              Message hiker
                             </Button>
 
                             <Button
@@ -928,10 +900,10 @@ export default function GuideDashboard() {
           </TabsContent>
 
           {/* Tab 2: Earnings & Hike Settlement Ledger */}
-          <TabsContent value="earnings" className="space-y-4 mt-0">
+          <TabsContent value="earnings" className="guide-panel space-y-5">
             {/* Earnings Summary Banner */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-              <Card className="glass-card border-emerald-500/30 bg-emerald-500/5">
+            <div className="guide-earnings-summary">
+              <Card className="guide-section">
                 <CardContent className="p-4 space-y-1">
                   <div className="flex items-center justify-between text-muted-foreground">
                     <span className="text-[11px] uppercase font-semibold">Lifetime Earned</span>
@@ -946,7 +918,7 @@ export default function GuideDashboard() {
                 </CardContent>
               </Card>
 
-              <Card className="glass-card">
+              <Card className="guide-section">
                 <CardContent className="p-4 space-y-1">
                   <div className="flex items-center justify-between text-muted-foreground">
                     <span className="text-[11px] uppercase font-semibold">This Month</span>
@@ -961,7 +933,7 @@ export default function GuideDashboard() {
                 </CardContent>
               </Card>
 
-              <Card className="glass-card">
+              <Card className="guide-section">
                 <CardContent className="p-4 space-y-1">
                   <div className="flex items-center justify-between text-muted-foreground">
                     <span className="text-[11px] uppercase font-semibold">This Week</span>
@@ -976,7 +948,7 @@ export default function GuideDashboard() {
                 </CardContent>
               </Card>
 
-              <Card className="glass-card border-primary/30 bg-primary/5">
+              <Card className="guide-section">
                 <CardContent className="p-4 space-y-1">
                   <div className="flex items-center justify-between text-muted-foreground">
                     <span className="text-[11px] uppercase font-semibold">Pending Payout</span>
@@ -993,19 +965,19 @@ export default function GuideDashboard() {
             </div>
 
             {/* Hike-by-Hike Settlement Ledger */}
-            <Card className="glass-card">
+            <Card className="guide-section">
               <CardHeader className="p-4 sm:p-6 pb-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <div>
                   <CardTitle className="text-base sm:text-lg flex items-center gap-2">
                     <Receipt className="h-5 w-5 text-primary" />
-                    Hike Settlement & Earnings Ledger
+                    Earnings history
                   </CardTitle>
                   <CardDescription className="text-xs">
                     Itemized record of all your guided hikes, fee breakdowns, and payment settlement statuses.
                   </CardDescription>
                 </div>
 
-                <div className="flex items-center gap-1.5">
+                <div className="guide-ledger-filters">
                   {(['all', 'completed', 'pending'] as const).map((mode) => (
                     <Button
                       key={mode}
@@ -1014,7 +986,7 @@ export default function GuideDashboard() {
                       onClick={() => setEarningsFilter(mode)}
                       className="capitalize text-xs h-7 rounded-lg"
                     >
-                      {mode === 'all' ? 'All Hikes' : mode === 'completed' ? 'Settled & Completed' : 'Upcoming / Pending'}
+                      {mode === 'all' ? 'All hikes' : mode === 'completed' ? 'Completed' : 'Upcoming'}
                     </Button>
                   ))}
                 </div>
@@ -1078,9 +1050,9 @@ export default function GuideDashboard() {
             </Card>
           </TabsContent>
 
-          {/* Tab 3: Hiker Reviews & Ratings */}
-          <TabsContent value="reviews" className="space-y-4 mt-0">
-            <Card className="glass-card">
+          {/* Tab 3: Hiker reviews */}
+          <TabsContent value="reviews" className="guide-panel space-y-5">
+            <Card className="guide-section">
               <CardHeader className="p-4 sm:p-6 pb-2">
                 <div className="flex items-center justify-between flex-wrap gap-2">
                   <div>
@@ -1102,7 +1074,9 @@ export default function GuideDashboard() {
                 </div>
               </CardHeader>
               <CardContent className="p-4 sm:p-6 pt-3 space-y-3">
-                {reviews.length === 0 ? (
+                {!reviewsAvailable ? (
+                  <p role="status" className="py-6 text-sm text-muted-foreground">Guide reviews are unavailable until the database upgrade is applied.</p>
+                ) : reviews.length === 0 ? (
                   <div className="text-center py-10 text-muted-foreground text-sm space-y-1">
                     <Star className="h-8 w-8 mx-auto opacity-30" />
                     <p>No hiker reviews recorded yet.</p>
@@ -1112,7 +1086,7 @@ export default function GuideDashboard() {
                   reviews.map((r) => (
                     <div
                       key={r.id}
-                      className="p-3.5 rounded-xl border border-border/30 bg-secondary/15 space-y-1.5 text-xs"
+                      className="guide-review space-y-2 text-sm"
                     >
                       <div className="flex items-center justify-between">
                         <span className="font-bold text-foreground text-sm">
@@ -1139,12 +1113,12 @@ export default function GuideDashboard() {
           </TabsContent>
 
           {/* Tab 4: Peer Guides Transparency Board */}
-          <TabsContent value="peers" className="mt-0">
-            <Card className="glass-card">
+          <TabsContent value="peers" className="guide-panel">
+            <Card className="guide-section">
               <CardHeader className="p-4 sm:p-6 pb-2">
                 <CardTitle className="text-base sm:text-lg flex items-center gap-2">
                   <Users className="h-5 w-5 text-primary" />
-                  Trailhead Guide Transparency Board
+                  Your guide team
                 </CardTitle>
                 <CardDescription className="text-xs sm:text-sm">
                   Active guides registered at Mount Kalisungan and their current assignment distribution.
@@ -1173,7 +1147,7 @@ export default function GuideDashboard() {
                         </div>
                         <div className="min-w-0">
                           <div className="flex items-center gap-2">
-                            <span className="font-semibold text-sm text-foreground truncate">
+                            <span className="font-semibold text-sm text-foreground break-words">
                               {g.full_name}
                             </span>
                             {isMe && <Badge className="text-[10px] py-0">You</Badge>}
@@ -1188,7 +1162,7 @@ export default function GuideDashboard() {
                         <span className="px-2.5 py-1 rounded-lg bg-primary/10 text-primary font-semibold">
                           {c.active} active hikes
                         </span>
-                        <span className="text-muted-foreground">{c.total} total completed</span>
+                        <span className="text-muted-foreground">{c.total} total assignments</span>
                       </div>
                     </div>
                   );
@@ -1198,7 +1172,7 @@ export default function GuideDashboard() {
           </TabsContent>
 
           {/* Tab 3: Off-Duty Schedule Manager */}
-          <TabsContent value="off" className="mt-0">
+          <TabsContent value="off" className="guide-panel guide-schedule">
             {guideRow ? (
               <GuideOffDutyForm guideId={guideRow.id} onChange={load} />
             ) : (
@@ -1207,17 +1181,48 @@ export default function GuideDashboard() {
           </TabsContent>
         </Tabs>
 
+        <Dialog open={profileOpen} onOpenChange={setProfileOpen}>
+          <DialogContent className="guide-dialog z-[3100] max-w-md">
+            <DialogHeader>
+              <DialogTitle>Guide profile</DialogTitle>
+              <DialogDescription>{guideRow.full_name}</DialogDescription>
+            </DialogHeader>
+            <div className="grid gap-3">
+              <label className="inline-flex h-9 cursor-pointer items-center justify-center gap-1.5 rounded-md border border-input bg-background px-3 text-xs font-medium hover:bg-accent">
+                {uploadingPhoto ? <Loader2 className="h-4 w-4 animate-spin" /> : <ImageUp className="h-4 w-4" />}
+                Photo
+                <input
+                  className="sr-only"
+                  type="file"
+                  accept="image/*"
+                  disabled={uploadingPhoto}
+                  onChange={(event) => void handlePhotoUpload(event.target.files?.[0])}
+                />
+              </label>
+              <Button size="sm" variant="outline" className="gap-1.5" onClick={() => void copyGuideLink('profile')}>
+                <Share2 className="h-4 w-4" />
+                Profile
+              </Button>
+              <Button size="sm" className="gap-1.5" onClick={() => void copyGuideLink('booking')}>
+                <Copy className="h-4 w-4" />
+                Referral
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
+
         {/* View Details Dialog */}
         <Dialog open={!!detailOpen} onOpenChange={(o) => !o && setDetailOpen(null)}>
-          <DialogContent className="z-[3100] max-w-lg">
+          <DialogContent className="guide-dialog z-[3100] max-w-lg">
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2">
                 <Mountain className="h-5 w-5 text-primary" />
                 Booking #{detailOpen?.booking_id?.slice(0, 8) || detailOpen?.id.slice(0, 8)}
               </DialogTitle>
+              <DialogDescription>Group details and hike support.</DialogDescription>
             </DialogHeader>
             {detailOpen && (() => {
-              const booking = detailOpen.booking;
+              const booking = assignments.find(assignment => assignment.id === detailOpen.id)?.booking ?? detailOpen.booking;
               const meta = parseMeta(booking?.notes);
               return (
                 <div className="space-y-3 text-xs sm:text-sm divide-y divide-border/20">
@@ -1247,7 +1252,8 @@ export default function GuideDashboard() {
                       <Row k="Reassignment Note" v={meta.guideChangeReason} />
                     )}
                   </div>
-                  {detailOpen.status === 'accepted' && (
+                  {booking && <div className="py-3"><BookingReceipt booking={booking} showDetails={false} /></div>}
+                  {detailOpen.status === 'accepted' && booking?.status !== 'completed' && !meta.hikeCompletedAt && (
                     <div className="pt-3 space-y-3">
                       <div>
                         <p className="font-semibold text-foreground">Horse help</p>
@@ -1330,7 +1336,7 @@ function Field({
       <Icon className={`h-4 w-4 mt-0.5 shrink-0 ${highlight ? 'text-primary' : 'text-muted-foreground'}`} />
       <div className="min-w-0">
         <p className="text-[10px] text-muted-foreground uppercase font-semibold">{label}</p>
-        <p className={`font-medium truncate ${highlight ? 'text-primary font-bold' : 'text-foreground'}`}>
+        <p className={`font-medium break-words ${highlight ? 'text-primary font-bold' : 'text-foreground'}`}>
           {value}
         </p>
       </div>

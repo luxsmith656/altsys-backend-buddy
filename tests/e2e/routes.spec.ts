@@ -6,7 +6,7 @@ const PUBLIC_EXPECTATIONS: Record<string, string | RegExp> = {
   '/': 'Mt. Kalisungan',
   '/login': 'Welcome Back',
   '/register': 'Create Account',
-  '/map': /Mt\. Kalisungan (Tracking Console|Hike)/,
+  '/map': 'Check in at your jump-off to start your hike.',
   '/chat': 'Trail Assistant',
   '/booking': 'Book Your',
   '/join-hike': 'Invalid or Expired Link',
@@ -27,6 +27,11 @@ for (const route of APP_ROUTES) {
       await expectRenderedPage(page, 'login', 'Welcome Back');
     } else {
       await expectRenderedPage(page, route.pageKey, PUBLIC_EXPECTATIONS[route.path]);
+      if (route.path === '/map') {
+        await expect(page.getByRole('heading', { name: 'Map', exact: true })).toBeVisible();
+        await expect(page.locator('.leaflet-container')).toBeVisible();
+        await expect(page.getByRole('button', { name: 'Zoom in', exact: true })).toBeVisible();
+      }
     }
 
     monitor.assertClean();

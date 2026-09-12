@@ -14,6 +14,18 @@ const insight: KaliInsight = {
 };
 
 describe('KaliContextPanel', () => {
+  it('carries the visible reminder into a typed chat follow-up', () => {
+    const listener = vi.fn();
+    window.addEventListener('open-global-ai-assistant', listener);
+    render(<KaliContextPanel role="hiker" insights={[insight]} />);
+    fireEvent.change(screen.getByRole('textbox', { name: 'Reply to Kali reminder' }), { target: { value: 'Will we still hike together?' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Send reply to Kali' }));
+    expect((listener.mock.calls[0][0] as CustomEvent).detail).toEqual({
+      prompt: 'Will we still hike together?',
+      guidance: [{ title: insight.title, message: insight.message }],
+    });
+    window.removeEventListener('open-global-ai-assistant', listener);
+  });
   it('renders nothing when Kali has no current guidance', () => {
     render(<KaliContextPanel role="hiker" insights={[]} />);
 

@@ -1224,7 +1224,8 @@ export default function TrailRecorder({ existingTrails, locationId, onSaved }: T
       ) : (
         createPortal(
           <div 
-            className="fixed top-[9.25rem] bottom-3 left-3 z-[1000] w-[calc(100%-1.5rem)] sm:bottom-4 sm:left-4 sm:w-[380px] flex flex-col bg-white/95 dark:bg-slate-900/95 backdrop-blur-md rounded-xl border border-slate-200/50 dark:border-slate-800/50 shadow-2xl pointer-events-auto overflow-hidden"
+            data-testid="route-editor-panel"
+            className="fixed top-auto bottom-[calc(80px+env(safe-area-inset-bottom,0px))] left-3 z-[900] max-h-[50dvh] w-[calc(100%-1.5rem)] sm:max-h-none sm:top-[9.25rem] sm:left-4 sm:w-[380px] flex flex-col bg-white/95 dark:bg-slate-900/95 backdrop-blur-md rounded-lg border border-slate-200/50 dark:border-slate-800/50 shadow-2xl pointer-events-auto overflow-hidden"
             onMouseDown={(e) => e.stopPropagation()}
             onMouseUp={(e) => e.stopPropagation()}
             onClick={(e) => e.stopPropagation()}
