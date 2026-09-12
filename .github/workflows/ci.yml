@@ -18,7 +18,7 @@ jobs:
       # These are public browser configuration values. Secrets override the
       # checked-in CI defaults when a repository uses a different project.
       VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL || 'https://evcqnlbumsfgbfddoonv.supabase.co' }}
-      VITE_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.VITE_SUPABASE_PUBLISHABLE_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJhbGciOiJIUzI1NiIsInJlZiI6ImV2Y3FubGJ1bXNmZ2JmZGRvb252Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzkxNTgwMDMsImV4cCI6MjA5NDczNDAwM30.mKWBV5Ie8cnUGin9tj80Y0aoiSqGPgqijiZ6hRu_PAo' }}
+      VITE_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.VITE_SUPABASE_PUBLISHABLE_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImV2Y3FubGJ1bXNmZ2JmZGRvb252Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzkxNTgwMDMsImV4cCI6MjA5NDczNDAwM30.mKWBV5Ie8cnUGin9tj80Y0aoiSqGPgqijiZ6hRu_PAo' }}
       VITE_SUPABASE_PROJECT_ID: ${{ secrets.VITE_SUPABASE_PROJECT_ID || 'evcqnlbumsfgbfddoonv' }}
       VITE_GUIDE_PROFILE_EXTENSIONS_ENABLED: ${{ secrets.VITE_GUIDE_PROFILE_EXTENSIONS_ENABLED }}
       E2E_REQUIRE_AUTH: 'true'
