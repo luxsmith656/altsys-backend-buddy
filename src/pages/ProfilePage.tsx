@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/hooks/useAuth';
+import { parseMeta } from '@/lib/bookingMeta';
 import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -348,8 +349,8 @@ export default function ProfilePage() {
                       <div className="text-center space-y-1">
                           <p className="font-semibold text-sm break-words">{b.booking_date}</p>
                         <p className="text-xs text-muted-foreground">{b.group_size} pax</p>
-                        {b.notes && (
-                          <p className="text-xs text-muted-foreground italic break-words">{b.notes}</p>
+                        {parseMeta(b.notes).userNotes && (
+                          <p className="text-xs text-muted-foreground italic break-words">{parseMeta(b.notes).userNotes}</p>
                         )}
                         <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_STYLES[b.status] ?? 'bg-secondary text-secondary-foreground'}`}>
                           {b.status}

@@ -21,7 +21,7 @@ export default function Navbar() {
   const location = useLocation();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [notifCount, setNotifCount] = useState(0);
-  const [notifPreview, setNotifPreview] = useState<Array<{ id: string; title: string; createdAt: string }>>([]);
+  const [notifPreview, setNotifPreview] = useState<Array<{ id: string; title: string; createdAt: string; href?: string }>>([]);
 
   const dashboardPath = role ? getRoleHomePath(role) : '/dashboard';
 
@@ -80,6 +80,7 @@ export default function Navbar() {
         id: `ann:${a.id}`,
         title: a.title,
         createdAt: a.created_at,
+        href: '/notifications',
       }));
       const { data } = await supabase
         .from('bookings')
@@ -185,7 +186,7 @@ export default function Navbar() {
                     <DropdownMenuItem disabled>No notifications yet</DropdownMenuItem>
                   ) : (
                     notifPreview.map((n) => (
-                      <DropdownMenuItem key={n.id} onClick={() => navigate('/notifications')}>
+                    <DropdownMenuItem key={n.id} onClick={() => navigate(n.href || '/notifications')}>
                         <div className="min-w-0">
                           <p className="text-xs font-medium truncate">{n.title}</p>
                           <p className="text-[10px] text-muted-foreground">{new Date(n.createdAt).toLocaleString()}</p>

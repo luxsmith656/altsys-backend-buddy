@@ -1254,7 +1254,7 @@ export default function BookingPage() {
                         ))}
 
                       </div>
-                      <p className="text-[11px] text-muted-foreground">Choose a fixed safe window. 10:00 AM is intentionally marked very late and not suggested.</p>
+                      <p className="text-[11px] text-muted-foreground">Choose a start within the fixed window for your selected hike type.</p>
                     </div>
 
                   </div>

@@ -19,6 +19,9 @@ interface WeatherSnapshot {
   minTempC: number;
   rainProbability: number;
   condition: string;
+  sourceName?: string;
+  sourceUrl?: string;
+  fetchedAt?: number;
 }
 
 export interface GroupComposition {
@@ -118,7 +121,7 @@ function getWeatherHikeAdvice(
       `Great news! Forecast looks perfect — **${weather.condition}**, ` +
       `${Math.round(weather.minTempC)}–${Math.round(weather.maxTempC)}°C, ` +
       `only **${Math.round(weather.rainProbability)}% rain** chance.\n\n` +
-      `I'd recommend starting at **${time}** for the best experience.` +
+      `A ${time} start may be comfortable for this forecast.` +
       (hasKids ? ' With kids in your group, the cooler early morning is ideal! 🧒' : '') +
       (hasSeniors ? ' The morning coolness is perfect for your senior companions. 👴' : '')
     );
@@ -129,8 +132,7 @@ function getWeatherHikeAdvice(
       `Trails can get slippery on descents. I'd suggest:\n` +
       `• Starting **before 06:00 AM** before rains typically build up\n` +
       `• Bringing rain gear and trekking poles\n` +
-      `• Or consider 1–2 days later when skies may be clearer\n\n` +
-      `Want me to suggest a better date?`
+      `Please check the forecast and official advisories again before departure.`
     );
   }
   if (hotDay) {
