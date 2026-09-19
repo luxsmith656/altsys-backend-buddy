@@ -32,6 +32,14 @@ function followUpPrompt(insight: KaliInsight): string {
   return 'What should I prepare for my confirmed booking?';
 }
 
+function thinkingLabel(insight: KaliInsight): string {
+  if (insight.kind === 'weather') return 'Kali is checking your weather window';
+  if (insight.kind === 'minor-review' || insight.kind === 'age-review') return 'Kali is checking your booking details';
+  if (insight.kind === 'group-guidance') return 'Kali is checking your group plan';
+  if (insight.kind === 'hike-type') return 'Kali is thinking about your hike type';
+  return 'Kali is thinking about your next step';
+}
+
 export default function KaliContextPanel({ role, insights }: KaliContextPanelProps) {
   const [open, setOpen] = useState(false);
   const [reply, setReply] = useState('');
@@ -102,7 +110,7 @@ export default function KaliContextPanel({ role, insights }: KaliContextPanelPro
           <header className="flex items-center gap-3 border-b border-border/30 px-4 py-3">
             <KaliAvatar expression={reply ? 'listening' : insight.expression} activity={reply ? 'listening' : 'speaking'} size="sm" />
             <div className="min-w-0 flex-1">
-              <p className="text-sm font-bold">Kali guidance</p>
+              <p className="text-sm font-bold">{thinkingLabel(insight)}</p>
               <p className="truncate text-[11px] text-muted-foreground">For {getKaliRoleLabel(role)}</p>
             </div>
             <button type="button" onClick={dismissCurrentInsights} aria-label="Dismiss Kali reminder" className="grid h-9 w-9 place-items-center rounded-full text-muted-foreground hover:bg-secondary hover:text-foreground">

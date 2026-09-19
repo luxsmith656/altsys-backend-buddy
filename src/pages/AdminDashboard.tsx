@@ -2298,7 +2298,7 @@ export default function AdminDashboard() {
 
                       {meta.medicalNotes && (
                         <div className="rounded-xl border border-destructive/20 bg-destructive/5 p-3 text-xs space-y-1">
-                          <p className="font-bold text-destructive">Medical Notes</p>
+                          <p className="font-bold text-destructive">Medical note</p>
                           <p className="text-muted-foreground">{meta.medicalNotes}</p>
                         </div>
                       )}
@@ -2589,7 +2589,7 @@ export default function AdminDashboard() {
                             </div>
                             {(meta.medicalNotes || scannedBooking.notes?.includes('Asthma') || scannedBooking.notes?.includes('Medical')) && (
                               <div className="text-red-600 font-medium flex items-center gap-1">
-                                <span className="font-bold">Medical: </span>
+                                <span className="font-bold text-red-600">Medical note: </span>
                                 <span>{meta.medicalNotes || 'Asthma (Carries rescue inhaler)'}</span>
                               </div>
                             )}
@@ -2895,7 +2895,7 @@ export default function AdminDashboard() {
                             )}
                             {meta.medicalNotes && (
                               <div className="text-xs bg-destructive/5 border border-destructive/15 rounded-lg p-2.5 text-destructive">
-                                <p className="font-semibold mb-0.5 uppercase tracking-wide text-[10px]">Medical Notes</p>
+                                <p className="font-semibold mb-0.5 uppercase tracking-wide text-[10px] text-destructive">Medical note</p>
                                 <p>{meta.medicalNotes}</p>
                               </div>
                             )}
