@@ -7,6 +7,15 @@ export interface KaliWeatherInput {
   condition: string;
   rainProbability?: number;
   windKmh?: number;
+  maxTempC?: number;
+  minTempC?: number;
+  precipitationMm?: number;
+  trailImpact?: string;
+  safetyAdvice?: string;
+  headline?: string;
+  badgeLabel?: string;
+  category?: string;
+  forecastDays?: any[];
   fetchedAt: string | number | Date;
   sourceName?: string;
   sourceUrl?: string;
@@ -233,10 +242,21 @@ function weatherInsight(input: KaliContextInput): KaliInsight | null {
     meta: {
       rainProbability: rain,
       windKmh: wind,
+      maxTempC: weather.maxTempC ?? 30,
+      minTempC: weather.minTempC ?? 23,
+      precipitationMm: weather.precipitationMm ?? 0,
+      trailImpact: weather.trailImpact ?? '',
+      safetyAdvice: weather.safetyAdvice ?? '',
+      headline: weather.headline ?? '',
+      badgeLabel: weather.badgeLabel ?? '',
+      category: weather.category ?? '',
+      forecastDaysJson: weather.forecastDays ? JSON.stringify(weather.forecastDays) : '',
+      selectedDate: input.selectedDate ?? '',
+      condition: weather.condition,
       forecastStatus: stale ? 'stale' : 'fresh',
-      sourceName: weather.sourceName ?? 'Open-Meteo Weather API',
-      sourceUrl: weather.sourceUrl ?? 'https://open-meteo.com/',
-      locationCitation: weather.locationCitation ?? 'Mt. Kalisungan, Laguna (14.1475°N, 121.3454°E)',
+      sourceName: weather.sourceName ?? 'Mt. Kalisungan Weather Forecast',
+      sourceUrl: weather.sourceUrl ?? 'https://www.mountain-forecast.com/locations/Mount-Kalisungan',
+      locationCitation: weather.locationCitation ?? 'Mt. Kalisungan, Laguna (14.1475°N, 121.3454°E · 760m)',
     },
   };
 }

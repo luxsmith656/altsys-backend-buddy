@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { AlertTriangle, BellRing, Check, ExternalLink, Info, MessageCircle, Send, ShieldAlert, X } from 'lucide-react';
+import { AlertTriangle, BellRing, Check, CloudSun, ExternalLink, Info, MessageCircle, Send, ShieldAlert, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { getKaliRoleLabel, type KaliInsight, type KaliRole } from '@/lib/kaliContext';
 import KaliAvatar from './KaliAvatar';
+import WeatherForecastPredictionModal from '@/components/weather/WeatherForecastPredictionModal';
 
 interface KaliContextPanelProps {
   role: KaliRole;
@@ -43,6 +44,8 @@ function thinkingLabel(insight: KaliInsight): string {
 export default function KaliContextPanel({ role, insights }: KaliContextPanelProps) {
   const [open, setOpen] = useState(false);
   const [reply, setReply] = useState('');
+  const [weatherModalOpen, setWeatherModalOpen] = useState(false);
+  const [selectedWeatherInsight, setSelectedWeatherInsight] = useState<KaliInsight | null>(null);
   const [dismissedInsightIds, setDismissedInsightIds] = useState<string[]>([]);
   const previousInsightIds = useRef<string[]>([]);
   const sortedInsights = useMemo(
@@ -125,24 +128,39 @@ export default function KaliContextPanel({ role, insights }: KaliContextPanelPro
                   <div className="min-w-0 flex-1">
                     <p className="text-xs font-bold">{item.title}</p>
                     <p className="mt-1 text-sm leading-relaxed text-foreground">{item.message}</p>
-                    {item.kind === 'weather' && Boolean(item.meta.sourceUrl) && (
-                      <div className="mt-2 flex flex-wrap items-center gap-1.5 pt-1.5 border-t border-border/40 text-[11px] text-muted-foreground">
-                        <span>Source:</span>
-                        <a
-                          href={String(item.meta.sourceUrl)}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          onClick={(e) => e.stopPropagation()}
-                          className="inline-flex items-center gap-1 font-semibold text-primary underline underline-offset-2 hover:opacity-80"
-                        >
-                          <span>{String(item.meta.sourceName || 'Open-Meteo Weather API')}</span>
-                          <ExternalLink className="h-3 w-3" />
-                        </a>
-                        {Boolean(item.meta.locationCitation) && (
-                          <span className="text-[10px] text-muted-foreground/75">
-                            · {String(item.meta.locationCitation)}
+                    {item.kind === 'weather' && (
+                      <div className="mt-2.5 space-y-2 pt-2 border-t border-border/40">
+                        {/* Forecast metrics summary pills */}
+                        <div className="flex flex-wrap items-center gap-1.5 text-[11px] font-medium">
+                          <span className="inline-flex items-center gap-1 rounded-md bg-background/80 px-2 py-0.5 border border-border/40 text-foreground">
+                            🌧️ {Number(item.meta.rainProbability ?? 0)}% Rain
                           </span>
-                        )}
+                          {item.meta.minTempC !== undefined && item.meta.maxTempC !== undefined && (
+                            <span className="inline-flex items-center gap-1 rounded-md bg-background/80 px-2 py-0.5 border border-border/40 text-foreground">
+                              🌡️ {Math.round(Number(item.meta.minTempC))}°–{Math.round(Number(item.meta.maxTempC))}°C
+                            </span>
+                          )}
+                          {Boolean(Number(item.meta.precipitationMm ?? 0) > 0) && (
+                            <span className="inline-flex items-center gap-1 rounded-md bg-background/80 px-2 py-0.5 border border-border/40 text-sky-600 dark:text-sky-400">
+                              💧 {item.meta.precipitationMm} mm
+                            </span>
+                          )}
+                        </div>
+
+                        {/* Interactive button to view full forecast prediction */}
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setSelectedWeatherInsight(item);
+                            setWeatherModalOpen(true);
+                          }}
+                          className="inline-flex w-full items-center justify-center gap-1.5 rounded-xl bg-primary/15 hover:bg-primary/25 border border-primary/30 px-3 py-1.5 text-xs font-bold text-primary transition-all shadow-sm cursor-pointer"
+                          aria-label="View Mt. Kalisungan weather prediction and forecast"
+                        >
+                          <CloudSun className="h-3.5 w-3.5" />
+                          <span>View Weather Prediction & Forecast</span>
+                        </button>
                       </div>
                     )}
                   </div>
@@ -197,6 +215,37 @@ export default function KaliContextPanel({ role, insights }: KaliContextPanelPro
       >
         <KaliAvatar expression={insight.expression} size="sm" className="h-11 w-11 rounded-full border border-primary-foreground/40 bg-primary/80" />
       </button>
+
+      {selectedWeatherInsight && (
+        <WeatherForecastPredictionModal
+          open={weatherModalOpen}
+          onOpenChange={setWeatherModalOpen}
+          selectedDate={String(selectedWeatherInsight.meta.selectedDate || '')}
+          condition={String(selectedWeatherInsight.meta.condition || selectedWeatherInsight.title)}
+          category={String(selectedWeatherInsight.meta.category || '')}
+          minTempC={Number(selectedWeatherInsight.meta.minTempC ?? 23)}
+          maxTempC={Number(selectedWeatherInsight.meta.maxTempC ?? 30)}
+          rainProbability={Number(selectedWeatherInsight.meta.rainProbability ?? 0)}
+          precipitationMm={Number(selectedWeatherInsight.meta.precipitationMm ?? 0)}
+          headline={String(selectedWeatherInsight.meta.headline || '')}
+          trailImpact={String(selectedWeatherInsight.meta.trailImpact || '')}
+          safetyAdvice={String(selectedWeatherInsight.meta.safetyAdvice || '')}
+          badgeLabel={String(selectedWeatherInsight.meta.badgeLabel || '')}
+          forecastDays={
+            selectedWeatherInsight.meta.forecastDaysJson
+              ? (() => {
+                  try {
+                    return JSON.parse(String(selectedWeatherInsight.meta.forecastDaysJson));
+                  } catch {
+                    return [];
+                  }
+                })()
+              : []
+          }
+          locationCitation={String(selectedWeatherInsight.meta.locationCitation || 'Mt. Kalisungan, Laguna (14.1475°N, 121.3454°E · 760m)')}
+          sourceUrl={String(selectedWeatherInsight.meta.sourceUrl || 'https://www.mountain-forecast.com/locations/Mount-Kalisungan')}
+        />
+      )}
     </div>
   );
 }

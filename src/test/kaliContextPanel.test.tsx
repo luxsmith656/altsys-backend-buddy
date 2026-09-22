@@ -125,7 +125,7 @@ describe('KaliContextPanel', () => {
     expect(screen.queryByText('Your booking is tomorrow.')).not.toBeInTheDocument();
   });
 
-  it('renders a clickable weather source link inside the Kali AI insight card', () => {
+  it('renders weather prediction metrics and opens the forecast modal on click', () => {
     const weatherInsightItem: KaliInsight = {
       id: 'weather',
       kind: 'weather',
@@ -134,18 +134,42 @@ describe('KaliContextPanel', () => {
       title: 'Strong weather warning',
       message: 'Strong weather risk is expected for September 23 (Severe Thunderstorm).',
       meta: {
-        sourceName: 'Open-Meteo Weather API',
-        sourceUrl: 'https://open-meteo.com/',
-        locationCitation: 'Mt. Kalisungan, Laguna (14.1475°N, 121.3454°E)',
+        rainProbability: 85,
+        minTempC: 23,
+        maxTempC: 31,
+        precipitationMm: 14,
+        condition: 'Severe Thunderstorm with Rain Gusts',
+        category: 'thunderstorm',
+        badgeLabel: '⚡ Thunderstorm Warning',
+        headline: 'Lightning Hazard on Exposed Ridge & Summit',
+        trailImpact: 'Summit grassland ridge is exposed. Red clay turns into slick mud.',
+        safetyAdvice: 'Ascend early before midday convective storms form.',
+        locationCitation: 'Mt. Kalisungan, Laguna (14.1475°N, 121.3454°E · 760m)',
+        sourceUrl: 'https://www.mountain-forecast.com/locations/Mount-Kalisungan',
       },
     };
 
     render(<KaliContextPanel role="hiker" insights={[weatherInsightItem]} />);
 
-    const link = screen.getByRole('link', { name: /open-meteo weather api/i });
-    expect(link).toBeInTheDocument();
-    expect(link).toHaveAttribute('href', 'https://open-meteo.com/');
-    expect(link).toHaveAttribute('target', '_blank');
-    expect(screen.getByText(/Mt\. Kalisungan, Laguna/i)).toBeInTheDocument();
+    // Renders the quick metrics in the card
+    expect(screen.getByText(/85% Rain/i)).toBeInTheDocument();
+    expect(screen.getByText(/23°–31°C/i)).toBeInTheDocument();
+    expect(screen.getByText(/14 mm/i)).toBeInTheDocument();
+
+    // Has button to view the actual weather prediction
+    const viewButton = screen.getByRole('button', { name: /view mt\. kalisungan weather prediction/i });
+    expect(viewButton).toBeInTheDocument();
+
+    // Click button to open full prediction modal
+    fireEvent.click(viewButton);
+
+    // Modal opens showing the full Mt. Kalisungan forecast prediction
+    expect(screen.getByText(/Mt\. Kalisungan Weather Prediction/i)).toBeInTheDocument();
+    expect(screen.getByText(/Mountain Weather Forecast/i)).toBeInTheDocument();
+    expect(screen.getByText(/Lightning Hazard on Exposed Ridge & Summit/i)).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /mountain-forecast\.com/i })).toHaveAttribute(
+      'href',
+      'https://www.mountain-forecast.com/locations/Mount-Kalisungan',
+    );
   });
 });
