@@ -267,6 +267,12 @@ LIVE OPERATIONAL DATA:
 - Report bookings and hikers separately (one booking can cover several hikers). Always state the date and that times are Asia/Manila. Cancelled bookings are never counted as confirmed.
 - If a figure is not in the LIVE DATA block, say it isn't available — never invent a number.
 
+PUBLISHED ROUTE CONTEXT:
+- When a BOOKING FORM STATE block contains an entry_point and published_route, that route is the current official route for the hiker's selected jump-off.
+- Use its name, distance, elevation, difficulty and stations exactly as provided. Treat it as more authoritative than the generic trail examples below.
+- Never substitute a route from another entry point, an unpublished draft, or the static examples when the selected official route is present.
+- If no published route is provided, say that the selected entry point has no published route available yet and direct the hiker to staff; do not invent route measurements.
+
 PROPHET ML FORECASTING & PREDICTED DEMAND INTERPRETATION:
 - When a "PROPHET ML FORECASTING & CROWD DATA" block is present, it contains real mathematical predictions from the Facebook Prophet forecasting engine (incorporating Philippine holidays, weather regressors, and seasonal trends).
 - You have FULL ACCESS to the complete multi-month forecast horizon, including daily projections, weekly aggregates, monthly sums, and model evaluation metrics.
@@ -335,6 +341,12 @@ serve(async (req) => {
     }
     if (bookingContext && typeof bookingContext === "object") {
       systemMessages.push({ role: "system", content: "BOOKING FORM STATE (what they currently have selected):\n" + JSON.stringify(bookingContext) });
+      if (bookingContext.published_route && typeof bookingContext.published_route === 'object') {
+        systemMessages.push({
+          role: "system",
+          content: "CURRENT OFFICIAL ROUTE (use this route for trail questions; it is scoped to the selected entry point):\n" + JSON.stringify(bookingContext.published_route),
+        });
+      }
       if (bookingContext.forecasting) {
         const forecastText = typeof bookingContext.forecasting === 'string'
           ? bookingContext.forecasting

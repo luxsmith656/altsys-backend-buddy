@@ -30,6 +30,16 @@ export interface GroupComposition {
   seniors: number;
 }
 
+export interface PublishedRouteContext {
+  id: string;
+  name: string;
+  locationName: string;
+  difficulty?: string;
+  elevationMeters?: number;
+  distanceKm?: number;
+  stationNames?: string[];
+}
+
 export interface BookingSuggestion {
   date?: string;      // yyyy-MM-dd
   hikeTime?: string;  // "06:00 AM"
@@ -54,6 +64,7 @@ interface BookingAIChatProps {
   hikeType: HikeType;
   weatherInsight?: WeatherSnapshot | null;
   groupComposition?: GroupComposition | null;
+  publishedRoute?: PublishedRouteContext | null;
   onGroupCompositionSet?: (composition: GroupComposition) => void;
   onTimeSuggest?: (time: string) => void;
   hikeTime?: string;
@@ -199,11 +210,12 @@ function generateResponse(
     hikeType: HikeType;
     weatherInsight?: WeatherSnapshot | null;
     groupComposition?: GroupComposition | null;
+    publishedRoute?: PublishedRouteContext | null;
   },
   onCompositionDetected: (comp: GroupComposition) => void,
 ): { content: string; quickReplies?: string[] } {
   const lower = message.toLowerCase();
-  const { date, groupSize, hikeType, weatherInsight, groupComposition } = context;
+  const { date, groupSize, hikeType, weatherInsight, groupComposition, publishedRoute } = context;
 
   /* Greeting */
   if (lower.match(/^(hi|hello|hey|good|musta|kumusta)/)) {
@@ -400,6 +412,17 @@ function generateResponse(
 
   /* Trail info */
   if (lower.match(/(trail|route|path|distance|km|elevation|summit|difficulty|how long)/)) {
+    if (publishedRoute) {
+      const distance = publishedRoute.distanceKm ? ` about **${publishedRoute.distanceKm.toFixed(1)} km**` : '';
+      const elevation = publishedRoute.elevationMeters ? ` and **${publishedRoute.elevationMeters}m** elevation` : '';
+      const stations = publishedRoute.stationNames?.length ? `\n\nStations: **${publishedRoute.stationNames.join(' → ')}**.` : '';
+      return {
+        content:
+          `The published route for **${publishedRoute.locationName}** is **${publishedRoute.name}**${distance}${elevation}.\n\n` +
+          `Difficulty: **${publishedRoute.difficulty || 'not specified'}**. This is the route to follow for this entry point; I won't substitute an unpublished path.${stations}`,
+        quickReplies: ['How long will it take?', 'How do I stay on the route?', 'What should I bring?'],
+      };
+    }
     return {
       content:
         `Mt. Kalisungan has **3 trail routes**:\n\n` +
@@ -507,6 +530,7 @@ export default function BookingAIChat({
   hikeType,
   weatherInsight,
   groupComposition,
+  publishedRoute,
   onGroupCompositionSet,
   onTimeSuggest: _onTimeSuggest,
   hikeTime,
@@ -605,6 +629,16 @@ export default function BookingAIChat({
             group_size: groupSize,
             hike_type: hikeType,
             group_composition: groupComposition ?? null,
+            entry_point: publishedRoute?.locationName ?? null,
+            published_route: publishedRoute ? {
+              id: publishedRoute.id,
+              name: publishedRoute.name,
+              locationName: publishedRoute.locationName,
+              difficulty: publishedRoute.difficulty ?? null,
+              elevationMeters: publishedRoute.elevationMeters ?? null,
+              distanceKm: publishedRoute.distanceKm ?? null,
+              stationNames: publishedRoute.stationNames ?? [],
+            } : null,
             weather_forecast: weatherInsight ?? null,
             forecasting: forecastContext ? {
               summary: forecastContext.summaryText,
@@ -653,7 +687,7 @@ export default function BookingAIChat({
     } catch {
       return null;
     }
-  }, [messages, date, hikeTime, groupSize, hikeType, groupComposition, weatherInsight, pageContext, role, user]);
+  }, [messages, date, hikeTime, groupSize, hikeType, groupComposition, publishedRoute, weatherInsight, pageContext, role, user]);
 
   const sendMessage = useCallback(
     async (text: string) => {
@@ -681,7 +715,7 @@ export default function BookingAIChat({
 
         const response = generateResponse(
           text,
-          { date, groupSize, hikeType, weatherInsight, groupComposition },
+          { date, groupSize, hikeType, weatherInsight, groupComposition, publishedRoute },
           (comp) => onGroupCompositionSet?.(comp),
         );
         addAIMessage(response.content, response.quickReplies);
@@ -691,7 +725,7 @@ export default function BookingAIChat({
         setIsTyping(false);
       }
     },
-    [date, groupSize, hikeType, weatherInsight, groupComposition, onGroupCompositionSet, addAIMessage, getOnlineAnswer],
+    [date, groupSize, hikeType, weatherInsight, groupComposition, publishedRoute, onGroupCompositionSet, addAIMessage, getOnlineAnswer],
   );
 
   useEffect(() => {

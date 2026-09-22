@@ -52,7 +52,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { format } from 'date-fns';
 import { encodeMeta } from '@/lib/bookingMeta';
 import { CapacityCalendar, type DayCapacityMap } from '@/components/booking/CapacityCalendar';
-import BookingAIChat, { type GroupComposition } from '@/components/booking/BookingAIChat';
+import BookingAIChat, { type GroupComposition, type PublishedRouteContext } from '@/components/booking/BookingAIChat';
 import { cn } from '@/lib/utils';
 import { getPHLocationOptions, COMMON_NATIONALITIES } from '@/lib/ph-locations';
 import { uploadPaymentScreenshot, isFirebaseConfigured } from '@/lib/firebase-storage';
@@ -65,6 +65,9 @@ import AdminWalkInDesk from '@/components/admin/AdminWalkInDesk';
 import KaliContextPanel from '@/components/kali/KaliContextPanel';
 import { useKaliContext } from '@/hooks/useKaliContext';
 import { HIKE_TIME_OPTIONS, getGuideFeePerGuide, getHikeTypeLabel, isValidHikeTime, normalizeHikeType, type HikeType } from '@/lib/hikeSchedule';
+import { officialRoutesForLocation } from '@/lib/officialRoutes';
+import { getBookingSlotStatuses, type ScheduledBooking } from '@/lib/bookingCapacity';
+import { haversineDistance } from '@/lib/map-data';
 
 /* ── Weather code → human-readable label (Open-Meteo) ── */
 function weatherCodeToLabel(code: number): string {
@@ -106,6 +109,19 @@ const STEPS = [
 ];
 
 const DEFAULT_MAX_CAPACITY = 100;
+
+interface PublishedRouteRow {
+  id: string;
+  location_id: string | null;
+  name: string;
+  difficulty: string;
+  elevation_meters: number;
+  coordinates_json: unknown;
+  recording_metadata: unknown;
+  status: string;
+  is_official: boolean;
+  review_status: string;
+}
 
 type Sex = 'male' | 'female' | 'prefer_not_to_say';
 type PaymentOption = 'onsite' | 'online';
@@ -232,6 +248,10 @@ export default function BookingPage() {
     setSearchParams(remainingParams, { replace: true });
   }, [searchParams, setSearchParams]);
   const [monthCapacity, setMonthCapacity] = useState<DayCapacityMap>({});
+  const [scheduledBookings, setScheduledBookings] = useState<ScheduledBooking[]>([]);
+  const [slotCapacityRequested, setSlotCapacityRequested] = useState(false);
+  const [slotCapacityError, setSlotCapacityError] = useState<string | null>(null);
+  const [publishedRoute, setPublishedRoute] = useState<PublishedRouteContext | null>(null);
   const [smartGuideEnabled, setSmartGuideEnabled] = useState(true);
   const [groupComposition, setGroupComposition] = useState<GroupComposition | null>(null);
   const [weatherInsight, setWeatherInsight] = useState<WeatherSnapshot | null>(null);
@@ -382,7 +402,8 @@ export default function BookingPage() {
   /* ── Auto-pick first active location if none chosen ── */
   useEffect(() => {
     if (!startLocationId && allLocations.length > 0) {
-      setStartLocationId(allLocations[0].id);
+      const preferredEntry = allLocations.find((location) => /lamot[- _]?2/i.test(`${location.slug} ${location.name}`));
+      setStartLocationId((preferredEntry ?? allLocations[0]).id);
     }
   }, [allLocations, startLocationId]);
 
@@ -390,6 +411,60 @@ export default function BookingPage() {
     () => allLocations.find((l) => l.id === startLocationId) || null,
     [allLocations, startLocationId],
   );
+
+  /* Load only the active entry point's published route for booking guidance. */
+  useEffect(() => {
+    let active = true;
+    if (!startLocationId) {
+      setPublishedRoute(null);
+      return () => { active = false; };
+    }
+
+    const loadPublishedRoute = async () => {
+      const { data, error } = await supabase
+        .from('trail_zones')
+        .select('id,location_id,name,difficulty,elevation_meters,coordinates_json,recording_metadata,status,is_official,review_status')
+        .eq('location_id', startLocationId)
+        .eq('status', 'active')
+        .eq('is_official', true)
+        .eq('review_status', 'approved')
+        .order('created_at', { ascending: true })
+        .limit(1);
+      if (!active) return;
+      if (error) {
+        setPublishedRoute(null);
+        return;
+      }
+      const routes = officialRoutesForLocation((data as unknown as PublishedRouteRow[] | null) ?? [], startLocationId);
+      const route = routes[0];
+      if (!route) {
+        setPublishedRoute(null);
+        return;
+      }
+      const points = route.coordinates_json as Array<{ lat: number; lng: number }>;
+      let distanceKm = 0;
+      for (let i = 1; i < points.length; i++) {
+        distanceKm += haversineDistance(points[i - 1].lat, points[i - 1].lng, points[i].lat, points[i].lng);
+      }
+      const metadata = route.recording_metadata as { stationNames?: unknown; stations?: unknown } | null;
+      const rawStations = Array.isArray(metadata?.stationNames)
+        ? metadata.stationNames
+        : Array.isArray(metadata?.stations)
+          ? metadata.stations.map((station) => typeof station === 'object' && station !== null && 'name' in station ? station.name : station)
+          : [];
+      setPublishedRoute({
+        id: route.id,
+        name: route.name,
+        locationName: selectedLocation?.name ?? 'Selected entry point',
+        difficulty: route.difficulty,
+        elevationMeters: Number(route.elevation_meters || 0) || undefined,
+        distanceKm: distanceKm || undefined,
+        stationNames: rawStations.filter((station): station is string => typeof station === 'string').slice(0, 8),
+      });
+    };
+    void loadPublishedRoute();
+    return () => { active = false; };
+  }, [selectedLocation?.name, startLocationId]);
 
   const guidesAtLocation = useMemo(
     () => dbGuides.filter((g) => g.location_id === startLocationId),
@@ -408,14 +483,31 @@ export default function BookingPage() {
 
 
   /* ── Capacity fetching ── */
+  const fetchSlotCapacity = useCallback(async (year: number, month: number) => {
+    const start = format(new Date(year, month, 1), 'yyyy-MM-dd');
+    const end = format(new Date(year, month + 1, 0), 'yyyy-MM-dd');
+    // The RPC returns aggregate slot counts only, so RLS never exposes another hiker's booking details.
+    const { data: slotRows, error } = await supabase.rpc('get_booking_slot_capacity' as any, { p_start_date: start, p_end_date: end });
+    if (error) {
+      setScheduledBookings([]);
+      setSlotCapacityError('Live start-time availability is temporarily unavailable. Please try again shortly.');
+      return;
+    }
+    setSlotCapacityError(null);
+    const reservations = ((slotRows as Array<{ booking_date: string; hike_time: string; hike_type: string; group_count: number }> | null) ?? [])
+      .flatMap((row) => Array.from({ length: Math.max(1, Number(row.group_count) || 1) }, (_, index) => ({
+        id: `${row.booking_date}-${row.hike_time}-${index}`,
+        booking_date: row.booking_date,
+        status: 'confirmed',
+        notes: JSON.stringify({ hikeTime: row.hike_time, hikeType: row.hike_type }),
+      })));
+    setScheduledBookings(reservations as ScheduledBooking[]);
+  }, []);
+
   const fetchMonthCapacity = useCallback(async (year: number, month: number) => {
     const start = format(new Date(year, month, 1), 'yyyy-MM-dd');
     const end = format(new Date(year, month + 1, 0), 'yyyy-MM-dd');
-    const { data } = await supabase
-      .from('daily_capacity')
-      .select('*')
-      .gte('date', start)
-      .lte('date', end);
+    const { data } = await supabase.from('daily_capacity').select('*').gte('date', start).lte('date', end);
     if (data) {
       setMonthCapacity((prev) => {
         const map = { ...prev };
@@ -453,10 +545,24 @@ export default function BookingPage() {
           }
         },
       )
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'bookings' }, () => {
+        const now = new Date();
+        void fetchMonthCapacity(now.getFullYear(), now.getMonth());
+        if (slotCapacityRequested) void fetchSlotCapacity(now.getFullYear(), now.getMonth());
+      })
       .subscribe();
 
     return () => { supabase.removeChannel(channel); };
-  }, [fetchMonthCapacity]);
+  }, [fetchMonthCapacity, fetchSlotCapacity, slotCapacityRequested]);
+
+  useEffect(() => {
+    if (!date || !slotCapacityRequested) {
+      setScheduledBookings([]);
+      setSlotCapacityError(null);
+      return;
+    }
+    void fetchSlotCapacity(date.getFullYear(), date.getMonth());
+  }, [date, fetchSlotCapacity, slotCapacityRequested]);
 
   useEffect(() => {
     if (!user) return;
@@ -522,6 +628,18 @@ export default function BookingPage() {
       return Math.max(0, max - current);
     }
   }, [date, monthCapacity, hikeType]);
+
+  const timeSlotStatuses = useMemo(() => {
+    if (!date) return [];
+    const statuses = getBookingSlotStatuses(format(date, 'yyyy-MM-dd'), HIKE_TIME_OPTIONS[hikeType], hikeType, scheduledBookings);
+    if (!slotCapacityError) return statuses;
+    return statuses.map((slot) => ({ ...slot, available: false, reason: 'capacity_unavailable' as const }));
+  }, [date, hikeType, scheduledBookings, slotCapacityError]);
+
+  const selectedTimeSlot = useMemo(
+    () => timeSlotStatuses.find((slot) => slot.time === hikeTime),
+    [timeSlotStatuses, hikeTime],
+  );
 
   const fetchSmartWeather = useCallback(async (selectedDate: Date) => {
     const weatherApiKey = import.meta.env.VITE_WEATHERAPI_KEY as string | undefined;
@@ -701,6 +819,7 @@ export default function BookingPage() {
   /* ── Hike type change ── */
   const handleHikeTypeChange = (type: HikeType) => {
     setHikeType(type);
+    if (date) setSlotCapacityRequested(true);
     const recommended = HIKE_TIME_OPTIONS[type].find((t) => t.recommended);
     if (recommended) setHikeTime(recommended.time);
   };
@@ -713,8 +832,14 @@ export default function BookingPage() {
       if (slotsForDate !== null && groupSize > slotsForDate) {
         return `Only ${slotsForDate} slot${slotsForDate !== 1 ? 's' : ''} available on this date. Reduce group size or choose another date.`;
       }
+      if (slotCapacityRequested && slotCapacityError) return slotCapacityError;
       if (!hikeTime) return 'Please select a start time.';
       if (!isValidHikeTime(hikeType, hikeTime)) return `Please choose a start time within the ${getHikeTypeLabel(hikeType).toLowerCase()} hike window.`;
+      if (selectedTimeSlot && !selectedTimeSlot.available) {
+        return selectedTimeSlot.reason === 'already_booked'
+          ? 'That start time is already reserved. Please choose the next available one-hour slot.'
+          : 'The summit is at its five-group limit for that arrival window. Please choose another available start time.';
+      }
     }
     if (step === 2) {
       if (!fullName.trim()) return 'Full name is required.';
@@ -1127,11 +1252,17 @@ export default function BookingPage() {
                     <div className="rounded-xl border border-border/30 p-2 sm:p-4 bg-background/40">
                       <CapacityCalendar
                         selected={date}
-                        onSelect={setDate}
+                        onSelect={(nextDate) => {
+                          setDate(nextDate);
+                          if (nextDate) setSlotCapacityRequested(true);
+                        }}
                         groupSize={groupSize}
                         monthCapacity={monthCapacity}
                         hikeType={hikeType}
-                        onMonthChange={fetchMonthCapacity}
+                        onMonthChange={(year, month) => {
+                          void fetchMonthCapacity(year, month);
+                          void fetchSlotCapacity(year, month);
+                        }}
                       />
                     </div>
 
@@ -1216,12 +1347,19 @@ export default function BookingPage() {
                       </Label>
                       <div className="flex flex-wrap gap-2">
                         {HIKE_TIME_OPTIONS[hikeType].map((opt) => (
+                          (() => {
+                            const slot = timeSlotStatuses.find((candidate) => candidate.time === opt.time);
+                            const unavailable = !!slot && !slot.available;
+                            return (
                           <button
                             key={opt.time}
-                            onClick={() => setHikeTime(opt.time)}
+                            onClick={() => !unavailable && setHikeTime(opt.time)}
+                            disabled={unavailable}
                             aria-pressed={hikeTime === opt.time}
+                            title={unavailable ? (slot?.reason === 'already_booked' ? 'Already reserved' : slot?.reason === 'summit_capacity' ? 'Summit group limit reached' : 'Availability check unavailable') : undefined}
                             className={cn(
                               'flex flex-col items-center px-3 py-2.5 rounded-xl border-2 text-xs font-bold transition-all min-w-[76px]',
+                              unavailable && 'opacity-40 cursor-not-allowed border-destructive/30 line-through',
                               hikeTime === opt.time
                                 ? 'bg-primary border-primary text-primary-foreground shadow-md'
                                 : smartRecommendations?.recommendedTimes.includes(opt.time)
@@ -1251,10 +1389,15 @@ export default function BookingPage() {
                                   : opt.label}
                             </span>
                           </button>
+                            );
+                          })()
                         ))}
 
                       </div>
-                      <p className="text-[11px] text-muted-foreground">Choose a start within the fixed window for your selected hike type.</p>
+                      {slotCapacityRequested && slotCapacityError && (
+                        <p className="text-xs text-destructive" role="alert">{slotCapacityError}</p>
+                      )}
+                      <p className="text-[11px] text-muted-foreground">Starts are one hour apart. A reserved time is blocked, and no more than 5 groups may share the same summit arrival window across all entry points.</p>
                     </div>
 
                   </div>
@@ -1594,6 +1737,21 @@ export default function BookingPage() {
                             lng={Number(selectedLocation.center_lng)}
                             description={selectedLocation.description}
                           />
+                          <div className={cn(
+                            'mt-2 rounded-lg border px-3 py-2 text-xs',
+                            publishedRoute ? 'border-primary/25 bg-primary/5 text-foreground' : 'border-amber-400/30 bg-amber-500/5 text-muted-foreground',
+                          )}>
+                            {publishedRoute ? (
+                              <>
+                                <strong>Official route for this jump-off:</strong> {publishedRoute.name}
+                                {publishedRoute.distanceKm ? ` · ${publishedRoute.distanceKm.toFixed(1)} km` : ''}
+                                {publishedRoute.elevationMeters ? ` · ${publishedRoute.elevationMeters}m` : ''}
+                                <span className="block text-[11px] text-muted-foreground">Synced from the approved trail map.</span>
+                              </>
+                            ) : (
+                              'No approved route is published for this entry point yet. Staff will confirm the route before the hike.'
+                            )}
+                          </div>
                         </div>
                       )}
 
@@ -2019,6 +2177,7 @@ export default function BookingPage() {
         groupSize={groupSize}
         hikeType={hikeType}
         hikeTime={hikeTime}
+        publishedRoute={publishedRoute}
         weatherInsight={weatherInsight}
         groupComposition={groupComposition}
         onGroupCompositionSet={setGroupComposition}

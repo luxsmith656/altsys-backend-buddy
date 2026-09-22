@@ -25,6 +25,7 @@ export function createGuideFixture() {
     booking_assignments: assignments, hiker_sessions: [], user_locations: [{ location_id: 'lamot2' }],
     locations: [{ id: 'lamot2', name: 'Lamot 2', slug: 'lamot2', status: 'active', center_lat: 14.15, center_lng: 121.34 }, { id: 'lamot1', name: 'Lamot 1', slug: 'lamot1', status: 'active', center_lat: 14.15, center_lng: 121.33 }],
     daily_capacity: [],
+    trail_zones: [],
     guide_reviews: [{ id: 'review-1', reviewer_name: 'Robin Cruz', rating: 5, comment: 'Kept a comfortable pace and checked on everyone at each station.', created_at: '2026-09-01T00:00:00Z' }],
     guide_off_duty_requests: [], profiles: [],
   };
