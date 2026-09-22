@@ -12,6 +12,7 @@ import Navbar from "@/components/layout/Navbar";
 import GlobalAIAssistant from "@/components/booking/GlobalAIAssistant";
 import NotFound from "./pages/NotFound";
 import RoleRoute from "@/components/auth/RoleRoute";
+import ScrollToTop from "@/components/common/ScrollToTop";
 import ErrorBoundary from "@/components/common/ErrorBoundary";
 import { APP_ROUTES, type AppRouteDefinition } from "@/app/routes";
 import { useEffect } from "react";
@@ -63,6 +64,7 @@ const App = () => (
       <Toaster />
       <Sonner />
       <BrowserRouter>
+        <ScrollToTop />
         <ThemeProvider>
           <AuthProvider>
             <LocationsProvider>

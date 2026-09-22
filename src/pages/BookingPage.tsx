@@ -68,20 +68,16 @@ import { HIKE_TIME_OPTIONS, getGuideFeePerGuide, getHikeTypeLabel, isValidHikeTi
 import { officialRoutesForLocation } from '@/lib/officialRoutes';
 import { getBookingSlotStatuses, type ScheduledBooking } from '@/lib/bookingCapacity';
 import { haversineDistance } from '@/lib/map-data';
+import CalendarWeatherAdvisory from '@/components/weather/CalendarWeatherAdvisory';
+import {
+  fetchKalisungan16DayForecast,
+  type KalisunganDayWeather,
+  interpretKalisunganWeather,
+} from '@/lib/kalisunganWeather';
 
-/* ── Weather code → human-readable label (Open-Meteo) ── */
+/* ── Weather code → human-readable label (Open-Meteo, tuned for Mt. Kalisungan, Laguna) ── */
 function weatherCodeToLabel(code: number): string {
-  if (code === 0) return 'Clear Sky';
-  if ([1, 2, 3].includes(code)) return 'Partly Cloudy';
-  if ([45, 48].includes(code)) return 'Foggy';
-  if ([51, 53, 55].includes(code)) return 'Light Drizzle';
-  if ([61, 63, 65].includes(code)) return 'Rainy';
-  if ([71, 73, 75, 77].includes(code)) return 'Snow';
-  if ([80, 81, 82].includes(code)) return 'Rain Showers';
-  if ([85, 86].includes(code)) return 'Snow Showers';
-  if (code === 95) return 'Thunderstorm';
-  if ([96, 99].includes(code)) return 'Thunderstorm with Hail';
-  return 'Variable Conditions';
+  return interpretKalisunganWeather(code, 0, 28).condition;
 }
 
 /* ─── Types ─── */
@@ -258,6 +254,35 @@ export default function BookingPage() {
   const [weatherLoading, setWeatherLoading] = useState(false);
   const [weatherError, setWeatherError] = useState<string | null>(null);
   const weatherRequestId = useRef(0);
+
+  // ── Mt. Kalisungan 16-day weather forecast (Open-Meteo) ──
+  const [kalisunganForecast, setKalisunganForecast] = useState<Record<string, KalisunganDayWeather>>({});
+  const [kalisunganForecastLoading, setKalisunganForecastLoading] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    const loadWeather = async () => {
+      try {
+        setKalisunganForecastLoading(true);
+        const res = await fetchKalisungan16DayForecast();
+        if (active) {
+          setKalisunganForecast(res.days);
+        }
+      } catch (err) {
+        console.warn('Could not load Mt. Kalisungan forecast:', err);
+      } finally {
+        if (active) setKalisunganForecastLoading(false);
+      }
+    };
+    void loadWeather();
+    return () => { active = false; };
+  }, []);
+
+  const selectedKalisunganWeather = useMemo(() => {
+    if (!date) return null;
+    const key = format(date, 'yyyy-MM-dd');
+    return kalisunganForecast[key] ?? null;
+  }, [date, kalisunganForecast]);
 
   // ── Step 2: Personal details
   const [fullName, setFullName] = useState('');
@@ -642,7 +667,6 @@ export default function BookingPage() {
   );
 
   const fetchSmartWeather = useCallback(async (selectedDate: Date) => {
-    const weatherApiKey = import.meta.env.VITE_WEATHERAPI_KEY as string | undefined;
     const formattedDate = format(selectedDate, 'yyyy-MM-dd');
     const requestId = ++weatherRequestId.current;
 
@@ -650,56 +674,23 @@ export default function BookingPage() {
       setWeatherLoading(true);
       setWeatherError(null);
 
-      const diff = dayDifference(selectedDate) + 1;
-      if (weatherApiKey && diff <= 10) {
-        const forecastDays = Math.max(1, diff);
-        const response = await fetch(
-          `https://api.weatherapi.com/v1/forecast.json?key=${weatherApiKey}&q=14.1475,121.3454&days=${forecastDays}&aqi=no&alerts=no`,
-        );
-        if (!response.ok) throw new Error(`WeatherAPI request failed (${response.status})`);
-        const payload = await response.json() as {
-          forecast?: { forecastday?: Array<{ date: string; day: { maxtemp_c: number; mintemp_c: number; daily_chance_of_rain: number; condition?: { text?: string } } }> };
-        };
-        const selected = payload.forecast?.forecastday?.find((item) => item.date === formattedDate);
-        if (!selected) throw new Error('No forecast available for the selected date');
-        if (requestId !== weatherRequestId.current) return;
-        setWeatherInsight({
-          maxTempC: selected.day.maxtemp_c,
-          minTempC: selected.day.mintemp_c,
-          rainProbability: Number(selected.day.daily_chance_of_rain ?? 0),
-          condition: selected.day.condition?.text ?? 'Forecast available',
-          sourceName: 'WeatherAPI',
-          sourceUrl: 'https://www.weatherapi.com/',
-          fetchedAt: Date.now(),
-        });
-        return;
+      let dayWeather = kalisunganForecast[formattedDate];
+      if (!dayWeather) {
+        const res = await fetchKalisungan16DayForecast();
+        setKalisunganForecast(res.days);
+        dayWeather = res.days[formattedDate];
       }
 
-      const response = await fetch(
-        `https://api.open-meteo.com/v1/forecast?latitude=14.1475&longitude=121.3454&daily=temperature_2m_max,temperature_2m_min,precipitation_probability_max,weathercode&timezone=Asia%2FManila&forecast_days=16`,
-      );
-      if (!response.ok) throw new Error(`Open-Meteo request failed (${response.status})`);
-      const payload = await response.json() as {
-        daily?: {
-          time: string[];
-          temperature_2m_max: number[];
-          temperature_2m_min: number[];
-          precipitation_probability_max: number[];
-          weathercode: number[];
-        };
-      };
-
-      const idx = payload.daily?.time?.findIndex((d) => d === formattedDate) ?? -1;
-      if (idx < 0 || !payload.daily) throw new Error('No forecast available for the selected date');
+      if (!dayWeather) throw new Error('No forecast available for the selected date');
       if (requestId !== weatherRequestId.current) return;
       setWeatherInsight({
-        maxTempC: payload.daily.temperature_2m_max[idx],
-        minTempC: payload.daily.temperature_2m_min[idx],
-        rainProbability: payload.daily.precipitation_probability_max[idx] ?? 0,
-        condition: weatherCodeToLabel(payload.daily.weathercode[idx] ?? -1),
-        sourceName: 'Open-Meteo',
-        sourceUrl: 'https://open-meteo.com/',
-        fetchedAt: Date.now(),
+        maxTempC: dayWeather.maxTempC,
+        minTempC: dayWeather.minTempC,
+        rainProbability: dayWeather.rainProbability,
+        condition: dayWeather.condition,
+        sourceName: dayWeather.sourceName,
+        sourceUrl: dayWeather.sourceUrl,
+        fetchedAt: dayWeather.fetchedAt,
       });
     } catch (err: unknown) {
       if (requestId === weatherRequestId.current) {
@@ -709,7 +700,7 @@ export default function BookingPage() {
     } finally {
       if (requestId === weatherRequestId.current) setWeatherLoading(false);
     }
-  }, []);
+  }, [kalisunganForecast]);
 
   useEffect(() => {
     if (!date) {
@@ -1263,6 +1254,7 @@ export default function BookingPage() {
                           void fetchMonthCapacity(year, month);
                           void fetchSlotCapacity(year, month);
                         }}
+                        weatherMap={kalisunganForecast}
                       />
                     </div>
 
@@ -1289,9 +1281,15 @@ export default function BookingPage() {
                             )}
                           </span>
                         </motion.div>
-
                       </div>
                     )}
+
+                    {/* Mt. Kalisungan Weather Advisory & API Citation */}
+                    <CalendarWeatherAdvisory
+                      weather={selectedKalisunganWeather}
+                      selectedDate={date}
+                      loading={kalisunganForecastLoading}
+                    />
 
                     {/* Group Size */}
                     <div className="flex items-center justify-between p-4 rounded-xl border border-border/20 bg-secondary/20">

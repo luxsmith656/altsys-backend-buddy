@@ -13,9 +13,10 @@ import {
   addMonths,
   startOfDay,
 } from 'date-fns';
-import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Zap, CloudRain, CloudFog, CloudSun, Sun, ExternalLink } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
+import type { KalisunganDayWeather } from '@/lib/kalisunganWeather';
 
 export interface DayCapacity {
   max_capacity: number;
@@ -36,6 +37,7 @@ interface CapacityCalendarProps {
   defaultMaxCapacity?: number;
   hikeType?: 'day' | 'night' | 'overnight' | string;
   onMonthChange: (year: number, month: number) => void;
+  weatherMap?: Record<string, KalisunganDayWeather>;
 }
 
 const WEEKDAYS = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'];
@@ -49,6 +51,7 @@ export function CapacityCalendar({
   defaultMaxCapacity = DEFAULT_MAX,
   hikeType = 'day',
   onMonthChange,
+  weatherMap,
 }: CapacityCalendarProps) {
   const [currentMonth, setCurrentMonth] = React.useState(() => {
     const now = new Date();
@@ -149,6 +152,9 @@ export function CapacityCalendar({
             available < groupSize ? 'full' :
             ratio <= 0.3 ? 'low' : 'good';
 
+          const dateStr = format(day, 'yyyy-MM-dd');
+          const dayWeather = weatherMap ? weatherMap[dateStr] : undefined;
+
           return (
             <button
               key={day.toISOString()}
@@ -163,12 +169,36 @@ export function CapacityCalendar({
                 isTodayDate && !isSelected && 'bg-accent text-accent-foreground ring-2 ring-accent/60',
                 !isSelected && !isTodayDate && !isDisabled && 'hover:bg-primary/10 hover:scale-105',
               )}
-              aria-label={`${format(day, 'MMMM d, yyyy')}${isCurrentMonth && !isPast ? `, ${available} slots available` : ''}`}
+              aria-label={`${format(day, 'MMMM d, yyyy')}${isCurrentMonth && !isPast ? `, ${available} slots available` : ''}${dayWeather ? `, ${dayWeather.condition}` : ''}`}
               aria-pressed={isSelected}
             >
-              <span className="text-xs sm:text-sm font-semibold leading-none mb-0.5">
-                {format(day, 'd')}
-              </span>
+              <div className="flex items-center gap-1 leading-none mb-0.5">
+                <span className="text-xs sm:text-sm font-semibold">
+                  {format(day, 'd')}
+                </span>
+                {isCurrentMonth && !isPast && dayWeather && (
+                  <span
+                    className="inline-flex items-center shrink-0"
+                    title={`Mt. Kalisungan: ${dayWeather.condition} (${Math.round(dayWeather.maxTempC)}°C, ${dayWeather.rainProbability}% rain)`}
+                  >
+                    {dayWeather.category === 'thunderstorm' && (
+                      <Zap className={cn('h-2.5 w-2.5', isSelected ? 'text-amber-200 fill-amber-200' : 'text-amber-500 fill-amber-500')} />
+                    )}
+                    {dayWeather.category === 'rain' && (
+                      <CloudRain className={cn('h-2.5 w-2.5', isSelected ? 'text-blue-200' : 'text-blue-500')} />
+                    )}
+                    {dayWeather.category === 'fog' && (
+                      <CloudFog className={cn('h-2.5 w-2.5', isSelected ? 'text-slate-200' : 'text-slate-500')} />
+                    )}
+                    {dayWeather.category === 'cloudy' && (
+                      <CloudSun className={cn('h-2.5 w-2.5', isSelected ? 'text-sky-200' : 'text-sky-500')} />
+                    )}
+                    {dayWeather.category === 'clear' && (
+                      <Sun className={cn('h-2.5 w-2.5', isSelected ? 'text-amber-200' : 'text-amber-500')} />
+                    )}
+                  </span>
+                )}
+              </div>
               {isCurrentMonth && !isPast && (
                 <span
                   className={cn(
@@ -190,7 +220,7 @@ export function CapacityCalendar({
         })}
       </div>
 
-      {/* Legend */}
+      {/* Capacity Legend */}
       <div className="flex flex-wrap items-center gap-3 sm:gap-5 mt-4 pt-3 border-t border-border/20">
         {[
           { color: 'bg-emerald-500', label: 'Available' },
@@ -203,6 +233,28 @@ export function CapacityCalendar({
             <span className="text-[10px] text-muted-foreground">{label}</span>
           </div>
         ))}
+      </div>
+
+      {/* Mt. Kalisungan Weather Legend & Source Citation */}
+      <div className="mt-2.5 pt-2.5 border-t border-border/20 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 text-[10px] text-muted-foreground">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="font-semibold text-foreground/80">Mt. Kalisungan Weather:</span>
+          <span className="inline-flex items-center gap-1"><Sun className="h-2.5 w-2.5 text-amber-500" /> Clear</span>
+          <span className="inline-flex items-center gap-1"><CloudSun className="h-2.5 w-2.5 text-sky-500" /> Cloudy</span>
+          <span className="inline-flex items-center gap-1"><CloudFog className="h-2.5 w-2.5 text-slate-500" /> Fog</span>
+          <span className="inline-flex items-center gap-1"><CloudRain className="h-2.5 w-2.5 text-blue-500" /> Rain</span>
+          <span className="inline-flex items-center gap-1"><Zap className="h-2.5 w-2.5 text-amber-500 fill-amber-500" /> Storm</span>
+        </div>
+        <a
+          href="https://open-meteo.com/"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex items-center gap-1 hover:underline text-primary shrink-0"
+          title="Weather Forecast API for Mt. Kalisungan, Calauan, Laguna"
+        >
+          API: Open-Meteo (14.1475°N, 121.3454°E)
+          <ExternalLink className="h-2.5 w-2.5" />
+        </a>
       </div>
     </div>
   );
