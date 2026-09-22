@@ -68,7 +68,6 @@ import { HIKE_TIME_OPTIONS, getGuideFeePerGuide, getHikeTypeLabel, isValidHikeTi
 import { officialRoutesForLocation } from '@/lib/officialRoutes';
 import { getBookingSlotStatuses, type ScheduledBooking } from '@/lib/bookingCapacity';
 import { haversineDistance } from '@/lib/map-data';
-import CalendarWeatherAdvisory from '@/components/weather/CalendarWeatherAdvisory';
 import {
   fetchKalisungan16DayForecast,
   type KalisunganDayWeather,
@@ -795,11 +794,14 @@ export default function BookingPage() {
     currentParticipants,
     selectedDate: date ? format(date, 'yyyy-MM-dd') : undefined,
     groupSize,
-    weather: weatherInsight
+    weather: (weatherInsight || selectedKalisunganWeather)
       ? {
-          condition: weatherInsight.condition,
-          rainProbability: weatherInsight.rainProbability,
-          fetchedAt: weatherInsight.fetchedAt ?? Date.now(),
+          condition: (weatherInsight || selectedKalisunganWeather)!.condition,
+          rainProbability: (weatherInsight || selectedKalisunganWeather)!.rainProbability,
+          fetchedAt: (weatherInsight || selectedKalisunganWeather)!.fetchedAt ?? Date.now(),
+          sourceName: (weatherInsight || selectedKalisunganWeather)!.sourceName ?? 'Open-Meteo Weather API',
+          sourceUrl: (weatherInsight || selectedKalisunganWeather)!.sourceUrl ?? 'https://open-meteo.com/',
+          locationCitation: 'Mt. Kalisungan, Laguna (14.1475°N, 121.3454°E)',
         }
       : null,
     selectedStartTime: date ? hikeTime : undefined,
@@ -1284,13 +1286,6 @@ export default function BookingPage() {
                       </div>
                     )}
 
-                    {/* Mt. Kalisungan Weather Advisory & API Citation */}
-                    <CalendarWeatherAdvisory
-                      weather={selectedKalisunganWeather}
-                      selectedDate={date}
-                      loading={kalisunganForecastLoading}
-                    />
-
                     {/* Group Size */}
                     <div className="flex items-center justify-between p-4 rounded-xl border border-border/20 bg-secondary/20">
                       <div className="flex items-center gap-2">
@@ -1395,7 +1390,7 @@ export default function BookingPage() {
                       {slotCapacityRequested && slotCapacityError && (
                         <p className="text-xs text-destructive" role="alert">{slotCapacityError}</p>
                       )}
-                      <p className="text-[11px] text-muted-foreground">Starts are one hour apart. A reserved time is blocked, and no more than 5 groups may share the same summit arrival window across all entry points.</p>
+                      <p className="text-[11px] text-muted-foreground">Starts are two hours apart (e.g. 02:00 AM, 04:00 AM, 06:00 AM, 08:00 AM). A reserved time is blocked, and no more than 5 groups may share the same summit arrival window across all entry points.</p>
                     </div>
 
                   </div>

@@ -10,29 +10,21 @@ export interface HikeTimeOption {
 export const HIKE_TIME_OPTIONS: Record<HikeType, HikeTimeOption[]> = {
   morning: [
     { time: '02:00 AM', label: 'Very Early' },
-    { time: '03:00 AM', label: 'Early Start' },
     { time: '04:00 AM', label: 'Pre-dawn' },
-    { time: '05:00 AM', label: 'Early Bird' },
     { time: '06:00 AM', label: 'Most Popular', recommended: true },
-    { time: '07:00 AM', label: 'Morning' },
     { time: '08:00 AM', label: 'Latest Suggested' },
   ],
   night: [
     { time: '02:00 PM', label: 'Early Afternoon', recommended: true },
-    { time: '03:00 PM', label: 'Afternoon' },
     { time: '04:00 PM', label: 'Late Afternoon' },
-    { time: '05:00 PM', label: 'Latest Start' },
   ],
   overnight: [
     { time: '02:00 PM', label: 'Early Afternoon', recommended: true },
-    { time: '03:00 PM', label: 'Afternoon' },
     { time: '04:00 PM', label: 'Latest Start' },
   ],
   day: [
-    { time: '04:00 AM', label: 'Very Early' },
-    { time: '05:00 AM', label: 'Early Bird' },
+    { time: '04:00 AM', label: 'Pre-dawn' },
     { time: '06:00 AM', label: 'Most Popular', recommended: true },
-    { time: '07:00 AM', label: 'Morning' },
     { time: '08:00 AM', label: 'Late Start' },
   ],
 };

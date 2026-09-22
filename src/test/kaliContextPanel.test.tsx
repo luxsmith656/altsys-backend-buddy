@@ -124,4 +124,28 @@ describe('KaliContextPanel', () => {
     expect(screen.getByText('Bring documents.')).toBeVisible();
     expect(screen.queryByText('Your booking is tomorrow.')).not.toBeInTheDocument();
   });
+
+  it('renders a clickable weather source link inside the Kali AI insight card', () => {
+    const weatherInsightItem: KaliInsight = {
+      id: 'weather',
+      kind: 'weather',
+      severity: 'high',
+      expression: 'alert',
+      title: 'Strong weather warning',
+      message: 'Strong weather risk is expected for September 23 (Severe Thunderstorm).',
+      meta: {
+        sourceName: 'Open-Meteo Weather API',
+        sourceUrl: 'https://open-meteo.com/',
+        locationCitation: 'Mt. Kalisungan, Laguna (14.1475°N, 121.3454°E)',
+      },
+    };
+
+    render(<KaliContextPanel role="hiker" insights={[weatherInsightItem]} />);
+
+    const link = screen.getByRole('link', { name: /open-meteo weather api/i });
+    expect(link).toBeInTheDocument();
+    expect(link).toHaveAttribute('href', 'https://open-meteo.com/');
+    expect(link).toHaveAttribute('target', '_blank');
+    expect(screen.getByText(/Mt\. Kalisungan, Laguna/i)).toBeInTheDocument();
+  });
 });

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { AlertTriangle, BellRing, Check, Info, MessageCircle, Send, ShieldAlert, X } from 'lucide-react';
+import { AlertTriangle, BellRing, Check, ExternalLink, Info, MessageCircle, Send, ShieldAlert, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { getKaliRoleLabel, type KaliInsight, type KaliRole } from '@/lib/kaliContext';
 import KaliAvatar from './KaliAvatar';
@@ -125,6 +125,26 @@ export default function KaliContextPanel({ role, insights }: KaliContextPanelPro
                   <div className="min-w-0 flex-1">
                     <p className="text-xs font-bold">{item.title}</p>
                     <p className="mt-1 text-sm leading-relaxed text-foreground">{item.message}</p>
+                    {item.kind === 'weather' && Boolean(item.meta.sourceUrl) && (
+                      <div className="mt-2 flex flex-wrap items-center gap-1.5 pt-1.5 border-t border-border/40 text-[11px] text-muted-foreground">
+                        <span>Source:</span>
+                        <a
+                          href={String(item.meta.sourceUrl)}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          onClick={(e) => e.stopPropagation()}
+                          className="inline-flex items-center gap-1 font-semibold text-primary underline underline-offset-2 hover:opacity-80"
+                        >
+                          <span>{String(item.meta.sourceName || 'Open-Meteo Weather API')}</span>
+                          <ExternalLink className="h-3 w-3" />
+                        </a>
+                        {Boolean(item.meta.locationCitation) && (
+                          <span className="text-[10px] text-muted-foreground/75">
+                            · {String(item.meta.locationCitation)}
+                          </span>
+                        )}
+                      </div>
+                    )}
                   </div>
                   <button
                     type="button"

@@ -8,6 +8,9 @@ export interface KaliWeatherInput {
   rainProbability?: number;
   windKmh?: number;
   fetchedAt: string | number | Date;
+  sourceName?: string;
+  sourceUrl?: string;
+  locationCitation?: string;
 }
 
 export interface KaliBookingInput {
@@ -189,8 +192,8 @@ function hikeTypeInsight(input: KaliContextInput): KaliInsight | null {
     title: overnight ? 'Overnight hike plan' : 'Night hike plan',
     message: overnight
       ? 'Overnight hikes start between 2:00 PM and 4:00 PM and include an overnight stay. Bring your own tent because tents are not provided and there is no lodging at the peak. Pack extra food, lighting, warm layers, and rest gear.'
-      : 'Night hikes start between 2:00 PM and 5:00 PM and continue into the evening, but the group still needs to descend the same day. Bring a headlamp, spare batteries, and visibility layers; choose this for prepared reduced-light travel.',
-    meta: { hikeType: input.hikeType, scheduleStart: '02:00 PM', scheduleEnd: overnight ? '04:00 PM' : '05:00 PM' },
+      : 'Night hikes start between 2:00 PM and 4:00 PM and continue into the evening, but the group still needs to descend the same day. Bring a headlamp, spare batteries, and visibility layers; choose this for prepared reduced-light travel.',
+    meta: { hikeType: input.hikeType, scheduleStart: '02:00 PM', scheduleEnd: '04:00 PM' },
   };
 }
 
@@ -227,7 +230,14 @@ function weatherInsight(input: KaliContextInput): KaliInsight | null {
       : caution
         ? `${weather.condition} is possible${dateNote} for this hike. Proceed with care, rain gear, and a flexible turnaround plan.${forecastNote}${timeNote}`
         : `${weather.condition} looks favorable${dateNote} for the selected hike window. Continue checking the forecast because mountain weather can change.${timeNote}`,
-    meta: { rainProbability: rain, windKmh: wind, forecastStatus: stale ? 'stale' : 'fresh' },
+    meta: {
+      rainProbability: rain,
+      windKmh: wind,
+      forecastStatus: stale ? 'stale' : 'fresh',
+      sourceName: weather.sourceName ?? 'Open-Meteo Weather API',
+      sourceUrl: weather.sourceUrl ?? 'https://open-meteo.com/',
+      locationCitation: weather.locationCitation ?? 'Mt. Kalisungan, Laguna (14.1475°N, 121.3454°E)',
+    },
   };
 }
 
