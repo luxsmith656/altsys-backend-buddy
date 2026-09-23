@@ -819,8 +819,8 @@ export default function BookingPage() {
             safetyAdvice: d.advisory?.safetyAdvice,
           })),
           fetchedAt: (weatherInsight || selectedKalisunganWeather)!.fetchedAt ?? Date.now(),
-          sourceName: 'Mountain-Forecast.com',
-          sourceUrl: 'https://www.mountain-forecast.com/peaks/Mount-Kalisungan/forecasts/686',
+          sourceName: 'AccuWeather (Calauan, Laguna)',
+          sourceUrl: 'https://www.accuweather.com/en/ph/calauan/263792/weather-forecast/263792',
           locationCitation: 'Mt. Kalisungan, Laguna (14.1475°N, 121.3454°E · 760m)',
         }
       : null,

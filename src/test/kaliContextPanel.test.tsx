@@ -145,7 +145,8 @@ describe('KaliContextPanel', () => {
         trailImpact: 'Summit grassland ridge is exposed. Red clay turns into slick mud.',
         safetyAdvice: 'Ascend early before midday convective storms form.',
         locationCitation: 'Mt. Kalisungan, Laguna (14.1475°N, 121.3454°E · 760m)',
-        sourceUrl: 'https://www.mountain-forecast.com/peaks/Mount-Kalisungan/forecasts/686',
+        sourceName: 'AccuWeather (Calauan, Laguna)',
+        sourceUrl: 'https://www.accuweather.com/en/ph/calauan/263792/weather-forecast/263792',
       },
     };
 
@@ -158,11 +159,11 @@ describe('KaliContextPanel', () => {
 
     // States the forecast source name directly without opening a modal view
     expect(screen.getByText(/Forecast Source:/i)).toBeInTheDocument();
-    const sourceLink = screen.getByRole('link', { name: /mountain-forecast\.com/i });
+    const sourceLink = screen.getByRole('link', { name: /accuweather/i });
     expect(sourceLink).toBeInTheDocument();
     expect(sourceLink).toHaveAttribute(
       'href',
-      'https://www.mountain-forecast.com/peaks/Mount-Kalisungan/forecasts/686',
+      'https://www.accuweather.com/en/ph/calauan/263792/weather-forecast/263792',
     );
     expect(screen.queryByRole('button', { name: /view mt\. kalisungan weather prediction/i })).not.toBeInTheDocument();
   });

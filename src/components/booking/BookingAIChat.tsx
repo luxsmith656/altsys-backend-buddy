@@ -124,10 +124,10 @@ function getWeatherHikeAdvice(
   const hotDay = weather.maxTempC >= 32;
   const comfortable = weather.maxTempC < 30 && weather.rainProbability < 30;
 
-  const realWebsiteLink = weather.sourceUrl || 'https://www.mountain-forecast.com/peaks/Mount-Kalisungan/forecasts/686';
+  const realWebsiteLink = weather.sourceUrl || 'https://www.accuweather.com/en/ph/calauan/263792/weather-forecast/263792';
   const citationBlock =
-    `\n\n🌐 **Official Mountain Weather Forecast Website:**\n` +
-    `• [Mountain-Forecast.com (Mt. Kalisungan 686m Peak)](${realWebsiteLink})\n` +
+    `\n\n🌐 **Official Local Weather Forecast Website:**\n` +
+    `• [AccuWeather (Calauan, Laguna)](${realWebsiteLink})\n` +
     `• [Zoom Earth Live Satellite Radar](https://zoom.earth/#view=14.1475,121.3454,12z)`;
 
   if (comfortable) {
@@ -382,8 +382,8 @@ function generateResponse(
         `To get a real weather forecast for your hike date:\n\n` +
         `1. **Select a date** on the booking calendar above\n` +
         `2. I'll automatically analyze the live Mt. Kalisungan weather for that day! 🌤️\n\n` +
-        `You can also view the live forecast right now on the official mountain weather website:\n` +
-        `• [Mountain-Forecast.com (Mt. Kalisungan 686m Peak)](https://www.mountain-forecast.com/peaks/Mount-Kalisungan/forecasts/686)\n` +
+        `You can also view the live forecast right now on the official local weather website:\n` +
+        `• [AccuWeather (Calauan, Laguna)](https://www.accuweather.com/en/ph/calauan/263792/weather-forecast/263792)\n` +
         `• [Zoom Earth Live Satellite Radar](https://zoom.earth/#view=14.1475,121.3454,12z)`,
       quickReplies: ['Help me pick a date', 'Are there river crossings?', 'What should I bring?'],
     };

@@ -247,13 +247,13 @@ export function CapacityCalendar({
         </div>
         <div className="flex items-center gap-2 shrink-0">
           <a
-            href="https://www.mountain-forecast.com/peaks/Mount-Kalisungan/forecasts/686"
+            href="https://www.accuweather.com/en/ph/calauan/263792/weather-forecast/263792"
             target="_blank"
             rel="noopener noreferrer"
             className="inline-flex items-center gap-1 hover:underline text-primary font-medium"
-            title="Real mountain weather forecast for Mt. Kalisungan Peak"
+            title="AccuWeather local mountain forecast for Calauan & Mt. Kalisungan"
           >
-            <span>Forecast: Mountain-Forecast.com (686m Peak)</span>
+            <span>Forecast: AccuWeather (Calauan, Laguna)</span>
             <ExternalLink className="h-2.5 w-2.5" />
           </a>
           <span className="text-muted-foreground/60">•</span>
