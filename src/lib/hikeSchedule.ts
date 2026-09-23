@@ -12,20 +12,29 @@ export const HIKE_TIME_OPTIONS: Record<HikeType, HikeTimeOption[]> = {
     { time: '02:00 AM', label: 'Very Early' },
     { time: '04:00 AM', label: 'Pre-dawn' },
     { time: '06:00 AM', label: 'Most Popular', recommended: true },
-    { time: '08:00 AM', label: 'Latest Suggested' },
+    { time: '08:00 AM', label: 'Morning' },
+    { time: '10:00 AM', label: 'Late Morning' },
   ],
   night: [
-    { time: '02:00 PM', label: 'Early Afternoon', recommended: true },
+    { time: '02:00 PM', label: 'Early Afternoon' },
     { time: '04:00 PM', label: 'Late Afternoon' },
+    { time: '06:00 PM', label: 'Sunset / Dusk' },
+    { time: '08:00 PM', label: 'Evening Trek' },
+    { time: '10:00 PM', label: 'Summit at Dawn', recommended: true },
+    { time: '12:00 AM', label: 'Midnight Trek' },
   ],
   overnight: [
     { time: '02:00 PM', label: 'Early Afternoon', recommended: true },
-    { time: '04:00 PM', label: 'Latest Start' },
+    { time: '04:00 PM', label: 'Late Afternoon' },
+    { time: '06:00 PM', label: 'Sunset Camp' },
+    { time: '08:00 PM', label: 'Night Camp' },
+    { time: '10:00 PM', label: 'Midnight Camp' },
   ],
   day: [
     { time: '04:00 AM', label: 'Pre-dawn' },
     { time: '06:00 AM', label: 'Most Popular', recommended: true },
-    { time: '08:00 AM', label: 'Late Start' },
+    { time: '08:00 AM', label: 'Morning' },
+    { time: '10:00 AM', label: 'Late Morning' },
   ],
 };
 

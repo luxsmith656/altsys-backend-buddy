@@ -1410,7 +1410,7 @@ export default function BookingPage() {
                       {slotCapacityRequested && slotCapacityError && (
                         <p className="text-xs text-destructive" role="alert">{slotCapacityError}</p>
                       )}
-                      <p className="text-[11px] text-muted-foreground">Starts are two hours apart (e.g. 02:00 AM, 04:00 AM, 06:00 AM, 08:00 AM). A reserved time is blocked, and no more than 5 groups may share the same summit arrival window across all entry points.</p>
+                      <p className="text-[11px] text-muted-foreground">Starts are two hours apart (e.g. 02:00 AM, 04:00 AM, 06:00 AM, 08:00 AM, 10:00 AM for morning; 02:00 PM, 04:00 PM, 06:00 PM, 08:00 PM, 10:00 PM, 12:00 AM for night). A reserved time is blocked, and no more than 5 groups may share the same summit arrival window across all entry points.</p>
                     </div>
 
                   </div>
