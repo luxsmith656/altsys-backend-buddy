@@ -236,7 +236,7 @@ export default function Index() {
                 </div>
                 <div>
                   <div className="text-xl font-semibold text-white">3 trails</div>
-                  <div>Summit • River • Ridge</div>
+                  <div>Summit • Plantation • Ridge</div>
                 </div>
                 <div>
                   <div className="text-xl font-semibold text-white">AI</div>
@@ -310,7 +310,7 @@ export default function Index() {
                 </div>
                 <div>
                   <div className="text-sm font-semibold text-foreground">3 trails</div>
-                  <div>Summit • River • Ridge</div>
+                  <div>Summit • Plantation • Ridge</div>
                 </div>
                 <div>
                   <div className="text-sm font-semibold text-foreground">Live weather</div>

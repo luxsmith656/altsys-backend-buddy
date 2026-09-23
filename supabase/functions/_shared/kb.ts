@@ -23,7 +23,7 @@ export const KB_SEED: KbSeed[] = [
     title: "Trails and difficulty",
     category: "trail",
     content:
-      "Summit Trail: hard, about 3.2 km, tops out at 622 m, the steepest and most direct route. River Trail: easy, about 2.1 km, up to 350 m, shaded and best for kids, seniors and first timers. Ridge Trail: moderate, about 2.8 km, up to 480 m, exposed ridgeline with strong wind and sun.",
+      "Summit Trail: hard, about 3.2 km, tops out at 622 m, the steepest and most direct route. Plantation Trail: easy, about 2.1 km, up to 350 m, shaded coconut groves and best for kids, seniors and first timers (strictly no river crossings). Ridge Trail: moderate, about 2.8 km, up to 480 m, exposed ridgeline with strong wind and sun.",
   },
   {
     title: "Best season and weather guidance",

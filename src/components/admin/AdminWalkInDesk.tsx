@@ -516,7 +516,7 @@ export default function AdminWalkInDesk({
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="Summit Trail (Main Peak)" className="text-xs">🏔️ Summit Trail (Main Peak - 622m)</SelectItem>
-                        <SelectItem value="River Trail (Scenic Valley)" className="text-xs">🌊 River Trail (Scenic Valley)</SelectItem>
+                        <SelectItem value="Plantation Trail (Scenic Valley)" className="text-xs">🌴 Plantation Trail (Scenic Valley)</SelectItem>
                         <SelectItem value="Ridge Trail (Panoramic Route)" className="text-xs">🌄 Ridge Trail (Panoramic Route)</SelectItem>
                       </SelectContent>
                     </Select>

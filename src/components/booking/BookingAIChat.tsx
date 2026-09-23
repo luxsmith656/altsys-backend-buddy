@@ -124,9 +124,15 @@ function getWeatherHikeAdvice(
   const hotDay = weather.maxTempC >= 32;
   const comfortable = weather.maxTempC < 30 && weather.rainProbability < 30;
 
+  const realWebsiteLink = weather.sourceUrl || 'https://www.mountain-forecast.com/peaks/Mount-Kalisungan/forecasts/686';
+  const citationBlock =
+    `\n\n🌐 **Official Mountain Weather Forecast Website:**\n` +
+    `• [Mountain-Forecast.com (Mt. Kalisungan 686m Peak)](${realWebsiteLink})\n` +
+    `• [Zoom Earth Live Satellite Radar](https://zoom.earth/#view=14.1475,121.3454,12z)`;
+
   if (comfortable) {
     const time = hikeType === 'morning' || hikeType === 'day'
-      ? (hasKids || hasSeniors ? '05:00 AM' : '06:00 AM')
+      ? (hasKids || hasSeniors ? '04:00 AM or 06:00 AM' : '06:00 AM')
       : '02:00 PM';
     return (
       `Great news! Forecast looks perfect — **${weather.condition}**, ` +
@@ -134,30 +140,34 @@ function getWeatherHikeAdvice(
       `only **${Math.round(weather.rainProbability)}% rain** chance.\n\n` +
       `A ${time} start may be comfortable for this forecast.` +
       (hasKids ? ' With kids in your group, the cooler early morning is ideal! 🧒' : '') +
-      (hasSeniors ? ' The morning coolness is perfect for your senior companions. 👴' : '')
+      (hasSeniors ? ' The morning coolness is perfect for your senior companions. 👴' : '') +
+      citationBlock
     );
   }
   if (rainHigh) {
     return (
-      `⚠️ Heads up! Rain chance is **${Math.round(weather.rainProbability)}%** — quite high.\n\n` +
-      `Trails can get slippery on descents. I'd suggest:\n` +
+      `⚠️ Heads up! Rain chance is **${Math.round(weather.rainProbability)}%** (${weather.condition}) — quite high.\n\n` +
+      `Volcanic clay trails can get very slippery on descents. Note: Mt. Kalisungan has **no river crossings**, but steep clay slopes become muddy. I'd suggest:\n` +
       `• Starting **before 06:00 AM** before rains typically build up\n` +
       `• Bringing rain gear and trekking poles\n` +
-      `Please check the forecast and official advisories again before departure.`
+      `Please check the official live forecast again before departure.` +
+      citationBlock
     );
   }
   if (hotDay) {
     return (
-      `🌡️ It'll be quite warm — up to **${Math.round(weather.maxTempC)}°C**!` +
+      `🌡️ It'll be quite warm — up to **${Math.round(weather.maxTempC)}°C** (${weather.condition})!` +
       (hasKids ? ' With kids, heat can be extra challenging.' : '') +
-      ` I strongly recommend starting at **04:30 or 05:00 AM** to summit before peak heat.\n\n` +
-      `Bring at least **2L of water per person** and sun protection!`
+      ` I strongly recommend starting at **04:00 AM or 06:00 AM** to summit before peak heat.\n\n` +
+      `Bring at least **2L of water per person** and sun protection for the unshaded ridge!` +
+      citationBlock
     );
   }
   return (
     `Forecast shows **${weather.condition}** — ` +
     `${Math.round(weather.minTempC)}–${Math.round(weather.maxTempC)}°C, ` +
-    `${Math.round(weather.rainProbability)}% rain. Conditions look manageable — come prepared! 🏔️`
+    `${Math.round(weather.rainProbability)}% rain. Conditions look manageable — come prepared! 🏔️` +
+    citationBlock
   );
 }
 
@@ -369,11 +379,13 @@ function generateResponse(
     }
     return {
       content:
-        `To get a real weather forecast for your hike date:\n` +
-        `1. **Select a date** on the calendar\n` +
-        `2. **Enable Smart Guide** (right panel) to load the forecast\n\n` +
-        `I'll then give you specific advice based on actual conditions! 🌤️`,
-      quickReplies: ['How does Smart Guide work?', 'Help me pick a date'],
+        `To get a real weather forecast for your hike date:\n\n` +
+        `1. **Select a date** on the booking calendar above\n` +
+        `2. I'll automatically analyze the live Mt. Kalisungan weather for that day! 🌤️\n\n` +
+        `You can also view the live forecast right now on the official mountain weather website:\n` +
+        `• [Mountain-Forecast.com (Mt. Kalisungan 686m Peak)](https://www.mountain-forecast.com/peaks/Mount-Kalisungan/forecasts/686)\n` +
+        `• [Zoom Earth Live Satellite Radar](https://zoom.earth/#view=14.1475,121.3454,12z)`,
+      quickReplies: ['Help me pick a date', 'Are there river crossings?', 'What should I bring?'],
     };
   }
 
@@ -410,6 +422,20 @@ function generateResponse(
     };
   }
 
+  /* River crossings / water */
+  if (lower.match(/(river|crossing|creek|stream|water crossing|wading|waterfall)/)) {
+    return {
+      content:
+        `🚫 **No River Crossings on Mt. Kalisungan:**\n\n` +
+        `There are **absolutely NO river crossings** anywhere on Mt. Kalisungan!\n\n` +
+        `• The trail climbs through **coconut plantations, fruit orchards, forest woodlands, and an open cogon grassland ridge** directly to the summit (622m).\n` +
+        `• Hikers will **never** need to wade across rivers, creeks, or streams.\n` +
+        `• Trail running shoes or standard hiking boots with good grip are ideal—no water shoes or aquatic gear needed.\n` +
+        `• Water refill stations and fresh buko juice are sold by local farmers at rest huts along the lower trail.`,
+      quickReplies: ['Summit Route details', 'What shoes should I wear?', 'Weather advice'],
+    };
+  }
+
   /* Trail info */
   if (lower.match(/(trail|route|path|distance|km|elevation|summit|difficulty|how long)/)) {
     if (publishedRoute) {
@@ -427,11 +453,11 @@ function generateResponse(
       content:
         `Mt. Kalisungan has **3 trail routes**:\n\n` +
         `🏔️ **Summit Route** — Most popular, 622m elevation (~3–4 hrs up)\n` +
-        `🌊 **River Route** — Scenic river crossings, lush jungle\n` +
+        `🌴 **Plantation Route** — Shaded coconut & fruit groves, scenic valley (NO river crossings!)\n` +
         `🌄 **Ridge Route** — Best panoramic views along the ridgeline\n\n` +
         `**Summit Route** is ~7km round trip. Total estimated time: **6–8 hours**.\n\n` +
         `Which route interests you most?`,
-      quickReplies: ['Summit Route details', 'Which is easiest?', 'Can beginners do it?', 'Best for families?'],
+      quickReplies: ['Summit Route details', 'Are there river crossings?', 'Which is easiest?', 'Can beginners do it?'],
     };
   }
 
@@ -849,7 +875,20 @@ export default function BookingAIChat({
                     )}
                   >
                     <div className="whitespace-pre-wrap break-words [&_p]:mb-2 [&_p:last-child]:mb-0">
-                      <ReactMarkdown>{msg.content}</ReactMarkdown>
+                      <ReactMarkdown
+                        components={{
+                          a: ({ node, ...props }) => (
+                            <a
+                              {...props}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="font-semibold text-primary underline underline-offset-2 hover:opacity-80 inline-flex items-center gap-1"
+                            />
+                          ),
+                        }}
+                      >
+                        {msg.content}
+                      </ReactMarkdown>
                     </div>
                     {msg.suggestion && onApplySuggestion && (
                       <button

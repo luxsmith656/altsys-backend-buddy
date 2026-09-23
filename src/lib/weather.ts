@@ -89,7 +89,7 @@ export function adviseRoute(w: WeatherSnapshot): RouteAdvice {
   const thunder = [95, 96, 99].includes(w.weatherCode);
   if (thunder) { level = 'avoid'; reasons.push('Thunderstorm activity — exposed ridges are dangerous.'); }
 
-  if (w.precipNext6hMm >= 10) { level = 'avoid'; reasons.push(`Heavy rain expected (${w.precipNext6hMm} mm in 6 h) — trail will be slippery, river crossings risky.`); }
+  if (w.precipNext6hMm >= 10) { level = 'avoid'; reasons.push(`Heavy rain expected (${w.precipNext6hMm} mm in 6 h) — clay trail will be very slippery, steep slopes hazardous.`); }
   else if (w.precipNext6hMm >= 3) { level = level === 'avoid' ? 'avoid' : 'caution'; reasons.push(`Rain expected (${w.precipNext6hMm} mm in 6 h) — pack rain gear.`); }
 
   if (w.windKmh >= 50) { level = 'avoid'; reasons.push(`Strong winds (${Math.round(w.windKmh)} km/h) — avoid summit & ridge trails.`); }

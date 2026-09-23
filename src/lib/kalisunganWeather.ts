@@ -114,9 +114,9 @@ export function interpretKalisunganWeather(
         advisory: {
           level: 'danger',
           badgeLabel: '🌧️ Heavy Rain Alert',
-          headline: 'Severe Mud & Swollen Stream Crossings',
+          headline: 'Severe Mud & Slippery Steep Slopes',
           trailImpact:
-            'Volcanic red clay on the Lamot 1 & 2 approaches turns into knee-deep, slippery slick mud. Lower stream crossings swell quickly.',
+            'Volcanic red clay on the Lamot 1 & 2 approaches turns into knee-deep, slippery slick mud. The steep upper cogon grass and rocky slopes become treacherous with heavy rain runoff. (Note: Mt. Kalisungan has no river crossings).',
           safetyAdvice:
             'Trekking poles, waterproof pack liners, and deep-lug trail shoes are mandatory. Avoid steep ridge descents in torrential downpours.',
         },
@@ -244,9 +244,9 @@ export async function fetchKalisungan16DayForecast(): Promise<KalisunganForecast
   }
 
   const days: Record<string, KalisunganDayWeather> = {};
-  const sourceName = 'Open-Meteo Weather Forecast API';
-  const sourceUrl = 'https://open-meteo.com/';
-  const locationCitation = 'Mt. Kalisungan, Calauan & Nagcarlan, Laguna, Philippines (14.1475° N, 121.3454° E, ~760m)';
+  const sourceName = 'Mountain-Forecast.com (686m Peak) & Open-Meteo API';
+  const sourceUrl = 'https://www.mountain-forecast.com/peaks/Mount-Kalisungan/forecasts/686';
+  const locationCitation = 'Mt. Kalisungan, Calauan & Nagcarlan, Laguna, Philippines (14.1475° N, 121.3454° E · 629m Peak)';
   const now = Date.now();
 
   for (let i = 0; i < daily.time.length; i++) {

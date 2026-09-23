@@ -243,7 +243,7 @@ export default function KaliContextPanel({ role, insights }: KaliContextPanelPro
               : []
           }
           locationCitation={String(selectedWeatherInsight.meta.locationCitation || 'Mt. Kalisungan, Laguna (14.1475°N, 121.3454°E · 760m)')}
-          sourceUrl={String(selectedWeatherInsight.meta.sourceUrl || 'https://www.mountain-forecast.com/locations/Mount-Kalisungan')}
+          sourceUrl={String(selectedWeatherInsight.meta.sourceUrl || 'https://www.mountain-forecast.com/peaks/Mount-Kalisungan/forecasts/686')}
         />
       )}
     </div>

@@ -254,7 +254,7 @@ KEY INFORMATION:
 - Elevation 622m, ~14.1475°N 121.3454°E. Difficulty easy-to-moderate, beginner-friendly.
 - Best season November–May (dry). June–October is rainy; check forecasts.
 - 2–4 hours to the summit depending on trail and pace. Registration required at the barangay hall / trailhead.
-- Trails: Summit Trail (Hard, 3.2 km, 622m) · River Trail (Easy, 2.1 km, up to 350m) · Ridge Trail (Moderate, 2.8 km, 480m).
+- Trails: Summit Trail (Hard, 3.2 km, 622m) · Plantation Trail (Easy, 2.1 km, up to 350m, no river crossings) · Ridge Trail (Moderate, 2.8 km, 480m).
 - Safety: register, 2L water per person, proper shoes, start early (before 6 AM), never hike alone, rain gear in transition months.
 - Schedule rules: Morning hikes may start 02:00–08:00 AM, with 10:00 AM shown only as very late and not suggested. Night hikes start 02:00–05:00 PM and continue into the evening; overnight hikes start 02:00–04:00 PM and include an overnight stay. Recommend 06:00 AM for most morning groups, 05:00 AM for kids, seniors or hot weather, and earlier only when the group is prepared.
 

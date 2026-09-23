@@ -18,7 +18,7 @@ const KB: KBEntry[] = [
     answer: `**Mt. Kalisungan has 3 trails:**
 
 1. **Summit Trail (Hard)** – 3.2 km, steep ascent through forest canopy to 622m summit
-2. **River Trail (Easy)** – 2.1 km, scenic riverside path, great for beginners, max 350m elevation
+2. **Plantation Trail (Easy)** – 2.1 km, scenic coconut & fruit groves, great for beginners, max 350m elevation (strictly NO river crossings)
 3. **Ridge Trail (Moderate)** – 2.8 km, panoramic ridge views, 480m elevation`,
   },
   {
@@ -33,15 +33,25 @@ const KB: KBEntry[] = [
 - ⚠️ Can be very slippery when wet — bring trekking poles`,
   },
   {
-    keywords: ['river', 'trail', 'riverside', 'creek', 'stream'],
-    answer: `**River Trail (Easy):**
+    keywords: ['river', 'crossing', 'creek', 'stream', 'water crossing', 'river crossing'],
+    answer: `**🚫 NO River Crossings on Mt. Kalisungan:**
+
+- **Zero river crossings:** Mt. Kalisungan has **no river crossings** anywhere along its trails!
+- The trail passes entirely through coconut plantations, fruit orchards, forest woodlands, and an open cogon grassland ridge to the summit.
+- Hikers do **not** need to wade across streams or wet their feet.
+- Regular trail shoes or hiking boots with good grip are recommended.
+- Fresh buko and water refills are available at rest huts along the lower trail.`,
+  },
+  {
+    keywords: ['plantation', 'orchard', 'valley', 'easy', 'flat', 'gentle'],
+    answer: `**Plantation & Valley Trail (Easy):**
 
 - Distance: 2.1 km one way
 - Max elevation: 350m
 - Duration: 1–2 hours
-- Features: Scenic riverside path, natural pools, shaded canopy
+- Features: Shaded coconut groves, banana orchards, tropical canopy, rustic rest huts
 - Best for: Beginners, families, and casual hikers
-- Tip: Great for photography — morning light hits the river beautifully`,
+- Note: Strictly NO river crossings — paths stay on dry agricultural and forest soil`,
   },
   {
     keywords: ['ridge', 'trail', 'panoramic', 'view', 'views'],
@@ -148,7 +158,7 @@ Afternoon thunderstorms can occur year-round.`,
 🦅 **Animals:**
 - Philippine eagle owl
 - Various bird species (kingfishers, sunbirds)
-- Diverse butterfly species along River Trail
+- Diverse butterfly species along Plantation Trail
 - Monitor lizards (rare)
 
 ⚠️ **Watch out for:**
@@ -230,12 +240,12 @@ Afternoon thunderstorms can occur year-round.`,
     keywords: ['difficulty', 'beginner', 'easy', 'hard', 'moderate', 'level', 'fitness', 'fit'],
     answer: `**Trail Difficulty Levels:**
 
-- 🟢 **River Trail (Easy)** – Best for beginners, families, 2.1 km
+- 🟢 **Plantation Trail (Easy)** – Best for beginners, families, 2.1 km
 - 🟡 **Ridge Trail (Moderate)** – Some steep sections, 2.8 km
 - 🔴 **Summit Trail (Hard)** – Steep ascent, requires good fitness, 3.2 km
 
 **Fitness tips:**
-- No prior hiking experience needed for River Trail
+- No prior hiking experience needed for Plantation Trail
 - Start jogging/walking 2 weeks before for Summit Trail
 - Stretch before and after the hike
 - Listen to your body — rest when needed`,
@@ -244,19 +254,19 @@ Afternoon thunderstorms can occur year-round.`,
     keywords: ['kid', 'kids', 'child', 'children', 'family', 'baby', 'toddler'],
     answer: `**Hiking with Kids:**
 
-- ✅ **River Trail** is family-friendly (Easy, 2.1 km)
+- ✅ **Plantation Trail** is family-friendly (Easy, 2.1 km)
 - Children 7+ can handle it with supervision
 - ❌ Summit Trail not recommended for young children
 - Bring extra snacks and water for kids
 - Keep them close — some sections have drop-offs
-- Consider a carrier for toddlers on River Trail only
+- Consider a carrier for toddlers on Plantation Trail only
 - Start very early to avoid midday heat`,
   },
   {
     keywords: ['senior', 'elderly', 'old', 'age', 'knee', 'joint'],
     answer: `**For Senior Hikers:**
 
-- ✅ **River Trail** is gentle and doable for most fitness levels
+- ✅ **Plantation Trail** is gentle and doable for most fitness levels
 - Use trekking poles for stability
 - Take frequent breaks
 - Avoid Summit Trail if you have knee/joint issues
@@ -274,7 +284,7 @@ Afternoon thunderstorms can occur year-round.`,
 |-------|-----|------|-------|
 | Summit | 2–3 hrs | 1.5–2 hrs | 3.5–5 hrs |
 | Ridge | 1.5–2 hrs | 1–1.5 hrs | 2.5–3.5 hrs |
-| River | 1–1.5 hrs | 45 min–1 hr | 1.5–2.5 hrs |
+| Plantation | 1–1.5 hrs | 45 min–1 hr | 1.5–2.5 hrs |
 
 ⏰ **Recommended start:** Before 6 AM
 🏁 **Aim to finish by:** 12 PM (avoid afternoon heat & storms)`,
@@ -427,7 +437,7 @@ Afternoon thunderstorms can occur year-round.`,
 📸 **Best photo spots:**
 - Summit — 360° panoramic views (best at sunrise)
 - Ridge Trail — dramatic landscape shots
-- River Trail — waterfalls and forest canopy
+- Plantation Trail — coconut groves and forest canopy
 - Sunrise from the summit is the #1 photo op
 
 ⏰ **Best times:**
@@ -540,7 +550,7 @@ Afternoon thunderstorms can occur year-round.`,
 - Hire a local guide for safety
 - Tell someone your expected return time
 - Bring a whistle and fully charged phone
-- Stick to River Trail (easiest, most trafficked)
+- Stick to Plantation Trail (easiest, most trafficked)
 - Join organized group hikes through Facebook/mountaineering clubs`,
   },
 
@@ -684,7 +694,7 @@ export function getOfflineAnswer(query: string): string {
   return `I'm currently **offline** and can only answer from my local knowledge base.
 
 **Topics I can help with:**
-- 🥾 Trails (Summit, River, Ridge)
+- 🥾 Trails (Summit, Plantation, Ridge)
 - 🎒 Gear & preparation
 - 🌤️ Weather & best seasons
 - 🦅 Wildlife & nature

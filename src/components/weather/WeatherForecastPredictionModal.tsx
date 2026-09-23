@@ -90,7 +90,7 @@ export function WeatherForecastPredictionModal({
   badgeLabel,
   forecastDays = [],
   locationCitation = 'Mt. Kalisungan, Laguna (14.1475°N, 121.3454°E · 760m)',
-  sourceUrl = 'https://www.mountain-forecast.com/locations/Mount-Kalisungan',
+  sourceUrl = 'https://www.mountain-forecast.com/peaks/Mount-Kalisungan/forecasts/686',
 }: WeatherForecastPredictionModalProps) {
   const [activeDate, setActiveDate] = useState<string | undefined>(selectedDate);
 
@@ -304,12 +304,12 @@ export function WeatherForecastPredictionModal({
 
           <div className="flex items-center gap-3">
             <a
-              href="https://www.mountain-forecast.com/locations/Mount-Kalisungan"
+              href={sourceUrl || "https://www.mountain-forecast.com/peaks/Mount-Kalisungan/forecasts/686"}
               target="_blank"
               rel="noopener noreferrer"
               className="inline-flex items-center gap-1 text-[11px] font-semibold text-primary underline underline-offset-2 hover:opacity-80"
             >
-              <span>Mountain-Forecast.com (760m Peak)</span>
+              <span>Mountain-Forecast.com (686m Peak)</span>
               <ExternalLink className="h-3 w-3" />
             </a>
             <a

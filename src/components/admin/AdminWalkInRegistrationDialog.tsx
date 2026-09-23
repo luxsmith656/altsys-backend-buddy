@@ -415,7 +415,7 @@ export default function AdminWalkInRegistrationDialog({
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="Summit Trail (Main Peak)" className="text-xs">Summit Trail (Main Peak - 622m)</SelectItem>
-                      <SelectItem value="River Trail (Scenic Valley)" className="text-xs">River Trail (Scenic Valley)</SelectItem>
+                      <SelectItem value="Plantation Trail (Scenic Valley)" className="text-xs">Plantation Trail (Scenic Valley)</SelectItem>
                       <SelectItem value="Ridge Trail (Panoramic)" className="text-xs">Ridge Trail (Panoramic Traverse)</SelectItem>
                     </SelectContent>
                   </Select>

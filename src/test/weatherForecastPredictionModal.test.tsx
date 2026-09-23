@@ -63,7 +63,7 @@ describe('WeatherForecastPredictionModal', () => {
 
     // External real forecast links (no developer API code)
     const mountainForecastLink = screen.getByRole('link', { name: /mountain-forecast\.com/i });
-    expect(mountainForecastLink).toHaveAttribute('href', 'https://www.mountain-forecast.com/locations/Mount-Kalisungan');
+    expect(mountainForecastLink).toHaveAttribute('href', 'https://www.mountain-forecast.com/peaks/Mount-Kalisungan/forecasts/686');
   });
 
   it('switches the active day prediction when a date in the multi-day strip is clicked', () => {

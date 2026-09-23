@@ -145,7 +145,7 @@ describe('KaliContextPanel', () => {
         trailImpact: 'Summit grassland ridge is exposed. Red clay turns into slick mud.',
         safetyAdvice: 'Ascend early before midday convective storms form.',
         locationCitation: 'Mt. Kalisungan, Laguna (14.1475°N, 121.3454°E · 760m)',
-        sourceUrl: 'https://www.mountain-forecast.com/locations/Mount-Kalisungan',
+        sourceUrl: 'https://www.mountain-forecast.com/peaks/Mount-Kalisungan/forecasts/686',
       },
     };
 
@@ -169,7 +169,7 @@ describe('KaliContextPanel', () => {
     expect(screen.getByText(/Lightning Hazard on Exposed Ridge & Summit/i)).toBeInTheDocument();
     expect(screen.getByRole('link', { name: /mountain-forecast\.com/i })).toHaveAttribute(
       'href',
-      'https://www.mountain-forecast.com/locations/Mount-Kalisungan',
+      'https://www.mountain-forecast.com/peaks/Mount-Kalisungan/forecasts/686',
     );
   });
 });

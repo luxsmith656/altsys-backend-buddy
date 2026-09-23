@@ -32,7 +32,7 @@ export const POI = [
   { name: 'Trailhead / Registration', pos: [14.1440, 121.3430] as LatLngTuple, type: 'checkpoint' },
   { name: 'Summit (629m)', pos: [14.1495, 121.3462] as LatLngTuple, type: 'summit' },
   { name: 'Campsite A', pos: [14.1465, 121.3445] as LatLngTuple, type: 'camp' },
-  { name: 'River Crossing', pos: [14.1430, 121.3458] as LatLngTuple, type: 'water' },
+  { name: 'Rest Station & Water Refill', pos: [14.1430, 121.3458] as LatLngTuple, type: 'water' },
   { name: 'Viewpoint Ridge', pos: [14.1478, 121.3422] as LatLngTuple, type: 'viewpoint' },
   { name: 'Ranger Station', pos: [14.1442, 121.3433] as LatLngTuple, type: 'ranger' },
 ];

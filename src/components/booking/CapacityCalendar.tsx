@@ -245,16 +245,29 @@ export function CapacityCalendar({
           <span className="inline-flex items-center gap-1"><CloudRain className="h-2.5 w-2.5 text-blue-500" /> Rain</span>
           <span className="inline-flex items-center gap-1"><Zap className="h-2.5 w-2.5 text-amber-500 fill-amber-500" /> Storm</span>
         </div>
-        <a
-          href="https://open-meteo.com/"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="inline-flex items-center gap-1 hover:underline text-primary shrink-0"
-          title="Weather Forecast API for Mt. Kalisungan, Calauan, Laguna"
-        >
-          API: Open-Meteo (14.1475°N, 121.3454°E)
-          <ExternalLink className="h-2.5 w-2.5" />
-        </a>
+        <div className="flex items-center gap-2 shrink-0">
+          <a
+            href="https://www.mountain-forecast.com/peaks/Mount-Kalisungan/forecasts/686"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-1 hover:underline text-primary font-medium"
+            title="Real mountain weather forecast for Mt. Kalisungan Peak"
+          >
+            <span>Forecast: Mountain-Forecast.com (686m Peak)</span>
+            <ExternalLink className="h-2.5 w-2.5" />
+          </a>
+          <span className="text-muted-foreground/60">•</span>
+          <a
+            href="https://zoom.earth/#view=14.1475,121.3454,12z"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-1 hover:underline text-primary font-medium"
+            title="Live satellite rain radar for Mt. Kalisungan"
+          >
+            <span>Live Radar</span>
+            <ExternalLink className="h-2.5 w-2.5" />
+          </a>
+        </div>
       </div>
     </div>
   );

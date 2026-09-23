@@ -820,7 +820,7 @@ export default function BookingPage() {
           })),
           fetchedAt: (weatherInsight || selectedKalisunganWeather)!.fetchedAt ?? Date.now(),
           sourceName: 'Mt. Kalisungan Weather Forecast',
-          sourceUrl: 'https://www.mountain-forecast.com/locations/Mount-Kalisungan',
+          sourceUrl: 'https://www.mountain-forecast.com/peaks/Mount-Kalisungan/forecasts/686',
           locationCitation: 'Mt. Kalisungan, Laguna (14.1475°N, 121.3454°E · 760m)',
         }
       : null,
