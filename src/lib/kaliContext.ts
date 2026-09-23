@@ -254,7 +254,7 @@ function weatherInsight(input: KaliContextInput): KaliInsight | null {
       selectedDate: input.selectedDate ?? '',
       condition: weather.condition,
       forecastStatus: stale ? 'stale' : 'fresh',
-      sourceName: weather.sourceName ?? 'Mt. Kalisungan Weather Forecast',
+      sourceName: weather.sourceName ?? 'Mountain-Forecast.com',
       sourceUrl: weather.sourceUrl ?? 'https://www.mountain-forecast.com/peaks/Mount-Kalisungan/forecasts/686',
       locationCitation: weather.locationCitation ?? 'Mt. Kalisungan, Laguna (14.1475°N, 121.3454°E · 760m)',
     },

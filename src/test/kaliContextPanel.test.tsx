@@ -156,20 +156,14 @@ describe('KaliContextPanel', () => {
     expect(screen.getByText(/23°–31°C/i)).toBeInTheDocument();
     expect(screen.getByText(/14 mm/i)).toBeInTheDocument();
 
-    // Has button to view the actual weather prediction
-    const viewButton = screen.getByRole('button', { name: /view mt\. kalisungan weather prediction/i });
-    expect(viewButton).toBeInTheDocument();
-
-    // Click button to open full prediction modal
-    fireEvent.click(viewButton);
-
-    // Modal opens showing the full Mt. Kalisungan forecast prediction
-    expect(screen.getByText(/Mt\. Kalisungan Weather Prediction/i)).toBeInTheDocument();
-    expect(screen.getByText(/Mountain Weather Forecast/i)).toBeInTheDocument();
-    expect(screen.getByText(/Lightning Hazard on Exposed Ridge & Summit/i)).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: /mountain-forecast\.com/i })).toHaveAttribute(
+    // States the forecast source name directly without opening a modal view
+    expect(screen.getByText(/Forecast Source:/i)).toBeInTheDocument();
+    const sourceLink = screen.getByRole('link', { name: /mountain-forecast\.com/i });
+    expect(sourceLink).toBeInTheDocument();
+    expect(sourceLink).toHaveAttribute(
       'href',
       'https://www.mountain-forecast.com/peaks/Mount-Kalisungan/forecasts/686',
     );
+    expect(screen.queryByRole('button', { name: /view mt\. kalisungan weather prediction/i })).not.toBeInTheDocument();
   });
 });

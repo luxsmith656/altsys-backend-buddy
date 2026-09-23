@@ -1,9 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { AlertTriangle, BellRing, Check, CloudSun, ExternalLink, Info, MessageCircle, Send, ShieldAlert, X } from 'lucide-react';
+import { AlertTriangle, BellRing, Check, ExternalLink, Info, MessageCircle, Send, ShieldAlert, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { getKaliRoleLabel, type KaliInsight, type KaliRole } from '@/lib/kaliContext';
 import KaliAvatar from './KaliAvatar';
-import WeatherForecastPredictionModal from '@/components/weather/WeatherForecastPredictionModal';
 
 interface KaliContextPanelProps {
   role: KaliRole;
@@ -44,8 +43,6 @@ function thinkingLabel(insight: KaliInsight): string {
 export default function KaliContextPanel({ role, insights }: KaliContextPanelProps) {
   const [open, setOpen] = useState(false);
   const [reply, setReply] = useState('');
-  const [weatherModalOpen, setWeatherModalOpen] = useState(false);
-  const [selectedWeatherInsight, setSelectedWeatherInsight] = useState<KaliInsight | null>(null);
   const [dismissedInsightIds, setDismissedInsightIds] = useState<string[]>([]);
   const previousInsightIds = useRef<string[]>([]);
   const sortedInsights = useMemo(
@@ -147,20 +144,19 @@ export default function KaliContextPanel({ role, insights }: KaliContextPanelPro
                           )}
                         </div>
 
-                        {/* Interactive button to view full forecast prediction */}
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setSelectedWeatherInsight(item);
-                            setWeatherModalOpen(true);
-                          }}
-                          className="inline-flex w-full items-center justify-center gap-1.5 rounded-xl bg-primary/15 hover:bg-primary/25 border border-primary/30 px-3 py-1.5 text-xs font-bold text-primary transition-all shadow-sm cursor-pointer"
-                          aria-label="View Mt. Kalisungan weather prediction and forecast"
-                        >
-                          <CloudSun className="h-3.5 w-3.5" />
-                          <span>View Weather Prediction & Forecast</span>
-                        </button>
+                        {/* Stating the forecast source name */}
+                        <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground pt-0.5">
+                          <span>Forecast Source:</span>
+                          <a
+                            href={String(item.meta?.sourceUrl || 'https://www.mountain-forecast.com/peaks/Mount-Kalisungan/forecasts/686')}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="font-medium text-primary hover:underline inline-flex items-center gap-1"
+                          >
+                            <span>{String(item.meta?.sourceName || 'Mountain-Forecast.com')}</span>
+                            <ExternalLink className="h-2.5 w-2.5" />
+                          </a>
+                        </div>
                       </div>
                     )}
                   </div>
@@ -215,37 +211,6 @@ export default function KaliContextPanel({ role, insights }: KaliContextPanelPro
       >
         <KaliAvatar expression={insight.expression} size="sm" className="h-11 w-11 rounded-full border border-primary-foreground/40 bg-primary/80" />
       </button>
-
-      {selectedWeatherInsight && (
-        <WeatherForecastPredictionModal
-          open={weatherModalOpen}
-          onOpenChange={setWeatherModalOpen}
-          selectedDate={String(selectedWeatherInsight.meta.selectedDate || '')}
-          condition={String(selectedWeatherInsight.meta.condition || selectedWeatherInsight.title)}
-          category={String(selectedWeatherInsight.meta.category || '')}
-          minTempC={Number(selectedWeatherInsight.meta.minTempC ?? 23)}
-          maxTempC={Number(selectedWeatherInsight.meta.maxTempC ?? 30)}
-          rainProbability={Number(selectedWeatherInsight.meta.rainProbability ?? 0)}
-          precipitationMm={Number(selectedWeatherInsight.meta.precipitationMm ?? 0)}
-          headline={String(selectedWeatherInsight.meta.headline || '')}
-          trailImpact={String(selectedWeatherInsight.meta.trailImpact || '')}
-          safetyAdvice={String(selectedWeatherInsight.meta.safetyAdvice || '')}
-          badgeLabel={String(selectedWeatherInsight.meta.badgeLabel || '')}
-          forecastDays={
-            selectedWeatherInsight.meta.forecastDaysJson
-              ? (() => {
-                  try {
-                    return JSON.parse(String(selectedWeatherInsight.meta.forecastDaysJson));
-                  } catch {
-                    return [];
-                  }
-                })()
-              : []
-          }
-          locationCitation={String(selectedWeatherInsight.meta.locationCitation || 'Mt. Kalisungan, Laguna (14.1475°N, 121.3454°E · 760m)')}
-          sourceUrl={String(selectedWeatherInsight.meta.sourceUrl || 'https://www.mountain-forecast.com/peaks/Mount-Kalisungan/forecasts/686')}
-        />
-      )}
     </div>
   );
 }
