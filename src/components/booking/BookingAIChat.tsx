@@ -326,7 +326,7 @@ function generateResponse(
     if (hikeType === 'night') {
       return {
         content:
-          `For a **night hike**, starts are spaced two hours apart from **02:00 PM to 12:00 AM** (with **10:00 PM** being the most popular to summit at dawn).\n\n` +
+          `For a **night hike**, available departure times are **02:00 PM** and **04:00 PM** (2-hour interval).\n\n` +
           `Bring headlamps, spare batteries, and visibility layers. You'll descend the same day after your summit experience.`,
         quickReplies: ['Why choose overnight?', "What's the trail like at night?", 'Any safety tips?'],
       };
@@ -335,7 +335,7 @@ function generateResponse(
     if (hikeType === 'overnight') {
       return {
         content:
-          `For an **overnight hike**, departures are available from **02:00 PM to 10:00 PM** (02:00 PM recommended to set up camp in daylight).\n\n` +
+          `For an **overnight hike**, departures are available in the afternoon at **02:00 PM, 03:00 PM, and 04:00 PM** (**02:00 PM** recommended to set up camp before dark).\n\n` +
           `Unlike a night hike, this includes an overnight stay. Bring your own tent because tents are not provided and there is no lodging at the peak, plus extra food, warm layers, and lighting.`,
         quickReplies: ['What is a night hike?', 'What should I pack?', 'Any safety tips?'],
       };
