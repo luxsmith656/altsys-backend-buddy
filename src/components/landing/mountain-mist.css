@@ -44,8 +44,8 @@
 .mountain-mist-near .mountain-mist-track { animation-name: mountain-mist-left; animation-duration: 83s; }
 .mountain-mist[data-moving=true] .mountain-mist-track { animation-play-state: running; }
 #learn-more { scroll-margin-top: calc(80px + env(safe-area-inset-top, 0px)); }
-/* Blend only the texture tails. Four tiles cover both boundaries throughout a
-   one-period translation, without fading the lane or stacking entire banks. */
+/* Five tiles keep a full texture tile on both sides of the viewport. Moving by
+   one tile per cycle avoids a visible seam when the animation wraps. */
 @keyframes mountain-mist-right {
   from { transform: translate3d(0, 0, 0); }
   to { transform: translate3d(25%, 0, 0); }

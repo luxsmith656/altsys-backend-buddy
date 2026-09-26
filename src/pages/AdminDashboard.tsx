@@ -106,6 +106,7 @@ import { toast } from 'sonner';
 import { officialRoutesForLocation as filterOfficialRoutes, selectAssignedOfficialRoute } from '@/lib/officialRoutes';
 import { loadGuideRatings, renderStars, type GuideRating } from '@/lib/guideRatings';
 import { getHikeTypeLabel } from '@/lib/hikeSchedule';
+import { guidePhotoForName } from '@/lib/guideDirectory';
 import {
   BarChart,
   Bar,
@@ -2806,9 +2807,7 @@ export default function AdminDashboard() {
                   <CardContent className="p-4 sm:p-5">
                     <div className="flex min-w-0 flex-wrap items-start justify-between gap-3">
                       <div className="flex min-w-0 items-center gap-3">
-                        <div className="w-11 h-11 rounded-full bg-primary/20 flex items-center justify-center flex-shrink-0 text-primary font-bold text-lg">
-                          {guide.name.charAt(0)}
-                        </div>
+                        {guidePhotoForName(guide.name) ? <img src={guidePhotoForName(guide.name) ?? undefined} alt={guide.name} className="w-11 h-11 rounded-full object-cover flex-shrink-0 border border-primary/20" /> : <div className="w-11 h-11 rounded-full bg-primary/20 flex items-center justify-center flex-shrink-0 text-primary font-bold text-lg">{guide.name.charAt(0)}</div>}
                         <div className="min-w-0">
                           <p className="break-words font-semibold">{guide.name}</p>
                           <p className="break-all text-xs text-muted-foreground">{guide.phone}</p>

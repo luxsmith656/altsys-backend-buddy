@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import { Star, Award, Users } from 'lucide-react';
 import { getTop3Guides, type GuideRating } from '@/lib/guideRatings';
+import { supabase } from '@/integrations/supabase/client';
+import { GUIDE_DIRECTORY, guidePhotoForName } from '@/lib/guideDirectory';
 
 function StarDisplay({ rating, size = 'sm' }: { rating: number; size?: 'sm' | 'lg' }) {
   const full = Math.floor(rating);
@@ -21,7 +23,7 @@ function StarDisplay({ rating, size = 'sm' }: { rating: number; size?: 'sm' | 'l
   );
 }
 
-function GuideCard({ guide, rank, index }: { guide: GuideRating; rank: number; index: number }) {
+function GuideCard({ guide, rank, index, photoUrl }: { guide: GuideRating; rank: number; index: number; photoUrl?: string | null }) {
   const rankColors = ['text-amber-500', 'text-slate-400', 'text-amber-700'];
   const rankBg = ['bg-amber-500/10 border-amber-400/30', 'bg-slate-400/10 border-slate-400/30', 'bg-amber-700/10 border-amber-700/30'];
   const rankLabel = ['🥇 Top Guide', '🥈 2nd Best', '🥉 3rd Best'];
@@ -42,7 +44,7 @@ function GuideCard({ guide, rank, index }: { guide: GuideRating; rank: number; i
       {/* Avatar + name */}
       <div className="flex items-center gap-4 pr-20">
         <div className="w-14 h-14 rounded-full bg-primary/20 flex items-center justify-center flex-shrink-0 text-primary font-black text-2xl">
-          {guide.guideName.charAt(0)}
+          {photoUrl ? <img src={photoUrl} alt={guide.guideName} className="h-14 w-14 rounded-full object-cover" /> : guide.guideName.charAt(0)}
         </div>
         <div>
           <p className="font-bold text-base leading-tight">{guide.guideName}</p>
@@ -88,7 +90,23 @@ export default function GuideRatings() {
   const [guides, setGuides] = useState<GuideRating[]>([]);
 
   useEffect(() => {
-    setGuides(getTop3Guides());
+    const localRatings = getTop3Guides();
+    const load = async () => {
+      const { data } = await supabase.from('guides' as any).select('id,full_name,specialty').eq('is_active', true).order('full_name').limit(60);
+      const dbGuides = ((data as any[]) ?? []).map((guide) => ({
+        guideId: guide.id,
+        guideName: guide.full_name,
+        trail: guide.specialty || 'Mt. Kalisungan local guide',
+        totalRating: 0,
+        reviewCount: 0,
+        avgRating: 0,
+        recentReviews: [],
+        photoUrl: guidePhotoForName(guide.full_name),
+      } as GuideRating & { photoUrl?: string | null }));
+      const source = dbGuides.length ? dbGuides : GUIDE_DIRECTORY.map((guide) => ({ guideId: guide.emailSlug, guideName: guide.name, trail: 'Mt. Kalisungan local guide', totalRating: 0, reviewCount: 0, avgRating: 0, recentReviews: [], photoUrl: guide.photoUrl }));
+      setGuides(source.length ? source as GuideRating[] : localRatings);
+    };
+    void load();
   }, []);
 
   if (guides.length === 0) return null;
@@ -117,7 +135,7 @@ export default function GuideRatings() {
 
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
           {guides.map((guide, i) => (
-            <GuideCard key={guide.guideId} guide={guide} rank={i + 1} index={i} />
+            <GuideCard key={guide.guideId} guide={guide} rank={(i % 3) + 1} index={i} photoUrl={(guide as GuideRating & { photoUrl?: string | null }).photoUrl} />
           ))}
         </div>
 

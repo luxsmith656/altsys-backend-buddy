@@ -66,6 +66,7 @@ import KaliContextPanel from '@/components/kali/KaliContextPanel';
 import { useKaliContext } from '@/hooks/useKaliContext';
 import { HIKE_TIME_OPTIONS, getGuideFeePerGuide, getHikeTypeLabel, isValidHikeTime, normalizeHikeType, type HikeType } from '@/lib/hikeSchedule';
 import { officialRoutesForLocation } from '@/lib/officialRoutes';
+import { guidePhotoForName } from '@/lib/guideDirectory';
 import { getBookingSlotStatuses, type ScheduledBooking } from '@/lib/bookingCapacity';
 import { haversineDistance } from '@/lib/map-data';
 import {
@@ -1791,7 +1792,10 @@ export default function BookingPage() {
                             <SelectItem value="none">None (Admin will assign)</SelectItem>
                             {guidesAtLocation.map((g) => (
                               <SelectItem key={g.id} value={g.id}>
-                                {g.full_name} — ₱{Number(g.per_trip_fee).toLocaleString()}
+                                <span className="flex items-center gap-2">
+                                  {guidePhotoForName(g.full_name) ? <img src={guidePhotoForName(g.full_name) ?? undefined} alt="" className="h-6 w-6 rounded-full object-cover" /> : null}
+                                  <span>{g.full_name} — ₱{Number(g.per_trip_fee).toLocaleString()}</span>
+                                </span>
                               </SelectItem>
                             ))}
                             {guidesAtLocation.length === 0 && (

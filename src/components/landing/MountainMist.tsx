@@ -29,12 +29,12 @@ export default function MountainMist() {
     <div ref={scene} className="mountain-mist" data-moving={!reducedMotion && visible} aria-hidden="true">
       <div className="mountain-mist-layer mountain-mist-far">
         <div className="mountain-mist-track">
-          {[0, 1, 2, 3].map((tile) => <img key={tile} src={mist} alt="" width={1440} height={720} />)}
+          {[0, 1, 2, 3, 4].map((tile) => <img key={tile} src={mist} alt="" width={1440} height={720} />)}
         </div>
       </div>
       <div className="mountain-mist-layer mountain-mist-near">
         <div className="mountain-mist-track">
-          {[0, 1, 2, 3].map((tile) => <img key={tile} src={lowMist} alt="" width={2172} height={724} />)}
+          {[0, 1, 2, 3, 4].map((tile) => <img key={tile} src={lowMist} alt="" width={2172} height={724} />)}
         </div>
       </div>
     </div>
