@@ -8,6 +8,10 @@ import { supabase } from '@/integrations/supabase/client';
 export async function resolvePostLoginPath(userId: string, redirect?: string | null): Promise<string> {
   const target = redirect || '/dashboard';
   try {
+    const { data: roles } = await supabase.from('user_roles').select('role').eq('user_id', userId);
+    if ((roles ?? []).some((row) => row.role === 'guide')) {
+      return target;
+    }
     const { data } = await supabase
       .from('profiles')
       .select('onboarding_completed_at')

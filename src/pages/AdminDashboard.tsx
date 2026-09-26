@@ -77,6 +77,7 @@ import {
   FileText,
   DollarSign,
   UserPlus,
+  Copy,
   ChevronDown,
   ChevronUp,
   MessageCircle,
@@ -344,6 +345,7 @@ export default function AdminDashboard() {
   const [addGuideSaving, setAddGuideSaving] = useState(false);
   const [removeGuideId, setRemoveGuideId] = useState<string | null>(null);
   const [removeGuidePassword, setRemoveGuidePassword] = useState('');
+  const [guideInvite, setGuideInvite] = useState<{ name: string; email: string; link: string; message: string } | null>(null);
 
   // Accept flow
   const [acceptDialogId, setAcceptDialogId] = useState<string | null>(null);
@@ -1477,11 +1479,13 @@ export default function AdminDashboard() {
           specialty: (locations.find((l) => l.id === locId)?.name || '').trim(),
           per_trip_fee: Number(newGuideFee) || 0,
           location_id: locId,
+          app_url: window.location.origin,
         }),
       });
       const j = await r.json();
       if (!r.ok) throw new Error(j?.error || 'Failed to create guide');
-      toast.success(`Guide "${name}" created. They can sign in with ${email}.`);
+      setGuideInvite({ name, email, link: j.setup_link, message: j.setup_message });
+      toast.success(`Guide "${name}" created. Setup instructions are ready to forward.`);
       setNewGuideName(''); setNewGuidePhone('');
       setNewGuideEmail(''); setNewGuidePassword(''); setNewGuideFee('500');
       await loadGuides();
@@ -3318,6 +3322,20 @@ export default function AdminDashboard() {
           void loadUpcomingCapacities();
         }}
       />
+
+      <Dialog open={!!guideInvite} onOpenChange={(open) => !open && setGuideInvite(null)}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Guide account ready</DialogTitle>
+            <DialogDescription>Forward this setup message to {guideInvite?.email}. The secure link lets the guide create a new password and finish their profile.</DialogDescription>
+          </DialogHeader>
+          <Textarea value={guideInvite?.message || ''} readOnly rows={7} className="text-sm" />
+          <div className="flex flex-wrap gap-2">
+            <Button className="gap-2" onClick={() => { if (guideInvite) { void navigator.clipboard.writeText(guideInvite.message); toast.success('Setup message copied.'); } }}><Copy className="h-4 w-4" /> Copy message</Button>
+            <Button variant="outline" onClick={() => { if (guideInvite) { void navigator.clipboard.writeText(guideInvite.link); toast.success('Setup link copied.'); } }}>Copy link</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* ── Group Companion Join QR Modal ── */}
       <Dialog open={companionQROpen} onOpenChange={setCompanionQROpen}>

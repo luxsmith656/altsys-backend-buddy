@@ -56,11 +56,11 @@ Deno.serve(async (req) => {
     if (existing) {
       userId = existing.id;
       await admin.auth.admin.updateUserById(existing.id, {
-        password, email_confirm: true, user_metadata: { full_name },
+        password, email_confirm: true, user_metadata: { full_name, account_type: 'guide' },
       });
     } else {
       const created = await admin.auth.admin.createUser({
-        email, password, email_confirm: true, user_metadata: { full_name },
+        email, password, email_confirm: true, user_metadata: { full_name, account_type: 'guide' },
       });
       if (created.error) return json({ error: created.error.message }, 500);
       userId = created.data.user!.id;
@@ -97,10 +97,27 @@ Deno.serve(async (req) => {
         per_trip_fee: per_trip_fee ?? 0,
         location_id,
         is_active: true,
+        onboarding_completed_at: null,
       }).select('id').single();
       if (insErr) return json({ error: insErr.message }, 500);
       guide_id = ins!.id;
     }
+
+    const appUrl = String(body?.app_url || 'https://mtkali.vercel.app').replace(/\/$/, '');
+    const { data: recovery, error: recoveryError } = await admin.auth.admin.generateLink({
+      type: 'recovery',
+      email: String(email).trim().toLowerCase(),
+      options: { redirectTo: `${appUrl}/guide/setup` },
+    });
+    if (recoveryError) console.warn('[admin-create-guide] recovery link unavailable:', recoveryError.message);
+
+    const setupLink = recovery?.properties?.action_link ?? `${appUrl}/login?redirect=%2Fguide%2Fsetup`;
+    const setupMessage = [
+      `Mt. Kalisungan guide account for ${full_name}.`,
+      `Open this secure setup link: ${setupLink}`,
+      `Confirm your name, create a new password, then enter your sex, age, contact number, and profile photo.`,
+      `Do not share this link. Contact the admin if it expires or is not yours.`,
+    ].join('\n');
 
     // Audit log
     await admin.from('admin_logs').insert({
@@ -111,7 +128,7 @@ Deno.serve(async (req) => {
       metadata: { email, location_id },
     });
 
-    return json({ ok: true, user_id: userId, guide_id });
+    return json({ ok: true, user_id: userId, guide_id, setup_link: setupLink, setup_message: setupMessage });
   } catch (e) {
     console.error('[admin-create-guide]', e);
     return json({ error: (e as Error).message }, 500);

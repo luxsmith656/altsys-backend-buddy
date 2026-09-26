@@ -26,6 +26,7 @@ const CentralDashboard = lazy(() => import('@/pages/CentralDashboard'));
 const RangerDashboard = lazy(() => import('@/pages/RangerDashboard'));
 const HikerDashboard = lazy(() => import('@/pages/HikerDashboard'));
 const GuideDashboard = lazy(() => import('@/pages/GuideDashboard'));
+const GuideSetupPage = lazy(() => import('@/pages/GuideSetupPage'));
 const GuideProfilePage = lazy(() => import('@/pages/GuideProfilePage'));
 const ProfilePage = lazy(() => import('@/pages/ProfilePage'));
 const DashboardRedirect = lazy(() => import('@/pages/DashboardRedirect'));
@@ -51,6 +52,7 @@ export const APP_ROUTES: AppRouteDefinition[] = [
   { path: '/ranger', pageKey: 'ranger', name: 'Ranger Checkpoint Monitor', access: 'roles', allowedRoles: ['ranger', 'admin', 'super_admin'], showInNavigation: true, component: RangerDashboard },
   { path: '/hiker', pageKey: 'hiker', name: 'Hiker Permit Dashboard', access: 'roles', allowedRoles: ['hiker'], showInNavigation: true, component: HikerDashboard },
   { path: '/guide', pageKey: 'guide', name: 'Guide Duty Dashboard', access: 'roles', allowedRoles: ['guide', 'admin', 'super_admin'], showInNavigation: true, component: GuideDashboard },
+  { path: '/guide/setup', pageKey: 'guide-setup', name: 'Guide Account Setup', access: 'roles', allowedRoles: ['guide'], showInNavigation: false, component: GuideSetupPage },
   { path: '/guide/:guideId', pageKey: 'guide-profile', name: 'Guide Profile', access: 'public', showInNavigation: false, component: GuideProfilePage },
   { path: '/profile', pageKey: 'profile', name: 'User Profile Settings', access: 'roles', allowedRoles: ALL_ROLES, showInNavigation: false, component: ProfilePage },
   { path: '/dashboard', pageKey: 'dashboard-redirect', name: 'Dashboard Redirect', access: 'public', showInNavigation: false, component: DashboardRedirect },

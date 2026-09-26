@@ -21,6 +21,7 @@ describe('authoritative application routes', () => {
       '/ranger',
       '/hiker',
       '/guide',
+      '/guide/setup',
       '/guide/:guideId',
       '/profile',
       '/dashboard',
