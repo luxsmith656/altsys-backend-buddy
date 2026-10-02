@@ -127,7 +127,7 @@ import DemographicsTab from '@/components/admin/DemographicsTab';
 import OverviewDashboard from '@/components/admin/OverviewDashboard';
 import MDRRMOAccessAudit from '@/components/admin/MDRRMOAccessAudit';
 import PaymentSummaryTab from '@/components/admin/PaymentSummaryTab';
-import ForecastingTab from '@/components/admin/forecasting/ForecastingTab';
+// ForecastingTab removed per user request
 import AdminWalkInRegistrationDialog from '@/components/admin/AdminWalkInRegistrationDialog';
 import EditPaymentDialog from '@/components/booking/EditPaymentDialog';
 import { bookingReceipt } from '@/lib/bookingReceipt';
@@ -173,7 +173,7 @@ const ANNOUNCEMENT_TYPE_STYLES: Record<string, string> = {
 const getMappedTab = (tab: string) => {
   if (['overview', 'demographics'].includes(tab)) return 'overview';
   if (['operations', 'requests', 'scan', 'live-map'].includes(tab)) return 'operations';
-  if (['management', 'guides', 'announcements', 'capacity', 'forecasting'].includes(tab)) return 'management';
+  if (['management', 'users', 'guides', 'announcements', 'capacity'].includes(tab)) return 'management';
   if (['finance', 'payment-summary'].includes(tab)) return 'finance';
   return 'overview';
 };
@@ -188,7 +188,7 @@ export default function AdminDashboard() {
   });
   const [managementTab, setManagementTab] = useState<string>(() => {
     const initialTab = searchParams.get('tab');
-    return ['users', 'guides', 'announcements', 'capacity', 'forecasting'].includes(initialTab || '')
+    return ['users', 'guides', 'announcements', 'capacity'].includes(initialTab || '')
       ? initialTab!
       : 'guides';
   });
@@ -230,7 +230,7 @@ export default function AdminDashboard() {
     if (tab === 'requests' || tab === 'scan' || tab === 'live-map') {
       if (tab !== operationsTab) setOperationsTab(tab);
     }
-    if (['guides', 'announcements', 'capacity', 'forecasting'].includes(tab || '')) {
+    if (['users', 'guides', 'announcements', 'capacity'].includes(tab || '')) {
       if (tab !== managementTab) setManagementTab(tab!);
     }
   }, [activeTab, operationsTab, managementTab, searchParams]);
@@ -2748,7 +2748,7 @@ export default function AdminDashboard() {
                   <TabsTrigger value="guides">Guide Roster</TabsTrigger>
                   <TabsTrigger value="announcements">Announcements</TabsTrigger>
                   <TabsTrigger value="capacity">Daily Capacity</TabsTrigger>
-                  <TabsTrigger value="forecasting">Prophet Forecasting</TabsTrigger>
+
                 </TabsList>
               </div>
               <TabsContent value="users" className="space-y-6 mt-0">
@@ -3173,9 +3173,6 @@ export default function AdminDashboard() {
                 </div>
               </CardContent>
             </Card>
-          </TabsContent>
-          <TabsContent value="forecasting" className="space-y-6 mt-0">
-            <ForecastingTab locationId={activeLocationId} />
           </TabsContent>
             </Tabs>
           </TabsContent>

@@ -5,6 +5,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import logo from '@/assets/logo.png';
@@ -20,6 +21,31 @@ export default function Login() {
   const { signIn } = useAuth();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
+  const [resetOpen, setResetOpen] = useState(false);
+  const [resetEmail, setResetEmail] = useState('');
+  const [resetLoading, setResetLoading] = useState(false);
+
+  const handleResetPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const targetEmail = resetEmail.trim().toLowerCase();
+    if (!targetEmail) {
+      toast.error('Please enter your email address');
+      return;
+    }
+    setResetLoading(true);
+    try {
+      const { error } = await supabase.auth.resetPasswordForEmail(targetEmail, {
+        redirectTo: window.location.origin + '/login',
+      });
+      if (error) throw error;
+      toast.success('Password reset link sent! Check your inbox or spam folder.');
+      setResetOpen(false);
+    } catch (err: any) {
+      toast.error(err?.message || 'Could not send reset password email');
+    } finally {
+      setResetLoading(false);
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -106,9 +132,9 @@ export default function Login() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center px-4 pt-16">
+    <div className="min-h-[100dvh] flex flex-col items-center justify-center px-4 pt-24 pb-12 sm:pt-28">
       <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,_hsl(152_60%_42%/0.06)_0%,_transparent_50%)]" />
-      <div className="w-full max-w-md relative z-10">
+      <div className="w-full max-w-md relative z-10 my-auto">
         <div className="text-center mb-8">
           <img src={logo} alt="Mt. Kalisungan logo" className="h-12 w-12 rounded-full object-cover mx-auto mb-4 bg-white/5" />
           <h1 className="text-2xl font-bold">Welcome Back</h1>
@@ -122,7 +148,19 @@ export default function Login() {
               <Input id="email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@example.com" required />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="password">Password</Label>
+              <div className="flex items-center justify-between">
+                <Label htmlFor="password">Password</Label>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setResetEmail(email || '');
+                    setResetOpen(true);
+                  }}
+                  className="text-xs text-primary hover:underline font-medium transition-colors"
+                >
+                  Forgot password?
+                </button>
+              </div>
               <Input id="password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="••••••••" required />
             </div>
             <Button type="submit" className="w-full" disabled={loading}>
@@ -211,6 +249,41 @@ export default function Login() {
           </Button>
         </div>
       </div>
+
+      {/* Reset Password Dialog */}
+      <Dialog open={resetOpen} onOpenChange={setResetOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Reset Password</DialogTitle>
+            <DialogDescription>
+              Enter your registered account email and we'll send you a secure link to reset your password.
+            </DialogDescription>
+          </DialogHeader>
+          <form onSubmit={handleResetPassword} className="space-y-4 pt-2">
+            <div className="space-y-2">
+              <Label htmlFor="reset-email">Email address</Label>
+              <Input
+                id="reset-email"
+                type="email"
+                placeholder="you@example.com"
+                value={resetEmail}
+                onChange={(e) => setResetEmail(e.target.value)}
+                required
+                autoFocus
+              />
+            </div>
+            <DialogFooter className="gap-2 sm:gap-0 pt-2">
+              <Button type="button" variant="ghost" onClick={() => setResetOpen(false)} disabled={resetLoading}>
+                Cancel
+              </Button>
+              <Button type="submit" disabled={resetLoading}>
+                {resetLoading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+                Send Reset Link
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

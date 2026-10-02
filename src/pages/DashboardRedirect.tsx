@@ -1,19 +1,17 @@
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
-import { supabase } from '@/integrations/supabase/client';
 import { Mountain, Loader2 } from 'lucide-react';
 import { getRoleHomePath } from '@/lib/authRoles';
 import { Button } from '@/components/ui/button';
 
 /**
  * Shown immediately after login or when navigating to /dashboard.
- * Reads the resolved role and reliably hard-redirects to the correct dashboard.
+ * Reads the resolved role and reliably hard-redirects to the correct dashboard instantly.
  */
 export default function DashboardRedirect() {
   const { user, role, loading, roleError, retryRole } = useAuth();
   const navigate = useNavigate();
-  const [checkingGuideSetup, setCheckingGuideSetup] = useState(false);
 
   useEffect(() => {
     if (loading || roleError) return;
@@ -23,21 +21,9 @@ export default function DashboardRedirect() {
       return;
     }
 
-    if (role === 'guide') {
-      setCheckingGuideSetup(true);
-      void (async () => {
-        try {
-          // Keep login compatible while the guide onboarding migration rolls out.
-          // The setup page remains available from the admin invite link.
-          await supabase.from('guides').select('id').eq('user_id', user.id).maybeSingle();
-          navigate('/guide', { replace: true });
-        } finally {
-          setCheckingGuideSetup(false);
-        }
-      })();
-      return;
+    if (role) {
+      navigate(getRoleHomePath(role), { replace: true });
     }
-    if (role) navigate(getRoleHomePath(role), { replace: true });
   }, [user, role, loading, roleError, navigate]);
 
   if (user && roleError) {
@@ -57,7 +43,7 @@ export default function DashboardRedirect() {
       <div className="text-center space-y-4">
         <Mountain className="h-14 w-14 text-primary mx-auto animate-pulse" />
         <Loader2 className="h-6 w-6 animate-spin text-muted-foreground mx-auto" />
-        <p className="text-muted-foreground text-sm font-medium">{checkingGuideSetup ? 'Checking your guide profile…' : 'Opening your dashboard…'}</p>
+        <p className="text-muted-foreground text-sm font-medium">Opening your dashboard…</p>
       </div>
     </div>
   );

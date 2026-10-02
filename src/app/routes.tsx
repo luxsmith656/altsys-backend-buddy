@@ -14,6 +14,7 @@ export interface AppRouteDefinition {
 }
 
 const Index = lazy(() => import('@/pages/Index'));
+const AboutPage = lazy(() => import('@/pages/AboutPage'));
 const Login = lazy(() => import('@/pages/Login'));
 const Register = lazy(() => import('@/pages/Register'));
 const MapPage = lazy(() => import('@/pages/MapPage'));
@@ -39,6 +40,7 @@ const ALL_ROLES: AppRole[] = ['admin', 'super_admin', 'ranger', 'guide', 'hiker'
 
 export const APP_ROUTES: AppRouteDefinition[] = [
   { path: '/', pageKey: 'landing', name: 'Landing Page', access: 'public', showInNavigation: true, component: Index },
+  { path: '/about', pageKey: 'about', name: 'About Mt. Kalisungan', access: 'public', showInNavigation: true, component: AboutPage },
   { path: '/login', pageKey: 'login', name: 'Login Page', access: 'public', showInNavigation: false, component: Login },
   { path: '/register', pageKey: 'register', name: 'Register Page', access: 'public', showInNavigation: false, component: Register },
   { path: '/map', pageKey: 'map', name: 'Interactive Trail Map', access: 'public', showInNavigation: true, component: MapPage },

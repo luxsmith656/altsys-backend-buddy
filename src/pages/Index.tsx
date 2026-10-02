@@ -21,8 +21,15 @@ type LiveWeather = {
 };
 
 function useLiveWeather(): { weather: LiveWeather | null; loading: boolean; error: string | null } {
-  const [weather, setWeather] = useState<LiveWeather | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [weather, setWeather] = useState<LiveWeather | null>(() => {
+    if (typeof window === 'undefined') return null;
+    try {
+      const saved = localStorage.getItem('cached_live_weather');
+      if (saved) return JSON.parse(saved);
+    } catch {}
+    return null;
+  });
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -32,7 +39,11 @@ function useLiveWeather(): { weather: LiveWeather | null; loading: boolean; erro
       try {
         const url =
           'https://api.open-meteo.com/v1/forecast?latitude=14.1475&longitude=121.3454&current=temperature_2m,wind_speed_10m,relative_humidity_2m,weather_code';
-        const resp = await fetch(url);
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), 3500);
+
+        const resp = await fetch(url, { signal: controller.signal });
+        clearTimeout(timer);
         if (!resp.ok) throw new Error(`Weather error ${resp.status}`);
         const data = await resp.json();
         if (cancelled || !data.current) return;
@@ -47,15 +58,22 @@ function useLiveWeather(): { weather: LiveWeather | null; loading: boolean; erro
         else if ([95, 96, 99].includes(code)) label = 'Thunderstorm';
         else if ([56, 57, 66, 67].includes(code)) label = 'Freezing rain';
 
-        setWeather({
+        const result: LiveWeather = {
           temperature: data.current.temperature_2m,
           windSpeed: data.current.wind_speed_10m,
           humidity: data.current.relative_humidity_2m,
           weatherLabel: label,
-        });
+        };
+
+        setWeather(result);
+        try {
+          localStorage.setItem('cached_live_weather', JSON.stringify(result));
+        } catch {}
         setError(null);
       } catch (e: unknown) {
-        setError(e instanceof Error ? e.message : 'Could not load weather');
+        if (!weather) {
+          setError(e instanceof Error ? e.message : 'Could not load weather');
+        }
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -322,30 +340,56 @@ export default function Index() {
         </motion.div>
       </section>
 
-      <section id="learn-more" className="py-10 md:py-14 px-4 bg-background">
+      <section id="learn-more" className="py-12 md:py-16 px-4 bg-background border-t border-border/30">
         <div className="container max-w-5xl mx-auto">
-          <div className="text-center max-w-3xl mx-auto">
+          <div className="text-center max-w-3xl mx-auto mb-10">
             <div className="inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.14em] text-primary/80 mb-3">
               <span className="h-px w-7 bg-primary/50" />
-              About the Mountain
+              Essential Mountain Profile
               <span className="h-px w-7 bg-primary/50" />
             </div>
             <h2 className="text-3xl md:text-4xl font-bold mb-4 leading-tight">
-              <span className="text-gradient">Mt. Kalisungan</span>
+              About <span className="text-gradient">Mt. Kalisungan</span>
             </h2>
             <p className="text-base md:text-lg text-muted-foreground leading-relaxed">
-              Mount Kalisungan is a well-known hiking destination in Calauan, Laguna, recognized for its
-              open grassland trails and scenic summit views. The mountain features a mix of gentle slopes and
-              gradual ascents, making it accessible for beginners while still enjoyable for experienced hikers.
-              <br /><br />
-              From the summit, hikers are rewarded with wide views of Laguna and nearby mountain ranges, especially
-              during sunrise and sunset.
+              Mount Kalisungan (622 MASL) is Calauan, Laguna\'s crown natural destination — famous for its
+              gentle orchard trails, dramatic cogon grassland summit ridge, historical World War II significance,
+              and 360-degree views of the Seven Crater Lakes and surrounding mountain peaks.
             </p>
-            <div className="mt-5 flex flex-wrap justify-center gap-2">
-              <span className="px-3 py-1 rounded-full text-xs bg-primary/10 text-primary border border-primary/20">Calauan, Laguna</span>
-              <span className="px-3 py-1 rounded-full text-xs bg-secondary/60 text-foreground border border-border/40">Lamot - Nagcarlan routes</span>
-              <span className="px-3 py-1 rounded-full text-xs bg-secondary/60 text-foreground border border-border/40">Sunrise ridge treks</span>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+            <div className="glass-card rounded-2xl p-4 text-center border-border/60">
+              <div className="text-xs uppercase tracking-wider text-muted-foreground font-semibold">Peak Elevation</div>
+              <div className="text-2xl font-bold text-foreground mt-1">622 MASL</div>
+              <p className="text-xs text-muted-foreground mt-1">2,041 ft • Minor climb (3/9)</p>
             </div>
+
+            <div className="glass-card rounded-2xl p-4 text-center border-border/60">
+              <div className="text-xs uppercase tracking-wider text-muted-foreground font-semibold">Jump-Off Points</div>
+              <div className="text-2xl font-bold text-foreground mt-1">3 Trailheads</div>
+              <p className="text-xs text-muted-foreground mt-1">Lamot 1 • Lamot 2 • Sto. Tomas</p>
+            </div>
+
+            <div className="glass-card rounded-2xl p-4 text-center border-emerald-500/30 bg-emerald-500/5">
+              <div className="text-xs uppercase tracking-wider text-emerald-600 dark:text-emerald-400 font-semibold">River Crossings</div>
+              <div className="text-2xl font-bold text-emerald-600 dark:text-emerald-400 mt-1">Strictly 0</div>
+              <p className="text-xs text-muted-foreground mt-1">Safe dry paths • No flood risks</p>
+            </div>
+
+            <div className="glass-card rounded-2xl p-4 text-center border-border/60">
+              <div className="text-xs uppercase tracking-wider text-muted-foreground font-semibold">Summit Panorama</div>
+              <div className="text-2xl font-bold text-foreground mt-1">7 Lakes & Peaks</div>
+              <p className="text-xs text-muted-foreground mt-1">Makiling • Banahaw • San Pablo</p>
+            </div>
+          </div>
+
+          <div className="text-center">
+            <Button asChild variant="outline" size="lg" className="rounded-xl border-primary/30 hover:border-primary">
+              <Link to="/about">
+                Explore Full Mountain Facts & History <ArrowUpRight className="ml-2 h-4 w-4" />
+              </Link>
+            </Button>
           </div>
         </div>
       </section>
@@ -461,6 +505,7 @@ export default function Index() {
               <div>
                 <h4 className="text-xs sm:text-sm font-semibold text-white mb-2 sm:mb-3 uppercase tracking-wider">Quick Links</h4>
                 <ul className="space-y-1 sm:space-y-2 text-xs sm:text-sm">
+                  <li><Link to="/about" className="hover:text-white transition-colors">About Mt. Kalisungan</Link></li>
                   <li><Link to="/map" className="hover:text-white transition-colors">Trail Map</Link></li>
                   <li><Link to="/booking" className="hover:text-white transition-colors">Book a Hike</Link></li>
                   <li><Link to="/chat" className="hover:text-white transition-colors">AI Assistant</Link></li>

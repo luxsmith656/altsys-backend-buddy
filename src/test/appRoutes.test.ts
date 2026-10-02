@@ -8,6 +8,7 @@ describe('authoritative application routes', () => {
     expect(new Set(paths).size).toBe(paths.length);
     expect(paths).toEqual([
       '/',
+      '/about',
       '/login',
       '/register',
       '/map',

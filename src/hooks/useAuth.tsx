@@ -16,6 +16,7 @@ interface AuthContextType {
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [role, setRole] = useState<AppRole | null>(null);
@@ -23,10 +24,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [roleError, setRoleError] = useState<string | null>(null);
 
   const fetchRole = useCallback(async (u: User): Promise<AppRole> => {
-    const { data, error } = await supabase
+    const roleQuery = supabase
       .from('user_roles')
       .select('role')
       .eq('user_id', u.id);
+
+    const { data, error } = await Promise.race([
+      roleQuery,
+      new Promise<{ data: null; error: Error }>((resolve) =>
+        setTimeout(() => resolve({ data: null, error: new Error('Role verification timed out') }), 4000)
+      ),
+    ]);
 
     if (error) {
       const knownRole = resolveKnownAccountRole(u);
@@ -41,11 +49,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const knownRole = resolveKnownAccountRole(u);
     if (knownRole && knownRole !== 'hiker') return knownRole;
 
-    const { data: guide, error: guideError } = await supabase
+    const guideQuery = supabase
       .from('guides')
       .select('id')
       .eq('user_id', u.id)
       .maybeSingle();
+
+    const { data: guide, error: guideError } = await Promise.race([
+      guideQuery,
+      new Promise<{ data: null; error: null }>((resolve) =>
+        setTimeout(() => resolve({ data: null, error: null }), 2500)
+      ),
+    ]);
+
     if (guideError) throw guideError;
     if (guide?.id) return 'guide';
 
@@ -111,7 +127,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (mounted && loading) {
         setLoading(false);
       }
-    }, 3000);
+    }, 2500);
 
     return () => {
       mounted = false;
@@ -121,22 +137,30 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [syncSession]);
 
   const signIn = async (email: string, password: string) => {
-    const maxRetries = 3;
+    const maxRetries = 2;
     let lastError: Error | null = null;
 
     for (let attempt = 0; attempt < maxRetries; attempt++) {
       try {
-        const { error } = await supabase.auth.signInWithPassword({ email: email.trim().toLowerCase(), password });
+        const signInPromise = supabase.auth.signInWithPassword({
+          email: email.trim().toLowerCase(),
+          password,
+        });
+        const timeoutPromise = new Promise<{ error: Error }>((resolve) =>
+          setTimeout(() => resolve({ error: new Error('Login request timed out. Please check your connection.') }), 8000)
+        );
+
+        const { error } = await Promise.race([signInPromise, timeoutPromise]);
         if (error) return { error: error as Error };
         return { error: null };
       } catch (err) {
         lastError = err as Error;
         if (attempt < maxRetries - 1) {
-          await new Promise(resolve => setTimeout(resolve, 1000 * (attempt + 1)));
+          await new Promise((resolve) => setTimeout(resolve, 800));
         }
       }
     }
-    
+
     return { error: lastError };
   };
 
@@ -153,16 +177,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const signOut = async () => {
+    // Instant UI update for 0ms perceptible lag
+    setUser(null);
+    setRole(null);
+    setRoleError(null);
+    setLoading(false);
+
     try {
-      const { error } = await supabase.auth.signOut({ scope: 'local' });
-      if (error) console.error('Sign out error:', error);
+      await Promise.race([
+        supabase.auth.signOut({ scope: 'local' }),
+        new Promise((resolve) => setTimeout(resolve, 1500)),
+      ]);
     } catch (err) {
-      console.error('Unexpected sign out error:', err);
-    } finally {
-      setUser(null);
-      setRole(null);
-      setRoleError(null);
-      setLoading(false);
+      console.warn('Sign out warning:', err);
     }
   };
 

@@ -70,8 +70,8 @@ export default function Register() {
   };
 
   return (
-    <main className="min-h-screen flex items-center justify-center px-4 pt-24 pb-10">
-      <div className="w-full max-w-md">
+    <main className="min-h-[100dvh] flex flex-col items-center justify-center px-4 pt-24 pb-12 sm:pt-28">
+      <div className="w-full max-w-md my-auto">
         <div className="text-center mb-6">
           <img src={logo} alt="Mt. Kalisungan logo" className="h-12 w-12 rounded-full object-cover mx-auto mb-4" />
           <h1 className="text-2xl font-bold">Create Account</h1>

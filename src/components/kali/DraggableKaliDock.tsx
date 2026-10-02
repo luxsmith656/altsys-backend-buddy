@@ -20,7 +20,7 @@ export default function DraggableKaliDock({ children, aboveNavigation = false }:
     window.addEventListener('resize', resize);
     return () => window.removeEventListener('resize', resize);
   }, []);
-  const right = position !== null && position.x > viewport.width / 2;
+  const right = position !== null ? position.x > viewport.width / 2 : true;
   const down = position !== null && position.y < viewport.height / 2;
   return <div ref={dock} className="kali-movable-dock" data-right={right} data-down={down} data-above-navigation={aboveNavigation}
     style={position ? { left: position.x, top: position.y, bottom: 'auto' } : undefined}
