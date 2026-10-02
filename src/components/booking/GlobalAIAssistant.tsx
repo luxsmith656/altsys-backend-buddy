@@ -90,6 +90,7 @@ export default function GlobalAIAssistant() {
             </button>
 
             {/* Book a Hike / Walk-in */}
+            {role !== 'super_admin' && (
             <button
               type="button"
               onClick={() => {
@@ -103,6 +104,7 @@ export default function GlobalAIAssistant() {
               </div>
               <span className="whitespace-nowrap">{isAdmin ? 'Walk-In Desk' : role === 'guide' ? 'Trail map' : 'Book a Hike'}</span>
             </button>
+            )}
 
             {/* Ask Kali AI */}
             <button

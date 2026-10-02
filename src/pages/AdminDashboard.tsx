@@ -131,7 +131,6 @@ import AdminWalkInRegistrationDialog from '@/components/admin/AdminWalkInRegistr
 import EditPaymentDialog from '@/components/booking/EditPaymentDialog';
 import { bookingReceipt } from '@/lib/bookingReceipt';
 import EndHikeSettlementDialog from '@/components/admin/EndHikeSettlementDialog';
-import AppDownloadButton from '@/components/AppDownloadButton';
 import { usePullToRefresh } from '@/hooks/usePullToRefresh';
 import PullToRefreshIndicator from '@/components/common/PullToRefreshIndicator';
 import { Calendar } from '@/components/ui/calendar';
@@ -1709,9 +1708,7 @@ export default function AdminDashboard() {
               </Select>
             </div>
           </div>
-          <div className="hidden sm:flex items-center gap-2">
-            <AppDownloadButton />
-          </div>
+          
         </motion.div>
 
         <Tabs

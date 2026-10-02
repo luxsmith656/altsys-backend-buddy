@@ -28,7 +28,7 @@ export default function Navbar() {
   const navLinks = user
     ? [
         { to: dashboardPath, label: 'Dashboard', icon: LayoutDashboard },
-        ...(role === 'guide' ? [] : [{ to: '/booking', label: 'Book Hike', icon: CalendarCheck }]),
+        ...(role === 'guide' || role === 'super_admin' ? [] : [{ to: '/booking', label: 'Book Hike', icon: CalendarCheck }]),
         { to: '/map', label: 'Map', icon: Map },
       ]
     : [];

@@ -430,7 +430,7 @@ export default function Index() {
       {/* Footer */}
       <footer className="relative overflow-hidden">
         {/* Mountain silhouette divider */}
-        <div className="relative h-16 md:h-24" aria-hidden="true">
+        <div className="relative h-8 sm:h-12 md:h-20" aria-hidden="true">
           <svg viewBox="0 0 1440 120" preserveAspectRatio="none" className="absolute bottom-0 w-full h-full">
             <path
               d="M0,60 L120,40 L240,55 L360,30 L480,50 L600,20 L720,45 L840,15 L960,35 L1080,10 L1200,30 L1320,20 L1440,40 L1440,120 L0,120 Z"
@@ -443,24 +443,24 @@ export default function Index() {
           </svg>
         </div>
 
-        <div className="bg-[hsl(152_25%_8%)] text-white/80 py-10 px-4">
+        <div className="bg-[hsl(152_25%_8%)] text-white/80 py-5 sm:py-8 px-4">
           <div className="container max-w-6xl mx-auto">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mb-8">
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-4 sm:gap-6 mb-4 sm:mb-6">
               {/* Brand */}
-              <div>
-                <div className="flex items-center gap-3 mb-3">
-                  <img src={logo} alt="Mt. Kalisungan logo" className="h-8 w-8 rounded-full object-cover bg-white/5" />
-                  <span className="text-lg font-bold text-white">Mt. Kalisungan</span>
+              <div className="col-span-2 md:col-span-1">
+                <div className="flex items-center gap-2.5 mb-2">
+                  <img src={logo} alt="Mt. Kalisungan logo" className="h-7 w-7 sm:h-8 sm:w-8 rounded-full object-cover bg-white/5" />
+                  <span className="text-base sm:text-lg font-bold text-white">Mt. Kalisungan</span>
                 </div>
-                <p className="text-sm text-white/50 leading-relaxed">
+                <p className="text-xs sm:text-sm text-white/50 leading-relaxed max-w-sm">
                   Plan, book, and track your hike with live weather, AI guidance, and GPS navigation — all in one app.
                 </p>
               </div>
 
               {/* Quick Links */}
               <div>
-                <h4 className="text-sm font-semibold text-white mb-3 uppercase tracking-wider">Quick Links</h4>
-                <ul className="space-y-2 text-sm">
+                <h4 className="text-xs sm:text-sm font-semibold text-white mb-2 sm:mb-3 uppercase tracking-wider">Quick Links</h4>
+                <ul className="space-y-1 sm:space-y-2 text-xs sm:text-sm">
                   <li><Link to="/map" className="hover:text-white transition-colors">Trail Map</Link></li>
                   <li><Link to="/booking" className="hover:text-white transition-colors">Book a Hike</Link></li>
                   <li><Link to="/chat" className="hover:text-white transition-colors">AI Assistant</Link></li>
@@ -470,18 +470,18 @@ export default function Index() {
 
               {/* Contact */}
               <div>
-                <h4 className="text-sm font-semibold text-white mb-3 uppercase tracking-wider">Location</h4>
-                <ul className="space-y-2 text-sm">
-                  <li className="flex items-center gap-2"><MapPin className="h-3.5 w-3.5 text-emerald-400" /> Calauan, Laguna, Philippines</li>
-                  <li className="flex items-center gap-2"><Mountain className="h-3.5 w-3.5 text-emerald-400" /> Elevation: 622 meters</li>
-                  <li className="flex items-center gap-2"><Trees className="h-3.5 w-3.5 text-emerald-400" /> 3 Trail Routes Available</li>
+                <h4 className="text-xs sm:text-sm font-semibold text-white mb-2 sm:mb-3 uppercase tracking-wider">Location</h4>
+                <ul className="space-y-1 sm:space-y-2 text-xs sm:text-sm">
+                  <li className="flex items-center gap-1.5"><MapPin className="h-3 w-3 sm:h-3.5 sm:w-3.5 text-emerald-400 shrink-0" /> <span className="truncate">Calauan, Laguna, PH</span></li>
+                  <li className="flex items-center gap-1.5"><Mountain className="h-3 w-3 sm:h-3.5 sm:w-3.5 text-emerald-400 shrink-0" /> <span>Elevation: 622m</span></li>
+                  <li className="flex items-center gap-1.5"><Trees className="h-3 w-3 sm:h-3.5 sm:w-3.5 text-emerald-400 shrink-0" /> <span>3 Trail Routes</span></li>
                 </ul>
               </div>
             </div>
 
-            <div className="border-t border-white/10 pt-6 flex flex-col md:flex-row items-center justify-between gap-3 text-xs text-white/40">
+            <div className="border-t border-white/10 pt-3 sm:pt-4 flex flex-col sm:flex-row items-center justify-between gap-1.5 sm:gap-3 text-[11px] sm:text-xs text-white/40 text-center sm:text-left">
               <div>© 2026 Mt. Kalisungan • Thesis Project</div>
-              <div>Built with ❤️ for adventurers and rangers alike</div>
+              <div>Built for adventurers and rangers alike</div>
             </div>
           </div>
         </div>
