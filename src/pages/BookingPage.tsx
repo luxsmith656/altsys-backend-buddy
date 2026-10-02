@@ -44,6 +44,9 @@ import {
   Globe,
   MapPin,
   UserPlus,
+  ArrowUp,
+  Compass,
+  CheckCircle2,
 } from 'lucide-react';
 import { calculateFees, formatPeso, GCASH_DETAILS, BANK_DETAILS, MAX_PAX_PER_GUIDE } from '@/lib/payments';
 import { usePricing } from '@/hooks/usePricing';
@@ -76,12 +79,12 @@ import {
   interpretKalisunganWeather,
 } from '@/lib/kalisunganWeather';
 
-/* ── Weather code → human-readable label (Open-Meteo, tuned for Mt. Kalisungan, Laguna) ── */
+/* â”€â”€ Weather code â†’ human-readable label (Open-Meteo, tuned for Mt. Kalisungan, Laguna) â”€â”€ */
 function weatherCodeToLabel(code: number): string {
   return interpretKalisunganWeather(code, 0, 28).condition;
 }
 
-/* ─── Types ─── */
+/* â”€â”€â”€ Types â”€â”€â”€ */
 interface WeatherSnapshot {
   maxTempC: number;
   minTempC: number;
@@ -92,12 +95,12 @@ interface WeatherSnapshot {
   fetchedAt?: number;
 }
 
-/* ─── Draft persistence key ─── */
+/* â”€â”€â”€ Draft persistence key â”€â”€â”€ */
 const DRAFT_KEY = 'mt-kalisnugon-booking-draft';
 const LAST_BOOKING_AGE_PREFIX = 'mt-kalisungan-last-booking-age:';
 const LAST_BOOKING_PARTICIPANTS_PREFIX = 'mt-kalisungan-last-booking-participants:';
 
-/* ─── Constants ─── */
+/* â”€â”€â”€ Constants â”€â”€â”€ */
 const STEPS = [
   { id: 1, label: 'Schedule', icon: CalendarCheck },
   { id: 2, label: 'Details', icon: UserRound },
@@ -145,7 +148,7 @@ type SubmittedBooking = {
   totalFee: number;
 };
 
-/* ─── City autocomplete (compact, used inline) ─── */
+/* â”€â”€â”€ City autocomplete (compact, used inline) â”€â”€â”€ */
 function CityAutocomplete({ value, options, onPick, placeholder }: { value: string; options: string[]; onPick: (city: string, province: string) => void; placeholder?: string }) {
   const [q, setQ] = useState(value || '');
   const [picked, setPicked] = useState(!!value);
@@ -155,7 +158,7 @@ function CityAutocomplete({ value, options, onPick, placeholder }: { value: stri
     <div className="relative">
       <Input
         value={q}
-        placeholder={placeholder || 'Search city / municipality…'}
+        placeholder={placeholder || 'Search city / municipalityâ€¦'}
         onChange={(e) => { setQ(e.target.value); setPicked(false); if (!e.target.value) onPick('', ''); }}
         className="text-sm"
       />
@@ -183,7 +186,7 @@ function CityAutocomplete({ value, options, onPick, placeholder }: { value: stri
   );
 }
 
-/* ─── Helpers ─── */
+/* â”€â”€â”€ Helpers â”€â”€â”€ */
 
 function parseHourFromTime12(time12: string): number {
   const [time, period] = time12.split(' ');
@@ -200,7 +203,7 @@ function dayDifference(target: Date): number {
   return Math.round((b - a) / (1000 * 60 * 60 * 24));
 }
 
-/* ─── Component ─── */
+/* â”€â”€â”€ Component â”€â”€â”€ */
 export default function BookingPage() {
   const { user, role } = useAuth();
   const { pricing } = usePricing();
@@ -209,7 +212,22 @@ export default function BookingPage() {
   const [adminWalkInOpen, setAdminWalkInOpen] = useState(false);
   const [forceHikerView, setForceHikerView] = useState(false);
 
-  // ── Step 1: Schedule
+  // Scroll to top on step transition for mobile & desktop
+  useEffect(() => {
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }, [step]);
+
+  // Floating minimalist Back to Top button state
+  const [showBackToTop, setShowBackToTop] = useState(false);
+  useEffect(() => {
+    const handleScroll = () => {
+      setShowBackToTop(window.scrollY > 280);
+    };
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, []);
+
+  // â”€â”€ Step 1: Schedule
   const [date, setDate] = useState<Date | undefined>();
   const [hikeType, setHikeType] = useState<HikeType>('morning');
   const [hikeTime, setHikeTime] = useState('06:00 AM');
@@ -236,7 +254,7 @@ export default function BookingPage() {
       setHikeType(nextType);
       applied.push(`${getHikeTypeLabel(nextType)} hike`);
     }
-    if (applied.length) toast.success(`Assistant applied: ${applied.join(' · ')}`);
+    if (applied.length) toast.success(`Assistant applied: ${applied.join(' Â· ')}`);
     if (searchParams.get('ready') === '1') {
       setStep(2);
       toast.info('Review your details, then accept the reminders and agreements to finish.');
@@ -257,7 +275,7 @@ export default function BookingPage() {
   const [weatherError, setWeatherError] = useState<string | null>(null);
   const weatherRequestId = useRef(0);
 
-  // ── Mt. Kalisungan 16-day weather forecast (Open-Meteo) ──
+  // â”€â”€ Mt. Kalisungan 16-day weather forecast (Open-Meteo) â”€â”€
   const [kalisunganForecast, setKalisunganForecast] = useState<Record<string, KalisunganDayWeather>>({});
   const [kalisunganForecastLoading, setKalisunganForecastLoading] = useState(false);
 
@@ -286,7 +304,7 @@ export default function BookingPage() {
     return kalisunganForecast[key] ?? null;
   }, [date, kalisunganForecast]);
 
-  // ── Step 2: Personal details
+  // â”€â”€ Step 2: Personal details
   const [fullName, setFullName] = useState('');
   const [age, setAge] = useState('');
   const [sex, setSex] = useState<Sex | ''>('');
@@ -302,25 +320,26 @@ export default function BookingPage() {
   const [locationSearch, setLocationSearch] = useState('');
   const [cityPicked, setCityPicked] = useState(false);
 
-  // ── Multi-location: hiker picks where to start (Lamot 1, Lamot 2, etc.) ──
+  // â”€â”€ Multi-location: hiker picks where to start (Lamot 1, Lamot 2, etc.) â”€â”€
   const { locations: allLocations } = useLocations();
   const [startLocationId, setStartLocationId] = useState<string>('');
   const [dbGuides, setDbGuides] = useState<Array<{ id: string; full_name: string; location_id: string; per_trip_fee: number }>>([]);
   const [preferredGuideId, setPreferredGuideId] = useState<string>('');
-  const referralGuideId = searchParams.get('guide') || String(user?.user_metadata?.referral_guide_id || '');
+  const referralGuideId = searchParams.get('guide') || searchParams.get('referral') || String(user?.user_metadata?.referral_guide_id || '');
   const appliedReferralId = useRef<string | null>(null);
+  const [referralCodeInput, setReferralCodeInput] = useState('');
 
-  // ── Guide dropdown options ──
+  // â”€â”€ Guide dropdown options â”€â”€
   const [guideOptions, setGuideOptions] = useState<string[]>([]);
 
-  // ── Step 3: Sworn declaration ──
+  // â”€â”€ Step 3: Sworn declaration â”€â”€
   const [agreedTruthful, setAgreedTruthful] = useState(false);
   const [showSwornPrompt, setShowSwornPrompt] = useState(false);
   const [minorAcknowledged, setMinorAcknowledged] = useState(false);
   const [committedMainAge, setCommittedMainAge] = useState('');
   const [committedCompanionAges, setCommittedCompanionAges] = useState<string[]>([]);
 
-  // ── Auto-detected minor status ──
+  // â”€â”€ Auto-detected minor status â”€â”€
   const hasMinors = useMemo(() => {
     const mainIsMinor = committedMainAge.trim() !== '' && Number(committedMainAge) > 0 && Number(committedMainAge) <= 17;
     const companionIsMinor = committedCompanionAges.some(
@@ -342,7 +361,7 @@ export default function BookingPage() {
     if (!hasMinors && minorAcknowledged) setMinorAcknowledged(false);
   }, [hasMinors, minorAcknowledged]);
 
-  // ── Step 4: Payment
+  // â”€â”€ Step 4: Payment
   const [paymentOption, setPaymentOption] = useState<PaymentOption>('onsite');
   const [onlinePayMethod, setOnlinePayMethod] = useState<OnlinePayMethod>('gcash');
   const [transactionRef, setTransactionRef] = useState('');
@@ -353,7 +372,7 @@ export default function BookingPage() {
 
   const phLocations = useMemo(() => getPHLocationOptions(), []);
 
-  // ── Step 3: Agreement
+  // â”€â”€ Step 3: Agreement
   const [agreedRules, setAgreedRules] = useState(false);
   const [agreedPrivacy, setAgreedPrivacy] = useState(false);
   const [hasScrolledRulesToEnd, setHasScrolledRulesToEnd] = useState(false);
@@ -364,7 +383,7 @@ export default function BookingPage() {
   const [loading, setLoading] = useState(false);
   const [booking, setBooking] = useState<SubmittedBooking | null>(null);
 
-  /* ── Restore form draft from localStorage ── */
+  /* â”€â”€ Restore form draft from localStorage â”€â”€ */
   useEffect(() => {
     try {
       const raw = localStorage.getItem(DRAFT_KEY);
@@ -392,7 +411,7 @@ export default function BookingPage() {
     }
   }, []); // mount only
 
-  /* ── Save draft on every change ── */
+  /* â”€â”€ Save draft on every change â”€â”€ */
   useEffect(() => {
     if (booking) return;
     try {
@@ -411,7 +430,7 @@ export default function BookingPage() {
       emailAddress, phoneNumber, province, city, locationSearch,
       companions, companionDetails, medicalNotes, preferredGuide, booking]);
 
-  /* ── Fetch guides (real DB rows for fee + location scoping; also feeds dropdown names) ── */
+  /* â”€â”€ Fetch guides (real DB rows for fee + location scoping; also feeds dropdown names) â”€â”€ */
   useEffect(() => {
     const fetchGuides = async () => {
       const { data: gs } = await supabase
@@ -426,7 +445,7 @@ export default function BookingPage() {
     void fetchGuides();
   }, []);
 
-  /* ── Auto-pick first active location if none chosen ── */
+  /* â”€â”€ Auto-pick first active location if none chosen â”€â”€ */
   useEffect(() => {
     if (!startLocationId && allLocations.length > 0) {
       const preferredEntry = allLocations.find((location) => /lamot[- _]?2/i.test(`${location.slug} ${location.name}`));
@@ -500,7 +519,14 @@ export default function BookingPage() {
 
   useEffect(() => {
     if (!referralGuideId || appliedReferralId.current === referralGuideId || !dbGuides.length) return;
-    const referredGuide = dbGuides.find((guide) => guide.id === referralGuideId);
+    const cleanRef = referralGuideId.toLowerCase().trim();
+    const cleanClean = cleanRef.replace(/[^a-z0-9]/g, '');
+    const referredGuide = dbGuides.find((guide) =>
+      guide.id.toLowerCase() === cleanRef ||
+      guide.full_name.toLowerCase() === cleanRef ||
+      guide.full_name.toLowerCase().replace(/[^a-z0-9]/g, '') === cleanClean ||
+      guide.full_name.toLowerCase().includes(cleanRef)
+    );
     if (!referredGuide) return;
     appliedReferralId.current = referralGuideId;
     if (referredGuide.location_id && referredGuide.location_id !== startLocationId) setStartLocationId(referredGuide.location_id);
@@ -508,8 +534,35 @@ export default function BookingPage() {
     setPreferredGuide(referredGuide.full_name);
   }, [dbGuides, preferredGuideId, referralGuideId, startLocationId]);
 
+  const handleApplyReferralCode = () => {
+    const raw = referralCodeInput.trim().toLowerCase();
+    if (!raw) {
+      toast.error('Please enter a guide referral code or guide name');
+      return;
+    }
+    const clean = raw.replace(/[^a-z0-9]/g, '');
+    const matched = dbGuides.find((g) =>
+      g.id.toLowerCase() === raw ||
+      g.full_name.toLowerCase() === raw ||
+      g.full_name.toLowerCase().replace(/[^a-z0-9]/g, '') === clean ||
+      g.full_name.toLowerCase().includes(raw)
+    );
 
-  /* ── Capacity fetching ── */
+    if (matched) {
+      if (matched.location_id && matched.location_id !== startLocationId) {
+        setStartLocationId(matched.location_id);
+      }
+      setPreferredGuideId(matched.id);
+      setPreferredGuide(matched.full_name);
+      setReferralCodeInput('');
+      toast.success(`Referral code applied! Guide ${matched.full_name} assigned.`);
+    } else {
+      toast.error('Guide referral code not found. The system will auto-assign your guide upon arrival.');
+    }
+  };
+
+
+  /* â”€â”€ Capacity fetching â”€â”€ */
   const fetchSlotCapacity = useCallback(async (year: number, month: number) => {
     const start = format(new Date(year, month, 1), 'yyyy-MM-dd');
     const end = format(new Date(year, month + 1, 0), 'yyyy-MM-dd');
@@ -639,7 +692,7 @@ export default function BookingPage() {
     }
   }, []);
 
-  /* ── Derived slot count for selected date (Day vs Night Split) ── */
+  /* â”€â”€ Derived slot count for selected date (Day vs Night Split) â”€â”€ */
   const slotsForDate = useMemo(() => {
     if (!date) return null;
     const dateStr = format(date, 'yyyy-MM-dd');
@@ -824,7 +877,7 @@ export default function BookingPage() {
           fetchedAt: (weatherInsight || selectedKalisunganWeather)!.fetchedAt ?? Date.now(),
           sourceName: 'AccuWeather (Calauan, Laguna)',
           sourceUrl: 'https://www.accuweather.com/en/ph/calauan/263792/weather-forecast/263792',
-          locationCitation: 'Mt. Kalisungan, Laguna (14.1475°N, 121.3454°E · 760m)',
+          locationCitation: 'Mt. Kalisungan, Laguna (14.1475Â°N, 121.3454Â°E Â· 760m)',
         }
       : null,
     selectedStartTime: date ? hikeTime : undefined,
@@ -832,7 +885,7 @@ export default function BookingPage() {
     hikeType,
   });
 
-  /* ── Hike type change ── */
+  /* â”€â”€ Hike type change â”€â”€ */
   const handleHikeTypeChange = (type: HikeType) => {
     setHikeType(type);
     if (date) setSlotCapacityRequested(true);
@@ -840,7 +893,7 @@ export default function BookingPage() {
     if (recommended) setHikeTime(recommended.time);
   };
 
-  /* ── Validation ── */
+  /* â”€â”€ Validation â”€â”€ */
   const validateStep = () => {
     if (step === 1) {
       if (!date) return 'Please select a date on the calendar.';
@@ -885,7 +938,7 @@ export default function BookingPage() {
     setStep((s) => s + 1);
   };
 
-  /* ── Screenshot handler ── */
+  /* â”€â”€ Screenshot handler â”€â”€ */
   const handleScreenshotChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -897,7 +950,7 @@ export default function BookingPage() {
     reader.readAsDataURL(file);
   };
 
-  /* ── Submit ── */
+  /* â”€â”€ Submit â”€â”€ */
   const handleBook = async () => {
     if (!user || !date) return;
     if (!startLocationId) {
@@ -908,7 +961,7 @@ export default function BookingPage() {
     const dateStr = format(date, 'yyyy-MM-dd');
     setLoading(true);
 
-    // ── Per-guide-per-day quota: 5 bookings max per guide for the same date.
+    // â”€â”€ Per-guide-per-day quota: 5 bookings max per guide for the same date.
     if (preferredGuideId) {
       const { data: existing, error: qErr } = await supabase
         .from('booking_assignments' as any)
@@ -940,7 +993,7 @@ export default function BookingPage() {
           screenshotUrl = result.url;
           screenshotPath = result.path;
         } else {
-          toast.warning('Firebase not configured — screenshot not uploaded. Contact admin.');
+          toast.warning('Firebase not configured â€” screenshot not uploaded. Contact admin.');
         }
       } catch {
         toast.error('Failed to upload screenshot. Booking will continue without it.');
@@ -1057,7 +1110,7 @@ export default function BookingPage() {
     setLoading(false);
   };
 
-  /* ─────────────── SUCCESS SCREEN ─────────────── */
+  /* â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ SUCCESS SCREEN â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
   if (booking) {
     return (
       <motion.div
@@ -1083,7 +1136,7 @@ export default function BookingPage() {
             <div className="space-y-2 text-sm">
               {[
                 { label: 'Date', value: booking.booking_date },
-                { label: 'Hike Type', value: `${booking.hikeType === 'overnight' || booking.hikeType === 'night' ? '🌙' : '☀️'} ${getHikeTypeLabel(booking.hikeType)} Hike` },
+                { label: 'Hike Type', value: `${booking.hikeType === 'overnight' || booking.hikeType === 'night' ? 'ðŸŒ™' : 'â˜€ï¸'} ${getHikeTypeLabel(booking.hikeType)} Hike` },
                 { label: 'Start Time', value: booking.hikeTime },
                 { label: 'Group Size', value: `${booking.group_size} pax` },
                 { label: 'Full Name', value: booking.fullName },
@@ -1126,7 +1179,7 @@ export default function BookingPage() {
     );
   }
 
-  /* ─────────────── ADMIN ON-SITE WALK-IN COUNTER ─────────────── */
+  /* â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ ADMIN ON-SITE WALK-IN COUNTER â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
   if ((role === 'admin' || role === 'super_admin') && !forceHikerView) {
     return (
       <AdminWalkInDesk
@@ -1136,7 +1189,7 @@ export default function BookingPage() {
     );
   }
 
-  /* ─────────────── HIKER ONLINE BOOKING FORM ─────────────── */
+  /* â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ HIKER ONLINE BOOKING FORM â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
   return (
     <div className="min-h-screen overflow-x-hidden pt-20 pb-24 md:pb-12 px-2 sm:px-4">
       <div className="container max-w-5xl mx-auto">
@@ -1144,7 +1197,7 @@ export default function BookingPage() {
         {forceHikerView && (
           <div className="mb-6 p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs shadow-sm">
             <span className="font-semibold text-amber-600 dark:text-amber-400">
-              👁️ Admin Preview Mode: Viewing public online hiker booking wizard.
+              ðŸ‘ï¸ Admin Preview Mode: Viewing public online hiker booking wizard.
             </span>
             <Button
               size="sm"
@@ -1166,7 +1219,7 @@ export default function BookingPage() {
           </p>
         </motion.div>
 
-        {/* ─── Step Indicator ─── */}
+        {/* â”€â”€â”€ Step Indicator â”€â”€â”€ */}
         <div className="mb-8 md:mb-12 pb-1">
           <div className="grid grid-cols-4 items-start gap-1 sm:gap-2">
           {STEPS.map((s, i) => {
@@ -1209,7 +1262,7 @@ export default function BookingPage() {
           </div>
         </div>
 
-        {/* ─── Step Content ─── */}
+        {/* â”€â”€â”€ Step Content â”€â”€â”€ */}
         <div className="max-w-none md:max-w-2xl mx-auto">
           <AnimatePresence mode="wait">
             <motion.div
@@ -1221,7 +1274,7 @@ export default function BookingPage() {
             >
               <Card className="glass-card border-primary/20 p-4 sm:p-8">
 
-                {/* ═══════════════ STEP 1: SCHEDULE ═══════════════ */}
+                {/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• STEP 1: SCHEDULE â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */}
                 {step === 1 && (
                   <div className="space-y-5">
 
@@ -1302,7 +1355,7 @@ export default function BookingPage() {
                           <span>
                             <strong>{format(date, 'MMMM d, yyyy')}</strong>
                             {slotsForDate !== null && (
-                              <> — <strong>{slotsForDate}</strong> slot{slotsForDate !== 1 ? 's' : ''} available</>
+                              <> â€” <strong>{slotsForDate}</strong> slot{slotsForDate !== 1 ? 's' : ''} available</>
                             )}
                           </span>
                         </motion.div>
@@ -1315,7 +1368,7 @@ export default function BookingPage() {
                         <Users className="h-4 w-4 text-muted-foreground" />
                         <div>
                           <p className="text-sm font-semibold leading-tight">Group Size</p>
-                          <p className="text-[11px] text-muted-foreground">1–30 hikers (1 guide per {MAX_PAX_PER_GUIDE} pax · {formatPeso(getGuideFeePerGuide(hikeType))}/guide)</p>
+                          <p className="text-[11px] text-muted-foreground">1â€“30 hikers (1 guide per {MAX_PAX_PER_GUIDE} pax Â· {formatPeso(getGuideFeePerGuide(hikeType))}/guide)</p>
                         </div>
                       </div>
                       <div className="flex items-center gap-2">
@@ -1358,7 +1411,7 @@ export default function BookingPage() {
                       <Label className="text-[11px] font-bold uppercase tracking-widest text-muted-foreground flex flex-wrap items-center gap-1.5">
                         Preferred Start Time
                         <span className="text-[10px] font-normal normal-case tracking-normal text-muted-foreground/60">
-                          — {getHikeTypeLabel(hikeType)} hike schedule
+                          â€” {getHikeTypeLabel(hikeType)} hike schedule
                         </span>
                       </Label>
                       <div className="flex flex-wrap gap-2">
@@ -1397,9 +1450,9 @@ export default function BookingPage() {
                               )}
                             >
                               {smartRecommendations?.recommendedTimes.includes(opt.time)
-                                ? '⭐ Recommended'
+                                ? 'â­ Recommended'
                                 : opt.recommended
-                                ? '★ Recommended'
+                                ? 'â˜… Recommended'
                                   : opt.notSuggested
                                   ? `${opt.label}`
                                   : opt.label}
@@ -1419,7 +1472,7 @@ export default function BookingPage() {
                   </div>
                 )}
 
-                {/* ═══════════════ STEP 2: PERSONAL DETAILS ═══════════════ */}
+                {/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• STEP 2: PERSONAL DETAILS â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */}
                 {step === 2 && (
                   <div className="space-y-6">
                     <div className="text-center mb-6">
@@ -1515,7 +1568,7 @@ export default function BookingPage() {
                         </Label>
                         <div className="relative">
                           <Input
-                            placeholder="Search PH city or municipality…"
+                            placeholder="Search PH city or municipalityâ€¦"
                             value={locationSearch}
                             onChange={(e) => {
                               setLocationSearch(e.target.value);
@@ -1650,7 +1703,7 @@ export default function BookingPage() {
                                       value={cd.city || ''}
                                       options={phLocations}
                                       onPick={(c) => updateCompanionDetail(idx, 'city', c)}
-                                      placeholder="Search PH city/municipality…"
+                                      placeholder="Search PH city/municipalityâ€¦"
                                     />
                                   </div>
 
@@ -1670,7 +1723,7 @@ export default function BookingPage() {
                         />
                       </div>
 
-                      {/* Minors — auto-detected from ages entered above */}
+                      {/* Minors â€” auto-detected from ages entered above */}
                       {hasMinors && (
                         <div id="minor-requirements" data-testid="minor-requirements" tabIndex={-1} className="space-y-3 sm:col-span-2 outline-none">
                           <div className="flex items-center gap-3 p-3 rounded-xl border border-amber-400/60 bg-amber-500/5 text-amber-700 dark:text-amber-300">
@@ -1700,7 +1753,7 @@ export default function BookingPage() {
                               </div>
                             ))}
                             <p className="text-[11px] text-amber-700/80 dark:text-amber-300/80 pt-1 border-t border-amber-400/20 mt-2">
-                              ⚠️ If a parent or guardian is NOT present onsite, the minor MUST carry a notarized parental consent letter and a photocopy of the parent's valid ID. Entry will be denied without these documents.
+                              âš ï¸ If a parent or guardian is NOT present onsite, the minor MUST carry a notarized parental consent letter and a photocopy of the parent's valid ID. Entry will be denied without these documents.
                             </p>
                             <div className="flex items-start space-x-3 p-3 rounded-lg border border-amber-400/30 bg-amber-500/10">
                               <Checkbox
@@ -1717,7 +1770,7 @@ export default function BookingPage() {
                         </div>
                       )}
 
-                      {/* Start Location (Lamot 1 / Lamot 2 / Main) — REQUIRED */}
+                      {/* Start Location (Lamot 1 / Lamot 2 / Main) â€” REQUIRED */}
                       <div className="space-y-2 sm:col-span-2">
                         <Label htmlFor="startLocation" className="flex items-center gap-1.5">
                           <MapPin className="h-3.5 w-3.5 text-primary" />
@@ -1733,7 +1786,7 @@ export default function BookingPage() {
                           <SelectContent>
                             {allLocations.map((loc) => (
                               <SelectItem key={loc.id} value={loc.id}>
-                                {loc.name}{loc.lgu ? ` — ${loc.lgu}` : ''}
+                                {loc.name}{loc.lgu ? ` â€” ${loc.lgu}` : ''}
                               </SelectItem>
                             ))}
                           </SelectContent>
@@ -1743,7 +1796,7 @@ export default function BookingPage() {
                         </p>
                       </div>
 
-                      {/* Map preview — shown BEFORE booking is confirmed so hikers see exactly where to go */}
+                      {/* Map preview â€” shown BEFORE booking is confirmed so hikers see exactly where to go */}
                       {selectedLocation && (
                         <div className="sm:col-span-2">
                           <LocationPreview
@@ -1760,8 +1813,8 @@ export default function BookingPage() {
                             {publishedRoute ? (
                               <>
                                 <strong>Official route for this jump-off:</strong> {publishedRoute.name}
-                                {publishedRoute.distanceKm ? ` · ${publishedRoute.distanceKm.toFixed(1)} km` : ''}
-                                {publishedRoute.elevationMeters ? ` · ${publishedRoute.elevationMeters}m` : ''}
+                                {publishedRoute.distanceKm ? ` Â· ${publishedRoute.distanceKm.toFixed(1)} km` : ''}
+                                {publishedRoute.elevationMeters ? ` Â· ${publishedRoute.elevationMeters}m` : ''}
                                 <span className="block text-[11px] text-muted-foreground">Synced from the approved trail map.</span>
                               </>
                             ) : (
@@ -1771,50 +1824,124 @@ export default function BookingPage() {
                         </div>
                       )}
 
-                      {/* Preferred Guide — scoped to chosen location, shows fee */}
-                      <div className="space-y-2 sm:col-span-2">
-                        <Label htmlFor="preferredGuide">Preferred Guide <span className="text-muted-foreground font-normal">(Optional, additional fee)</span></Label>
-                        <Select
-                          value={preferredGuideId || 'none'}
-                          onValueChange={(v) => {
-                            if (v === 'none') {
-                              setPreferredGuideId('');
-                              setPreferredGuide('');
-                            } else {
-                              setPreferredGuideId(v);
-                              const g = guidesAtLocation.find((x) => x.id === v);
-                              setPreferredGuide(g?.full_name || '');
-                            }
-                          }}
-                        >
-                          <SelectTrigger id="preferredGuide">
-                            <SelectValue placeholder="None (Admin will assign)" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="none">None (Admin will assign)</SelectItem>
-                            {guidesAtLocation.map((g) => (
-                              <SelectItem key={g.id} value={g.id}>
-                                <span className="flex items-center gap-2">
-                                  {guidePhotoForName(g.full_name) ? <img src={guidePhotoForName(g.full_name) ?? undefined} alt="" className="h-6 w-6 rounded-full object-cover" /> : null}
-                                  <span>{g.full_name} — ₱{Number(g.per_trip_fee).toLocaleString()}</span>
-                                </span>
-                              </SelectItem>
-                            ))}
-                            {guidesAtLocation.length === 0 && (
-                              <SelectItem value="__none__" disabled>No guides yet at this location</SelectItem>
-                            )}
-                          </SelectContent>
-                        </Select>
-                        <p className="text-xs text-muted-foreground">
-                          Each guide can take up to <strong>5 bookings per day</strong>. Assignment subject to availability.
+                      {/* Guide Assignment: Referral Code / System Auto-Assignment */}
+                      <div className="space-y-3 sm:col-span-2 rounded-xl border border-border/60 bg-muted/20 p-4">
+                        <div className="flex items-center justify-between">
+                          <Label className="text-sm font-semibold flex items-center gap-1.5">
+                            <Compass className="h-4 w-4 text-primary" />
+                            Guide Assignment
+                          </Label>
+                          <Badge variant="outline" className="text-[10px] bg-primary/10 text-primary border-primary/20">
+                            1 Guide : 5 Hikers
+                          </Badge>
+                        </div>
+
+                        <p className="text-xs text-muted-foreground leading-relaxed">
+                          To uphold fair rotation and community livelihood, manual guide browsing is disabled.
+                          Guides are <strong>automatically assigned by the system</strong> on rotation among accredited on-duty guides.
                         </p>
+
+                        {/* Referral Code / Link Applied Card */}
+                        {preferredGuide ? (
+                          <div className="flex items-center justify-between p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/30">
+                            <div className="flex items-center gap-3">
+                              <div className="h-9 w-9 rounded-full bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 flex items-center justify-center font-bold text-sm">
+                                {guidePhotoForName(preferredGuide) ? (
+                                  <img src={guidePhotoForName(preferredGuide) ?? undefined} alt="" className="h-9 w-9 rounded-full object-cover" />
+                                ) : (
+                                  preferredGuide.charAt(0)
+                                )}
+                              </div>
+                              <div>
+                                <div className="flex items-center gap-1.5">
+                                  <span className="text-xs font-semibold text-foreground">Referred Guide: {preferredGuide}</span>
+                                  <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />
+                                </div>
+                                <span className="text-[11px] text-muted-foreground">
+                                  Applied via referral link or code
+                                </span>
+                              </div>
+                            </div>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => {
+                                setPreferredGuideId('');
+                                setPreferredGuide('');
+                                setReferralCodeInput('');
+                                toast.info('Referral removed. The system will auto-assign your guide.');
+                              }}
+                              className="text-xs text-muted-foreground hover:text-destructive h-8 px-2"
+                            >
+                              Remove
+                            </Button>
+                          </div>
+                        ) : (
+                          <div className="space-y-2">
+                            <Label htmlFor="guideReferralCode" className="text-xs text-muted-foreground font-medium">
+                              Have a guide referral code? (Optional)
+                            </Label>
+                            <div className="flex gap-2">
+                              <Input
+                                id="guideReferralCode"
+                                placeholder="Enter guide referral code or guide name"
+                                value={referralCodeInput}
+                                onChange={(e) => setReferralCodeInput(e.target.value)}
+                                className="text-xs h-9"
+                              />
+                              <Button
+                                type="button"
+                                variant="secondary"
+                                size="sm"
+                                onClick={handleApplyReferralCode}
+                                className="text-xs px-3 shrink-0"
+                              >
+                                Apply Code
+                              </Button>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* System Auto-Assignment Notice */}
+                        <div className="rounded-lg bg-background/50 border border-border/40 p-2.5 text-[11px] text-muted-foreground space-y-1">
+                          <div className="flex items-center gap-1.5 font-medium text-foreground">
+                            <Users className="h-3 w-3 text-primary" />
+                            {groupSize > 5 ? (
+                              <span>Group of {groupSize} hikers requires {Math.ceil(groupSize / 5)} guides</span>
+                            ) : (
+                              <span>System Auto-Rotation Assignment</span>
+                            )}
+                          </div>
+                          {groupSize > 5 ? (
+                            <p>
+                              {preferredGuide ? (
+                                <>
+                                  Your referred guide <strong>{preferredGuide}</strong> will lead your trek. Because your group requires <strong>{Math.ceil(groupSize / 5)} guides</strong>, the additional guide(s) will be automatically assigned by the system upon station check-in.
+                                </>
+                              ) : (
+                                <>
+                                  Because your group size requires <strong>{Math.ceil(groupSize / 5)} guides</strong>, all guides are automatically assigned by the system rotation upon arrival.
+                                </>
+                              )}
+                            </p>
+                          ) : (
+                            <p>
+                              {preferredGuide ? (
+                                <>Guide assigned: <strong>{preferredGuide}</strong> (subject to station check-in and daily limits).</>
+                              ) : (
+                                <>No referral code? No problem! The system automatically assigns an accredited local guide upon station check-in.</>
+                              )}
+                            </p>
+                          )}
+                        </div>
                       </div>
 
                     </div>
                   </div>
                 )}
 
-                {/* ═══════════════ STEP 3: AGREEMENT ═══════════════ */}
+                {/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• STEP 3: AGREEMENT â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */}
                 {step === 3 && (
                   <div className="space-y-6">
                     <div className="text-center mb-6">
@@ -1838,7 +1965,7 @@ export default function BookingPage() {
                       <p>5. Report medical concerns before the hike and inform rangers of emergencies immediately.</p>
                       <p>6. Respect local community guidelines at Barangay Lamot II and all checkpoints.</p>
                       <p>7. You are responsible for providing accurate details for yourself and companions.</p>
-                      <p className="mt-3 font-semibold text-destructive">8. LIABILITY WAIVER — IMPORTANT</p>
+                      <p className="mt-3 font-semibold text-destructive">8. LIABILITY WAIVER â€” IMPORTANT</p>
                       <p>By booking and participating in this activity, the hiker fully acknowledges that hiking involves inherent risks including but not limited to: physical injury, accidents, loss or damage of property, and adverse weather conditions. <strong>The Mt. Kalisungan community, the Local Government Unit (LGU) of Calauan, Barangay Lamot II, the Barangay Council, and any affiliated organization, corporation, or association are NOT liable and shall bear NO responsibility</strong> for any injury, accident, illness, death, loss of personal belongings, or damage to property occurring before, during, or after the hiking activity. ALL LIABILITY rests solely with the hiker and their group. Participation is entirely at the hiker's own risk.</p>
                       <p>9. For minors, the parent or guardian assumes full liability and responsibility. Failure to present required parental consent documents will result in denial of entry.</p>
                       <p>10. Payment of fees does not constitute insurance coverage. Hikers are strongly advised to secure their own personal accident and travel insurance.</p>
@@ -1846,7 +1973,7 @@ export default function BookingPage() {
                       <p className="text-amber-900 dark:text-amber-200 font-medium">To protect guide livelihoods and maintain daily trail capacity limits, <strong>any request for date adjustments, rescheduling, or booking cancellations must be submitted at least 1 to 3 days prior to your confirmed hike date</strong>. Same-day cancellations or no-shows are strictly non-refundable and forfeit assigned guide slots.</p>
                     </div>
                     {!hasScrolledRulesToEnd && (
-                      <p className="text-xs text-amber-600 font-medium">Please scroll to the end of the rules (including 1–3 days cancellation policy) to enable agreement.</p>
+                      <p className="text-xs text-amber-600 font-medium">Please scroll to the end of the rules (including 1â€“3 days cancellation policy) to enable agreement.</p>
                     )}
                     <div className="space-y-4">
                       {hasScrolledRulesToEnd && (
@@ -1914,7 +2041,7 @@ export default function BookingPage() {
                   </div>
                 )}
 
-                {/* ═══════════════ STEP 4: CONFIRM ═══════════════ */}
+                {/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• STEP 4: CONFIRM â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */}
                 {step === 4 && (() => {
                   const { entryFee, envFee, guideFee, guidesNeeded, totalFee } = calculateFees(groupSize, { hikeType });
                   return (
@@ -1926,7 +2053,7 @@ export default function BookingPage() {
                     <div className="space-y-3 p-5 rounded-2xl bg-primary/5 border border-primary/20">
                       {[
                         { label: 'Hike Date', value: date ? format(date, 'MMMM d, yyyy') : '' },
-                        { label: 'Hike Type', value: `${hikeType === 'overnight' ? '🌙' : hikeType === 'night' ? '🌙' : '☀️'} ${getHikeTypeLabel(hikeType)} Hike` },
+                        { label: 'Hike Type', value: `${hikeType === 'overnight' ? 'ðŸŒ™' : hikeType === 'night' ? 'ðŸŒ™' : 'â˜€ï¸'} ${getHikeTypeLabel(hikeType)} Hike` },
                         { label: 'Start Time', value: hikeTime },
                         { label: 'Group Size', value: `${groupSize} Pax` },
                         { label: 'Full Name', value: fullName },
@@ -1936,7 +2063,7 @@ export default function BookingPage() {
                         { label: 'Email', value: emailAddress },
                         { label: 'Address', value: [city, province].filter(Boolean).join(', ') || 'Not provided' },
                         { label: 'Companions', value: companions.map((name) => name.trim()).filter(Boolean).join(', ') || 'None listed' },
-                        { label: 'Preferred Guide', value: preferredGuide.trim() || 'No preference' },
+                        { label: 'Guide Assignment', value: preferredGuide.trim() ? `${preferredGuide} (Referred)` : (groupSize > 5 ? `${Math.ceil(groupSize / 5)} guides (Auto-Assigned)` : 'System Auto-Assigned') },
                       ].map(({ label, value }) => (
                         <div key={label} className="flex justify-between items-center py-2 border-b border-border/10 last:border-0">
                           <span className="text-xs text-muted-foreground font-bold uppercase tracking-wider">{label}</span>
@@ -1945,23 +2072,23 @@ export default function BookingPage() {
                       ))}
                     </div>
 
-                    {/* ── Payment Section ── */}
+                    {/* â”€â”€ Payment Section â”€â”€ */}
                     <div className="space-y-4 p-5 rounded-2xl border border-border/20 bg-secondary/10">
                       <h3 className="font-semibold flex items-center gap-2 text-base">
                         <CreditCard className="h-4 w-4 text-primary" /> Payment Summary
                       </h3>
                       <div className="space-y-2 text-sm">
                         <div className="flex justify-between">
-                          <span className="text-muted-foreground">Registration / Entry Fee ({formatPeso(pricing.entryFee)} × {groupSize} pax)</span>
+                          <span className="text-muted-foreground">Registration / Entry Fee ({formatPeso(pricing.entryFee)} Ã— {groupSize} pax)</span>
                           <span className="font-semibold">{formatPeso(entryFee)}</span>
                         </div>
                         <div className="flex justify-between">
-                          <span className="text-muted-foreground">Environmental / DSPA Fee ({formatPeso(pricing.envFee)} × {groupSize} pax)</span>
+                          <span className="text-muted-foreground">Environmental / DSPA Fee ({formatPeso(pricing.envFee)} Ã— {groupSize} pax)</span>
                           <span className="font-semibold">{formatPeso(envFee)}</span>
                         </div>
                         <div className="flex justify-between">
                           <span className="text-muted-foreground">
-                            Tour Guide Fee ({formatPeso(getGuideFeePerGuide(hikeType))} / guide · {guidesNeeded} {guidesNeeded > 1 ? 'guides' : 'guide'})
+                            Tour Guide Fee ({formatPeso(getGuideFeePerGuide(hikeType))} / guide Â· {guidesNeeded} {guidesNeeded > 1 ? 'guides' : 'guide'})
                           </span>
                           <span className="font-semibold">{formatPeso(guideFee)}</span>
                         </div>
@@ -2034,7 +2161,7 @@ export default function BookingPage() {
                                 <p>Account Name: <strong>{BANK_DETAILS.accountName}</strong></p>
                               </>
                             )}
-                            <p className="text-xs text-muted-foreground pt-1">Amount: <strong>{formatPeso(totalFee)}</strong> — use your booking name as reference.</p>
+                            <p className="text-xs text-muted-foreground pt-1">Amount: <strong>{formatPeso(totalFee)}</strong> â€” use your booking name as reference.</p>
                           </div>
 
                           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -2048,7 +2175,7 @@ export default function BookingPage() {
                               />
                             </div>
                             <div className="space-y-2">
-                              <Label htmlFor="amountPaid" className="text-xs">Amount Paid (₱)</Label>
+                              <Label htmlFor="amountPaid" className="text-xs">Amount Paid (â‚±)</Label>
                               <Input
                                 id="amountPaid"
                                 type="number"
@@ -2066,7 +2193,7 @@ export default function BookingPage() {
                               {isFirebaseConfigured() ? (
                                 <span className="text-[10px] font-normal text-muted-foreground">(saved to secure storage, compressed)</span>
                               ) : (
-                                <span className="text-[10px] font-normal text-amber-500">(Firebase not configured — admin will request manually)</span>
+                                <span className="text-[10px] font-normal text-amber-500">(Firebase not configured â€” admin will request manually)</span>
                               )}
                             </Label>
                             {screenshotPreview ? (
@@ -2090,7 +2217,7 @@ export default function BookingPage() {
                           </div>
 
                           <p className="text-xs text-muted-foreground">
-                            Online payment is optional — you may pay remaining balance onsite. Proof of payment may be required at check-in.
+                            Online payment is optional â€” you may pay remaining balance onsite. Proof of payment may be required at check-in.
                           </p>
                         </motion.div>
                       )}
@@ -2106,7 +2233,7 @@ export default function BookingPage() {
                       <div className="rounded-2xl border border-amber-500/40 bg-amber-500/10 p-4 text-xs space-y-1.5 animate-in fade-in">
                         <div className="flex items-center gap-2 font-bold text-amber-800 dark:text-amber-300">
                           <AlertTriangle className="h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" />
-                          <span>Important: 1–3 Days Notice for Date Changes or Cancellation</span>
+                          <span>Important: 1â€“3 Days Notice for Date Changes or Cancellation</span>
                         </div>
                         <p className="text-amber-900 dark:text-amber-200 leading-relaxed">
                           To protect assigned tour guide schedules and environmental carrying capacities, any <strong>schedule adjustment, date change, or booking cancellation must be communicated at least 1 to 3 days before your confirmed hike date</strong>.
@@ -2120,7 +2247,7 @@ export default function BookingPage() {
             </motion.div>
           </AnimatePresence>
 
-          {/* ─── Navigation Buttons ─── */}
+          {/* â”€â”€â”€ Navigation Buttons â”€â”€â”€ */}
           <div className="hidden md:flex justify-between items-center mt-6">
             <Button
               variant="ghost"
@@ -2148,7 +2275,7 @@ export default function BookingPage() {
                 ) : (
                   <Check className="h-4 w-4" />
                 )}
-                {screenshotUploading ? 'Uploading…' : 'Confirm Reservation'}
+                {screenshotUploading ? 'Uploadingâ€¦' : 'Confirm Reservation'}
               </Button>
             )}
           </div>
@@ -2180,7 +2307,7 @@ export default function BookingPage() {
                   ) : (
                     <Check className="h-4 w-4" />
                   )}
-                  {screenshotUploading ? 'Uploading…' : 'Confirm'}
+                  {screenshotUploading ? 'Uploadingâ€¦' : 'Confirm'}
                 </Button>
               )}
             </div>
@@ -2190,7 +2317,7 @@ export default function BookingPage() {
 
       <KaliContextPanel role={role ?? 'guest'} insights={kaliInsights} />
 
-      {/* Floating AI Chat — left side */}
+      {/* Floating AI Chat â€” left side */}
       <BookingAIChat
         date={date}
         groupSize={groupSize}
@@ -2210,7 +2337,7 @@ export default function BookingPage() {
           if (s.hikeType) { const nextType = normalizeHikeType(s.hikeType); setHikeType(nextType); applied.push(`${getHikeTypeLabel(nextType)} hike`); }
           if (s.hikeTime && isValidHikeTime(s.hikeType ? normalizeHikeType(s.hikeType) : hikeType, s.hikeTime)) { setHikeTime(s.hikeTime); applied.push(s.hikeTime); }
           if (typeof s.groupSize === 'number') { setGroupSize(s.groupSize); applied.push(`${s.groupSize} pax`); }
-          if (applied.length) toast.success(`Applied: ${applied.join(' · ')}`);
+          if (applied.length) toast.success(`Applied: ${applied.join(' Â· ')}`);
           if (s.submit) {
             setStep(2);
             toast.info('Review your details, then accept the reminders and agreements to finish.');
@@ -2258,6 +2385,20 @@ export default function BookingPage() {
             </CardContent>
           </Card>
         </div>
+      )}
+
+      {/* ── Minimalist Back to Top floating button (desktop & mobile) ── */}
+      {showBackToTop && (
+        <Button
+          type="button"
+          variant="outline"
+          size="icon"
+          onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+          aria-label="Back to top"
+          className="fixed bottom-6 right-6 z-40 h-10 w-10 rounded-full shadow-lg border-border/60 bg-background/80 backdrop-blur-md hover:bg-primary hover:text-white transition-all duration-300"
+        >
+          <ArrowUp className="h-4 w-4" />
+        </Button>
       )}
 
     </div>

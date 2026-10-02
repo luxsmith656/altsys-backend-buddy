@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import { Mountain, MapPin, Compass, ShieldAlert, Trees, Sun, Clock, Users, ArrowRight, CheckCircle2, History, AlertTriangle } from 'lucide-react';
+import { Mountain, MapPin, Compass, ShieldAlert, Trees, Sun, Clock, Users, ArrowRight, CheckCircle2, History, AlertTriangle, HelpCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import heroImage from '@/assets/mt-kalisungan-hero.jpg';
@@ -271,6 +271,105 @@ export default function AboutPage() {
             </div>
           </div>
         </Card>
+
+        {/* Frequently Asked Questions (FAQ) */}
+        <div className="space-y-6">
+          <div className="text-center max-w-2xl mx-auto space-y-2">
+            <div className="inline-flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-primary">
+              <HelpCircle className="h-4 w-4" />
+              Frequently Asked Questions
+            </div>
+            <h2 className="text-2xl sm:text-3xl font-bold">Everything You Need to Know</h2>
+            <p className="text-sm sm:text-base text-muted-foreground">
+              Official answers to common questions about climbing Mt. Kalisungan, permits, guides, and trail safety.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <Card className="glass-card p-5 border-border/60 space-y-2">
+              <h4 className="text-sm sm:text-base font-bold text-foreground flex items-start gap-2">
+                <span className="text-primary font-black">Q:</span>
+                Are there any river crossings on Mt. Kalisungan?
+              </h4>
+              <p className="text-xs sm:text-sm text-muted-foreground leading-relaxed pl-5">
+                <strong className="text-emerald-500">Strictly ZERO.</strong> Mt. Kalisungan has 0 river crossings. The entire route is dry land consisting of orchard trails, dirt paths, and ridge grasslands with no river flash flood hazard.
+              </p>
+            </Card>
+
+            <Card className="glass-card p-5 border-border/60 space-y-2">
+              <h4 className="text-sm sm:text-base font-bold text-foreground flex items-start gap-2">
+                <span className="text-primary font-black">Q:</span>
+                Is a local guide mandatory for all hikers?
+              </h4>
+              <p className="text-xs sm:text-sm text-muted-foreground leading-relaxed pl-5">
+                <strong>Yes.</strong> By municipal tourism ordinance, every group must be accompanied by an accredited local guide (1 guide per 5 hikers) to ensure hiker safety, proper navigation, and environmental preservation.
+              </p>
+            </Card>
+
+            <Card className="glass-card p-5 border-border/60 space-y-2">
+              <h4 className="text-sm sm:text-base font-bold text-foreground flex items-start gap-2">
+                <span className="text-primary font-black">Q:</span>
+                How does guide assignment work during booking?
+              </h4>
+              <p className="text-xs sm:text-sm text-muted-foreground leading-relaxed pl-5">
+                Manual guide picking from a list is disabled to ensure fair livelihood rotation among local guides. You may enter a guide&apos;s <strong>referral code or referral link</strong>. If none is entered, or if your group needs 2+ guides, the system automatically assigns certified guides on rotation.
+              </p>
+            </Card>
+
+            <Card className="glass-card p-5 border-border/60 space-y-2">
+              <h4 className="text-sm sm:text-base font-bold text-foreground flex items-start gap-2">
+                <span className="text-primary font-black">Q:</span>
+                What is the difficulty rating and summit elevation?
+              </h4>
+              <p className="text-xs sm:text-sm text-muted-foreground leading-relaxed pl-5">
+                The mountain stands at <strong>622 MASL</strong> (2,041 ft) and is classified as a <strong>Minor Hike (Difficulty 3/9, Trail Class 1–2)</strong>. It is beginner-friendly, typically taking 2.5 to 3.5 hours to reach the summit.
+              </p>
+            </Card>
+
+            <Card className="glass-card p-5 border-border/60 space-y-2">
+              <h4 className="text-sm sm:text-base font-bold text-foreground flex items-start gap-2">
+                <span className="text-primary font-black">Q:</span>
+                What are the available booking time slots?
+              </h4>
+              <p className="text-xs sm:text-sm text-muted-foreground leading-relaxed pl-5">
+                To prevent overcrowding, slots follow fixed 2-hour intervals:
+                <br />• <strong>Morning:</strong> 2:00 AM, 4:00 AM, 6:00 AM, 8:00 AM, 10:00 AM
+                <br />• <strong>Afternoon:</strong> 2:00 PM, 4:00 PM
+                <br />• <strong>Overnight:</strong> 2:00 PM, 3:00 PM, 4:00 PM
+              </p>
+            </Card>
+
+            <Card className="glass-card p-5 border-border/60 space-y-2">
+              <h4 className="text-sm sm:text-base font-bold text-foreground flex items-start gap-2">
+                <span className="text-primary font-black">Q:</span>
+                Can we camp overnight at the summit?
+              </h4>
+              <p className="text-xs sm:text-sm text-muted-foreground leading-relaxed pl-5">
+                <strong>Yes!</strong> Overnight slots are available on the summit grassland. Campers must bring their own wind-resistant tents, warm clothing, and drinking water. Open bonfires are strictly prohibited to protect the cogon grass.
+              </p>
+            </Card>
+
+            <Card className="glass-card p-5 border-border/60 space-y-2">
+              <h4 className="text-sm sm:text-base font-bold text-foreground flex items-start gap-2">
+                <span className="text-primary font-black">Q:</span>
+                What trailhead entry points can I choose from?
+              </h4>
+              <p className="text-xs sm:text-sm text-muted-foreground leading-relaxed pl-5">
+                Three jump-offs are registered in Calauan, Laguna: <strong>Sitio Lamot 1</strong> (the main terminal with complete registration and parking), <strong>Sitio Lamot 2</strong> (plantation trail), and <strong>Brgy. Sto. Tomas</strong> (cross-country trail).
+              </p>
+            </Card>
+
+            <Card className="glass-card p-5 border-border/60 space-y-2">
+              <h4 className="text-sm sm:text-base font-bold text-foreground flex items-start gap-2">
+                <span className="text-primary font-black">Q:</span>
+                How do we get to the trailhead via commute?
+              </h4>
+              <p className="text-xs sm:text-sm text-muted-foreground leading-relaxed pl-5">
+                Take any provincial bus bound for Sta. Cruz, Laguna from Buendia, Pasay, or Cubao. Disembark at Duck Junction / Calauan highway, then hire a local tricycle directly to the <strong>Lamot 1 Barangay Hall / Trailhead Terminal</strong>.
+              </p>
+            </Card>
+          </div>
+        </div>
 
         {/* CTA Banner */}
         <div className="rounded-3xl p-8 sm:p-12 text-center bg-gradient-to-br from-emerald-950/80 via-emerald-900/60 to-slate-900/90 border border-emerald-500/30 shadow-2xl relative overflow-hidden">

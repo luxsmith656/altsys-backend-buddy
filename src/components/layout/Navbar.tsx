@@ -30,10 +30,8 @@ export default function Navbar() {
         { to: dashboardPath, label: 'Dashboard', icon: LayoutDashboard },
         ...(role === 'guide' || role === 'super_admin' ? [] : [{ to: '/booking', label: 'Book Hike', icon: CalendarCheck }]),
         { to: '/map', label: 'Map', icon: Map },
-        { to: '/about', label: 'About', icon: Mountain },
       ]
     : [
-        { to: '/about', label: 'About', icon: Mountain },
         { to: '/map', label: 'Map', icon: Map },
         { to: '/booking', label: 'Book Hike', icon: CalendarCheck },
       ];

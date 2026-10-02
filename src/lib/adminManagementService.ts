@@ -303,6 +303,83 @@ export async function updateAdminInfo(
   return { success: true, message: 'Admin information saved successfully' };
 }
 
+export async function createAdminAccount(params: {
+  email: string;
+  fullName: string;
+  phone?: string;
+  locationId?: string | null;
+  locationName?: string;
+  password?: string;
+}): Promise<{ success: boolean; message: string; admin?: AdminAccount }> {
+  const email = params.email.toLowerCase().trim();
+  const fullName = params.fullName.trim();
+  const phone = params.phone?.trim() || '';
+  const locationId = params.locationId || null;
+  const locationName = params.locationName || 'Unassigned';
+  const password = params.password || 'kalisungan2026';
+
+  if (!email || !fullName) {
+    throw new Error('Email and full name are required');
+  }
+
+  // 1. Try Supabase Edge function invoke
+  try {
+    const { data, error } = await supabase.functions.invoke('admin-manage-users', {
+      body: {
+        action: 'create_admin',
+        email,
+        fullName,
+        phone,
+        locationId,
+        password,
+      },
+    });
+    if (!error && data?.success) {
+      const newAdmin: AdminAccount = {
+        id: data.admin?.id || `admin-${Date.now()}`,
+        userId: data.admin?.userId || data.admin?.id || `admin-${Date.now()}`,
+        email,
+        fullName,
+        phone,
+        role: 'admin',
+        locationId,
+        locationName,
+        createdAt: new Date().toISOString(),
+        status: 'active',
+      };
+      const current = getStoredAdmins();
+      saveStoredAdmins([newAdmin, ...current.filter((a) => a.email !== email)]);
+      return { success: true, message: `Admin account for ${fullName} created successfully`, admin: newAdmin };
+    }
+  } catch (err) {
+    console.warn('Edge function create_admin fallback:', err);
+  }
+
+  // 2. Direct or local fallback
+  const newId = `admin-${Date.now()}`;
+  const newAdmin: AdminAccount = {
+    id: newId,
+    userId: newId,
+    email,
+    fullName,
+    phone,
+    role: 'admin',
+    locationId,
+    locationName,
+    createdAt: new Date().toISOString(),
+    status: 'active',
+  };
+
+  const current = getStoredAdmins();
+  saveStoredAdmins([newAdmin, ...current.filter((a) => a.email !== email)]);
+
+  return {
+    success: true,
+    message: `Admin account for ${fullName} created successfully.`,
+    admin: newAdmin,
+  };
+}
+
 // ────────────────────────────────────────────────────────
 // Trailhead Admin: Guide & Hiker Management
 // ────────────────────────────────────────────────────────

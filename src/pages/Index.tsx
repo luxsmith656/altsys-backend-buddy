@@ -1,7 +1,7 @@
 import { Link, useNavigate } from 'react-router-dom';
 import { useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
-import { Mountain, ArrowUpRight, Wind, Trees, MapPin } from 'lucide-react';
+import { Mountain, ArrowUpRight, Wind, Trees, MapPin, LayoutDashboard } from 'lucide-react';
 import { motion, useReducedMotion } from 'framer-motion';
 import MountainMist from '@/components/landing/MountainMist';
 import heroImage from '@/assets/mt-kalisungan-hero.jpg';
@@ -12,6 +12,7 @@ import GuideRatings from '@/components/landing/GuideRatings';
 import TrailOverview from '@/components/landing/TrailOverview';
 import ReservingGuide from '@/components/landing/ReservingGuide';
 import { useAuth } from '@/hooks/useAuth';
+import { getRoleHomePath } from '@/lib/authRoles';
 
 type LiveWeather = {
   temperature: number;
@@ -186,7 +187,7 @@ function WaveDivider({ className = '' }: { className?: string }) {
 export default function Index() {
   const { weather, loading, error } = useLiveWeather();
   const reduceMotion = useReducedMotion();
-  const { user } = useAuth();
+  const { user, role } = useAuth();
   const navigate = useNavigate();
 
   const handleLearnMore = () => {
@@ -237,14 +238,29 @@ export default function Index() {
               </p>
 
               <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 justify-center lg:justify-start">
-                <Button size="lg" className="text-base px-8 glow-primary" onClick={handleBookNow}>
-                  <span className="inline-flex items-center">
-                    Book Now <ArrowUpRight className="ml-2 h-4 w-4" />
-                  </span>
-                </Button>
-                <Button variant="outline" size="lg" className="text-base px-8" onClick={handleLearnMore}>
-                  Learn More
-                </Button>
+                {user ? (
+                  <>
+                    <Button size="lg" className="text-base px-8 glow-primary" onClick={() => navigate(role ? getRoleHomePath(role) : '/dashboard')}>
+                      <span className="inline-flex items-center">
+                        <LayoutDashboard className="mr-2 h-4 w-4" /> Go to Dashboard <ArrowUpRight className="ml-1.5 h-4 w-4" />
+                      </span>
+                    </Button>
+                    <Button variant="outline" size="lg" className="text-base px-8 bg-white/10 hover:bg-white/20 text-white border-white/20" onClick={handleBookNow}>
+                      Book a Hike
+                    </Button>
+                  </>
+                ) : (
+                  <>
+                    <Button size="lg" className="text-base px-8 glow-primary" onClick={handleBookNow}>
+                      <span className="inline-flex items-center">
+                        Book Now <ArrowUpRight className="ml-2 h-4 w-4" />
+                      </span>
+                    </Button>
+                    <Button variant="outline" size="lg" className="text-base px-8" onClick={handleLearnMore}>
+                      Learn More
+                    </Button>
+                  </>
+                )}
               </div>
 
               <div className="hidden sm:flex mt-8 gap-6 text-xs sm:text-sm text-white/70 drop-shadow-[0_8px_24px_rgba(0,0,0,0.35)]">
@@ -458,12 +474,27 @@ export default function Index() {
                 </h2>
                 <p className="text-lg text-white/80 mb-8 font-medium">Reserve your slot now and start your adventure.</p>
                 <div className="flex flex-col sm:flex-row gap-4 justify-center">
-                  <Button asChild size="lg" className="text-base px-8 bg-white text-emerald-900 hover:bg-white/90 shadow-lg">
-                    <Link to="/register">Create Account</Link>
-                  </Button>
-                  <Button asChild variant="outline" size="lg" className="text-base px-8 border-white/30 bg-transparent text-white hover:bg-white/10 hover:text-white">
-                    <Link to="/login">Sign In</Link>
-                  </Button>
+                  {user ? (
+                    <>
+                      <Button asChild size="lg" className="text-base px-8 bg-white text-emerald-900 hover:bg-white/90 shadow-lg">
+                        <Link to={role ? getRoleHomePath(role) : '/dashboard'}>
+                          <LayoutDashboard className="mr-2 h-4 w-4" /> Go to Dashboard
+                        </Link>
+                      </Button>
+                      <Button asChild variant="outline" size="lg" className="text-base px-8 border-white/30 bg-transparent text-white hover:bg-white/10 hover:text-white">
+                        <Link to="/booking">Book a Hike</Link>
+                      </Button>
+                    </>
+                  ) : (
+                    <>
+                      <Button asChild size="lg" className="text-base px-8 bg-white text-emerald-900 hover:bg-white/90 shadow-lg">
+                        <Link to="/register">Create Account</Link>
+                      </Button>
+                      <Button asChild variant="outline" size="lg" className="text-base px-8 border-white/30 bg-transparent text-white hover:bg-white/10 hover:text-white">
+                        <Link to="/login">Sign In</Link>
+                      </Button>
+                    </>
+                  )}
                 </div>
               </motion.div>
             </div>
@@ -505,11 +536,18 @@ export default function Index() {
               <div>
                 <h4 className="text-xs sm:text-sm font-semibold text-white mb-2 sm:mb-3 uppercase tracking-wider">Quick Links</h4>
                 <ul className="space-y-1 sm:space-y-2 text-xs sm:text-sm">
+                  {user && (
+                    <li>
+                      <Link to={role ? getRoleHomePath(role) : '/dashboard'} className="hover:text-white transition-colors flex items-center gap-1.5 font-medium text-emerald-400">
+                        <LayoutDashboard className="h-3 w-3" /> Dashboard
+                      </Link>
+                    </li>
+                  )}
                   <li><Link to="/about" className="hover:text-white transition-colors">About Mt. Kalisungan</Link></li>
                   <li><Link to="/map" className="hover:text-white transition-colors">Trail Map</Link></li>
                   <li><Link to="/booking" className="hover:text-white transition-colors">Book a Hike</Link></li>
                   <li><Link to="/chat" className="hover:text-white transition-colors">AI Assistant</Link></li>
-                  <li><Link to="/register" className="hover:text-white transition-colors">Create Account</Link></li>
+                  {!user && <li><Link to="/register" className="hover:text-white transition-colors">Create Account</Link></li>}
                 </ul>
               </div>
 

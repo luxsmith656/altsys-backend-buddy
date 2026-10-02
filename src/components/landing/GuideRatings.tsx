@@ -1,9 +1,20 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Star, Award, Users } from 'lucide-react';
+import { Star, Award, Users, Search, ArrowRight } from 'lucide-react';
 import { getTop3Guides, type GuideRating } from '@/lib/guideRatings';
 import { supabase } from '@/integrations/supabase/client';
 import { GUIDE_DIRECTORY, guidePhotoForName } from '@/lib/guideDirectory';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Badge } from '@/components/ui/badge';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from '@/components/ui/dialog';
 
 function StarDisplay({ rating, size = 'sm' }: { rating: number; size?: 'sm' | 'lg' }) {
   const full = Math.floor(rating);
@@ -87,7 +98,10 @@ function GuideCard({ guide, rank, index, photoUrl }: { guide: GuideRating; rank:
 }
 
 export default function GuideRatings() {
+  const navigate = useNavigate();
   const [guides, setGuides] = useState<GuideRating[]>([]);
+  const [allGuidesOpen, setAllGuidesOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
 
   useEffect(() => {
     const localRatings = getTop3Guides();
@@ -109,6 +123,16 @@ export default function GuideRatings() {
     void load();
   }, []);
 
+  const top3Guides = useMemo(() => guides.slice(0, 3), [guides]);
+
+  const filteredGuides = useMemo(() => {
+    const q = searchQuery.toLowerCase().trim();
+    if (!q) return guides;
+    return guides.filter(
+      (g) => g.guideName.toLowerCase().includes(q) || g.trail.toLowerCase().includes(q)
+    );
+  }, [guides, searchQuery]);
+
   if (guides.length === 0) return null;
 
   return (
@@ -126,17 +150,37 @@ export default function GuideRatings() {
             <span className="h-px w-7 bg-amber-500/50" />
           </div>
           <h2 className="text-3xl md:text-4xl font-bold mb-3">
-            Our <span className="text-gradient">Top Rated</span> Local Guides
+            Our <span className="text-gradient">Top 3 Rated</span> Local Guides
           </h2>
           <p className="text-base text-muted-foreground max-w-xl mx-auto">
             These guides have earned the highest ratings from verified hikers. Rankings update automatically based on new reviews.
           </p>
         </motion.div>
 
+        {/* Featured strictly top 3 guides */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
-          {guides.map((guide, i) => (
-            <GuideCard key={guide.guideId} guide={guide} rank={(i % 3) + 1} index={i} photoUrl={(guide as GuideRating & { photoUrl?: string | null }).photoUrl} />
+          {top3Guides.map((guide, i) => (
+            <GuideCard
+              key={guide.guideId}
+              guide={guide}
+              rank={i + 1}
+              index={i}
+              photoUrl={(guide as GuideRating & { photoUrl?: string | null }).photoUrl}
+            />
           ))}
+        </div>
+
+        {/* View all guides button */}
+        <div className="flex justify-center mt-10">
+          <Button
+            variant="outline"
+            size="lg"
+            onClick={() => setAllGuidesOpen(true)}
+            className="gap-2 px-6 border-amber-500/30 hover:border-amber-500 hover:bg-amber-500/10 text-foreground shadow-sm"
+          >
+            <Users className="h-4 w-4 text-amber-500" />
+            View All Accredited Guides ({guides.length})
+          </Button>
         </div>
 
         <motion.p
@@ -148,6 +192,84 @@ export default function GuideRatings() {
           Rankings are based on verified post-hike ratings submitted by hikers who completed their trek. Updated in real-time.
         </motion.p>
       </div>
+
+      {/* Directory Modal */}
+      <Dialog open={allGuidesOpen} onOpenChange={setAllGuidesOpen}>
+        <DialogContent className="max-w-2xl max-h-[85vh] flex flex-col p-6">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-xl font-bold">
+              <Users className="h-5 w-5 text-primary" /> Accredited Local Guides Directory
+            </DialogTitle>
+            <DialogDescription>
+              Meet our certified Mt. Kalisungan community guides. You may book directly with a guide's referral link or let the system auto-assign upon arrival.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="relative my-2">
+            <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+            <Input
+              placeholder="Search guides by name or specialty..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="pl-9 text-xs sm:text-sm h-9"
+            />
+          </div>
+
+          <div className="overflow-y-auto space-y-2.5 pr-1 max-h-[50vh] mt-2">
+            {filteredGuides.map((guide) => {
+              const photo = (guide as any).photoUrl;
+              return (
+                <div
+                  key={guide.guideId}
+                  className="flex items-center justify-between gap-3 p-3 rounded-xl border border-border/60 bg-card hover:border-primary/40 transition-colors"
+                >
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className="w-11 h-11 rounded-full bg-primary/20 flex items-center justify-center flex-shrink-0 text-primary font-black text-base">
+                      {photo ? (
+                        <img src={photo} alt={guide.guideName} className="h-11 w-11 rounded-full object-cover" />
+                      ) : (
+                        guide.guideName.charAt(0)
+                      )}
+                    </div>
+                    <div className="min-w-0">
+                      <p className="font-bold text-sm text-foreground truncate">{guide.guideName}</p>
+                      <p className="text-xs text-muted-foreground truncate">{guide.trail}</p>
+                      <div className="flex items-center gap-2 mt-0.5">
+                        <Badge variant="outline" className="text-[10px] bg-primary/5 text-primary border-primary/20">
+                          Accredited Guide
+                        </Badge>
+                        {guide.avgRating > 0 && (
+                          <span className="text-xs font-semibold text-amber-500 flex items-center gap-0.5">
+                            ★ {guide.avgRating.toFixed(1)}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    onClick={() => {
+                      setAllGuidesOpen(false);
+                      navigate(`/booking?guide=${encodeURIComponent(guide.guideId)}`);
+                    }}
+                    className="text-xs shrink-0 gap-1"
+                  >
+                    <span>Book with Referral</span>
+                    <ArrowRight className="h-3 w-3" />
+                  </Button>
+                </div>
+              );
+            })}
+            {filteredGuides.length === 0 && (
+              <div className="text-center py-8 text-xs text-muted-foreground">
+                No guides found matching &quot;{searchQuery}&quot;
+              </div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
     </section>
   );
 }

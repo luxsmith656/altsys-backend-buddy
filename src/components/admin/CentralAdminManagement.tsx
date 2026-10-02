@@ -33,12 +33,14 @@ import {
   Phone,
   Calendar,
   Lock,
+  Plus,
 } from 'lucide-react';
 import { useLocations } from '@/hooks/useLocations';
 import {
   fetchAdminsList,
   resetAdminPassword,
   updateAdminInfo,
+  createAdminAccount,
   type AdminAccount,
 } from '@/lib/adminManagementService';
 
@@ -47,6 +49,15 @@ export default function CentralAdminManagement() {
   const [admins, setAdmins] = useState<AdminAccount[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
+
+  // Add admin dialog state
+  const [addAdminOpen, setAddAdminOpen] = useState(false);
+  const [addFullName, setAddFullName] = useState('');
+  const [addEmail, setAddEmail] = useState('');
+  const [addPhone, setAddPhone] = useState('');
+  const [addLocationId, setAddLocationId] = useState<string>('unassigned');
+  const [addPassword, setAddPassword] = useState('');
+  const [creatingAdmin, setCreatingAdmin] = useState(false);
 
   // Password reset dialog state
   const [resetTarget, setResetTarget] = useState<AdminAccount | null>(null);
@@ -141,6 +152,47 @@ export default function CentralAdminManagement() {
     }
   };
 
+  const handleExecuteAddAdmin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!addFullName.trim()) {
+      toast.error('Admin name is required');
+      return;
+    }
+    if (!addEmail.trim() || !addEmail.includes('@')) {
+      toast.error('Valid email address is required');
+      return;
+    }
+    if (addPassword && addPassword.length < 6) {
+      toast.error('Password must be at least 6 characters');
+      return;
+    }
+
+    setCreatingAdmin(true);
+    try {
+      const selectedLoc = locations.find((l) => l.id === addLocationId);
+      const res = await createAdminAccount({
+        fullName: addFullName.trim(),
+        email: addEmail.trim(),
+        phone: addPhone.trim(),
+        locationId: addLocationId === 'unassigned' ? null : addLocationId,
+        locationName: selectedLoc ? selectedLoc.name : 'Unassigned',
+        password: addPassword || undefined,
+      });
+      toast.success(res.message);
+      setAddAdminOpen(false);
+      setAddFullName('');
+      setAddEmail('');
+      setAddPhone('');
+      setAddLocationId('unassigned');
+      setAddPassword('');
+      await loadData();
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to create admin');
+    } finally {
+      setCreatingAdmin(false);
+    }
+  };
+
   const filteredAdmins = admins.filter((a) => {
     const q = search.toLowerCase();
     return (
@@ -174,6 +226,9 @@ export default function CentralAdminManagement() {
           </div>
           <Button variant="outline" size="sm" onClick={loadData} disabled={loading} className="gap-1.5 text-xs">
             <RefreshCw className={`h-3.5 w-3.5 ${loading ? 'animate-spin' : ''}`} /> Refresh
+          </Button>
+          <Button size="sm" onClick={() => setAddAdminOpen(true)} className="gap-1.5 text-xs glow-primary">
+            <Plus className="h-3.5 w-3.5" /> Add Admin
           </Button>
         </div>
       </div>
@@ -400,6 +455,108 @@ export default function CentralAdminManagement() {
               </Button>
               <Button type="submit" disabled={savingEdit}>
                 {savingEdit ? 'Saving...' : 'Save Changes'}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Add Administrator Dialog ── */}
+      <Dialog open={addAdminOpen} onOpenChange={setAddAdminOpen}>
+        <DialogContent className="sm:max-w-md">
+          <form onSubmit={handleExecuteAddAdmin}>
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2 text-base">
+                <Plus className="h-4 w-4 text-primary" />
+                Add New Administrator
+              </DialogTitle>
+              <DialogDescription>
+                Create a trailhead station administrator or central system admin account.
+              </DialogDescription>
+            </DialogHeader>
+
+            <div className="space-y-4 py-4 text-xs">
+              <div className="space-y-1.5">
+                <Label htmlFor="addAdminName" className="text-xs font-semibold">
+                  Full Name <span className="text-destructive">*</span>
+                </Label>
+                <Input
+                  id="addAdminName"
+                  placeholder="e.g. Maria Santos"
+                  value={addFullName}
+                  onChange={(e) => setAddFullName(e.target.value)}
+                  required
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="addAdminEmail" className="text-xs font-semibold">
+                  Official Email Address <span className="text-destructive">*</span>
+                </Label>
+                <Input
+                  id="addAdminEmail"
+                  type="email"
+                  placeholder="e.g. msantos@kalisungan.ph"
+                  value={addEmail}
+                  onChange={(e) => setAddEmail(e.target.value)}
+                  required
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="addAdminPhone" className="text-xs font-semibold">
+                  Contact Phone Number
+                </Label>
+                <Input
+                  id="addAdminPhone"
+                  placeholder="+63 9XX XXX XXXX"
+                  value={addPhone}
+                  onChange={(e) => setAddPhone(e.target.value)}
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="addAdminStation" className="text-xs font-semibold">
+                  Assigned Trailhead Station
+                </Label>
+                <Select value={addLocationId} onValueChange={setAddLocationId}>
+                  <SelectTrigger id="addAdminStation">
+                    <SelectValue placeholder="Select Trailhead" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="unassigned">Unassigned / General</SelectItem>
+                    {locations.map((loc) => (
+                      <SelectItem key={loc.id} value={loc.id}>
+                        {loc.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="addAdminPassword" className="text-xs font-semibold">
+                  Temporary Initial Password
+                </Label>
+                <Input
+                  id="addAdminPassword"
+                  type="password"
+                  placeholder="Defaults to kalisungan2026 (min 6 chars)"
+                  value={addPassword}
+                  onChange={(e) => setAddPassword(e.target.value)}
+                />
+                <span className="text-[11px] text-muted-foreground">
+                  The new administrator can reset their password upon initial login.
+                </span>
+              </div>
+            </div>
+
+            <DialogFooter className="gap-2 sm:gap-0">
+              <Button type="button" variant="ghost" onClick={() => setAddAdminOpen(false)}>
+                Cancel
+              </Button>
+              <Button type="submit" disabled={creatingAdmin} className="glow-primary">
+                {creatingAdmin ? 'Creating...' : 'Create Administrator'}
               </Button>
             </DialogFooter>
           </form>
