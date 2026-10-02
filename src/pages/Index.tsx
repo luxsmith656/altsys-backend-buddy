@@ -1,7 +1,7 @@
 import { Link, useNavigate } from 'react-router-dom';
 import { useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
-import { Mountain, ArrowUpRight, Wind, Trees, MapPin, LayoutDashboard } from 'lucide-react';
+import { Mountain, ArrowUpRight, Wind, Trees, MapPin } from 'lucide-react';
 import { motion, useReducedMotion } from 'framer-motion';
 import MountainMist from '@/components/landing/MountainMist';
 import heroImage from '@/assets/mt-kalisungan-hero.jpg';
@@ -12,7 +12,6 @@ import GuideRatings from '@/components/landing/GuideRatings';
 import TrailOverview from '@/components/landing/TrailOverview';
 import ReservingGuide from '@/components/landing/ReservingGuide';
 import { useAuth } from '@/hooks/useAuth';
-import { getRoleHomePath } from '@/lib/authRoles';
 
 type LiveWeather = {
   temperature: number;
@@ -22,15 +21,8 @@ type LiveWeather = {
 };
 
 function useLiveWeather(): { weather: LiveWeather | null; loading: boolean; error: string | null } {
-  const [weather, setWeather] = useState<LiveWeather | null>(() => {
-    if (typeof window === 'undefined') return null;
-    try {
-      const saved = localStorage.getItem('cached_live_weather');
-      if (saved) return JSON.parse(saved);
-    } catch {}
-    return null;
-  });
-  const [loading, setLoading] = useState(false);
+  const [weather, setWeather] = useState<LiveWeather | null>(null);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -40,11 +32,7 @@ function useLiveWeather(): { weather: LiveWeather | null; loading: boolean; erro
       try {
         const url =
           'https://api.open-meteo.com/v1/forecast?latitude=14.1475&longitude=121.3454&current=temperature_2m,wind_speed_10m,relative_humidity_2m,weather_code';
-        const controller = new AbortController();
-        const timer = setTimeout(() => controller.abort(), 3500);
-
-        const resp = await fetch(url, { signal: controller.signal });
-        clearTimeout(timer);
+        const resp = await fetch(url);
         if (!resp.ok) throw new Error(`Weather error ${resp.status}`);
         const data = await resp.json();
         if (cancelled || !data.current) return;
@@ -59,22 +47,15 @@ function useLiveWeather(): { weather: LiveWeather | null; loading: boolean; erro
         else if ([95, 96, 99].includes(code)) label = 'Thunderstorm';
         else if ([56, 57, 66, 67].includes(code)) label = 'Freezing rain';
 
-        const result: LiveWeather = {
+        setWeather({
           temperature: data.current.temperature_2m,
           windSpeed: data.current.wind_speed_10m,
           humidity: data.current.relative_humidity_2m,
           weatherLabel: label,
-        };
-
-        setWeather(result);
-        try {
-          localStorage.setItem('cached_live_weather', JSON.stringify(result));
-        } catch {}
+        });
         setError(null);
       } catch (e: unknown) {
-        if (!weather) {
-          setError(e instanceof Error ? e.message : 'Could not load weather');
-        }
+        setError(e instanceof Error ? e.message : 'Could not load weather');
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -187,7 +168,7 @@ function WaveDivider({ className = '' }: { className?: string }) {
 export default function Index() {
   const { weather, loading, error } = useLiveWeather();
   const reduceMotion = useReducedMotion();
-  const { user, role } = useAuth();
+  const { user } = useAuth();
   const navigate = useNavigate();
 
   const handleLearnMore = () => {
@@ -238,29 +219,14 @@ export default function Index() {
               </p>
 
               <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 justify-center lg:justify-start">
-                {user ? (
-                  <>
-                    <Button size="lg" className="text-base px-8 glow-primary" onClick={() => navigate(role ? getRoleHomePath(role) : '/dashboard')}>
-                      <span className="inline-flex items-center">
-                        <LayoutDashboard className="mr-2 h-4 w-4" /> Go to Dashboard <ArrowUpRight className="ml-1.5 h-4 w-4" />
-                      </span>
-                    </Button>
-                    <Button variant="outline" size="lg" className="text-base px-8 bg-white/10 hover:bg-white/20 text-white border-white/20" onClick={handleBookNow}>
-                      Book a Hike
-                    </Button>
-                  </>
-                ) : (
-                  <>
-                    <Button size="lg" className="text-base px-8 glow-primary" onClick={handleBookNow}>
-                      <span className="inline-flex items-center">
-                        Book Now <ArrowUpRight className="ml-2 h-4 w-4" />
-                      </span>
-                    </Button>
-                    <Button variant="outline" size="lg" className="text-base px-8" onClick={handleLearnMore}>
-                      Learn More
-                    </Button>
-                  </>
-                )}
+                <Button size="lg" className="text-base px-8 glow-primary" onClick={handleBookNow}>
+                  <span className="inline-flex items-center">
+                    Book Now <ArrowUpRight className="ml-2 h-4 w-4" />
+                  </span>
+                </Button>
+                <Button variant="outline" size="lg" className="text-base px-8" onClick={handleLearnMore}>
+                  Learn More
+                </Button>
               </div>
 
               <div className="hidden sm:flex mt-8 gap-6 text-xs sm:text-sm text-white/70 drop-shadow-[0_8px_24px_rgba(0,0,0,0.35)]">
@@ -356,56 +322,30 @@ export default function Index() {
         </motion.div>
       </section>
 
-      <section id="learn-more" className="py-12 md:py-16 px-4 bg-background border-t border-border/30">
+      <section id="learn-more" className="py-10 md:py-14 px-4 bg-background">
         <div className="container max-w-5xl mx-auto">
-          <div className="text-center max-w-3xl mx-auto mb-10">
+          <div className="text-center max-w-3xl mx-auto">
             <div className="inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.14em] text-primary/80 mb-3">
               <span className="h-px w-7 bg-primary/50" />
-              Essential Mountain Profile
+              About the Mountain
               <span className="h-px w-7 bg-primary/50" />
             </div>
             <h2 className="text-3xl md:text-4xl font-bold mb-4 leading-tight">
-              About <span className="text-gradient">Mt. Kalisungan</span>
+              <span className="text-gradient">Mt. Kalisungan</span>
             </h2>
             <p className="text-base md:text-lg text-muted-foreground leading-relaxed">
-              Mount Kalisungan (622 MASL) is Calauan, Laguna\'s crown natural destination — famous for its
-              gentle orchard trails, dramatic cogon grassland summit ridge, historical World War II significance,
-              and 360-degree views of the Seven Crater Lakes and surrounding mountain peaks.
+              Mount Kalisungan is a well-known hiking destination in Calauan, Laguna, recognized for its
+              open grassland trails and scenic summit views. The mountain features a mix of gentle slopes and
+              gradual ascents, making it accessible for beginners while still enjoyable for experienced hikers.
+              <br /><br />
+              From the summit, hikers are rewarded with wide views of Laguna and nearby mountain ranges, especially
+              during sunrise and sunset.
             </p>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-            <div className="glass-card rounded-2xl p-4 text-center border-border/60">
-              <div className="text-xs uppercase tracking-wider text-muted-foreground font-semibold">Peak Elevation</div>
-              <div className="text-2xl font-bold text-foreground mt-1">622 MASL</div>
-              <p className="text-xs text-muted-foreground mt-1">2,041 ft • Minor climb (3/9)</p>
+            <div className="mt-5 flex flex-wrap justify-center gap-2">
+              <span className="px-3 py-1 rounded-full text-xs bg-primary/10 text-primary border border-primary/20">Calauan, Laguna</span>
+              <span className="px-3 py-1 rounded-full text-xs bg-secondary/60 text-foreground border border-border/40">Lamot - Nagcarlan routes</span>
+              <span className="px-3 py-1 rounded-full text-xs bg-secondary/60 text-foreground border border-border/40">Sunrise ridge treks</span>
             </div>
-
-            <div className="glass-card rounded-2xl p-4 text-center border-border/60">
-              <div className="text-xs uppercase tracking-wider text-muted-foreground font-semibold">Jump-Off Points</div>
-              <div className="text-2xl font-bold text-foreground mt-1">3 Trailheads</div>
-              <p className="text-xs text-muted-foreground mt-1">Lamot 1 • Lamot 2 • Sto. Tomas</p>
-            </div>
-
-            <div className="glass-card rounded-2xl p-4 text-center border-emerald-500/30 bg-emerald-500/5">
-              <div className="text-xs uppercase tracking-wider text-emerald-600 dark:text-emerald-400 font-semibold">River Crossings</div>
-              <div className="text-2xl font-bold text-emerald-600 dark:text-emerald-400 mt-1">Strictly 0</div>
-              <p className="text-xs text-muted-foreground mt-1">Safe dry paths • No flood risks</p>
-            </div>
-
-            <div className="glass-card rounded-2xl p-4 text-center border-border/60">
-              <div className="text-xs uppercase tracking-wider text-muted-foreground font-semibold">Summit Panorama</div>
-              <div className="text-2xl font-bold text-foreground mt-1">7 Lakes & Peaks</div>
-              <p className="text-xs text-muted-foreground mt-1">Makiling • Banahaw • San Pablo</p>
-            </div>
-          </div>
-
-          <div className="text-center">
-            <Button asChild variant="outline" size="lg" className="rounded-xl border-primary/30 hover:border-primary">
-              <Link to="/about">
-                Explore Full Mountain Facts & History <ArrowUpRight className="ml-2 h-4 w-4" />
-              </Link>
-            </Button>
           </div>
         </div>
       </section>
@@ -474,27 +414,12 @@ export default function Index() {
                 </h2>
                 <p className="text-lg text-white/80 mb-8 font-medium">Reserve your slot now and start your adventure.</p>
                 <div className="flex flex-col sm:flex-row gap-4 justify-center">
-                  {user ? (
-                    <>
-                      <Button asChild size="lg" className="text-base px-8 bg-white text-emerald-900 hover:bg-white/90 shadow-lg">
-                        <Link to={role ? getRoleHomePath(role) : '/dashboard'}>
-                          <LayoutDashboard className="mr-2 h-4 w-4" /> Go to Dashboard
-                        </Link>
-                      </Button>
-                      <Button asChild variant="outline" size="lg" className="text-base px-8 border-white/30 bg-transparent text-white hover:bg-white/10 hover:text-white">
-                        <Link to="/booking">Book a Hike</Link>
-                      </Button>
-                    </>
-                  ) : (
-                    <>
-                      <Button asChild size="lg" className="text-base px-8 bg-white text-emerald-900 hover:bg-white/90 shadow-lg">
-                        <Link to="/register">Create Account</Link>
-                      </Button>
-                      <Button asChild variant="outline" size="lg" className="text-base px-8 border-white/30 bg-transparent text-white hover:bg-white/10 hover:text-white">
-                        <Link to="/login">Sign In</Link>
-                      </Button>
-                    </>
-                  )}
+                  <Button asChild size="lg" className="text-base px-8 bg-white text-emerald-900 hover:bg-white/90 shadow-lg">
+                    <Link to="/register">Create Account</Link>
+                  </Button>
+                  <Button asChild variant="outline" size="lg" className="text-base px-8 border-white/30 bg-transparent text-white hover:bg-white/10 hover:text-white">
+                    <Link to="/login">Sign In</Link>
+                  </Button>
                 </div>
               </motion.div>
             </div>
@@ -536,18 +461,10 @@ export default function Index() {
               <div>
                 <h4 className="text-xs sm:text-sm font-semibold text-white mb-2 sm:mb-3 uppercase tracking-wider">Quick Links</h4>
                 <ul className="space-y-1 sm:space-y-2 text-xs sm:text-sm">
-                  {user && (
-                    <li>
-                      <Link to={role ? getRoleHomePath(role) : '/dashboard'} className="hover:text-white transition-colors flex items-center gap-1.5 font-medium text-emerald-400">
-                        <LayoutDashboard className="h-3 w-3" /> Dashboard
-                      </Link>
-                    </li>
-                  )}
-                  <li><Link to="/about" className="hover:text-white transition-colors">About Mt. Kalisungan</Link></li>
                   <li><Link to="/map" className="hover:text-white transition-colors">Trail Map</Link></li>
                   <li><Link to="/booking" className="hover:text-white transition-colors">Book a Hike</Link></li>
                   <li><Link to="/chat" className="hover:text-white transition-colors">AI Assistant</Link></li>
-                  {!user && <li><Link to="/register" className="hover:text-white transition-colors">Create Account</Link></li>}
+                  <li><Link to="/register" className="hover:text-white transition-colors">Create Account</Link></li>
                 </ul>
               </div>
 
