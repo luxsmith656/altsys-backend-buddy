@@ -59,6 +59,7 @@ export default function CentralAdminManagement() {
   const [editName, setEditName] = useState('');
   const [editPhone, setEditPhone] = useState('');
   const [editLocationId, setEditLocationId] = useState<string>('');
+  const [editStatus, setEditStatus] = useState<'active' | 'deactivated'>('active');
   const [savingEdit, setSavingEdit] = useState(false);
 
   const loadData = useCallback(async () => {
@@ -113,6 +114,7 @@ export default function CentralAdminManagement() {
     setEditName(admin.fullName);
     setEditPhone(admin.phone);
     setEditLocationId(admin.locationId || 'unassigned');
+    setEditStatus(admin.status === 'deactivated' ? 'deactivated' : 'active');
   };
 
   const handleSaveEdit = async (e: React.FormEvent) => {
@@ -127,6 +129,7 @@ export default function CentralAdminManagement() {
         phone: editPhone,
         locationId: editLocationId === 'unassigned' ? null : editLocationId,
         locationName: selectedLoc ? selectedLoc.name : 'Unassigned',
+        status: editStatus,
       });
       toast.success(res.message);
       setEditTarget(null);
@@ -188,9 +191,20 @@ export default function CentralAdminManagement() {
                     <CardTitle className="text-sm font-bold flex items-center gap-1.5">
                       {admin.fullName}
                     </CardTitle>
-                    <Badge variant="outline" className="text-[10px] mt-0.5 bg-primary/5 text-primary border-primary/20">
-                      {admin.role.toUpperCase()}
-                    </Badge>
+                    <div className="flex items-center gap-1.5 mt-0.5">
+                      <Badge variant="outline" className="text-[10px] bg-primary/5 text-primary border-primary/20">
+                        {admin.role.toUpperCase()}
+                      </Badge>
+                      {admin.status === 'deactivated' ? (
+                        <Badge variant="destructive" className="text-[10px]">
+                          Deactivated
+                        </Badge>
+                      ) : (
+                        <Badge variant="outline" className="text-[10px] bg-emerald-500/10 text-emerald-600 border-emerald-500/30">
+                          Active
+                        </Badge>
+                      )}
+                    </div>
                   </div>
                 </div>
               </div>
@@ -360,6 +374,21 @@ export default function CentralAdminManagement() {
                         {loc.name}
                       </SelectItem>
                     ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="editAdminStatus" className="text-xs font-semibold">
+                  Account Access Status
+                </Label>
+                <Select value={editStatus} onValueChange={(v) => setEditStatus(v as 'active' | 'deactivated')}>
+                  <SelectTrigger id="editAdminStatus">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="active">Active (Permitted to sign in & manage)</SelectItem>
+                    <SelectItem value="deactivated">Deactivated (Blocked from accessing system)</SelectItem>
                   </SelectContent>
                 </Select>
               </div>

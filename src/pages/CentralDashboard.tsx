@@ -178,49 +178,7 @@ export default function CentralDashboard() {
             </div>
           </div>
 
-          {/* Trailhead Quick Filter Pills */}
-          <div className="mt-4 flex flex-wrap items-center gap-1.5 p-1 rounded-2xl bg-secondary/30 border border-border/30 w-fit">
-            <button
-              type="button"
-              onClick={() => setActiveLocationId(null)}
-              className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all ${
-                !activeLocationId
-                  ? 'bg-primary text-primary-foreground shadow-sm'
-                  : 'text-muted-foreground hover:text-foreground hover:bg-secondary/60'
-              }`}
-            >
-              All Trailheads
-            </button>
-            {locations.map((loc) => {
-              const isSelected = activeLocationId === loc.id;
-              const locStat = stats.find((s) => s.id === loc.id);
-              return (
-                <button
-                  key={loc.id}
-                  type="button"
-                  onClick={() => setActiveLocationId(loc.id)}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition-all ${
-                    isSelected
-                      ? 'bg-primary text-primary-foreground shadow-sm'
-                      : 'text-muted-foreground hover:text-foreground hover:bg-secondary/60'
-                  }`}
-                >
-                  <MapPin className="h-3 w-3" />
-                  <span>{loc.name}</span>
-                  {locStat && (
-                    <span
-                      className={`ml-1 px-1.5 py-0.2 rounded-full text-[10px] ${
-                        isSelected ? 'bg-primary-foreground/20 text-primary-foreground' : 'bg-muted text-muted-foreground'
-                      }`}
-                    >
-                      {locStat.bookingsTotal}
-                    </span>
-                  )}
-                </button>
-              );
-            })}
-          </div>
-        </motion.div>
+          </motion.div>
 
         {loadError && (
           <div role="alert" className="mb-4 flex items-center gap-2 rounded-md border border-destructive/40 p-3 text-sm text-destructive">
@@ -344,18 +302,7 @@ export default function CentralDashboard() {
                         <Row label="Total hikers (pax)" value={s.totalHikers} />
                         <Row label="Recorded revenue" value={`₱${s.revenue.toLocaleString()}`} />
                         <Row label="Active hikers on trail" value={s.activeHikers} />
-                        {!isCurrentFilter && (
-                          <div className="pt-2">
-                            <Button
-                              variant="secondary"
-                              size="sm"
-                              className="w-full text-xs font-semibold"
-                              onClick={() => setActiveLocationId(s.id)}
-                            >
-                              Filter to {s.name}
-                            </Button>
-                          </div>
-                        )}
+                        
                       </CardContent>
                     </Card>
                   );

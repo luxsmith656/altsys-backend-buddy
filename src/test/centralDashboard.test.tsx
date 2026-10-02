@@ -99,19 +99,15 @@ describe('CentralDashboard', () => {
     expect(screen.queryByRole('button', { name: /walk-in/i })).not.toBeInTheDocument();
   });
 
-  it('renders trailhead filter pills and switches active trailhead on click', async () => {
+  it('relies on the location dropdown switcher and has no filter pill buttons', async () => {
     render(<CentralDashboard />);
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: 'All Trailheads' })).toBeInTheDocument();
+      expect(screen.getByTestId('location-switcher')).toBeInTheDocument();
     });
 
-    const lamot1Buttons = screen.getAllByRole('button', { name: /Lamot 1/i });
-    expect(lamot1Buttons.length).toBeGreaterThan(0);
-    const lamot2Buttons = screen.getAllByRole('button', { name: /Lamot 2/i });
-    expect(lamot2Buttons.length).toBeGreaterThan(0);
-
-    fireEvent.click(lamot1Buttons[0]);
-    expect(mockSetActiveLocationId).toHaveBeenCalledWith('lamot1');
+    // Verify filter pill buttons and card filter buttons have been cleanly removed
+    expect(screen.queryByRole('button', { name: 'All Trailheads' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Filter to Lamot 1/i })).not.toBeInTheDocument();
   });
 
   it('renders actual bookings breakdown table with real data', async () => {

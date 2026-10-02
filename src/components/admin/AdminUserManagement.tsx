@@ -81,6 +81,7 @@ export default function AdminUserManagement({
   const [editEmergency, setEditEmergency] = useState('');
   const [editSpecialty, setEditSpecialty] = useState('');
   const [editStatus, setEditStatus] = useState('available');
+  const [editAccountStatus, setEditAccountStatus] = useState<'active' | 'deactivated'>('active');
   const [submittingEdit, setSubmittingEdit] = useState(false);
 
   // Delete modal
@@ -142,6 +143,7 @@ export default function AdminUserManagement({
     setEditEmergency(u.emergencyContact || '');
     setEditSpecialty(u.specialty || '');
     setEditStatus(u.status || 'available');
+    setEditAccountStatus(u.accountStatus === 'deactivated' || u.status === 'deactivated' ? 'deactivated' : 'active');
   };
 
   const handleSaveEdit = async (e: React.FormEvent) => {
@@ -155,7 +157,8 @@ export default function AdminUserManagement({
         phone: editPhone,
         emergencyContact: editEmergency,
         specialty: editSpecialty,
-        status: editStatus,
+        status: editAccountStatus === 'deactivated' ? 'deactivated' : editStatus,
+        accountStatus: editAccountStatus,
         locationId: editTarget.locationId,
       });
       toast.success(res.message);
@@ -286,7 +289,16 @@ export default function AdminUserManagement({
                         >
                           {isGuide ? 'TOUR GUIDE' : 'HIKER'}
                         </Badge>
-                        {isGuide && user.status && (
+                        {user.accountStatus === 'deactivated' || user.status === 'deactivated' ? (
+                          <Badge variant="destructive" className="text-[10px] py-0">
+                            Deactivated
+                          </Badge>
+                        ) : (
+                          <Badge variant="outline" className="text-[10px] py-0 bg-emerald-500/10 text-emerald-600 border-emerald-500/30">
+                            Active
+                          </Badge>
+                        )}
+                        {isGuide && user.status && user.status !== 'deactivated' && (
                           <span
                             className={`text-[10px] px-1.5 py-0.2 rounded-full font-semibold ${
                               user.status === 'available'
@@ -466,6 +478,21 @@ export default function AdminUserManagement({
                   onChange={(e) => setEditPhone(e.target.value)}
                   placeholder="+63 9XX XXX XXXX"
                 />
+              </div>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="editAccountStatus" className="text-xs font-semibold">
+                  Account Access Status
+                </Label>
+                <Select value={editAccountStatus} onValueChange={(v) => setEditAccountStatus(v as 'active' | 'deactivated')}>
+                  <SelectTrigger id="editAccountStatus">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="active">Active (Permitted to use account)</SelectItem>
+                    <SelectItem value="deactivated">Deactivated (Blocked from accessing system)</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
 
               {editTarget?.role === 'guide' ? (

@@ -12,9 +12,9 @@ interface KaliContextPanelProps {
 const severityRank = { high: 0, medium: 1, info: 2 } as const;
 
 function InsightIcon({ severity }: { severity: KaliInsight['severity'] }) {
-  if (severity === 'high') return <ShieldAlert className="h-4 w-4" />;
-  if (severity === 'medium') return <AlertTriangle className="h-4 w-4" />;
-  return <Info className="h-4 w-4" />;
+  if (severity === 'high') return <ShieldAlert className="h-3.5 w-3.5 shrink-0" />;
+  if (severity === 'medium') return <AlertTriangle className="h-3.5 w-3.5 shrink-0" />;
+  return <Info className="h-3.5 w-3.5 shrink-0" />;
 }
 
 function severityClasses(severity: KaliInsight['severity']) {
@@ -33,11 +33,11 @@ function followUpPrompt(insight: KaliInsight): string {
 }
 
 function thinkingLabel(insight: KaliInsight): string {
-  if (insight.kind === 'weather') return 'Kali is checking your weather window';
-  if (insight.kind === 'minor-review' || insight.kind === 'age-review') return 'Kali is checking your booking details';
-  if (insight.kind === 'group-guidance') return 'Kali is checking your group plan';
-  if (insight.kind === 'hike-type') return 'Kali is thinking about your hike type';
-  return 'Kali is thinking about your next step';
+  if (insight.kind === 'weather') return 'Weather check';
+  if (insight.kind === 'minor-review' || insight.kind === 'age-review') return 'Booking check';
+  if (insight.kind === 'group-guidance') return 'Group plan check';
+  if (insight.kind === 'hike-type') return 'Hike type advice';
+  return 'Kali Assistant';
 }
 
 export default function KaliContextPanel({ role, insights }: KaliContextPanelProps) {
@@ -72,17 +72,20 @@ export default function KaliContextPanel({ role, insights }: KaliContextPanelPro
     previousInsightIds.current = nextIds;
   }, [sortedInsights]);
 
-  // Kali is intentionally absent until there is actionable context to surface.
   if (!insight) return null;
 
   const label = `${insight.title}: ${insight.message}`;
   const askKali = (prompt = followUpPrompt(insight)) => {
     setOpen(false);
     setReply('');
-    window.dispatchEvent(new CustomEvent('open-global-ai-assistant', { detail: {
-      prompt,
-      guidance: visibleInsights.map(({ title, message }) => ({ title, message })),
-    } }));
+    window.dispatchEvent(
+      new CustomEvent('open-global-ai-assistant', {
+        detail: {
+          prompt,
+          guidance: visibleInsights.map(({ title, message }) => ({ title, message })),
+        },
+      })
+    );
   };
 
   const viewMinorRequirements = () => {
@@ -97,7 +100,7 @@ export default function KaliContextPanel({ role, insights }: KaliContextPanelPro
   };
 
   const acknowledgeInsight = (id: string) => {
-    setDismissedInsightIds((current) => current.includes(id) ? current : [...current, id]);
+    setDismissedInsightIds((current) => (current.includes(id) ? current : [...current, id]));
   };
 
   return (
@@ -105,99 +108,134 @@ export default function KaliContextPanel({ role, insights }: KaliContextPanelPro
       {open && (
         <section
           aria-label="Kali context guidance"
-          className="pointer-events-auto absolute bottom-16 right-0 w-[min(22rem,calc(100vw-1.5rem))] transform-gpu overflow-hidden rounded-3xl border border-border/50 bg-card/95 shadow-2xl backdrop-blur-md sm:bottom-16"
+          className="pointer-events-auto absolute bottom-14 right-0 w-[min(19rem,calc(100vw-1.5rem))] transform-gpu overflow-hidden rounded-2xl border border-border/70 bg-card/95 shadow-xl backdrop-blur-md sm:bottom-14"
         >
-          <header className="flex items-center gap-3 border-b border-border/30 px-4 py-3">
-            <KaliAvatar expression={reply ? 'listening' : insight.expression} activity={reply ? 'listening' : 'speaking'} size="sm" />
+          {/* Notification-style Compact Header */}
+          <header className="flex items-center gap-2 border-b border-border/30 bg-muted/30 px-3 py-1.5">
+            <KaliAvatar
+              expression={reply ? 'listening' : insight.expression}
+              activity={reply ? 'listening' : 'speaking'}
+              size="sm"
+              className="h-6 w-6"
+            />
             <div className="min-w-0 flex-1">
-              <p className="text-sm font-bold">{thinkingLabel(insight)}</p>
-              <p className="truncate text-[11px] text-muted-foreground">For {getKaliRoleLabel(role)}</p>
+              <div className="flex items-center gap-1.5">
+                <span className="text-[11px] font-bold text-foreground truncate">{thinkingLabel(insight)}</span>
+                <span className="text-[9px] px-1 rounded bg-primary/10 text-primary font-medium">{getKaliRoleLabel(role)}</span>
+              </div>
             </div>
-            <button type="button" onClick={dismissCurrentInsights} aria-label="Dismiss Kali reminder" className="grid h-9 w-9 place-items-center rounded-full text-muted-foreground hover:bg-secondary hover:text-foreground">
-              <X className="h-4 w-4" />
+            <button
+              type="button"
+              onClick={dismissCurrentInsights}
+              aria-label="Dismiss Kali reminder"
+              className="grid h-6 w-6 place-items-center rounded-full text-muted-foreground hover:bg-secondary hover:text-foreground transition-colors"
+            >
+              <X className="h-3.5 w-3.5" />
             </button>
           </header>
 
-          <div className="max-h-[min(70vh,34rem)] space-y-3 overscroll-contain overflow-y-auto p-4">
+          {/* Compact Notification Body */}
+          <div className="max-h-[22rem] space-y-2 overscroll-contain overflow-y-auto p-2.5 text-xs">
             {visibleInsights.map((item) => (
-                <div key={item.id} className={cn('flex items-start gap-2 rounded-2xl border p-3', severityClasses(item.severity))}>
-                  <InsightIcon severity={item.severity} />
-                  <div className="min-w-0 flex-1">
-                    <p className="text-xs font-bold">{item.title}</p>
-                    <p className="mt-1 text-sm leading-relaxed text-foreground">{item.message}</p>
-                    {item.kind === 'weather' && (
-                      <div className="mt-2.5 space-y-2 pt-2 border-t border-border/40">
-                        {/* Forecast metrics summary pills */}
-                        <div className="flex flex-wrap items-center gap-1.5 text-[11px] font-medium">
-                          <span className="inline-flex items-center gap-1 rounded-md bg-background/80 px-2 py-0.5 border border-border/40 text-foreground">
-                            🌧️ {Number(item.meta.rainProbability ?? 0)}% Rain
-                          </span>
-                          {item.meta.minTempC !== undefined && item.meta.maxTempC !== undefined && (
-                            <span className="inline-flex items-center gap-1 rounded-md bg-background/80 px-2 py-0.5 border border-border/40 text-foreground">
-                              🌡️ {Math.round(Number(item.meta.minTempC))}°–{Math.round(Number(item.meta.maxTempC))}°C
-                            </span>
-                          )}
-                          {Boolean(Number(item.meta.precipitationMm ?? 0) > 0) && (
-                            <span className="inline-flex items-center gap-1 rounded-md bg-background/80 px-2 py-0.5 border border-border/40 text-sky-600 dark:text-sky-400">
-                              💧 {item.meta.precipitationMm} mm
-                            </span>
-                          )}
-                        </div>
+              <div key={item.id} className={cn('flex items-start gap-2 rounded-xl border p-2', severityClasses(item.severity))}>
+                <InsightIcon severity={item.severity} />
+                <div className="min-w-0 flex-1">
+                  <p className="text-[11px] font-bold leading-tight">{item.title}</p>
+                  <p className="mt-0.5 text-xs leading-normal text-foreground">{item.message}</p>
 
-                        {/* Stating the forecast source name */}
-                        <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground pt-0.5">
-                          <span>Forecast Source:</span>
-                          <a
-                            href={String(item.meta?.sourceUrl || 'https://www.accuweather.com/en/ph/calauan/263792/weather-forecast/263792')}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="font-medium text-primary hover:underline inline-flex items-center gap-1"
-                          >
-                            <span>{String(item.meta?.sourceName || 'AccuWeather (Calauan, Laguna)')}</span>
-                            <ExternalLink className="h-2.5 w-2.5" />
-                          </a>
-                        </div>
+                  {item.kind === 'weather' && (
+                    <div className="mt-1.5 space-y-1 pt-1.5 border-t border-border/30">
+                      <div className="flex flex-wrap items-center gap-1 text-[10px] font-medium">
+                        <span className="inline-flex items-center gap-0.5 rounded bg-background/80 px-1.5 py-0.5 border border-border/40 text-foreground">
+                          🌧️ {Number(item.meta.rainProbability ?? 0)}% Rain
+                        </span>
+                        {item.meta.minTempC !== undefined && item.meta.maxTempC !== undefined && (
+                          <span className="inline-flex items-center gap-0.5 rounded bg-background/80 px-1.5 py-0.5 border border-border/40 text-foreground">
+                            🌡️ {Math.round(Number(item.meta.minTempC))}°–{Math.round(Number(item.meta.maxTempC))}°C
+                          </span>
+                        )}
+                        {Boolean(Number(item.meta.precipitationMm ?? 0) > 0) && (
+                          <span className="inline-flex items-center gap-0.5 rounded bg-background/80 px-1.5 py-0.5 border border-border/40 text-sky-600 dark:text-sky-400">
+                            💧 {item.meta.precipitationMm} mm
+                          </span>
+                        )}
                       </div>
-                    )}
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => acknowledgeInsight(item.id)}
-                    aria-label={`Acknowledge ${item.title}`}
-                    className="inline-flex shrink-0 items-center gap-1 rounded-lg border border-current/25 px-2 py-1 text-[10px] font-bold uppercase tracking-wide transition-colors hover:bg-background/50"
-                  >
-                    <Check className="h-3 w-3" /> OK
-                  </button>
+                      <div className="flex items-center gap-1 text-[10px] text-muted-foreground">
+                        <span>Forecast Source:</span>
+                        <a
+                          href={String(item.meta?.sourceUrl || 'https://www.accuweather.com/en/ph/calauan/263792/weather-forecast/263792')}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="font-medium text-primary hover:underline inline-flex items-center gap-0.5"
+                        >
+                          <span className="truncate max-w-[130px]">{String(item.meta?.sourceName || 'AccuWeather (Calauan, Laguna)')}</span>
+                          <ExternalLink className="h-2 w-2" />
+                        </a>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => acknowledgeInsight(item.id)}
+                  aria-label={`Acknowledge ${item.title}`}
+                  className="inline-flex shrink-0 items-center gap-0.5 rounded border border-current/25 px-1.5 py-0.5 text-[9px] font-bold uppercase transition-colors hover:bg-background/50"
+                >
+                  <Check className="h-2.5 w-2.5" /> OK
+                </button>
               </div>
             ))}
+
             {hasMinorRequirements && (
               <a
                 href="#minor-requirements"
                 onClick={viewMinorRequirements}
                 aria-label="View minor requirements"
-                className="block w-full rounded-xl border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-left text-xs font-bold text-amber-700 underline decoration-amber-500/60 underline-offset-2 transition-colors hover:bg-amber-500/20 dark:text-amber-300"
+                className="block w-full rounded-lg border border-amber-500/40 bg-amber-500/10 px-2 py-1 text-center text-[11px] font-bold text-amber-700 underline decoration-amber-500/60 transition-colors hover:bg-amber-500/20 dark:text-amber-300"
               >
                 View required documents
               </a>
             )}
-            <p className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
-              <BellRing className="h-3 w-3" /> Context checked just now. Confirm details with the responsible staff member when needed.
-            </p>
+
+            {/* Quick Action Button */}
             <button
               type="button"
               onClick={() => askKali()}
-              className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-primary px-3 py-2.5 text-xs font-bold text-primary-foreground shadow-sm transition-colors hover:bg-primary/90"
+              className="inline-flex h-8 w-full items-center justify-center gap-1.5 rounded-lg bg-primary px-2 text-xs font-semibold text-primary-foreground shadow-sm transition-colors hover:bg-primary/90"
             >
-              <MessageCircle className="h-4 w-4" /> Ask Kali in chat
+              <MessageCircle className="h-3.5 w-3.5" /> Ask Kali in chat
             </button>
-            <form className="flex gap-2" onSubmit={(event) => { event.preventDefault(); if (reply.trim()) askKali(reply.trim()); }}>
-              <input aria-label="Reply to Kali reminder" placeholder="Ask me about this..." value={reply} onChange={(event) => setReply(event.target.value)} className="min-w-0 flex-1 rounded-md border border-border bg-background px-3 py-2 text-sm" />
-              <button type="submit" disabled={!reply.trim()} aria-label="Send reply to Kali" className="grid h-11 w-11 shrink-0 place-items-center rounded-md bg-primary text-primary-foreground disabled:opacity-50"><Send className="h-4 w-4" /></button>
+
+            {/* Compact Reply Form */}
+            <form
+              className="flex gap-1.5"
+              onSubmit={(event) => {
+                event.preventDefault();
+                if (reply.trim()) askKali(reply.trim());
+              }}
+            >
+              <input
+                aria-label="Reply to Kali reminder"
+                placeholder="Ask Kali about this..."
+                value={reply}
+                onChange={(event) => setReply(event.target.value)}
+                className="h-8 min-w-0 flex-1 rounded-md border border-border bg-background px-2.5 text-xs placeholder:text-muted-foreground/70"
+              />
+              <button
+                type="submit"
+                disabled={!reply.trim()}
+                aria-label="Send reply to Kali"
+                className="grid h-8 w-8 shrink-0 place-items-center rounded-md bg-primary text-primary-foreground disabled:opacity-40 transition-colors"
+              >
+                <Send className="h-3.5 w-3.5" />
+              </button>
             </form>
           </div>
         </section>
       )}
 
+      {/* Floating Kali trigger button */}
       <button
         type="button"
         onClick={() => setOpen((current) => !current)}
@@ -205,11 +243,15 @@ export default function KaliContextPanel({ role, insights }: KaliContextPanelPro
         aria-expanded={open}
         title={label}
         className={cn(
-          'pointer-events-auto relative grid h-14 w-14 place-items-center rounded-full border-2 border-primary-foreground/20 bg-primary text-primary-foreground shadow-xl shadow-primary/30 transition-transform active:scale-95',
+          'pointer-events-auto relative grid h-12 w-12 sm:h-14 sm:w-14 place-items-center rounded-full border-2 border-primary-foreground/20 bg-primary text-primary-foreground shadow-xl shadow-primary/30 transition-transform active:scale-95',
           open && 'ring-2 ring-primary/30',
         )}
       >
-        <KaliAvatar expression={insight.expression} size="sm" className="h-11 w-11 rounded-full border border-primary-foreground/40 bg-primary/80" />
+        <KaliAvatar
+          expression={insight.expression}
+          size="sm"
+          className="h-9 w-9 sm:h-11 sm:w-11 rounded-full border border-primary-foreground/40 bg-primary/80"
+        />
       </button>
     </div>
   );

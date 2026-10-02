@@ -3,6 +3,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { User, type Session } from '@supabase/supabase-js';
 import type { AppRole } from '@/types';
 import { resolveAccountRole, resolveKnownAccountRole } from '@/lib/authRoles';
+import { isAccountDeactivated } from '@/lib/adminManagementService';
 
 interface AuthContextType {
   user: User | null;
@@ -76,6 +77,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
     setUser(session?.user ?? null);
 
+    if (session?.user && isAccountDeactivated(session.user.id, session.user.email)) {
+      void supabase.auth.signOut({ scope: 'local' });
+      setUser(null);
+      setRole(null);
+      setLoading(false);
+      setRoleError('This account has been deactivated. Please contact your administrator.');
+      return;
+    }
+
     if (!session?.user) {
       setRole(null);
       setRoleError(null);
@@ -137,6 +147,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [syncSession]);
 
   const signIn = async (email: string, password: string) => {
+    const cleanEmail = email.trim().toLowerCase();
+    if (isAccountDeactivated('', cleanEmail)) {
+      return { error: new Error('This account has been deactivated. Please contact your administrator.') };
+    }
     const maxRetries = 2;
     let lastError: Error | null = null;
 
