@@ -208,7 +208,7 @@ export default function AdminDashboard() {
 
   /* ── Guide state ── */
   /* ── Real guides loaded from DB, mapped to the legacy UI shape ── */
-  const { activeLocationId, isSuperAdmin, locations, setActiveLocationId, loading: locationsLoading } = useLocations();
+  const { activeLocationId, activeLocation, isSuperAdmin, locations, setActiveLocationId, loading: locationsLoading } = useLocations();
   const { user: adminUser, role, signOut } = useAuth();
   const navigate = useNavigate();
   const { theme, toggleTheme } = useTheme();

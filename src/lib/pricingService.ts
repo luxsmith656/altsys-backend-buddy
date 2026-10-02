@@ -52,11 +52,11 @@ function notifySubscribers(config: PricingConfig) {
 
 export async function fetchPricingConfig(): Promise<PricingConfig> {
   try {
-    const { data, error } = await supabase
+    const { data, error }: any = await (supabase
       .from('system_settings' as any)
       .select('value, updated_at, updated_by')
       .eq('key', 'pricing_config')
-      .maybeSingle();
+      .maybeSingle() as any);
 
     if (!error && data && data.value && typeof data.value === 'object') {
       const val = data.value as any;

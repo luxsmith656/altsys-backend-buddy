@@ -24,6 +24,7 @@ interface LocationsContextValue {
   myLocations: LocationRow[];
   /** Currently active location for filtering. null = "All locations" (super_admin only). */
   activeLocationId: string | null;
+  activeLocation: LocationRow | null;
   setActiveLocationId: (id: string | null) => void;
   isSuperAdmin: boolean;
   loading: boolean;
@@ -176,6 +177,7 @@ export function LocationsProvider({ children }: { children: ReactNode }) {
   }, [refresh]);
 
   const myLocations = locations.filter((l) => myLocationIds.includes(l.id));
+  const activeLocation = locations.find((l) => l.id === activeLocationId) || null;
 
   return (
     <Ctx.Provider
@@ -183,6 +185,7 @@ export function LocationsProvider({ children }: { children: ReactNode }) {
         locations,
         myLocations,
         activeLocationId,
+        activeLocation,
         setActiveLocationId,
         isSuperAdmin,
         loading: loading && locations.length === 0,

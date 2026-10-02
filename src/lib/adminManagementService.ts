@@ -161,7 +161,7 @@ export async function fetchAdminsList(): Promise<AdminAccount[]> {
     const stored = getStoredAdmins();
 
     if (adminRoles && adminRoles.length > 0) {
-      const combined = adminRoles.map((r) => {
+      const combined: AdminAccount[] = adminRoles.map((r) => {
         const prof = (profiles ?? []).find((p) => p.user_id === r.user_id);
         const ul = (userLocs ?? []).find((l) => l.user_id === r.user_id);
         const seed = stored.find((s) => s.userId === r.user_id);
@@ -398,9 +398,9 @@ export async function fetchUsersList(locationId?: string | null): Promise<UserAc
 
     const { data: guidesData } = await guideQuery;
 
-    let bookingQuery = supabase
-      .from('bookings')
-      .select('id, user_id, full_name, contact_phone, contact_email, emergency_contact, location_id, created_at')
+    let bookingQuery: any = supabase
+      .from('bookings' as any)
+      .select('id, user_id, contact_phone, contact_email, notes, emergency_contact_name, emergency_contact_phone, location_id, created_at')
       .order('created_at', { ascending: false });
 
     if (locationId) {
@@ -443,7 +443,7 @@ export async function fetchUsersList(locationId?: string | null): Promise<UserAc
     // Map hikers
     const seenEmails = new Set<string>();
     if (bookingsData) {
-      for (const b of bookingsData) {
+      for (const b of (bookingsData as any[])) {
         const email = b.contact_email?.trim().toLowerCase();
         if (email && seenEmails.has(email)) continue;
         if (email) seenEmails.add(email);
@@ -452,13 +452,22 @@ export async function fetchUsersList(locationId?: string | null): Promise<UserAc
         const uId = b.user_id || b.id;
         const isDeact = isAccountDeactivated(uId, b.contact_email);
 
+        let leadName = prof?.full_name || '';
+        try {
+          if (b.notes) {
+            const meta = typeof b.notes === 'string' ? JSON.parse(b.notes) : b.notes;
+            if (meta?.fullName) leadName = meta.fullName;
+          }
+        } catch {}
+        if (!leadName) leadName = b.emergency_contact_name || 'Hiker';
+
         users.push({
           id: b.id,
           userId: uId,
           email: b.contact_email || 'hiker@example.com',
-          fullName: prof?.full_name || b.full_name || 'Hiker',
+          fullName: leadName,
           phone: prof?.phone || b.contact_phone || '',
-          emergencyContact: prof?.emergency_contact || b.emergency_contact || '',
+          emergencyContact: prof?.emergency_contact || b.emergency_contact_phone || '',
           role: 'hiker',
           locationId: b.location_id,
           locationName: locMap.get(b.location_id) || 'Visitor',
