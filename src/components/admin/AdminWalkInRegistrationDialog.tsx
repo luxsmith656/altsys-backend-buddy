@@ -455,11 +455,11 @@ export default function AdminWalkInRegistrationDialog({
 
               <div className="grid grid-cols-3 gap-2 text-xs py-1 border-y border-border/20">
                 <div>
-                  <span className="text-muted-foreground block">Registration (₱30):</span>
+                  <span className="text-muted-foreground block">Registration ({formatPeso(fees.entryFee / (groupSize || 1))}):</span>
                   <span className="font-semibold">{formatPeso(fees.entryFee)}</span>
                 </div>
                 <div>
-                  <span className="text-muted-foreground block">Environmental (₱20):</span>
+                  <span className="text-muted-foreground block">Environmental ({formatPeso(fees.envFee / (groupSize || 1))}):</span>
                   <span className="font-semibold">{formatPeso(fees.envFee)}</span>
                 </div>
                 <div>

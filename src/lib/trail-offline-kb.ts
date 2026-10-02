@@ -1,6 +1,6 @@
 // Offline knowledge base for Mt. Kalisungan trail assistant
 // Static entries + dynamic learning cache from previous AI responses
-import { FEE_POLICY_TEXT } from './payments';
+import { FEE_POLICY_TEXT, getDynamicFeePolicyText } from './payments';
 
 const CACHE_KEY = 'kalisungan_learned_cache';
 const CACHE_MAX = 200;
@@ -669,6 +669,10 @@ export function getCacheSize(): number {
 
 export function getOfflineAnswer(query: string): string {
   const q = query.toLowerCase();
+  if (/(fee|fees|pricing|prices|price|cost|costs|rate|rates|fare|fares|magkano|how much)/i.test(q)) {
+    return `${getDynamicFeePolicyText()}\n\n---\n*📴 Offline response — connect to the internet for more detailed answers.*`;
+  }
+
   const queryKeywords = extractKeywords(query);
 
   // 1. Score static KB entries

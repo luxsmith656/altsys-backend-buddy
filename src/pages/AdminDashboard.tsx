@@ -96,6 +96,7 @@ import BookingChat from '@/components/booking/BookingChat';
 import ReassignGuideDialog from '@/components/booking/ReassignGuideDialog';
 import EditBookingDialog from '@/components/booking/EditBookingDialog';
 import { AdminOffDutyApprovals } from '@/components/booking/OffDutyManager';
+import AdminUserManagement from '@/components/admin/AdminUserManagement';
 import { useAuth } from '@/hooks/useAuth';
 import { parseMeta, encodeMeta } from '@/lib/bookingMeta';
 import { calculateFees, calculatePeakExtensionFee, formatPeso, PAYMENT_METHOD_LABELS, type PaymentMethod } from '@/lib/payments';
@@ -187,7 +188,7 @@ export default function AdminDashboard() {
   });
   const [managementTab, setManagementTab] = useState<string>(() => {
     const initialTab = searchParams.get('tab');
-    return ['guides', 'announcements', 'capacity', 'forecasting'].includes(initialTab || '')
+    return ['users', 'guides', 'announcements', 'capacity', 'forecasting'].includes(initialTab || '')
       ? initialTab!
       : 'guides';
   });
@@ -2743,12 +2744,19 @@ export default function AdminDashboard() {
             >
               <div className="mb-4 overflow-x-auto pb-2">
                 <TabsList className="glass-card">
+                  <TabsTrigger value="users">Manage Users</TabsTrigger>
                   <TabsTrigger value="guides">Guide Roster</TabsTrigger>
                   <TabsTrigger value="announcements">Announcements</TabsTrigger>
                   <TabsTrigger value="capacity">Daily Capacity</TabsTrigger>
                   <TabsTrigger value="forecasting">Prophet Forecasting</TabsTrigger>
                 </TabsList>
               </div>
+              <TabsContent value="users" className="space-y-6 mt-0">
+                <AdminUserManagement
+                  locationId={activeLocationId}
+                  locationName={activeLocation?.name || 'Current Trailhead'}
+                />
+              </TabsContent>
               <TabsContent value="guides" className="space-y-6 mt-0">
             <div className="flex flex-wrap items-center justify-between gap-3 mb-2">
               <div>

@@ -12,6 +12,7 @@ import { getKaliExpression, getKaliQuickReplies } from '@/lib/kaliPersonality';
 import { getKaliRoleLabel } from '@/lib/kaliContext';
 import { useAuth } from '@/hooks/useAuth';
 import ReactMarkdown from 'react-markdown';
+import { getPricingConfig } from '@/lib/pricingService';
 
 
 interface WeatherSnapshot {
@@ -404,6 +405,25 @@ function generateResponse(
         (hasKids ? `\n🧒 **For kids** — Extra snacks, light jacket` : '') +
         `\n\nTrail registration fee collected at the trailhead!`,
       quickReplies: ["What's the registration fee?", 'Any food along the trail?', 'Safety tips'],
+    };
+  }
+
+  /* Fees & Fare Inquiries */
+  if (lower.match(/(fee|fees|cost|price|pricing|rate|rates|fare|fares|magkano|how much|registration fee|guide fee)/)) {
+    const p = getPricingConfig();
+    return {
+      content:
+        `📋 **Mt. Kalisungan Official Published Fees & Fare Schedule:**\n\n` +
+        `• **Registration Fee:** ₱${p.entryFee} per hiker\n` +
+        `• **Environmental / DSPA Fee:** ₱${p.envFee} per hiker\n` +
+        `• **Tour Guide Fees:** (1 guide covers up to 5 hikers)\n` +
+        `  - Morning Hike: ₱${p.guideFeeMorning} per guide\n` +
+        `  - Night Hike: ₱${p.guideFeeNight} per guide\n` +
+        `  - Overnight Hike: ₱${p.guideFeeOvernight} per guide\n` +
+        `• **Peak Summit Extension:** ₱${p.peakExtensionFeePerHour} per extra hour\n` +
+        `• **Emergency Horse Assistance:** ₱${p.horseEmergencyFee} (Stations 2–1) / ₱${p.horseHighStationFee} (Stations 5–3)\n\n` +
+        `*These official rates apply across all jump-offs (Lamot 1, Lamot 2, Sto. Tomas). You can settle onsite or via GCash/bank transfer!*`,
+      quickReplies: ['Book a Morning Hike', 'Book a Night Hike', 'Are there river crossings?', 'Pack list please'],
     };
   }
 

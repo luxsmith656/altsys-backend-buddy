@@ -46,6 +46,7 @@ import {
   UserPlus,
 } from 'lucide-react';
 import { calculateFees, formatPeso, GCASH_DETAILS, BANK_DETAILS, MAX_PAX_PER_GUIDE } from '@/lib/payments';
+import { usePricing } from '@/hooks/usePricing';
 import { QRCodeSVG } from 'qrcode.react';
 import { toast } from 'sonner';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -202,6 +203,7 @@ function dayDifference(target: Date): number {
 /* ─── Component ─── */
 export default function BookingPage() {
   const { user, role } = useAuth();
+  const { pricing } = usePricing();
   const navigate = useNavigate();
   const [step, setStep] = useState(1);
   const [adminWalkInOpen, setAdminWalkInOpen] = useState(false);
@@ -1950,11 +1952,11 @@ export default function BookingPage() {
                       </h3>
                       <div className="space-y-2 text-sm">
                         <div className="flex justify-between">
-                          <span className="text-muted-foreground">Registration / Entry Fee (₱30 × {groupSize} pax)</span>
+                          <span className="text-muted-foreground">Registration / Entry Fee ({formatPeso(pricing.entryFee)} × {groupSize} pax)</span>
                           <span className="font-semibold">{formatPeso(entryFee)}</span>
                         </div>
                         <div className="flex justify-between">
-                          <span className="text-muted-foreground">Environmental / DSPA Fee (₱20 × {groupSize} pax)</span>
+                          <span className="text-muted-foreground">Environmental / DSPA Fee ({formatPeso(pricing.envFee)} × {groupSize} pax)</span>
                           <span className="font-semibold">{formatPeso(envFee)}</span>
                         </div>
                         <div className="flex justify-between">

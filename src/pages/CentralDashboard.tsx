@@ -11,6 +11,8 @@ import { motion } from 'framer-motion';
 import { Building2, Users, DollarSign, TrendingUp, MapPin, Loader2, AlertTriangle, RefreshCw, Filter, CalendarCheck } from 'lucide-react';
 import LocationSwitcher from '@/components/layout/LocationSwitcher';
 import RealtimeMonitorMap from '@/components/admin/RealtimeMonitorMap';
+import CentralAdminManagement from '@/components/admin/CentralAdminManagement';
+import CentralPricingManagement from '@/components/admin/CentralPricingManagement';
 import { format, startOfMonth } from 'date-fns';
 
 interface LocStats {
@@ -303,6 +305,8 @@ export default function CentralDashboard() {
             <TabsList className="glass-card min-w-max">
               <TabsTrigger value="overview">Overview by location</TabsTrigger>
               <TabsTrigger value="monitor">Live monitor</TabsTrigger>
+              <TabsTrigger value="admins">Admin Management</TabsTrigger>
+              <TabsTrigger value="pricing">Fare & Pricing Control</TabsTrigger>
             </TabsList>
           </div>
 
@@ -443,6 +447,14 @@ export default function CentralDashboard() {
 
           <TabsContent value="monitor" className="mt-4">
             <RealtimeMonitorMap locationId={activeLocationId} canAddCheckpoints={false} />
+          </TabsContent>
+
+          <TabsContent value="admins" className="mt-4">
+            <CentralAdminManagement />
+          </TabsContent>
+
+          <TabsContent value="pricing" className="mt-4">
+            <CentralPricingManagement />
           </TabsContent>
         </Tabs>
       </div>

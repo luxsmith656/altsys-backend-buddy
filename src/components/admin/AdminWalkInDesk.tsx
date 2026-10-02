@@ -48,6 +48,7 @@ import {
 } from '@/lib/payments';
 import { getGuideFeePerGuide, HIKE_TIME_OPTIONS, type HikeType } from '@/lib/hikeSchedule';
 import { useAuth } from '@/hooks/useAuth';
+import { usePricing } from '@/hooks/usePricing';
 import { useNavigate } from 'react-router-dom';
 
 interface AdminWalkInDeskProps {
@@ -60,6 +61,7 @@ export default function AdminWalkInDesk({
   onToggleHikerView,
 }: AdminWalkInDeskProps) {
   const { user } = useAuth();
+  const { pricing } = usePricing();
   const navigate = useNavigate();
 
   // Form State
@@ -544,7 +546,7 @@ export default function AdminWalkInDesk({
                   <div className="space-y-1">
                     <Label className="text-xs flex items-center justify-between">
                       <span>Peak Extension</span>
-                      <span className="text-[10px] text-muted-foreground">₱100/hr</span>
+                      <span className="text-[10px] text-muted-foreground">₱{pricing.peakExtensionFeePerHour}/hr</span>
                     </Label>
                     <div className="flex items-center gap-2">
                       <Input
@@ -562,7 +564,7 @@ export default function AdminWalkInDesk({
                   <div className="space-y-1">
                     <Label className="text-xs flex items-center justify-between">
                       <span>Emergency Horse</span>
-                      <span className="text-[10px] text-muted-foreground">₱500/horse</span>
+                      <span className="text-[10px] text-muted-foreground">₱{pricing.horseEmergencyFee}/horse</span>
                     </Label>
                     <div className="flex items-center gap-2">
                       <Input
@@ -596,11 +598,11 @@ export default function AdminWalkInDesk({
                 {/* Fee Breakdown List */}
                 <div className="p-4 rounded-2xl bg-secondary/30 border border-border/30 space-y-2 text-xs">
                   <div className="flex justify-between items-center text-muted-foreground">
-                    <span>Registration Fee (₱{ENTRY_FEE_PER_PERSON} × {groupSize} pax)</span>
+                    <span>Registration Fee (₱{pricing.entryFee} × {groupSize} pax)</span>
                     <span className="font-semibold text-foreground">{formatPeso(fees.entryFee)}</span>
                   </div>
                   <div className="flex justify-between items-center text-muted-foreground">
-                    <span>Environmental Fee (₱{ENV_FEE_PER_PERSON} × {groupSize} pax)</span>
+                    <span>Environmental Fee (₱{pricing.envFee} × {groupSize} pax)</span>
                     <span className="font-semibold text-foreground">{formatPeso(fees.envFee)}</span>
                   </div>
                   <div className="flex justify-between items-center text-muted-foreground">
@@ -609,13 +611,13 @@ export default function AdminWalkInDesk({
                   </div>
                   {fees.peakExtensionFee > 0 && (
                     <div className="flex justify-between items-center text-primary">
-                      <span>Peak Stay Extension (+{peakHours}h @ ₱100/h)</span>
+                      <span>Peak Stay Extension (+{peakHours}h @ ₱{pricing.peakExtensionFeePerHour}/h)</span>
                       <span className="font-semibold">+{formatPeso(fees.peakExtensionFee)}</span>
                     </div>
                   )}
                   {fees.emergencyHorseFee > 0 && (
                     <div className="flex justify-between items-center text-amber-600 dark:text-amber-400">
-                      <span>Emergency Horse Service ({horseCount} @ ₱500)</span>
+                      <span>Emergency Horse Service ({horseCount} @ ₱{pricing.horseEmergencyFee})</span>
                       <span className="font-semibold">+{formatPeso(fees.emergencyHorseFee)}</span>
                     </div>
                   )}
