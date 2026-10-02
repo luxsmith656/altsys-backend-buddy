@@ -188,6 +188,56 @@ export type Database = {
           },
         ]
       }
+      booking_confirmation_emails: {
+        Row: {
+          attempts: number
+          booking_id: string
+          created_at: string
+          first_attempt_at: string | null
+          last_error: string | null
+          lease_until: string | null
+          next_attempt_at: string
+          payload: Json | null
+          provider_id: string | null
+          sent_at: string | null
+          status: string
+        }
+        Insert: {
+          attempts?: number
+          booking_id: string
+          created_at?: string
+          first_attempt_at?: string | null
+          last_error?: string | null
+          lease_until?: string | null
+          next_attempt_at?: string
+          payload?: Json | null
+          provider_id?: string | null
+          sent_at?: string | null
+          status?: string
+        }
+        Update: {
+          attempts?: number
+          booking_id?: string
+          created_at?: string
+          first_attempt_at?: string | null
+          last_error?: string | null
+          lease_until?: string | null
+          next_attempt_at?: string
+          payload?: Json | null
+          provider_id?: string | null
+          sent_at?: string | null
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "booking_confirmation_emails_booking_id_fkey"
+            columns: ["booking_id"]
+            isOneToOne: true
+            referencedRelation: "bookings"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       booking_messages: {
         Row: {
           booking_id: string
@@ -221,6 +271,8 @@ export type Database = {
       bookings: {
         Row: {
           booking_date: string
+          contact_email: string | null
+          contact_phone: string | null
           created_at: string
           emergency_contact_name: string
           emergency_contact_phone: string
@@ -229,6 +281,7 @@ export type Database = {
           location_id: string | null
           notes: string
           qr_code_data: string
+          referral_guide_id: string | null
           requested_at: string | null
           requested_new_date: string | null
           status: string
@@ -236,6 +289,8 @@ export type Database = {
         }
         Insert: {
           booking_date: string
+          contact_email?: string | null
+          contact_phone?: string | null
           created_at?: string
           emergency_contact_name?: string
           emergency_contact_phone?: string
@@ -244,6 +299,7 @@ export type Database = {
           location_id?: string | null
           notes?: string
           qr_code_data?: string
+          referral_guide_id?: string | null
           requested_at?: string | null
           requested_new_date?: string | null
           status?: string
@@ -251,6 +307,8 @@ export type Database = {
         }
         Update: {
           booking_date?: string
+          contact_email?: string | null
+          contact_phone?: string | null
           created_at?: string
           emergency_contact_name?: string
           emergency_contact_phone?: string
@@ -259,6 +317,7 @@ export type Database = {
           location_id?: string | null
           notes?: string
           qr_code_data?: string
+          referral_guide_id?: string | null
           requested_at?: string | null
           requested_new_date?: string | null
           status?: string
@@ -270,6 +329,13 @@ export type Database = {
             columns: ["location_id"]
             isOneToOne: false
             referencedRelation: "locations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "bookings_referral_guide_id_fkey"
+            columns: ["referral_guide_id"]
+            isOneToOne: false
+            referencedRelation: "guides"
             referencedColumns: ["id"]
           },
         ]
@@ -452,41 +518,110 @@ export type Database = {
         }
         Relationships: []
       }
+      guide_reviews: {
+        Row: {
+          booking_id: string | null
+          comment: string
+          created_at: string
+          guide_id: string
+          id: string
+          is_approved: boolean
+          rating: number
+          reviewer_id: string
+          reviewer_name: string
+        }
+        Insert: {
+          booking_id?: string | null
+          comment?: string
+          created_at?: string
+          guide_id: string
+          id?: string
+          is_approved?: boolean
+          rating: number
+          reviewer_id: string
+          reviewer_name?: string
+        }
+        Update: {
+          booking_id?: string | null
+          comment?: string
+          created_at?: string
+          guide_id?: string
+          id?: string
+          is_approved?: boolean
+          rating?: number
+          reviewer_id?: string
+          reviewer_name?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "guide_reviews_booking_id_fkey"
+            columns: ["booking_id"]
+            isOneToOne: false
+            referencedRelation: "bookings"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "guide_reviews_guide_id_fkey"
+            columns: ["guide_id"]
+            isOneToOne: false
+            referencedRelation: "guides"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       guides: {
         Row: {
+          age: number | null
           created_at: string
+          facebook_url: string | null
           full_name: string
           id: string
           is_active: boolean
           location_id: string
+          onboarding_completed_at: string | null
           per_trip_fee: number
           phone: string
+          photo_url: string | null
+          referral_code: string | null
+          sex: string | null
           specialty: string
           status: string
           updated_at: string
           user_id: string | null
         }
         Insert: {
+          age?: number | null
           created_at?: string
+          facebook_url?: string | null
           full_name: string
           id?: string
           is_active?: boolean
           location_id: string
+          onboarding_completed_at?: string | null
           per_trip_fee?: number
           phone?: string
+          photo_url?: string | null
+          referral_code?: string | null
+          sex?: string | null
           specialty?: string
           status?: string
           updated_at?: string
           user_id?: string | null
         }
         Update: {
+          age?: number | null
           created_at?: string
+          facebook_url?: string | null
           full_name?: string
           id?: string
           is_active?: boolean
           location_id?: string
+          onboarding_completed_at?: string | null
           per_trip_fee?: number
           phone?: string
+          photo_url?: string | null
+          referral_code?: string | null
+          sex?: string | null
           specialty?: string
           status?: string
           updated_at?: string
@@ -796,6 +931,7 @@ export type Database = {
           emergency_contact: string
           full_name: string
           id: string
+          is_active: boolean
           liability_waiver_at: string | null
           mdrrmo_consent_at: string | null
           mdrrmo_consent_version: string | null
@@ -814,6 +950,7 @@ export type Database = {
           emergency_contact?: string
           full_name?: string
           id?: string
+          is_active?: boolean
           liability_waiver_at?: string | null
           mdrrmo_consent_at?: string | null
           mdrrmo_consent_version?: string | null
@@ -832,6 +969,7 @@ export type Database = {
           emergency_contact?: string
           full_name?: string
           id?: string
+          is_active?: boolean
           liability_waiver_at?: string | null
           mdrrmo_consent_at?: string | null
           mdrrmo_consent_version?: string | null
@@ -907,6 +1045,27 @@ export type Database = {
           reviewer_name?: string
           trail_name?: string
           user_id?: string
+        }
+        Relationships: []
+      }
+      system_settings: {
+        Row: {
+          key: string
+          updated_at: string
+          updated_by: string | null
+          value: Json
+        }
+        Insert: {
+          key: string
+          updated_at?: string
+          updated_by?: string | null
+          value: Json
+        }
+        Update: {
+          key?: string
+          updated_at?: string
+          updated_by?: string | null
+          value?: Json
         }
         Relationships: []
       }
@@ -1156,6 +1315,40 @@ export type Database = {
           p_start_date: string
         }
         Returns: Json
+      }
+      can_moderate_guide_review: {
+        Args: { _booking_id: string }
+        Returns: boolean
+      }
+      can_submit_guide_review: {
+        Args: { _booking_id: string; _guide_id: string }
+        Returns: boolean
+      }
+      claim_booking_confirmation_email: {
+        Args: { _booking_id: string }
+        Returns: {
+          attempts: number
+          booking_id: string
+          created_at: string
+          first_attempt_at: string | null
+          last_error: string | null
+          lease_until: string | null
+          next_attempt_at: string
+          payload: Json | null
+          provider_id: string | null
+          sent_at: string | null
+          status: string
+        }[]
+      }
+      get_booking_slot_capacity: {
+        Args: { p_end_date: string; p_start_date: string }
+        Returns: {
+          booking_date: string
+          group_count: number
+          hike_time: string
+          hike_type: string
+          summit_hour: number
+        }[]
       }
       guide_can_handover_assignment: {
         Args: {
