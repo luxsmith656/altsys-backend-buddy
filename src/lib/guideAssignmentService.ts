@@ -116,15 +116,15 @@ export async function acceptGuideAssignment({
       sender_id: guideUserId || null,
       sender_role: 'system',
       kind: 'system',
-      content: `✅ Tour Guide ${guideName} has ACCEPTED this booking for ${effectiveDate}. See you at the trailhead!`,
+      content: `✅ Mountain Guide ${guideName} has ACCEPTED this booking for ${effectiveDate}. See you at the trailhead!`,
     } as any);
     if (messageError) warnings.push(`Booking chat: ${messageError.message}`);
 
     // 4. Notify Hiker
     if (effectiveHikerId) {
       await notifyUser(effectiveHikerId, {
-        title: '🎉 Tour Guide Confirmed!',
-        body: `Your tour guide ${guideName} has accepted your hike booking for ${effectiveDate}.`,
+        title: '🎉 Mountain Guide Confirmed!',
+        body: `Your mountain guide ${guideName} has accepted your hike booking for ${effectiveDate}.`,
         category: 'booking',
       }).catch(() => warnings.push('In-app notification could not be delivered.'));
     }
@@ -263,8 +263,8 @@ export async function declineAndReassignGuide({
       // Notify hiker of guide replacement
       if (effectiveHikerId) {
         await notifyUser(effectiveHikerId, {
-          title: '🔄 Tour Guide Update',
-          body: `Your tour guide for ${effectiveDate} has been updated to ${replacementGuideName}${replacementGuidePhone ? ` (${replacementGuidePhone})` : ''} due to: ${cleanReason}.`,
+          title: '🔄 Mountain Guide Update',
+          body: `Your mountain guide for ${effectiveDate} has been updated to ${replacementGuideName}${replacementGuidePhone ? ` (${replacementGuidePhone})` : ''} due to: ${cleanReason}.`,
           category: 'booking',
         });
       }
@@ -301,7 +301,7 @@ export async function declineAndReassignGuide({
       // Notify hiker that admin is assigning a replacement
       if (effectiveHikerId) {
         await notifyUser(effectiveHikerId, {
-          title: '⏳ Tour Guide Reassignment in Progress',
+          title: '⏳ Mountain Guide Reassignment in Progress',
           body: `Your assigned guide was unable to take your hike on ${effectiveDate} (${cleanReason}). The LGU dispatch is assigning a replacement guide for you.`,
           category: 'booking',
         });
@@ -316,7 +316,7 @@ export async function declineAndReassignGuide({
 }
 
 /**
- * Admin reassigns a tour guide on any booking
+ * Admin reassigns a mountain guide on any booking
  */
 export async function reassignGuideByAdmin({
   bookingId,
@@ -413,7 +413,7 @@ export async function reassignGuideByAdmin({
         booking_id: bookingId,
         sender_role: 'system',
         kind: 'system',
-        content: `🔄 Admin reassigned tour guide: ${currentGuideName ? `${currentGuideName} replaced by ${newGuideName}` : `Assigned ${newGuideName}`}. Reason: ${cleanReason}`,
+        content: `🔄 Admin reassigned mountain guide: ${currentGuideName ? `${currentGuideName} replaced by ${newGuideName}` : `Assigned ${newGuideName}`}. Reason: ${cleanReason}`,
       },
       {
         booking_id: bookingId,
@@ -444,8 +444,8 @@ export async function reassignGuideByAdmin({
     // 7. Notify hiker
     if (effectiveHikerId) {
       await notifyUser(effectiveHikerId, {
-        title: '🔄 Tour Guide Changed',
-        body: `Your tour guide for ${effectiveDate} is now ${newGuideName}${newGuidePhone ? ` (${newGuidePhone})` : ''}. Reason: ${cleanReason}.`,
+        title: '🔄 Mountain Guide Changed',
+        body: `Your mountain guide for ${effectiveDate} is now ${newGuideName}${newGuidePhone ? ` (${newGuidePhone})` : ''}. Reason: ${cleanReason}.`,
         category: 'booking',
       });
     }

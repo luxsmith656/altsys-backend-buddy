@@ -256,7 +256,7 @@ export default function AdminWalkInRegistrationDialog({
                 On-Site Walk-In Hiker Registration
               </DialogTitle>
               <DialogDescription className="text-xs">
-                Register, collect fees, and assign an on-duty tour guide for walk-in hikers at the trailhead desk.
+                Register, collect fees, and assign an on-duty mountain guide for walk-in hikers at the trailhead desk.
               </DialogDescription>
             </div>
           </div>
@@ -476,7 +476,7 @@ export default function AdminWalkInRegistrationDialog({
               </div>
             )}
 
-            {/* Section 2: Trail & Tour Guide Assignment */}
+            {/* Section 2: Trail & Mountain Guide Assignment */}
             <div className="p-3.5 rounded-2xl bg-secondary/20 border border-border/30 space-y-3">
               <p className="text-xs font-bold text-primary uppercase tracking-wider flex items-center gap-1.5">
                 <Mountain className="h-4 w-4" /> 2. Trail Route & On-Duty Guide Assignment
@@ -522,7 +522,7 @@ export default function AdminWalkInRegistrationDialog({
                 </div>
 
                 <div className="space-y-1">
-                  <Label className="text-xs">Assign Tour Guide *</Label>
+                  <Label className="text-xs">Assign Mountain Guide *</Label>
                   <Select value={assignedGuideId} onValueChange={setAssignedGuideId}>
                     <SelectTrigger className="text-xs h-8">
                       <SelectValue placeholder="Select an on-duty guide…" />

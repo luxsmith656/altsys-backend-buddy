@@ -23,7 +23,7 @@ describe('Payment and Fee Calculation Logic', () => {
     expect(HORSE_EMERGENCY_SERVICE_FEE).toBe(500);
   });
 
-  it('calculates correct number of tour guides per 5 pax ratio', () => {
+  it('calculates correct number of mountain guides per 5 pax ratio', () => {
     expect(calculateGuidesNeeded(1)).toBe(1);
     expect(calculateGuidesNeeded(4)).toBe(1);
     expect(calculateGuidesNeeded(5)).toBe(1);
@@ -61,7 +61,7 @@ describe('Payment and Fee Calculation Logic', () => {
     expect(fees.totalFee).toBe(1050);
   });
 
-  it('calculates fees accurately for 6 hikers (triggers 2nd tour guide)', () => {
+  it('calculates fees accurately for 6 hikers (triggers 2nd mountain guide)', () => {
     const fees = calculateFees(6);
     expect(fees.entryFee).toBe(180);  // 30 * 6
     expect(fees.envFee).toBe(120);    // 20 * 6

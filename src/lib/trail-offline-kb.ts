@@ -230,7 +230,7 @@ Afternoon thunderstorms can occur year-round.`,
 - Registration is **required** at the barangay hall / trailhead
 - Registration fee: ₱${p.entryFee} per person
 - Environmental fee: ₱${p.envFee} per person
-- Mandatory Tour Guide fee: ₱${p.guideFeeMorning} per morning guide (1 guide per ${p.maxPaxPerGuide} hikers; groups over ${p.maxPaxPerGuide} require an additional guide)
+- Mandatory Mountain Guide fee: ₱${p.guideFeeMorning} per morning guide (1 guide per ${p.maxPaxPerGuide} hikers; groups over ${p.maxPaxPerGuide} require an additional guide)
 - Groups should register together
 - Bring exact cash, GCash, or pre-book through the app
 

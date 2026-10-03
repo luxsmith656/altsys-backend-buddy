@@ -54,7 +54,7 @@ export default function CentralAnnouncements() {
     setType('info');
     setIsImportant(true);
     const maxRatio = pricing.maxPaxPerGuide || 5;
-    const msg = `Official Mt. Kalisungan tourism tariff schedule: Registration Entry Fee: ${formatPeso(pricing.entryFee)}/head, Environmental/DSPA: ${formatPeso(pricing.envFee)}/head. Mandatory Tour Guide ratio: 1 licensed guide per 1–${maxRatio} hikers (${formatPeso(pricing.guideFeeMorning)} Day / ${formatPeso(pricing.guideFeeNight)} Night / ${formatPeso(pricing.guideFeeOvernight)} Overnight). Peak Summit Extension: ${formatPeso(pricing.peakExtensionFeePerHour)}/hr. Horse porter & emergency rescue: ${formatPeso(pricing.horseEmergencyFee)} (lower stations) to ${formatPeso(pricing.horseHighStationFee)} (upper stations). Effective across Lamot 2, Lamot 1, and Sto. Tomas stations.`;
+    const msg = `Official Mt. Kalisungan tourism tariff schedule: Registration Entry Fee: ${formatPeso(pricing.entryFee)}/head, Environmental/DSPA: ${formatPeso(pricing.envFee)}/head. Mandatory Mountain Guide ratio: 1 licensed guide per 1–${maxRatio} hikers (${formatPeso(pricing.guideFeeMorning)} Day / ${formatPeso(pricing.guideFeeNight)} Night / ${formatPeso(pricing.guideFeeOvernight)} Overnight). Peak Summit Extension: ${formatPeso(pricing.peakExtensionFeePerHour)}/hr. Horse porter & emergency rescue: ${formatPeso(pricing.horseEmergencyFee)} (lower stations) to ${formatPeso(pricing.horseHighStationFee)} (upper stations). Effective across Lamot 2, Lamot 1, and Sto. Tomas stations.`;
     setBody(msg);
     toast.success('Clean fare notice template generated!');
   };
@@ -172,7 +172,7 @@ export default function CentralAnnouncements() {
                       <SelectContent>
                         <SelectItem value="all">🌐 All Users &amp; Staff</SelectItem>
                         <SelectItem value="admins">🛡️ Station Admins Only</SelectItem>
-                        <SelectItem value="guides">🧭 Tour Guides Only</SelectItem>
+                        <SelectItem value="guides">🧭 Mountain Guides Only</SelectItem>
                         <SelectItem value="hikers">🥾 Hikers Only</SelectItem>
                       </SelectContent>
                     </Select>
@@ -313,7 +313,7 @@ export default function CentralAnnouncements() {
                         )}
                         {ann.target === 'guides' && (
                           <Badge variant="outline" className="text-[10px] bg-emerald-500/15 text-emerald-600 border-emerald-500/30">
-                            🧭 Tour Guides
+                            🧭 Mountain Guides
                           </Badge>
                         )}
                         {ann.target === 'hikers' && (

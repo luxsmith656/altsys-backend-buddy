@@ -432,7 +432,7 @@ export default function CentralAccountManagement() {
             <SelectContent>
               <SelectItem value="all">All Accounts ({counts.all})</SelectItem>
               <SelectItem value="admin">Local Admins ({counts.admin})</SelectItem>
-              <SelectItem value="guide">Tour Guides ({counts.guide})</SelectItem>
+              <SelectItem value="guide">Mountain Guides ({counts.guide})</SelectItem>
               <SelectItem value="hiker">Hikers ({counts.hiker})</SelectItem>
             </SelectContent>
           </Select>
@@ -539,7 +539,7 @@ export default function CentralAccountManagement() {
                         )}
                         {isGuide && (
                           <Badge variant="outline" className="text-[10px] bg-emerald-500/15 text-emerald-600 border-emerald-500/30 font-bold gap-1">
-                            <Compass className="h-3 w-3" /> Tour Guide
+                            <Compass className="h-3 w-3" /> Mountain Guide
                           </Badge>
                         )}
                         {isHiker && (
@@ -909,7 +909,7 @@ export default function CentralAccountManagement() {
                 <div>
                   {viewTarget.role === 'guide' ? (
                     <Badge variant="outline" className="text-[11px] bg-emerald-500/15 text-emerald-600 border-emerald-500/30 font-bold gap-1">
-                      <Compass className="h-3 w-3" /> Tour Guide
+                      <Compass className="h-3 w-3" /> Mountain Guide
                     </Badge>
                   ) : (
                     <Badge variant="outline" className="text-[11px] bg-sky-500/15 text-sky-600 border-sky-500/30 font-bold gap-1">
@@ -966,7 +966,7 @@ export default function CentralAccountManagement() {
                 </div>
               </div>
 
-              {/* Tour Guide Specialty if available */}
+              {/* Mountain Guide Specialty if available */}
               {viewTarget.role === 'guide' && viewTarget.specialty && (
                 <div className="p-2.5 rounded-lg border border-border/20 bg-background/50 space-y-0.5">
                   <div className="text-[10px] text-muted-foreground font-semibold">Guide Specialty &amp; Certification</div>
@@ -996,7 +996,7 @@ export default function CentralAccountManagement() {
               <div className="p-3 rounded-xl border border-primary/20 bg-primary/5 flex items-start gap-2.5">
                 <Info className="h-4 w-4 text-primary shrink-0 mt-0.5" />
                 <p className="text-[11px] text-muted-foreground leading-relaxed">
-                  <strong className="text-foreground">Trailhead Local Governance:</strong> Tour Guide and Hiker credentials, passwords, and assignments are managed locally by their assigned Trailhead Admin. Central Admin has unified, read-only operational visibility.
+                  <strong className="text-foreground">Trailhead Local Governance:</strong> Mountain Guide and Hiker credentials, passwords, and assignments are managed locally by their assigned Trailhead Admin. Central Admin has unified, read-only operational visibility.
                 </p>
               </div>
 

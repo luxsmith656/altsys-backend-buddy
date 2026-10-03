@@ -269,7 +269,7 @@ export default function JoinHikeGuestPage() {
             <div className="rounded-2xl border border-primary/20 bg-primary/5 p-3.5 text-xs flex items-start gap-2.5 text-muted-foreground">
               <ShieldCheck className="h-4 w-4 text-primary shrink-0 mt-0.5" />
               <span>
-                By continuing, you allow GPS trail tracking for safety coordination with park rangers and your tour guide.
+                By continuing, you allow GPS trail tracking for safety coordination with park rangers and your mountain guide.
               </span>
             </div>
 

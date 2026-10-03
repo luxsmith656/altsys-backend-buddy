@@ -744,7 +744,7 @@ export default function ActiveHikersLayer({
           >
             <Popup>
               <div className="p-1.5 text-xs min-w-[200px]">
-                <p className="font-bold text-blue-600 flex items-center gap-1">🧭 On-Duty Tour Guide</p>
+                <p className="font-bold text-blue-600 flex items-center gap-1">🧭 On-Duty Mountain Guide</p>
                 <p className="font-bold text-sm mt-0.5">{h.guideName}</p>
                 <p className="text-muted-foreground">{h.guidePhone}</p>
                 <div className="border-t pt-1 mt-1 text-[11px] space-y-0.5">

@@ -131,7 +131,7 @@ export default function ReassignGuideDialog({
       <DialogContent className="max-w-md">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-primary">
-            <UserCog className="h-5 w-5" /> Reassign Tour Guide
+            <UserCog className="h-5 w-5" /> Reassign Mountain Guide
           </DialogTitle>
           <DialogDescription className="text-xs">
             Replace {currentGuideName ?? 'the currently assigned guide'} with another active guide. Both guides and the hiker will be automatically notified with your stated reason.

@@ -237,7 +237,7 @@ export default function CentralPricingManagement() {
             Official Fare &amp; Pricing Schedule &amp; Capacity Control
           </h2>
           <p className="text-xs lg:text-sm text-muted-foreground mt-0.5">
-            Unified management of official tariff rates, tour guide group allocations, and daily environmental quotas across Lamot 2, Lamot 1, and Sto. Tomas.
+            Unified management of official tariff rates, mountain guide group allocations, and daily environmental quotas across Lamot 2, Lamot 1, and Sto. Tomas.
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -329,7 +329,7 @@ export default function CentralPricingManagement() {
                   <div className="flex items-center justify-between">
                     <div>
                       <Label htmlFor="maxPaxPerGuide" className="text-xs font-bold text-primary flex items-center gap-1.5">
-                        <Users className="h-4 w-4" /> Tour Guide Capacity Ratio (Max Hikers per Guide)
+                        <Users className="h-4 w-4" /> Mountain Guide Capacity Ratio (Max Hikers per Guide)
                       </Label>
                       <p className="text-[11px] text-muted-foreground mt-0.5">
                         Number of hikers permitted under a single licensed guide. Groups exceeding this require an additional guide.

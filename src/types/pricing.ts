@@ -7,7 +7,7 @@ export interface PricingConfig {
   peakExtensionFeePerHour: number; // ₱ peak summit extension / hour (default: 100)
   horseEmergencyFee: number;     // ₱ horse rescue Stations 2-1 (default: 500)
   horseHighStationFee: number;   // ₱ horse rescue Stations 5-3 (default: 1000)
-  maxPaxPerGuide: number;        // Maximum hikers covered per tour guide (default: 5)
+  maxPaxPerGuide: number;        // Maximum hikers covered per mountain guide (default: 5)
   updatedAt?: string;
   updatedBy?: string;
 }

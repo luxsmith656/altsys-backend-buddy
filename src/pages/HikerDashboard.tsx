@@ -795,7 +795,7 @@ export default function HikerDashboard() {
               Important Policy: 1–3 Days Notice for Date Changes &amp; Cancellations
             </p>
             <p className="text-amber-800 dark:text-amber-300 leading-relaxed">
-              To respect assigned local tour guides and protected area capacity quotas, all rescheduling or cancellation requests must be made at least <strong>1 to 3 days before your scheduled hike date</strong>.
+              To respect assigned local mountain guides and protected area capacity quotas, all rescheduling or cancellation requests must be made at least <strong>1 to 3 days before your scheduled hike date</strong>.
             </p>
           </div>
         </div>

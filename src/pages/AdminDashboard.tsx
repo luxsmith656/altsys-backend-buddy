@@ -2692,7 +2692,7 @@ export default function AdminDashboard() {
                           <p className="text-[11px] leading-relaxed opacity-90">
                             {meta.assignedGuide && meta.guideStatus === 'pending'
                               ? `Assigned guide "${meta.assignedGuide}" must accept this booking in their Guide Dashboard before onsite check-in can be started.`
-                              : 'Assign a tour guide and have them accept the permit to confirm this booking before check-in.'}
+                              : 'Assign a mountain guide and have them accept the permit to confirm this booking before check-in.'}
                           </p>
                           <div className="pt-1">
                             <Button

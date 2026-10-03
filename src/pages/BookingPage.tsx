@@ -1443,7 +1443,7 @@ export default function BookingPage() {
                       <div className="flex items-center gap-2 p-2.5 rounded-xl bg-primary/10 border border-primary/20 text-xs text-primary">
                         <Users className="h-4 w-4 shrink-0" />
                         <span>
-                          Groups over {maxPaxRatio} hikers require <strong>{Math.ceil(groupSize / maxPaxRatio)} tour guides</strong> ({formatPeso(getGuideFeePerGuide(hikeType))} per guide) for trail safety.
+                          Groups over {maxPaxRatio} hikers require <strong>{Math.ceil(groupSize / maxPaxRatio)} mountain guides</strong> ({formatPeso(getGuideFeePerGuide(hikeType))} per guide) for trail safety.
                         </span>
                       </div>
                     )}
@@ -2130,7 +2130,7 @@ export default function BookingPage() {
                         </div>
                         <div className="flex justify-between">
                           <span className="text-muted-foreground">
-                            Tour Guide Fee ({formatPeso(getGuideFeePerGuide(hikeType))} / guide Â· {guidesNeeded} {guidesNeeded > 1 ? 'guides' : 'guide'})
+                            Mountain Guide Fee ({formatPeso(getGuideFeePerGuide(hikeType))} / guide · {guidesNeeded} {guidesNeeded > 1 ? 'guides' : 'guide'})
                           </span>
                           <span className="font-semibold">{formatPeso(guideFee)}</span>
                         </div>
@@ -2278,7 +2278,7 @@ export default function BookingPage() {
                           <span>Important: 1â€“3 Days Notice for Date Changes or Cancellation</span>
                         </div>
                         <p className="text-amber-900 dark:text-amber-200 leading-relaxed">
-                          To protect assigned tour guide schedules and environmental carrying capacities, any <strong>schedule adjustment, date change, or booking cancellation must be communicated at least 1 to 3 days before your confirmed hike date</strong>.
+                          To protect assigned mountain guide schedules and environmental carrying capacities, any <strong>schedule adjustment, date change, or booking cancellation must be communicated at least 1 to 3 days before your confirmed hike date</strong>.
                         </p>
                       </div>
                     </div>

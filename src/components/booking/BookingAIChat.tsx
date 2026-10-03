@@ -362,7 +362,7 @@ function generateResponse(
         `Here is the automated breakdown from the mathematical model:\n\n` +
         `• 📈 **Weekly Traffic Pattern**: High weekend concentration (65–70% of total weekly volume falls on Saturdays & Sundays).\n` +
         `• 🏔️ **Quiet Hiking Windows**: Tuesday through Thursday average only 10–20 hikers/day — recommended for hikers wanting peaceful nature and solitude.\n` +
-        `• ⚡ **Peak Demand Management**: Saturdays project 70–100+ hikers. Additional tour guides and checkpoint rangers are recommended.\n` +
+        `• ⚡ **Peak Demand Management**: Saturdays project 70–100+ hikers. Additional mountain guides and checkpoint rangers are recommended.\n` +
         `• 🌧️ **Weather Regressor Impact**: Rain probabilities above 60% historically reduce traffic by ~35% while increasing slip risks on descent.\n` +
         `• 💡 **Actionable Advice**: Start at **05:00–06:00 AM** for the best weather window and summit views.\n\n` +
         `Would you like to explore specific dates or simulate capacity adjustments?`,
@@ -416,7 +416,7 @@ function generateResponse(
         `📋 **Mt. Kalisungan Official Published Fees & Fare Schedule:**\n\n` +
         `• **Registration Fee:** ₱${p.entryFee} per hiker\n` +
         `• **Environmental / DSPA Fee:** ₱${p.envFee} per hiker\n` +
-        `• **Tour Guide Fees:** (1 guide covers up to ${p.maxPaxPerGuide} hikers)\n` +
+        `• **Mountain Guide Fees:** (1 guide covers up to ${p.maxPaxPerGuide} hikers)\n` +
         `  - Morning Hike: ₱${p.guideFeeMorning} per guide\n` +
         `  - Night Hike: ₱${p.guideFeeNight} per guide\n` +
         `  - Overnight Hike: ₱${p.guideFeeOvernight} per guide\n` +

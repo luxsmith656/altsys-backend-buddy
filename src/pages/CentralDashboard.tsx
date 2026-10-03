@@ -23,11 +23,13 @@ import {
   Megaphone,
   ArrowRight,
   ShieldCheck,
+  BarChart3,
 } from 'lucide-react';
 import LocationSwitcher from '@/components/layout/LocationSwitcher';
 import CentralAccountManagement from '@/components/admin/CentralAccountManagement';
 import CentralPricingManagement from '@/components/admin/CentralPricingManagement';
 import CentralAnnouncements from '@/components/admin/CentralAnnouncements';
+import CentralAnalyticsReporting from '@/components/admin/CentralAnalyticsReporting';
 import { format, startOfMonth } from 'date-fns';
 
 interface LocStats {
@@ -268,7 +270,7 @@ export default function CentralDashboard() {
             {
               label: 'Recorded Tourism Revenue',
               value: `₱${activeStats.revenue.toLocaleString()}`,
-              subtext: 'Collected municipal & guide receipts',
+              subtext: 'Collected municipal & mountain guide receipts',
               icon: DollarSign,
               color: 'text-emerald-500',
               bgGlow: 'from-emerald-500/10 to-transparent',
@@ -329,13 +331,25 @@ export default function CentralDashboard() {
               </TabsTrigger>
 
               <TabsTrigger
+                value="analytics"
+                className="justify-start gap-2.5 px-3 py-2.5 data-[state=active]:bg-primary/20 data-[state=active]:text-primary whitespace-nowrap rounded-xl text-xs font-semibold text-left transition-all"
+              >
+                <BarChart3 className="h-4 w-4 shrink-0" />
+                <div className="text-left hidden sm:block">
+                  <div className="font-bold">Analytics &amp; Reporting</div>
+                  <div className="text-[10px] text-muted-foreground font-normal">KPIs, metrics &amp; export</div>
+                </div>
+                <span className="sm:hidden">Analytics</span>
+              </TabsTrigger>
+
+              <TabsTrigger
                 value="accounts"
                 className="justify-start gap-2.5 px-3 py-2.5 data-[state=active]:bg-primary/20 data-[state=active]:text-primary whitespace-nowrap rounded-xl text-xs font-semibold text-left transition-all"
               >
                 <Users className="h-4 w-4 shrink-0" />
                 <div className="text-left hidden sm:block">
                   <div className="font-bold">Account Management</div>
-                  <div className="text-[10px] text-muted-foreground font-normal">Admins, guides &amp; hikers</div>
+                  <div className="text-[10px] text-muted-foreground font-normal">Admins, mountain guides &amp; hikers</div>
                 </div>
                 <span className="sm:hidden">Accounts</span>
               </TabsTrigger>
@@ -566,7 +580,12 @@ export default function CentralDashboard() {
               </Card>
             </TabsContent>
 
-            {/* ──────────────── TAB 2: UNIFIED ACCOUNT MANAGEMENT (ROSTER LIST) ──────────────── */}
+            {/* ──────────────── TAB 2: COMPLETE ANALYTICS & REPORTING ──────────────── */}
+            <TabsContent value="analytics" className="mt-0">
+              <CentralAnalyticsReporting />
+            </TabsContent>
+
+            {/* ──────────────── TAB 3: UNIFIED ACCOUNT MANAGEMENT (ROSTER LIST) ──────────────── */}
             <TabsContent value="accounts" className="mt-0">
               <CentralAccountManagement />
             </TabsContent>

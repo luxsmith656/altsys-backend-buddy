@@ -461,7 +461,7 @@ export default function AdminWalkInDesk({
                   <div className="flex items-center justify-between">
                     <div>
                       <Label className="text-xs font-bold text-foreground">Group Size (Hikers)</Label>
-                      <p className="text-[11px] text-muted-foreground">1 Tour Guide required per 1–{maxPaxRatio} hikers ({formatPeso(getGuideFeePerGuide(hikeType))}/guide)</p>
+                      <p className="text-[11px] text-muted-foreground">1 Mountain Guide required per 1–{maxPaxRatio} hikers ({formatPeso(getGuideFeePerGuide(hikeType))}/guide)</p>
                     </div>
                     <div className="flex items-center gap-2">
                       <Button
@@ -488,7 +488,7 @@ export default function AdminWalkInDesk({
                     {groupSize > maxPaxRatio && (
                     <div className="p-2 rounded-xl bg-primary/10 border border-primary/20 text-[11px] text-primary font-medium flex items-center gap-1.5">
                       <ShieldCheck className="h-3.5 w-3.5 shrink-0" />
-                      <span>{groupSize} hikers requires <strong>{fees.guidesNeeded} tour guides</strong> (₱{fees.guideFee.toLocaleString()}).</span>
+                      <span>{groupSize} hikers requires <strong>{fees.guidesNeeded} mountain guides</strong> (₱{fees.guideFee.toLocaleString()}).</span>
                     </div>
                   )}
                 </div>
@@ -637,10 +637,10 @@ export default function AdminWalkInDesk({
                   </div>
 
                   <div className="space-y-1">
-                    <Label className="text-xs">Assign On-Duty Tour Guide *</Label>
+                    <Label className="text-xs">Assign On-Duty Mountain Guide *</Label>
                     <Select value={assignedGuideId} onValueChange={setAssignedGuideId}>
                       <SelectTrigger className="text-xs h-9">
-                        <SelectValue placeholder="Select Tour Guide" />
+                        <SelectValue placeholder="Select Mountain Guide" />
                       </SelectTrigger>
                       <SelectContent>
                         {guides.map((g) => (
@@ -718,7 +718,7 @@ export default function AdminWalkInDesk({
                     <span className="font-semibold text-foreground">{formatPeso(fees.envFee)}</span>
                   </div>
                   <div className="flex justify-between items-center text-muted-foreground">
-                    <span>Tour Guide Fee ({fees.guidesNeeded} guide @ {formatPeso(fees.guideFee / fees.guidesNeeded)})</span>
+                    <span>Mountain Guide Fee ({fees.guidesNeeded} guide @ {formatPeso(fees.guideFee / fees.guidesNeeded)})</span>
                     <span className="font-semibold text-foreground">{formatPeso(fees.guideFee)}</span>
                   </div>
                   {fees.peakExtensionFee > 0 && (

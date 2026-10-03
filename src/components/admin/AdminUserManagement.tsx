@@ -292,7 +292,7 @@ export default function AdminUserManagement({
                               : 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border-emerald-500/30'
                           }`}
                         >
-                          {isGuide ? 'TOUR GUIDE' : 'HIKER'}
+                          {isGuide ? 'MOUNTAIN GUIDE' : 'HIKER'}
                         </Badge>
                       </td>
                       <td className="px-4 py-3">
