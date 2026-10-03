@@ -346,6 +346,15 @@ export default function Index() {
               <span className="px-3 py-1 rounded-full text-xs bg-secondary/60 text-foreground border border-border/40">Lamot - Nagcarlan routes</span>
               <span className="px-3 py-1 rounded-full text-xs bg-secondary/60 text-foreground border border-border/40">Sunrise ridge treks</span>
             </div>
+            <div className="mt-7">
+              <Link to="/about">
+                <Button variant="outline" className="gap-2 rounded-full px-6 border-primary/40 hover:border-primary hover:bg-primary/5 transition-all">
+                  <Mountain className="w-4 h-4 text-primary" />
+                  Learn More About Mt. Kalisungan
+                  <ArrowUpRight className="w-4 h-4 text-primary" />
+                </Button>
+              </Link>
+            </div>
           </div>
         </div>
       </section>
