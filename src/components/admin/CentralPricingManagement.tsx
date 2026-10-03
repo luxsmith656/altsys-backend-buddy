@@ -4,10 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
-import { Checkbox } from '@/components/ui/checkbox';
-import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 import {
@@ -16,23 +13,20 @@ import {
   RotateCcw,
   Sparkles,
   Calculator,
-  Info,
   Users,
-  Megaphone,
   CalendarCheck,
-  SlidersHorizontal,
   Trash2,
   Loader2,
   Building2,
   ShieldCheck,
   CheckCircle2,
+  Layers,
 } from 'lucide-react';
 import { usePricing } from '@/hooks/usePricing';
 import { useLocations } from '@/hooks/useLocations';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
 import { calculateFees, formatPeso } from '@/lib/payments';
-import { addAnnouncement, type AdminAnnouncement, type AnnouncementTarget } from '@/lib/announcements';
 import type { PricingConfig } from '@/types/pricing';
 
 export default function CentralPricingManagement() {
@@ -40,18 +34,11 @@ export default function CentralPricingManagement() {
   const { locations } = useLocations();
   const { pricing, loading: pricingLoading, updatePricing, resetPricing } = usePricing();
 
-  // Sub-tab selection
-  const [activeSubTab, setActiveSubTab] = useState<'pricing' | 'capacity'>('pricing');
-
   // ----------------------------------------------------
   // Fare & Pricing State
   // ----------------------------------------------------
   const [form, setForm] = useState<PricingConfig>(pricing);
   const [savingFare, setSavingFare] = useState(false);
-  const [postAnnouncementOnChange, setPostAnnouncementOnChange] = useState(true);
-  const [announcementTarget, setAnnouncementTarget] = useState<AnnouncementTarget>('all');
-  const [announcementTitle, setAnnouncementTitle] = useState('Official Fare & Pricing Schedule Update');
-  const [announcementMessage, setAnnouncementMessage] = useState('');
 
   // Scrape jump-off locations to strictly Lamot 2, Lamot 1, Sto. Tomas
   const jumpOffLocations = useMemo(() => {
@@ -68,23 +55,13 @@ export default function CentralPricingManagement() {
       });
   }, [locations]);
 
-  // Generate clean ready announcement text
-  const generateCleanMessage = useCallback((cfg: PricingConfig) => {
-    return `Official Mt. Kalisungan tourism fare updated: Entry Fee: ${formatPeso(cfg.entryFee)}, Environmental Fee: ${formatPeso(cfg.envFee)}, Day Guide Fee: ${formatPeso(cfg.guideFeeMorning)}, Night Guide: ${formatPeso(cfg.guideFeeNight)}, Overnight Guide: ${formatPeso(cfg.guideFeeOvernight)}, Peak Extension: ${formatPeso(cfg.peakExtensionFeePerHour)}/hr. Emergency horse rescue: ${formatPeso(cfg.horseEmergencyFee || 500)} (lower stations) / ${formatPeso(cfg.horseHighStationFee || 1000)} (upper stations). These revised rates apply across all jump-off stations (Lamot 2, Lamot 1, Sto. Tomas) effective immediately.`;
-  }, []);
-
   useEffect(() => {
     setForm(pricing);
-    setAnnouncementMessage(generateCleanMessage(pricing));
-  }, [pricing, generateCleanMessage]);
+  }, [pricing]);
 
   const handleFareChange = (key: keyof PricingConfig, value: string) => {
     const num = Math.max(0, parseInt(value, 10) || 0);
-    setForm((prev) => {
-      const next = { ...prev, [key]: num };
-      setAnnouncementMessage(generateCleanMessage(next));
-      return next;
-    });
+    setForm((prev) => ({ ...prev, [key]: num }));
   };
 
   const handleSaveFare = async (e: React.FormEvent) => {
@@ -92,23 +69,7 @@ export default function CentralPricingManagement() {
     setSavingFare(true);
     try {
       await updatePricing(form, user?.id);
-
-      // Post clean official targeted announcement if enabled
-      if (postAnnouncementOnChange) {
-        const cleanMsg = announcementMessage.trim() || generateCleanMessage(form);
-        const newAnn: AdminAnnouncement = {
-          id: Date.now().toString(),
-          title: announcementTitle.trim() || 'Official Fare & Pricing Schedule Update',
-          body: cleanMsg,
-          type: 'info',
-          target: announcementTarget,
-          created_at: new Date().toISOString(),
-          isImportant: true,
-        };
-        addAnnouncement(newAnn);
-      }
-
-      toast.success('Official fare pricing updated successfully across all stations!');
+      toast.success('Official fare pricing and guide capacity updated successfully across all stations!');
     } catch (err: any) {
       toast.error(err.message || 'Failed to update pricing');
     } finally {
@@ -117,7 +78,7 @@ export default function CentralPricingManagement() {
   };
 
   const handleResetFare = async () => {
-    if (!window.confirm('Reset all fares to standard official defaults?')) return;
+    if (!window.confirm('Reset all fares and guide capacity to standard official defaults?')) return;
     setSavingFare(true);
     try {
       await resetPricing(user?.id);
@@ -131,8 +92,8 @@ export default function CentralPricingManagement() {
 
   // Live simulation using currently edited form values
   const simSolo = calculateFees(1, { hikeType: 'morning', pricing: form });
-  const simFive = calculateFees(5, { hikeType: 'morning', pricing: form });
-  const simTwelveNight = calculateFees(12, { hikeType: 'night', peakExtensionHours: 1, pricing: form });
+  const simFive = calculateFees(form.maxPaxPerGuide || 5, { hikeType: 'morning', pricing: form });
+  const simGroup = calculateFees((form.maxPaxPerGuide || 5) * 2 + 1, { hikeType: 'night', peakExtensionHours: 1, pricing: form });
 
   // ----------------------------------------------------
   // Daily Capacity Controls State
@@ -261,93 +222,87 @@ export default function CentralPricingManagement() {
   };
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+    <div className="space-y-8">
+      {/* Header Banner */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-border/20">
         <div>
-          <h2 className="text-xl font-bold flex items-center gap-2">
-            <DollarSign className="h-5 w-5 text-emerald-500" />
-            Central Fare & Capacity Command
+          <div className="flex items-center gap-2 mb-1">
+            <Badge variant="outline" className="text-[10px] uppercase font-bold tracking-wider bg-primary/10 text-primary border-primary/20">
+              Cross-Trailhead Regulatory Authority
+            </Badge>
+            <span className="text-xs text-muted-foreground">Municipal Ordinance Control</span>
+          </div>
+          <h2 className="text-xl lg:text-2xl font-bold flex items-center gap-2">
+            <DollarSign className="h-6 w-6 text-primary" />
+            Official Fare &amp; Pricing Schedule &amp; Capacity Control
           </h2>
-          <p className="text-sm text-muted-foreground mt-0.5">
-            Centralized tourism fee regulation, hiker quotas, and targeted broadcast announcements for Mt. Kalisungan.
+          <p className="text-xs lg:text-sm text-muted-foreground mt-0.5">
+            Unified management of official tariff rates, tour guide group allocations, and daily environmental quotas across Lamot 2, Lamot 1, and Sto. Tomas.
           </p>
         </div>
-
-        {activeSubTab === 'pricing' && (
-          <div className="flex items-center gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleResetFare}
-              disabled={savingFare || pricingLoading}
-              className="gap-1.5 text-xs text-muted-foreground hover:text-foreground"
-            >
-              <RotateCcw className="h-3.5 w-3.5" /> Reset Defaults
-            </Button>
-            <Button
-              size="sm"
-              onClick={handleSaveFare}
-              disabled={savingFare || pricingLoading}
-              className="gap-1.5 text-xs bg-emerald-600 hover:bg-emerald-700 text-white"
-            >
-              <Save className="h-3.5 w-3.5" /> {savingFare ? 'Saving...' : 'Publish Rates'}
-            </Button>
-          </div>
-        )}
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleResetFare}
+            disabled={savingFare || pricingLoading}
+            className="gap-1.5 text-xs h-9"
+          >
+            <RotateCcw className="h-3.5 w-3.5" /> Reset Defaults
+          </Button>
+          <Button
+            size="sm"
+            onClick={handleSaveFare}
+            disabled={savingFare || pricingLoading}
+            className="gap-1.5 text-xs h-9 glow-primary"
+          >
+            {savingFare ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
+            Publish Rates
+          </Button>
+        </div>
       </div>
 
-      {/* Sub-tab Navigation */}
-      <Tabs value={activeSubTab} onValueChange={(val) => setActiveSubTab(val as 'pricing' | 'capacity')}>
-        <TabsList className="glass-card mb-4">
-          <TabsTrigger value="pricing" className="gap-2">
-            <DollarSign className="h-4 w-4 text-emerald-500" /> Official Fare & Pricing Schedule
-          </TabsTrigger>
-          <TabsTrigger value="capacity" className="gap-2">
-            <CalendarCheck className="h-4 w-4 text-primary" /> Daily Hiker Capacity Controls
-          </TabsTrigger>
-        </TabsList>
+      {/* ──────────────── SECTION 1: FARE RATES & GUIDE CAPACITY ──────────────── */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="lg:col-span-2 space-y-6">
+          <Card className="glass-card border-border/30 overflow-hidden">
+            <CardHeader className="pb-3 border-b border-border/20 bg-secondary/10">
+              <CardTitle className="text-base font-bold flex items-center gap-2">
+                <DollarSign className="h-4 w-4 text-primary" /> Official Ordinance Fee Schedule
+              </CardTitle>
+              <CardDescription className="text-xs">
+                Rates automatically enforce across online registrations and physical walk-in desks.
+              </CardDescription>
+            </CardHeader>
 
-        {/* -------------------- TAB 1: FARE & PRICING -------------------- */}
-        <TabsContent value="pricing" className="space-y-6 mt-0">
-          <div className="grid lg:grid-cols-3 gap-6">
-            {/* Form Inputs */}
-            <div className="lg:col-span-2 space-y-6">
-              {/* Fixed Fees */}
-              <Card className="glass-card">
-                <CardHeader className="pb-3">
-                  <CardTitle className="text-base flex items-center gap-2">
-                    <Users className="h-4 w-4 text-primary" /> Per-Hiker Fixed Fees
-                  </CardTitle>
-                  <CardDescription>Mandatory entrance and conservation fees collected per registered head.</CardDescription>
-                </CardHeader>
-                <CardContent className="grid sm:grid-cols-2 gap-4">
-                  <div className="space-y-1.5">
-                    <Label htmlFor="entryFee" className="text-xs font-semibold">
-                      Barangay Registration / Entry Fee
-                    </Label>
+            <CardContent className="p-5 space-y-5">
+              {/* Mandatory Registration & Environmental */}
+              <div>
+                <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-3 flex items-center gap-1.5">
+                  <ShieldCheck className="h-3.5 w-3.5 text-primary" /> Per-Hiker Fees
+                </h4>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="space-y-1.5 p-3 rounded-xl bg-secondary/20 border border-border/30">
+                    <Label htmlFor="entryFee" className="text-xs font-semibold">Registration / Entry Fee (₱ / head)</Label>
                     <div className="relative">
-                      <span className="absolute left-3 top-2.5 text-xs text-muted-foreground font-semibold">₱</span>
+                      <span className="absolute left-3 top-2 text-xs font-bold text-muted-foreground">₱</span>
                       <Input
                         id="entryFee"
                         type="number"
                         min="0"
-                        step="10"
+                        step="5"
                         value={form.entryFee}
                         onChange={(e) => handleFareChange('entryFee', e.target.value)}
-                        className="pl-7"
-                        required
+                        className="pl-7 font-mono text-xs h-8 bg-background/80"
                       />
                     </div>
-                    <p className="text-[11px] text-muted-foreground">Standard barangay tourism registration.</p>
+                    <p className="text-[10px] text-muted-foreground">Standard ordinance default: ₱30</p>
                   </div>
 
-                  <div className="space-y-1.5">
-                    <Label htmlFor="envFee" className="text-xs font-semibold">
-                      Environmental / DSPA Fee
-                    </Label>
+                  <div className="space-y-1.5 p-3 rounded-xl bg-secondary/20 border border-border/30">
+                    <Label htmlFor="envFee" className="text-xs font-semibold">Environmental / DSPA Fee (₱ / head)</Label>
                     <div className="relative">
-                      <span className="absolute left-3 top-2.5 text-xs text-muted-foreground font-semibold">₱</span>
+                      <span className="absolute left-3 top-2 text-xs font-bold text-muted-foreground">₱</span>
                       <Input
                         id="envFee"
                         type="number"
@@ -355,330 +310,264 @@ export default function CentralPricingManagement() {
                         step="5"
                         value={form.envFee}
                         onChange={(e) => handleFareChange('envFee', e.target.value)}
-                        className="pl-7"
-                        required
+                        className="pl-7 font-mono text-xs h-8 bg-background/80"
                       />
                     </div>
-                    <p className="text-[11px] text-muted-foreground">Mountain maintenance & eco-preservation.</p>
+                    <p className="text-[10px] text-muted-foreground">Standard ordinance default: ₱20</p>
                   </div>
-                </CardContent>
-              </Card>
+                </div>
+              </div>
 
-              {/* Guide Rates */}
-              <Card className="glass-card">
-                <CardHeader className="pb-3">
-                  <CardTitle className="text-base flex items-center gap-2">
-                    <Users className="h-4 w-4 text-sky-500" /> Mandatory Guide Rates (Per Guide)
-                  </CardTitle>
-                  <CardDescription>Standard guide compensation (ratio: 1 guide per 5 hikers maximum).</CardDescription>
-                </CardHeader>
-                <CardContent className="grid sm:grid-cols-3 gap-4">
-                  <div className="space-y-1.5">
-                    <Label htmlFor="guideMorning" className="text-xs font-semibold">
-                      Morning Hike Guide
-                    </Label>
-                    <div className="relative">
-                      <span className="absolute left-3 top-2.5 text-xs text-muted-foreground font-semibold">₱</span>
+              {/* Guide Capacity & Fees */}
+              <div>
+                <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-3 flex items-center gap-1.5">
+                  <Users className="h-3.5 w-3.5 text-primary" /> Guide Allocation &amp; Tariffs
+                </h4>
+
+                {/* Adjustable Guide Capacity (5 pax default, syncs everywhere) */}
+                <div className="p-4 rounded-xl bg-primary/5 border border-primary/20 space-y-2 mb-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <Label htmlFor="maxPaxPerGuide" className="text-xs font-bold text-primary flex items-center gap-1.5">
+                        <Users className="h-4 w-4" /> Tour Guide Capacity Ratio (Max Hikers per Guide)
+                      </Label>
+                      <p className="text-[11px] text-muted-foreground mt-0.5">
+                        Number of hikers permitted under a single licensed guide. Groups exceeding this require an additional guide.
+                      </p>
+                    </div>
+                    <div className="w-28 relative">
                       <Input
-                        id="guideMorning"
+                        id="maxPaxPerGuide"
+                        type="number"
+                        min="1"
+                        max="20"
+                        value={form.maxPaxPerGuide ?? 5}
+                        onChange={(e) => handleFareChange('maxPaxPerGuide', e.target.value)}
+                        className="font-bold text-sm text-center h-9 border-primary/40 focus:border-primary"
+                      />
+                    </div>
+                  </div>
+                  <div className="text-[10px] text-primary/80 flex items-center gap-1.5 pt-1 border-t border-primary/10">
+                    <CheckCircle2 className="h-3.5 w-3.5 text-primary shrink-0" />
+                    <span>Synchronizes in real time across Booking Page, Admin Walk-In Desks, and Guide Assignments.</span>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  <div className="space-y-1.5 p-3 rounded-xl bg-secondary/20 border border-border/30">
+                    <Label htmlFor="guideFeeMorning" className="text-xs font-semibold">Morning Hike Guide (₱)</Label>
+                    <div className="relative">
+                      <span className="absolute left-3 top-2 text-xs font-bold text-muted-foreground">₱</span>
+                      <Input
+                        id="guideFeeMorning"
                         type="number"
                         min="0"
                         step="50"
                         value={form.guideFeeMorning}
                         onChange={(e) => handleFareChange('guideFeeMorning', e.target.value)}
-                        className="pl-7"
-                        required
+                        className="pl-7 font-mono text-xs h-8 bg-background/80"
                       />
                     </div>
-                    <p className="text-[11px] text-muted-foreground">2:00 AM – 10:00 AM intervals.</p>
+                    <p className="text-[10px] text-muted-foreground">Standard default: ₱800</p>
                   </div>
 
-                  <div className="space-y-1.5">
-                    <Label htmlFor="guideNight" className="text-xs font-semibold">
-                      Night Hike Guide
-                    </Label>
+                  <div className="space-y-1.5 p-3 rounded-xl bg-secondary/20 border border-border/30">
+                    <Label htmlFor="guideFeeNight" className="text-xs font-semibold">Night Hike Guide (₱)</Label>
                     <div className="relative">
-                      <span className="absolute left-3 top-2.5 text-xs text-muted-foreground font-semibold">₱</span>
+                      <span className="absolute left-3 top-2 text-xs font-bold text-muted-foreground">₱</span>
                       <Input
-                        id="guideNight"
+                        id="guideFeeNight"
                         type="number"
                         min="0"
                         step="50"
                         value={form.guideFeeNight}
                         onChange={(e) => handleFareChange('guideFeeNight', e.target.value)}
-                        className="pl-7"
-                        required
+                        className="pl-7 font-mono text-xs h-8 bg-background/80"
                       />
                     </div>
-                    <p className="text-[11px] text-muted-foreground">Sunset / Twilight ascent.</p>
+                    <p className="text-[10px] text-muted-foreground">Standard default: ₱1,000</p>
                   </div>
 
-                  <div className="space-y-1.5">
-                    <Label htmlFor="guideOvernight" className="text-xs font-semibold">
-                      Overnight Camp Guide
-                    </Label>
+                  <div className="space-y-1.5 p-3 rounded-xl bg-secondary/20 border border-border/30">
+                    <Label htmlFor="guideFeeOvernight" className="text-xs font-semibold">Overnight Camp Guide (₱)</Label>
                     <div className="relative">
-                      <span className="absolute left-3 top-2.5 text-xs text-muted-foreground font-semibold">₱</span>
+                      <span className="absolute left-3 top-2 text-xs font-bold text-muted-foreground">₱</span>
                       <Input
-                        id="guideOvernight"
+                        id="guideFeeOvernight"
                         type="number"
                         min="0"
                         step="50"
                         value={form.guideFeeOvernight}
                         onChange={(e) => handleFareChange('guideFeeOvernight', e.target.value)}
-                        className="pl-7"
-                        required
+                        className="pl-7 font-mono text-xs h-8 bg-background/80"
                       />
                     </div>
-                    <p className="text-[11px] text-muted-foreground">Full overnight campout.</p>
+                    <p className="text-[10px] text-muted-foreground">Standard default: ₱1,600</p>
                   </div>
-                </CardContent>
-              </Card>
+                </div>
+              </div>
 
-              {/* Surcharges & Rescue */}
-              <Card className="glass-card">
-                <CardHeader className="pb-3">
-                  <CardTitle className="text-base flex items-center gap-2">
-                    <Sparkles className="h-4 w-4 text-amber-500" /> Surcharges & Emergency Rates
-                  </CardTitle>
-                  <CardDescription>Overstaying, peak extension, and emergency horse rescue.</CardDescription>
-                </CardHeader>
-                <CardContent className="grid sm:grid-cols-3 gap-4">
-                  <div className="space-y-1.5">
-                    <Label htmlFor="peakHour" className="text-xs font-semibold">
-                      Peak Summit Extension (/Hour)
-                    </Label>
+              {/* Peak Extension & Horse Rescue */}
+              <div>
+                <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-3 flex items-center gap-1.5">
+                  <Sparkles className="h-3.5 w-3.5 text-primary" /> Ancillary &amp; Emergency Rates
+                </h4>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  <div className="space-y-1.5 p-3 rounded-xl bg-secondary/20 border border-border/30">
+                    <Label htmlFor="peakExtensionFee" className="text-xs font-semibold">Summit Peak Extension (₱/hr)</Label>
                     <div className="relative">
-                      <span className="absolute left-3 top-2.5 text-xs text-muted-foreground font-semibold">₱</span>
+                      <span className="absolute left-3 top-2 text-xs font-bold text-muted-foreground">₱</span>
                       <Input
-                        id="peakHour"
+                        id="peakExtensionFee"
                         type="number"
                         min="0"
-                        step="25"
+                        step="10"
                         value={form.peakExtensionFeePerHour}
                         onChange={(e) => handleFareChange('peakExtensionFeePerHour', e.target.value)}
-                        className="pl-7"
-                        required
+                        className="pl-7 font-mono text-xs h-8 bg-background/80"
                       />
                     </div>
-                    <p className="text-[11px] text-muted-foreground">Past summit window.</p>
+                    <p className="text-[10px] text-muted-foreground">Default: ₱100/hr</p>
                   </div>
 
-                  <div className="space-y-1.5">
-                    <Label htmlFor="horseLow" className="text-xs font-semibold">
-                      Horse Rescue (Station 1–2)
-                    </Label>
+                  <div className="space-y-1.5 p-3 rounded-xl bg-secondary/20 border border-border/30">
+                    <Label htmlFor="horseEmergencyFee" className="text-xs font-semibold">Horse (Lower Stations 2-1)</Label>
                     <div className="relative">
-                      <span className="absolute left-3 top-2.5 text-xs text-muted-foreground font-semibold">₱</span>
+                      <span className="absolute left-3 top-2 text-xs font-bold text-muted-foreground">₱</span>
                       <Input
-                        id="horseLow"
+                        id="horseEmergencyFee"
                         type="number"
                         min="0"
                         step="50"
-                        value={form.horseEmergencyFee || 500}
+                        value={form.horseEmergencyFee}
                         onChange={(e) => handleFareChange('horseEmergencyFee', e.target.value)}
-                        className="pl-7"
-                        required
+                        className="pl-7 font-mono text-xs h-8 bg-background/80"
                       />
                     </div>
-                    <p className="text-[11px] text-muted-foreground">Emergency horse lower trail.</p>
+                    <p className="text-[10px] text-muted-foreground">Default: ₱500</p>
                   </div>
 
-                  <div className="space-y-1.5">
-                    <Label htmlFor="horseHigh" className="text-xs font-semibold">
-                      Horse Rescue (Station 3–5)
-                    </Label>
+                  <div className="space-y-1.5 p-3 rounded-xl bg-secondary/20 border border-border/30">
+                    <Label htmlFor="horseHighStationFee" className="text-xs font-semibold">Horse (Upper Stations 5-3)</Label>
                     <div className="relative">
-                      <span className="absolute left-3 top-2.5 text-xs text-muted-foreground font-semibold">₱</span>
+                      <span className="absolute left-3 top-2 text-xs font-bold text-muted-foreground">₱</span>
                       <Input
-                        id="horseHigh"
+                        id="horseHighStationFee"
                         type="number"
                         min="0"
                         step="50"
-                        value={form.horseHighStationFee || 1000}
+                        value={form.horseHighStationFee}
                         onChange={(e) => handleFareChange('horseHighStationFee', e.target.value)}
-                        className="pl-7"
-                        required
+                        className="pl-7 font-mono text-xs h-8 bg-background/80"
                       />
                     </div>
-                    <p className="text-[11px] text-muted-foreground">Emergency horse upper trail.</p>
+                    <p className="text-[10px] text-muted-foreground">Default: ₱1,000</p>
                   </div>
-                </CardContent>
-              </Card>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
 
-              {/* Clean Ready Announcement Generator with Targeting */}
-              <Card className="glass-card border-primary/20 bg-primary/5">
-                <CardHeader className="pb-2">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <Megaphone className="h-4 w-4 text-primary" />
-                      <CardTitle className="text-sm font-semibold">Targeted Ready Announcement Bulletin</CardTitle>
-                    </div>
-                    <Badge variant="outline" className="text-[10px] bg-primary/10 text-primary border-primary/30">
-                      Auto-Broadcast
-                    </Badge>
+        {/* Live Simulator Column */}
+        <div className="space-y-6">
+          <Card className="glass-card border-border/30 h-full flex flex-col justify-between">
+            <CardHeader className="pb-3 border-b border-border/20 bg-secondary/10">
+              <CardTitle className="text-sm font-bold flex items-center gap-2">
+                <Calculator className="h-4 w-4 text-primary" /> Live Tariff Simulation
+              </CardTitle>
+              <CardDescription className="text-xs">
+                Real-time fee verification using your currently edited inputs.
+              </CardDescription>
+            </CardHeader>
+
+            <CardContent className="p-4 space-y-4 text-xs">
+              {/* Scenario 1 */}
+              <div className="p-3 rounded-xl bg-secondary/20 border border-border/30 space-y-1.5">
+                <div className="flex items-center justify-between font-semibold">
+                  <span>Solo Hiker (1 Pax, Day)</span>
+                  <Badge variant="outline" className="text-[10px] font-mono font-bold text-primary">
+                    {formatPeso(simSolo.totalFee)}
+                  </Badge>
+                </div>
+                <div className="text-[11px] text-muted-foreground space-y-0.5">
+                  <div className="flex justify-between">
+                    <span>Reg + Env ({formatPeso(form.entryFee + form.envFee)})</span>
+                    <span>1 Guide ({formatPeso(form.guideFeeMorning)})</span>
                   </div>
-                  <CardDescription className="text-xs">
-                    Clean, ready message generated automatically when fare changes occur.
-                  </CardDescription>
-                </CardHeader>
+                </div>
+              </div>
 
-                <CardContent className="space-y-4 pt-1">
-                  <div className="flex items-center gap-2.5">
-                    <Checkbox
-                      id="annToggle"
-                      checked={postAnnouncementOnChange}
-                      onCheckedChange={(v) => setPostAnnouncementOnChange(Boolean(v))}
-                    />
-                    <Label htmlFor="annToggle" className="text-xs font-semibold cursor-pointer">
-                      Auto-broadcast clean announcement upon publishing rates
-                    </Label>
+              {/* Scenario 2 */}
+              <div className="p-3 rounded-xl bg-secondary/20 border border-border/30 space-y-1.5">
+                <div className="flex items-center justify-between font-semibold">
+                  <span>Standard Group ({form.maxPaxPerGuide || 5} Pax, Day)</span>
+                  <Badge variant="outline" className="text-[10px] font-mono font-bold text-emerald-600">
+                    {formatPeso(simFive.totalFee)}
+                  </Badge>
+                </div>
+                <div className="text-[11px] text-muted-foreground space-y-0.5">
+                  <div className="flex justify-between">
+                    <span>Reg + Env ({formatPeso((form.entryFee + form.envFee) * (form.maxPaxPerGuide || 5))})</span>
+                    <span>1 Guide ({formatPeso(form.guideFeeMorning)})</span>
                   </div>
+                </div>
+              </div>
 
-                  {postAnnouncementOnChange && (
-                    <div className="space-y-3 pt-1 border-t border-border/20">
-                      <div className="grid sm:grid-cols-2 gap-3">
-                        <div className="space-y-1">
-                          <Label className="text-xs font-semibold">Target Audience</Label>
-                          <Select
-                            value={announcementTarget}
-                            onValueChange={(val) => setAnnouncementTarget(val as AnnouncementTarget)}
-                          >
-                            <SelectTrigger className="h-8 text-xs">
-                              <SelectValue placeholder="Select target" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="all">📢 All (Admins, Hikers & Guides)</SelectItem>
-                              <SelectItem value="admins">🛡️ Trailhead Admins Only</SelectItem>
-                              <SelectItem value="hikers">🥾 Hikers Only</SelectItem>
-                              <SelectItem value="guides">🧭 Guides Only</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        </div>
-
-                        <div className="space-y-1">
-                          <Label className="text-xs font-semibold">Bulletin Title</Label>
-                          <Input
-                            className="h-8 text-xs font-medium"
-                            value={announcementTitle}
-                            onChange={(e) => setAnnouncementTitle(e.target.value)}
-                            placeholder="Announcement title"
-                          />
-                        </div>
-                      </div>
-
-                      <div className="space-y-1.5">
-                        <div className="flex items-center justify-between">
-                          <Label className="text-xs font-semibold">Clean Message Body</Label>
-                          <button
-                            type="button"
-                            onClick={() => setAnnouncementMessage(generateCleanMessage(form))}
-                            className="text-[11px] text-primary hover:underline font-medium"
-                          >
-                            Reset to generated text
-                          </button>
-                        </div>
-                        <Textarea
-                          className="text-xs font-sans leading-relaxed min-h-[85px] bg-background/70"
-                          value={announcementMessage}
-                          onChange={(e) => setAnnouncementMessage(e.target.value)}
-                          placeholder="Clean announcement text..."
-                        />
-                      </div>
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-            </div>
-
-            {/* Live Rate Simulation Preview */}
-            <div className="space-y-6">
-              <Card className="glass-card border-emerald-500/30 sticky top-20">
-                <CardHeader className="pb-3">
-                  <div className="flex items-center justify-between">
-                    <CardTitle className="text-base flex items-center gap-2">
-                      <Calculator className="h-4 w-4 text-emerald-500" /> Live Rate Preview
-                    </CardTitle>
-                    <Badge variant="outline" className="text-[10px] bg-emerald-500/10 text-emerald-600 border-emerald-500/30">
-                      Instant Simulation
-                    </Badge>
+              {/* Scenario 3 */}
+              <div className="p-3 rounded-xl bg-secondary/20 border border-border/30 space-y-1.5">
+                <div className="flex items-center justify-between font-semibold">
+                  <span>Extended Group ({(form.maxPaxPerGuide || 5) * 2 + 1} Pax, Night + 1h Peak)</span>
+                  <Badge variant="outline" className="text-[10px] font-mono font-bold text-sky-600">
+                    {formatPeso(simGroup.totalFee)}
+                  </Badge>
+                </div>
+                <div className="text-[11px] text-muted-foreground space-y-0.5">
+                  <div className="flex justify-between">
+                    <span>Guides Needed: 3 guides</span>
+                    <span>{formatPeso(simGroup.guideFee)}</span>
                   </div>
-                  <CardDescription>Live cost breakdown using current rates.</CardDescription>
-                </CardHeader>
-
-                <CardContent className="space-y-4 text-xs">
-                  {/* Solo Hiker */}
-                  <div className="p-3 rounded-xl bg-background/60 border border-border/20 space-y-1">
-                    <div className="flex justify-between font-semibold">
-                      <span>Solo Hiker (Day Hike)</span>
-                      <span className="text-primary">{formatPeso(simSolo.totalFee)}</span>
-                    </div>
-                    <div className="text-[11px] text-muted-foreground flex justify-between">
-                      <span>Entry: {formatPeso(form.entryFee)} + Eco: {formatPeso(form.envFee)} + Guide: {formatPeso(form.guideFeeMorning)}</span>
-                      <Badge variant="outline" className="text-[9px] py-0">1 Guide</Badge>
-                    </div>
+                  <div className="flex justify-between">
+                    <span>Peak Summit Extension:</span>
+                    <span>{formatPeso(simGroup.peakExtensionFee)}</span>
                   </div>
+                </div>
+              </div>
 
-                  {/* 5 Hikers */}
-                  <div className="p-3 rounded-xl bg-background/60 border border-border/20 space-y-1">
-                    <div className="flex justify-between font-semibold">
-                      <span>Group of 5 (Morning Hike)</span>
-                      <span className="text-primary">{formatPeso(simFive.totalFee)}</span>
-                    </div>
-                    <div className="text-[11px] text-muted-foreground flex justify-between">
-                      <span>5 × ({formatPeso(form.entryFee + form.envFee)}) + {formatPeso(form.guideFeeMorning)} guide</span>
-                      <Badge variant="outline" className="text-[9px] py-0">1 Guide</Badge>
-                    </div>
-                  </div>
+              <div className="pt-2">
+                <Button
+                  onClick={handleSaveFare}
+                  disabled={savingFare}
+                  className="w-full text-xs font-semibold glow-primary"
+                >
+                  {savingFare ? 'Saving...' : 'Apply Simulated Rates'}
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      </div>
 
-                  {/* 12 Hikers Night */}
-                  <div className="p-3 rounded-xl bg-background/60 border border-border/20 space-y-1">
-                    <div className="flex justify-between font-semibold">
-                      <span>Group of 12 (Night + 1h Peak)</span>
-                      <span className="text-primary">{formatPeso(simTwelveNight.totalFee)}</span>
-                    </div>
-                    <div className="text-[11px] text-muted-foreground flex justify-between">
-                      <span>12 pax · 3 guides ({formatPeso(form.guideFeeNight * 3)}) + {formatPeso(form.peakExtensionFeePerHour)} peak</span>
-                      <Badge variant="outline" className="text-[9px] py-0">3 Guides</Badge>
-                    </div>
-                  </div>
-
-                  <div className="p-3 rounded-xl bg-secondary/30 border border-border/30 text-[11px] text-muted-foreground flex items-start gap-2">
-                    <Info className="h-4 w-4 text-primary shrink-0 mt-0.5" />
-                    <span>
-                      All published rates apply across Lamot 2, Lamot 1, and Sto. Tomas, updating checkout forms, on-site walk-ins, and receipts immediately.
-                    </span>
-                  </div>
-
-                  {form.updatedAt && (
-                    <p className="text-[10px] text-muted-foreground/80 text-center">
-                      Last updated: {format(new Date(form.updatedAt), 'MMM d, yyyy h:mm a')}
-                    </p>
-                  )}
-                </CardContent>
-              </Card>
-            </div>
-          </div>
-        </TabsContent>
-
-        {/* -------------------- TAB 2: DAILY CAPACITY CONTROLS -------------------- */}
-        <TabsContent value="capacity" className="space-y-6 mt-0">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-secondary/20 p-3.5 rounded-xl border border-border/20">
+      {/* ──────────────── SECTION 2: TRAILHEAD CAPACITY LIMITS ──────────────── */}
+      <Card className="glass-card border-border/30 overflow-hidden">
+        <CardHeader className="pb-3 border-b border-border/20 bg-secondary/10">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div>
-              <h3 className="text-sm font-semibold flex items-center gap-1.5">
-                <Building2 className="h-4 w-4 text-primary" /> Target Trailhead Station Scope
-              </h3>
-              <p className="text-xs text-muted-foreground">
-                Set quotas across all stations or restrict limits per specific jump-off trailhead.
-              </p>
+              <CardTitle className="text-base font-bold flex items-center gap-2">
+                <CalendarCheck className="h-4 w-4 text-primary" /> Daily Trailhead Quota &amp; Carrying Capacity
+              </CardTitle>
+              <CardDescription className="text-xs">
+                Set carrying capacity limits for individual dates or bulk date ranges across stations.
+              </CardDescription>
             </div>
-            <div className="w-full sm:w-64">
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-muted-foreground font-semibold">Scope:</span>
               <Select value={selectedCapLocationId} onValueChange={setSelectedCapLocationId}>
-                <SelectTrigger className="h-9 text-xs">
-                  <SelectValue placeholder="Scope by station" />
+                <SelectTrigger className="h-8 text-xs font-semibold w-52 bg-background/80">
+                  <SelectValue placeholder="All Stations" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">🌐 All Jump-Off Stations</SelectItem>
+                  <SelectItem value="all">🌐 All Stations (Global Default)</SelectItem>
                   {jumpOffLocations.map((loc) => (
                     <SelectItem key={loc.id} value={loc.id}>
                       📍 {loc.name}
@@ -688,219 +577,171 @@ export default function CentralPricingManagement() {
               </Select>
             </div>
           </div>
+        </CardHeader>
 
-          <div className="grid lg:grid-cols-2 gap-6">
-            {/* Single Date & Date Range Setters */}
-            <Card className="glass-card">
-              <CardHeader className="pb-3">
-                <CardTitle className="text-base flex items-center gap-2">
-                  <SlidersHorizontal className="h-4 w-4 text-primary" /> Set Daily Hiker Quota
-                </CardTitle>
-                <CardDescription>
-                  Configure day & night hiker caps for single dates or bulk date spans. Default is 100 hikers/day.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                {/* Single Date Setter */}
-                <div className="space-y-3 p-3.5 rounded-xl border border-border/20 bg-background/50">
-                  <p className="text-xs font-semibold text-foreground">Specific Date Limit</p>
-                  <div className="space-y-1.5">
-                    <Label htmlFor="singleCapDate" className="text-xs">Target Date</Label>
-                    <Input
-                      id="singleCapDate"
-                      type="date"
-                      value={capDate}
-                      onChange={(e) => setCapDate(e.target.value)}
-                      min={format(new Date(), 'yyyy-MM-dd')}
-                      className="h-8 text-xs"
-                    />
-                  </div>
-
-                  <div className="grid grid-cols-3 gap-2">
-                    <div className="space-y-1">
-                      <Label htmlFor="capMax" className="text-[11px]">Total Max</Label>
-                      <Input
-                        id="capMax"
-                        type="number"
-                        min={1}
-                        max={500}
-                        value={capMax}
-                        onChange={(e) => {
-                          const val = Math.max(1, parseInt(e.target.value) || 1);
-                          setCapMax(val);
-                          setCapDayMax(Math.round(val * 0.65));
-                          setCapNightMax(Math.max(1, val - Math.round(val * 0.65)));
-                        }}
-                        className="h-8 text-xs font-bold"
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <Label htmlFor="capDayMax" className="text-[11px] text-amber-600 dark:text-amber-400">☀️ Day</Label>
-                      <Input
-                        id="capDayMax"
-                        type="number"
-                        min={1}
-                        max={capMax}
-                        value={capDayMax}
-                        onChange={(e) => setCapDayMax(Math.max(1, parseInt(e.target.value) || 1))}
-                        className="h-8 text-xs"
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <Label htmlFor="capNightMax" className="text-[11px] text-sky-600 dark:text-sky-400">🌙 Night</Label>
-                      <Input
-                        id="capNightMax"
-                        type="number"
-                        min={1}
-                        max={capMax}
-                        value={capNightMax}
-                        onChange={(e) => setCapNightMax(Math.max(1, parseInt(e.target.value) || 1))}
-                        className="h-8 text-xs"
-                      />
-                    </div>
-                  </div>
-
-                  <Button
-                    className="w-full gap-1.5 text-xs h-8"
-                    onClick={saveCapacity}
-                    disabled={capSaving || !capDate}
-                  >
-                    {capSaving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CalendarCheck className="h-3.5 w-3.5" />}
-                    Save Single Date Limit
-                  </Button>
+        <CardContent className="p-5 space-y-6">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* Single Date Capacity */}
+            <div className="p-4 rounded-xl bg-secondary/20 border border-border/30 space-y-4">
+              <h4 className="text-xs font-bold text-foreground flex items-center gap-1.5">
+                <CalendarCheck className="h-3.5 w-3.5 text-primary" /> Single Date Capacity Override
+              </h4>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <Label className="text-[11px] font-semibold">Target Date</Label>
+                  <Input
+                    type="date"
+                    value={capDate}
+                    onChange={(e) => setCapDate(e.target.value)}
+                    className="text-xs h-8 bg-background/80"
+                  />
                 </div>
-
-                {/* Bulk Date Range Setter */}
-                <div className="space-y-3 p-3.5 rounded-xl border border-border/20 bg-background/50">
-                  <p className="text-xs font-semibold text-foreground">Bulk Date-Range Limit</p>
-                  <div className="grid grid-cols-2 gap-2">
-                    <div className="space-y-1">
-                      <Label htmlFor="capRangeStart" className="text-[11px]">Start Date</Label>
-                      <Input
-                        id="capRangeStart"
-                        type="date"
-                        value={capRangeStart}
-                        onChange={(e) => setCapRangeStart(e.target.value)}
-                        min={format(new Date(), 'yyyy-MM-dd')}
-                        className="h-8 text-xs"
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <Label htmlFor="capRangeEnd" className="text-[11px]">End Date</Label>
-                      <Input
-                        id="capRangeEnd"
-                        type="date"
-                        value={capRangeEnd}
-                        onChange={(e) => setCapRangeEnd(e.target.value)}
-                        min={capRangeStart || format(new Date(), 'yyyy-MM-dd')}
-                        className="h-8 text-xs"
-                      />
-                    </div>
-                  </div>
-
-                  <Button
-                    variant="secondary"
-                    className="w-full gap-1.5 text-xs h-8"
-                    onClick={saveCapacityRange}
-                    disabled={capSaving || !capRangeStart || !capRangeEnd}
-                  >
-                    {capSaving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CalendarCheck className="h-3.5 w-3.5" />}
-                    Apply to Entire Date Range ({capMax} slots/day)
-                  </Button>
+                <div className="space-y-1">
+                  <Label className="text-[11px] font-semibold">Total Max Capacity (Pax)</Label>
+                  <Input
+                    type="number"
+                    min="1"
+                    value={capMax}
+                    onChange={(e) => setCapMax(parseInt(e.target.value, 10) || 100)}
+                    className="text-xs h-8 bg-background/80 font-mono"
+                  />
                 </div>
-              </CardContent>
-            </Card>
-
-            {/* Upcoming Schedules List */}
-            <Card className="glass-card">
-              <CardHeader className="pb-3">
-                <div className="flex items-center justify-between">
-                  <CardTitle className="text-base flex items-center gap-2">
-                    <CalendarCheck className="h-4 w-4 text-emerald-500" /> Scheduled Capacity Limits
-                  </CardTitle>
-                  <Badge variant="outline" className="text-[10px]">
-                    {upcomingCapacities.length} custom schedules
-                  </Badge>
+                <div className="space-y-1">
+                  <Label className="text-[11px] font-semibold">Day Ascent Cap</Label>
+                  <Input
+                    type="number"
+                    min="0"
+                    value={capDayMax}
+                    onChange={(e) => setCapDayMax(parseInt(e.target.value, 10) || 65)}
+                    className="text-xs h-8 bg-background/80 font-mono"
+                  />
                 </div>
-                <CardDescription>
-                  Upcoming capacity overrides currently enforced on the booking system.
-                </CardDescription>
-              </CardHeader>
+                <div className="space-y-1">
+                  <Label className="text-[11px] font-semibold">Night Ascent Cap</Label>
+                  <Input
+                    type="number"
+                    min="0"
+                    value={capNightMax}
+                    onChange={(e) => setCapNightMax(parseInt(e.target.value, 10) || 35)}
+                    className="text-xs h-8 bg-background/80 font-mono"
+                  />
+                </div>
+              </div>
+              <Button
+                size="sm"
+                onClick={saveCapacity}
+                disabled={capSaving || !capDate}
+                className="w-full text-xs h-8 glow-primary"
+              >
+                {capSaving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : 'Set Date Capacity'}
+              </Button>
+            </div>
 
-              <CardContent>
-                {upcomingCapacities.length === 0 ? (
-                  <div className="text-center py-12">
-                    <SlidersHorizontal className="h-8 w-8 text-muted-foreground/30 mx-auto mb-2" />
-                    <p className="text-muted-foreground text-xs">
-                      No custom overrides set. All upcoming dates use the default quota of 100 hikers/day.
-                    </p>
-                  </div>
-                ) : (
-                  <div className="space-y-2 max-h-[360px] overflow-y-auto pr-1">
-                    {upcomingCapacities.map((cap) => {
-                      const dayMax = cap.day_max_capacity ?? Math.round(cap.max_capacity * 0.65);
-                      const nightMax = cap.night_max_capacity ?? Math.max(1, cap.max_capacity - dayMax);
-                      const available = Math.max(0, cap.max_capacity - cap.current_count);
-                      const ratio = cap.max_capacity > 0 ? available / cap.max_capacity : 0;
-                      const statusColor = available === 0
-                        ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'
-                        : ratio <= 0.3 ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400'
-                        : 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400';
+            {/* Bulk Range Capacity */}
+            <div className="p-4 rounded-xl bg-secondary/20 border border-border/30 space-y-4">
+              <h4 className="text-xs font-bold text-foreground flex items-center gap-1.5">
+                <Layers className="h-3.5 w-3.5 text-primary" /> Bulk Date Range Quota (Holidays / Peak)
+              </h4>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <Label className="text-[11px] font-semibold">Start Date</Label>
+                  <Input
+                    type="date"
+                    value={capRangeStart}
+                    onChange={(e) => setCapRangeStart(e.target.value)}
+                    className="text-xs h-8 bg-background/80"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-[11px] font-semibold">End Date</Label>
+                  <Input
+                    type="date"
+                    value={capRangeEnd}
+                    onChange={(e) => setCapRangeEnd(e.target.value)}
+                    className="text-xs h-8 bg-background/80"
+                  />
+                </div>
+                <div className="sm:col-span-2 text-[11px] text-muted-foreground">
+                  Applies <strong className="text-foreground">{capMax} max hikers/day</strong> ({capDayMax} day / {capNightMax} night) to each calendar day in the range.
+                </div>
+              </div>
+              <Button
+                size="sm"
+                variant="secondary"
+                onClick={saveCapacityRange}
+                disabled={capSaving || !capRangeStart || !capRangeEnd}
+                className="w-full text-xs h-8 font-semibold"
+              >
+                {capSaving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : 'Apply Bulk Range Quota'}
+              </Button>
+            </div>
+          </div>
 
-                      const locName = locations.find((l) => l.id === cap.location_id)?.name || 'All Stations';
-
+          {/* Upcoming Overrides Table */}
+          <div className="space-y-2">
+            <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+              <CalendarCheck className="h-3.5 w-3.5 text-primary" /> Active Configured Date Limits ({upcomingCapacities.length})
+            </h4>
+            <div className="rounded-xl border border-border/30 overflow-hidden bg-background/50">
+              <div className="max-h-60 overflow-y-auto">
+                <table className="w-full text-left text-xs">
+                  <thead className="bg-secondary/30 text-muted-foreground border-b border-border/20 font-semibold uppercase text-[10px] sticky top-0">
+                    <tr>
+                      <th className="px-4 py-2.5">Date</th>
+                      <th className="px-4 py-2.5">Station Scope</th>
+                      <th className="px-4 py-2.5">Total Capacity</th>
+                      <th className="px-4 py-2.5">Day Cap</th>
+                      <th className="px-4 py-2.5">Night Cap</th>
+                      <th className="px-4 py-2.5 text-right">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-border/10 font-mono text-[11px]">
+                    {upcomingCapacities.map((c) => {
+                      const loc = locations.find((l) => l.id === c.location_id);
                       return (
-                        <div key={cap.id} className="flex items-center justify-between p-3 rounded-xl border border-border/20 bg-secondary/15">
-                          <div className="space-y-1">
-                            <div className="flex items-center gap-2">
-                              <p className="text-xs font-bold text-foreground">{cap.date}</p>
-                              <Badge variant="outline" className="text-[9px] py-0">
-                                {locName}
+                        <tr key={c.id} className="hover:bg-muted/30">
+                          <td className="px-4 py-2.5 font-bold font-sans">{c.date}</td>
+                          <td className="px-4 py-2.5 font-sans">
+                            {loc ? (
+                              <Badge variant="outline" className="text-[10px]">
+                                {loc.name}
                               </Badge>
-                            </div>
-                            <div className="flex items-center gap-2 flex-wrap">
-                              <span className="text-[11px] text-muted-foreground">
-                                Booked: <strong>{cap.current_count}</strong> / {cap.max_capacity}
-                              </span>
-                              <span className={`text-[9px] font-bold px-1.5 py-0.2 rounded-full ${statusColor}`}>
-                                {available === 0 ? 'Full' : `${available} left`}
-                              </span>
-                            </div>
-                            <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
-                              <span className="text-amber-600 dark:text-amber-400 font-medium">☀️ Day: {dayMax}</span>
-                              <span>•</span>
-                              <span className="text-sky-600 dark:text-sky-400 font-medium">🌙 Night: {nightMax}</span>
-                            </div>
-                          </div>
-
-                          <div className="flex items-center gap-2">
-                            <div className="w-14 h-1.5 rounded-full bg-border/30 overflow-hidden">
-                              <div
-                                className={`h-full rounded-full transition-all ${
-                                  ratio <= 0.3 ? 'bg-amber-500' : ratio === 0 ? 'bg-red-500' : 'bg-emerald-500'
-                                }`}
-                                style={{ width: `${Math.min(100, (cap.current_count / cap.max_capacity) * 100)}%` }}
-                              />
-                            </div>
-                            <button
-                              type="button"
-                              onClick={() => deleteCapacityLimit(cap.id)}
-                              className="text-muted-foreground hover:text-destructive transition-colors p-1"
-                              aria-label={`Remove limit for ${cap.date}`}
+                            ) : (
+                              <Badge variant="secondary" className="text-[10px]">
+                                All Stations
+                              </Badge>
+                            )}
+                          </td>
+                          <td className="px-4 py-2.5 font-bold text-foreground">{c.max_capacity} pax</td>
+                          <td className="px-4 py-2.5 text-muted-foreground">{c.day_max_capacity ?? '—'}</td>
+                          <td className="px-4 py-2.5 text-muted-foreground">{c.night_max_capacity ?? '—'}</td>
+                          <td className="px-4 py-2.5 text-right">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => deleteCapacityLimit(c.id)}
+                              className="h-7 w-7 p-0 text-destructive hover:bg-destructive/10"
                             >
                               <Trash2 className="h-3.5 w-3.5" />
-                            </button>
-                          </div>
-                        </div>
+                            </Button>
+                          </td>
+                        </tr>
                       );
                     })}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
+                    {upcomingCapacities.length === 0 && (
+                      <tr>
+                        <td colSpan={6} className="px-4 py-6 text-center text-muted-foreground font-sans">
+                          No custom date overrides active. Standard default of 100 hikers/day applies across all stations.
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
           </div>
-        </TabsContent>
-      </Tabs>
+        </CardContent>
+      </Card>
     </div>
   );
 }

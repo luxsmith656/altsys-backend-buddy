@@ -1,5 +1,5 @@
 import * as shared from '../../supabase/functions/_shared/payments';
-import { getPricingConfig, getDynamicFeePolicyText } from './pricingService';
+import { getPricingConfig, getDynamicFeePolicyText, getMaxPaxPerGuide } from './pricingService';
 import type { PricingConfig } from '@/types/pricing';
 
 export * from '../../supabase/functions/_shared/payments';
@@ -14,6 +14,12 @@ export function getDynamicGuideFee(hikeType?: string | null, pricing: PricingCon
   return pricing.guideFeeMorning;
 }
 
+export function calculateGuidesNeeded(groupSize: number, maxPax?: number): number {
+  const size = Math.max(1, groupSize || 1);
+  const ratio = maxPax && maxPax > 0 ? maxPax : getMaxPaxPerGuide();
+  return Math.max(1, Math.ceil(size / ratio));
+}
+
 /**
  * Calculates hike fees using the system's dynamic pricing schedule.
  * Automatically respects Central Admin updates, defaulting to standard official rates.
@@ -24,7 +30,8 @@ export function calculateFees(groupSize: number, options?: ExtendedFeeOptions): 
 
   const entryFee = pricing.entryFee * size;
   const envFee = pricing.envFee * size;
-  const guidesNeeded = shared.calculateGuidesNeeded(size);
+  const maxPax = pricing.maxPaxPerGuide > 0 ? pricing.maxPaxPerGuide : 5;
+  const guidesNeeded = Math.max(1, Math.ceil(size / maxPax));
   const guideFee = guidesNeeded * getDynamicGuideFee(options?.hikeType, pricing);
 
   const peakExtensionHours = Math.max(0, Math.floor(Number(options?.peakExtensionHours) || 0));
@@ -51,4 +58,4 @@ export function calculateFees(groupSize: number, options?: ExtendedFeeOptions): 
   };
 }
 
-export { getPricingConfig, getDynamicFeePolicyText };
+export { getPricingConfig, getDynamicFeePolicyText, getMaxPaxPerGuide };

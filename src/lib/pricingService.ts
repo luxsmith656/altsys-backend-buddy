@@ -19,6 +19,7 @@ let cachedPricing: PricingConfig = (() => {
       peakExtensionFeePerHour: Number(parsed.peakExtensionFeePerHour) >= 0 ? Number(parsed.peakExtensionFeePerHour) : DEFAULT_PRICING.peakExtensionFeePerHour,
       horseEmergencyFee: Number(parsed.horseEmergencyFee) >= 0 ? Number(parsed.horseEmergencyFee) : DEFAULT_PRICING.horseEmergencyFee,
       horseHighStationFee: Number(parsed.horseHighStationFee) >= 0 ? Number(parsed.horseHighStationFee) : DEFAULT_PRICING.horseHighStationFee,
+      maxPaxPerGuide: Number(parsed.maxPaxPerGuide) > 0 ? Number(parsed.maxPaxPerGuide) : DEFAULT_PRICING.maxPaxPerGuide,
       updatedAt: parsed.updatedAt,
       updatedBy: parsed.updatedBy,
     };
@@ -29,6 +30,10 @@ let cachedPricing: PricingConfig = (() => {
 
 export function getPricingConfig(): PricingConfig {
   return { ...cachedPricing };
+}
+
+export function getMaxPaxPerGuide(): number {
+  return cachedPricing.maxPaxPerGuide > 0 ? cachedPricing.maxPaxPerGuide : 5;
 }
 
 export function subscribePricing(listener: (config: PricingConfig) => void): () => void {
@@ -69,6 +74,7 @@ export async function fetchPricingConfig(): Promise<PricingConfig> {
         peakExtensionFeePerHour: Number(val.peakExtensionFeePerHour) >= 0 ? Number(val.peakExtensionFeePerHour) : DEFAULT_PRICING.peakExtensionFeePerHour,
         horseEmergencyFee: Number(val.horseEmergencyFee) >= 0 ? Number(val.horseEmergencyFee) : DEFAULT_PRICING.horseEmergencyFee,
         horseHighStationFee: Number(val.horseHighStationFee) >= 0 ? Number(val.horseHighStationFee) : DEFAULT_PRICING.horseHighStationFee,
+        maxPaxPerGuide: Number(val.maxPaxPerGuide) > 0 ? Number(val.maxPaxPerGuide) : DEFAULT_PRICING.maxPaxPerGuide,
         updatedAt: (data as any).updated_at ?? (val.updatedAt || undefined),
         updatedBy: (data as any).updated_by ?? (val.updatedBy || undefined),
       };
@@ -95,6 +101,7 @@ export async function updatePricingConfig(
     peakExtensionFeePerHour: updates.peakExtensionFeePerHour !== undefined && Number(updates.peakExtensionFeePerHour) >= 0 ? Number(updates.peakExtensionFeePerHour) : current.peakExtensionFeePerHour,
     horseEmergencyFee: updates.horseEmergencyFee !== undefined && Number(updates.horseEmergencyFee) >= 0 ? Number(updates.horseEmergencyFee) : current.horseEmergencyFee,
     horseHighStationFee: updates.horseHighStationFee !== undefined && Number(updates.horseHighStationFee) >= 0 ? Number(updates.horseHighStationFee) : current.horseHighStationFee,
+    maxPaxPerGuide: updates.maxPaxPerGuide !== undefined && Number(updates.maxPaxPerGuide) > 0 ? Number(updates.maxPaxPerGuide) : current.maxPaxPerGuide,
     updatedAt: new Date().toISOString(),
     updatedBy: userId || current.updatedBy,
   };
@@ -123,5 +130,6 @@ export async function resetPricingConfig(userId?: string): Promise<PricingConfig
 }
 
 export function getDynamicFeePolicyText(pricing: PricingConfig = getPricingConfig()): string {
-  return `Registration is PHP ${pricing.entryFee} per hiker; environmental fee is PHP ${pricing.envFee} per hiker. One guide covers up to 5 hikers, rounding guide count upward. Each guide costs PHP ${pricing.guideFeeMorning} for morning, PHP ${pricing.guideFeeNight} for night, or PHP ${pricing.guideFeeOvernight} for overnight. These rates apply to all jump-offs and walk-ins. Peak extension is PHP ${pricing.peakExtensionFeePerHour} per hour. Horse help from Stations 5-3 costs PHP ${pricing.horseHighStationFee}; Stations 2-1 costs PHP ${pricing.horseEmergencyFee}. Water, porter and other optional expenses have no fixed published rate: quote only the recorded amount, never invent a price. Recorded admin adjustments and actual receipt charges take precedence over a new estimate. A confirmed booking is not proof of payment.`;
+  const maxPax = pricing.maxPaxPerGuide > 0 ? pricing.maxPaxPerGuide : 5;
+  return `Registration is PHP ${pricing.entryFee} per hiker; environmental fee is PHP ${pricing.envFee} per hiker. One guide covers up to ${maxPax} hikers, rounding guide count upward. Each guide costs PHP ${pricing.guideFeeMorning} for morning, PHP ${pricing.guideFeeNight} for night, or PHP ${pricing.guideFeeOvernight} for overnight. These rates apply to all jump-offs and walk-ins. Peak extension is PHP ${pricing.peakExtensionFeePerHour} per hour. Horse help from Stations 5-3 costs PHP ${pricing.horseHighStationFee}; Stations 2-1 costs PHP ${pricing.horseEmergencyFee}. Water, porter and other optional expenses have no fixed published rate: quote only the recorded amount, never invent a price. Recorded admin adjustments and actual receipt charges take precedence over a new estimate. A confirmed booking is not proof of payment.`;
 }

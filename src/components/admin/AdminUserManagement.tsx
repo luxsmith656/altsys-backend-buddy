@@ -258,30 +258,35 @@ export default function AdminUserManagement({
         </div>
       </div>
 
-      {/* User cards list */}
-      <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {filtered.map((user) => {
-          const isGuide = user.role === 'guide';
-          return (
-            <Card key={user.id} className="glass-card hover:border-primary/40 transition-all flex flex-col justify-between">
-              <CardHeader className="pb-3">
-                <div className="flex items-start justify-between gap-2">
-                  <div className="flex items-center gap-2.5 min-w-0">
-                    <div
-                      className={`h-9 w-9 rounded-xl grid place-items-center font-bold text-sm shrink-0 ${
-                        isGuide
-                          ? 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20'
-                          : 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20'
-                      }`}
-                    >
-                      {user.fullName.charAt(0) || (isGuide ? 'G' : 'H')}
-                    </div>
-                    <div className="min-w-0">
-                      <CardTitle className="text-sm font-bold truncate">{user.fullName}</CardTitle>
-                      <div className="flex items-center gap-1.5 mt-0.5">
+      {/* User Roster Table List */}
+      <Card className="glass-card overflow-hidden border-border/30">
+        <CardContent className="p-0">
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs">
+              <thead className="bg-secondary/30 text-muted-foreground border-b border-border/20 font-semibold uppercase text-[10px] tracking-wider">
+                <tr>
+                  <th className="px-4 py-3">User &amp; Contact</th>
+                  <th className="px-4 py-3">Role</th>
+                  <th className="px-4 py-3">Status</th>
+                  <th className="px-4 py-3">Specialty / Emergency</th>
+                  <th className="px-4 py-3">Registered</th>
+                  <th className="px-4 py-3 text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border/10">
+                {filtered.map((user) => {
+                  const isGuide = user.role === 'guide';
+                  return (
+                    <tr key={user.id} className="hover:bg-muted/30 transition-colors">
+                      <td className="px-4 py-3">
+                        <div className="font-semibold text-foreground">{user.fullName}</div>
+                        <div className="text-[10px] text-muted-foreground font-mono">{user.email}</div>
+                        {user.phone && <div className="text-[10px] text-muted-foreground">{user.phone}</div>}
+                      </td>
+                      <td className="px-4 py-3">
                         <Badge
                           variant="outline"
-                          className={`text-[10px] py-0 ${
+                          className={`text-[10px] py-0 font-bold ${
                             isGuide
                               ? 'bg-amber-500/10 text-amber-700 dark:text-amber-300 border-amber-500/30'
                               : 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border-emerald-500/30'
@@ -289,6 +294,8 @@ export default function AdminUserManagement({
                         >
                           {isGuide ? 'TOUR GUIDE' : 'HIKER'}
                         </Badge>
+                      </td>
+                      <td className="px-4 py-3">
                         {user.accountStatus === 'deactivated' || user.status === 'deactivated' ? (
                           <Badge variant="destructive" className="text-[10px] py-0">
                             Deactivated
@@ -300,7 +307,7 @@ export default function AdminUserManagement({
                         )}
                         {isGuide && user.status && user.status !== 'deactivated' && (
                           <span
-                            className={`text-[10px] px-1.5 py-0.2 rounded-full font-semibold ${
+                            className={`ml-1.5 text-[10px] px-1.5 py-0.2 rounded-full font-semibold ${
                               user.status === 'available'
                                 ? 'bg-emerald-500/15 text-emerald-600'
                                 : 'bg-muted text-muted-foreground'
@@ -309,81 +316,70 @@ export default function AdminUserManagement({
                             {user.status}
                           </span>
                         )}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </CardHeader>
-
-              <CardContent className="space-y-2 text-xs pb-3">
-                <div className="flex items-center gap-2 text-muted-foreground">
-                  <Mail className="h-3.5 w-3.5 text-primary shrink-0" />
-                  <span className="font-mono truncate">{user.email}</span>
-                </div>
-
-                <div className="flex items-center gap-2 text-muted-foreground">
-                  <Phone className="h-3.5 w-3.5 text-primary shrink-0" />
-                  <span>{user.phone || 'No phone recorded'}</span>
-                </div>
-
-                {isGuide && user.specialty && (
-                  <div className="flex items-center gap-2 text-muted-foreground">
-                    <Compass className="h-3.5 w-3.5 text-amber-500 shrink-0" />
-                    <span className="truncate">{user.specialty}</span>
-                  </div>
+                      </td>
+                      <td className="px-4 py-3 text-muted-foreground">
+                        {isGuide ? (
+                          user.specialty ? (
+                            <span className="flex items-center gap-1 text-amber-600 dark:text-amber-400">
+                              <Compass className="h-3 w-3 shrink-0" /> {user.specialty}
+                            </span>
+                          ) : (
+                            '—'
+                          )
+                        ) : user.emergencyContact ? (
+                          <span className="flex items-center gap-1 text-rose-500">
+                            <HeartPulse className="h-3 w-3 shrink-0" /> {user.emergencyContact}
+                          </span>
+                        ) : (
+                          '—'
+                        )}
+                      </td>
+                      <td className="px-4 py-3 text-muted-foreground font-mono text-[11px]">
+                        {user.createdAt ? format(new Date(user.createdAt), 'MMM d, yyyy') : '—'}
+                      </td>
+                      <td className="px-4 py-3 text-right">
+                        <div className="flex items-center justify-end gap-1.5">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-7 text-xs gap-1 hover:text-primary px-2"
+                            onClick={() => handleOpenEdit(user)}
+                          >
+                            <Edit className="h-3 w-3" /> Edit
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="h-7 text-xs gap-1 border-amber-500/30 text-amber-600 dark:text-amber-400 hover:bg-amber-500/10 px-2"
+                            onClick={() => handleOpenPassword(user)}
+                          >
+                            <KeyRound className="h-3 w-3" /> Pass
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-7 text-xs gap-1 text-destructive hover:bg-destructive/10 px-2"
+                            onClick={() => setDeleteTarget(user)}
+                          >
+                            <Trash2 className="h-3 w-3" /> Remove
+                          </Button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+                {filtered.length === 0 && !loading && (
+                  <tr>
+                    <td colSpan={6} className="px-4 py-10 text-center text-muted-foreground">
+                      No users found matching your filters.
+                    </td>
+                  </tr>
                 )}
-
-                {!isGuide && user.emergencyContact && (
-                  <div className="flex items-center gap-2 text-muted-foreground">
-                    <HeartPulse className="h-3.5 w-3.5 text-rose-500 shrink-0" />
-                    <span className="truncate">{user.emergencyContact}</span>
-                  </div>
-                )}
-
-                <div className="text-[11px] text-muted-foreground/80 pt-1 border-t border-border/20">
-                  Registered: {format(new Date(user.createdAt), 'MMM d, yyyy')}
-                </div>
-              </CardContent>
-
-              {/* Action Buttons */}
-              <div className="p-3 pt-0 border-t border-border/20 mt-2 flex items-center justify-between gap-1 bg-secondary/10 rounded-b-xl">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-8 text-xs gap-1 hover:text-primary px-2"
-                  onClick={() => handleOpenEdit(user)}
-                >
-                  <Edit className="h-3.5 w-3.5" /> Edit
-                </Button>
-
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="h-8 text-xs gap-1 border-amber-500/30 text-amber-600 dark:text-amber-400 hover:bg-amber-500/10 px-2"
-                  onClick={() => handleOpenPassword(user)}
-                >
-                  <KeyRound className="h-3.5 w-3.5" /> Pass
-                </Button>
-
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-8 text-xs gap-1 text-destructive hover:bg-destructive/10 px-2"
-                  onClick={() => setDeleteTarget(user)}
-                >
-                  <Trash2 className="h-3.5 w-3.5" /> Remove
-                </Button>
-              </div>
-            </Card>
-          );
-        })}
-
-        {filtered.length === 0 && !loading && (
-          <div className="col-span-full py-12 text-center text-muted-foreground">
-            No users found matching your filters.
+              </tbody>
+            </table>
           </div>
-        )}
-      </div>
+        </CardContent>
+      </Card>
 
       {/* ── Change Password Modal ── */}
       <Dialog open={!!passwordTarget} onOpenChange={(open) => !open && setPasswordTarget(null)}>

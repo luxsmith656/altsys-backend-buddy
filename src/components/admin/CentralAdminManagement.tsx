@@ -252,23 +252,38 @@ export default function CentralAdminManagement() {
         </div>
       </div>
 
-      <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {filteredAdmins.map((admin) => (
-          <Card key={admin.id} className="glass-card hover:border-primary/40 transition-all flex flex-col justify-between">
-            <CardHeader className="pb-3">
-              <div className="flex items-start justify-between gap-2">
-                <div className="flex items-center gap-2.5">
-                  <div className="h-9 w-9 rounded-xl bg-primary/10 border border-primary/20 text-primary grid place-items-center font-bold text-sm">
-                    {admin.fullName.charAt(0) || 'A'}
-                  </div>
-                  <div>
-                    <CardTitle className="text-sm font-bold flex items-center gap-1.5">
-                      {admin.fullName}
-                    </CardTitle>
-                    <div className="flex items-center gap-1.5 mt-0.5">
-                      <Badge variant="outline" className="text-[10px] bg-primary/5 text-primary border-primary/20">
-                        {admin.role.toUpperCase()}
-                      </Badge>
+      {/* Roster Table List */}
+      <Card className="glass-card overflow-hidden border-border/30">
+        <CardContent className="p-0">
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs">
+              <thead className="bg-secondary/30 text-muted-foreground border-b border-border/20 font-semibold uppercase text-[10px] tracking-wider">
+                <tr>
+                  <th className="px-4 py-3">Administrator</th>
+                  <th className="px-4 py-3">Jurisdiction</th>
+                  <th className="px-4 py-3">Phone</th>
+                  <th className="px-4 py-3">Status</th>
+                  <th className="px-4 py-3">Created</th>
+                  <th className="px-4 py-3 text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border/10">
+                {filteredAdmins.map((admin) => (
+                  <tr key={admin.id} className="hover:bg-muted/30 transition-colors">
+                    <td className="px-4 py-3">
+                      <div className="font-semibold text-foreground">{admin.fullName}</div>
+                      <div className="text-[10px] text-muted-foreground font-mono">{admin.email}</div>
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-1.5 font-medium">
+                        <Building2 className="h-3.5 w-3.5 text-primary shrink-0" />
+                        <span>{admin.locationName}</span>
+                      </div>
+                    </td>
+                    <td className="px-4 py-3 text-muted-foreground">
+                      {admin.phone || '—'}
+                    </td>
+                    <td className="px-4 py-3">
                       {admin.status === 'deactivated' ? (
                         <Badge variant="destructive" className="text-[10px]">
                           Deactivated
@@ -278,63 +293,44 @@ export default function CentralAdminManagement() {
                           Active
                         </Badge>
                       )}
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </CardHeader>
-
-            <CardContent className="space-y-2.5 text-xs pb-4">
-              <div className="flex items-center gap-2 text-muted-foreground">
-                <Mail className="h-3.5 w-3.5 text-primary shrink-0" />
-                <span className="font-mono truncate">{admin.email}</span>
-              </div>
-
-              <div className="flex items-center gap-2 text-muted-foreground">
-                <Building2 className="h-3.5 w-3.5 text-primary shrink-0" />
-                <span className="font-semibold text-foreground">{admin.locationName}</span>
-              </div>
-
-              {admin.phone && (
-                <div className="flex items-center gap-2 text-muted-foreground">
-                  <Phone className="h-3.5 w-3.5 text-primary shrink-0" />
-                  <span>{admin.phone}</span>
-                </div>
-              )}
-
-              <div className="flex items-center gap-2 text-[11px] text-muted-foreground/80 pt-1 border-t border-border/20">
-                <Calendar className="h-3 w-3" />
-                <span>Added: {format(new Date(admin.createdAt), 'MMM d, yyyy')}</span>
-              </div>
-            </CardContent>
-
-            <div className="p-3 pt-0 border-t border-border/20 mt-2 flex items-center justify-end gap-2 bg-secondary/10 rounded-b-xl">
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-8 text-xs gap-1.5 hover:text-primary"
-                onClick={() => handleOpenEdit(admin)}
-              >
-                <Edit className="h-3.5 w-3.5" /> Edit Info
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                className="h-8 text-xs gap-1.5 border-amber-500/30 text-amber-600 dark:text-amber-400 hover:bg-amber-500/10"
-                onClick={() => handleOpenReset(admin)}
-              >
-                <KeyRound className="h-3.5 w-3.5" /> Reset Pass
-              </Button>
-            </div>
-          </Card>
-        ))}
-
-        {filteredAdmins.length === 0 && !loading && (
-          <div className="col-span-full py-12 text-center text-muted-foreground">
-            No administrator accounts match your query.
+                    </td>
+                    <td className="px-4 py-3 text-muted-foreground font-mono text-[11px]">
+                      {admin.createdAt ? format(new Date(admin.createdAt), 'MMM d, yyyy') : '—'}
+                    </td>
+                    <td className="px-4 py-3 text-right">
+                      <div className="flex items-center justify-end gap-1.5">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-7 text-xs gap-1 hover:text-primary"
+                          onClick={() => handleOpenEdit(admin)}
+                        >
+                          <Edit className="h-3.5 w-3.5" /> Edit Info
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-7 text-xs gap-1 border-amber-500/30 text-amber-600 dark:text-amber-400 hover:bg-amber-500/10"
+                          onClick={() => handleOpenReset(admin)}
+                        >
+                          <KeyRound className="h-3.5 w-3.5" /> Reset Pass
+                        </Button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+                {filteredAdmins.length === 0 && !loading && (
+                  <tr>
+                    <td colSpan={6} className="px-4 py-10 text-center text-muted-foreground">
+                      No administrator accounts match your query.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
           </div>
-        )}
-      </div>
+        </CardContent>
+      </Card>
 
       {/* ── Reset Password Dialog ── */}
       <Dialog open={!!resetTarget} onOpenChange={(open) => !open && setResetTarget(null)}>

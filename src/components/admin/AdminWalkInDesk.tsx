@@ -138,7 +138,9 @@ export default function AdminWalkInDesk({
     hikeType,
     peakExtensionHours: peakHours,
     emergencyHorseCount: horseCount,
+    pricing,
   });
+  const maxPaxRatio = pricing?.maxPaxPerGuide || MAX_PAX_PER_GUIDE;
   const totalAmount = fees.totalFee;
 
   const tenderedNum = Number(cashTendered) || 0;
@@ -459,7 +461,7 @@ export default function AdminWalkInDesk({
                   <div className="flex items-center justify-between">
                     <div>
                       <Label className="text-xs font-bold text-foreground">Group Size (Hikers)</Label>
-                      <p className="text-[11px] text-muted-foreground">1 Tour Guide required per 1–{MAX_PAX_PER_GUIDE} hikers ({formatPeso(getGuideFeePerGuide(hikeType))}/guide)</p>
+                      <p className="text-[11px] text-muted-foreground">1 Tour Guide required per 1–{maxPaxRatio} hikers ({formatPeso(getGuideFeePerGuide(hikeType))}/guide)</p>
                     </div>
                     <div className="flex items-center gap-2">
                       <Button
@@ -483,7 +485,7 @@ export default function AdminWalkInDesk({
                       </Button>
                     </div>
                   </div>
-                    {groupSize > MAX_PAX_PER_GUIDE && (
+                    {groupSize > maxPaxRatio && (
                     <div className="p-2 rounded-xl bg-primary/10 border border-primary/20 text-[11px] text-primary font-medium flex items-center gap-1.5">
                       <ShieldCheck className="h-3.5 w-3.5 shrink-0" />
                       <span>{groupSize} hikers requires <strong>{fees.guidesNeeded} tour guides</strong> (₱{fees.guideFee.toLocaleString()}).</span>

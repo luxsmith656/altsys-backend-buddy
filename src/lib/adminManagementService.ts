@@ -668,9 +668,14 @@ export async function editUserInfo(
 
 export async function deleteUserAccount(
   targetUserId: string,
-  role: 'guide' | 'hiker'
+  role: 'admin' | 'guide' | 'hiker'
 ): Promise<{ success: boolean; message: string }> {
   setAccountDeactivated(targetUserId, undefined, true);
+
+  if (role === 'admin') {
+    const current = getStoredAdmins();
+    saveStoredAdmins(current.filter((a) => a.userId !== targetUserId && a.id !== targetUserId));
+  }
 
   try {
     const { data, error } = await supabase.functions.invoke('admin-manage-users', {

@@ -20,17 +20,14 @@ import {
   RefreshCw,
   CalendarCheck,
   Search,
-  Filter,
-  ShieldCheck,
-  Compass,
+  Megaphone,
   ArrowRight,
-  ExternalLink,
+  ShieldCheck,
 } from 'lucide-react';
 import LocationSwitcher from '@/components/layout/LocationSwitcher';
-import RealtimeMonitorMap from '@/components/admin/RealtimeMonitorMap';
-import CentralAdminManagement from '@/components/admin/CentralAdminManagement';
+import CentralAccountManagement from '@/components/admin/CentralAccountManagement';
 import CentralPricingManagement from '@/components/admin/CentralPricingManagement';
-import AdminUserManagement from '@/components/admin/AdminUserManagement';
+import CentralAnnouncements from '@/components/admin/CentralAnnouncements';
 import { format, startOfMonth } from 'date-fns';
 
 interface LocStats {
@@ -71,6 +68,7 @@ export default function CentralDashboard() {
       });
   }, [locations]);
 
+  const [activeTab, setActiveTab] = useState('overview');
   const [stats, setStats] = useState<LocStats[]>([]);
   const [recentBookings, setRecentBookings] = useState<BookingRecord[]>([]);
   const [loading, setLoading] = useState(true);
@@ -215,13 +213,13 @@ export default function CentralDashboard() {
                 <Badge variant="outline" className="text-[10px] uppercase font-bold tracking-wider bg-primary/10 text-primary border-primary/20">
                   Municipal Command
                 </Badge>
-                <span className="text-xs text-muted-foreground">Laguna Tourism & DRRM Oversight</span>
+                <span className="text-xs text-muted-foreground">Laguna Tourism &amp; DRRM Oversight</span>
               </div>
               <h1 className="text-2xl lg:text-3xl font-extrabold tracking-tight">
                 Central <span className="text-gradient">Operations Console</span>
               </h1>
               <p className="text-xs lg:text-sm text-muted-foreground mt-0.5">
-                Unified multi-trailhead oversight, realtime hiker tracking, and municipal tourism regulation.
+                Unified multi-trailhead oversight, municipal tourism regulation, and cross-station directory.
               </p>
             </div>
 
@@ -246,48 +244,6 @@ export default function CentralDashboard() {
               <span>{loadError}</span>
             </div>
           )}
-
-          {/* Desktop Trailhead Scope Selector (Excludes Mt. Kalisungan) */}
-          <div className="flex items-center justify-between flex-wrap gap-2.5 p-2 rounded-2xl border border-border/30 bg-secondary/15 backdrop-blur-sm">
-            <div className="flex items-center gap-1.5 overflow-x-auto custom-scrollbar py-0.5">
-              <Button
-                size="sm"
-                variant={!activeLocationId ? 'default' : 'ghost'}
-                onClick={() => setActiveLocationId(null)}
-                className={`text-xs h-8 rounded-xl font-semibold gap-1.5 ${
-                  !activeLocationId ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'
-                }`}
-              >
-                <Building2 className="h-3.5 w-3.5" />
-                All Jump-Off Stations
-              </Button>
-
-              {jumpOffStations.map((station) => {
-                const isActive = activeLocationId === station.id;
-                return (
-                  <Button
-                    key={station.id}
-                    size="sm"
-                    variant={isActive ? 'default' : 'ghost'}
-                    onClick={() => setActiveLocationId(station.id)}
-                    className={`text-xs h-8 rounded-xl font-semibold gap-1.5 ${
-                      isActive ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'
-                    }`}
-                  >
-                    <MapPin className="h-3.5 w-3.5" />
-                    {station.name}
-                  </Button>
-                );
-              })}
-            </div>
-
-            <div className="flex items-center gap-2 px-3 text-xs text-muted-foreground">
-              <span>Scope:</span>
-              <Badge variant="outline" className="font-bold text-[11px] text-foreground bg-background/60">
-                {activeLocationName}
-              </Badge>
-            </div>
-          </div>
         </motion.div>
 
         {/* Hero KPIs Grid */}
@@ -351,259 +307,280 @@ export default function CentralDashboard() {
           ))}
         </div>
 
-        {/* Desktop Tabs Layout */}
-        <Tabs defaultValue="overview" className="w-full space-y-6">
-          <div className="border-b border-border/30 pb-px">
-            <TabsList className="bg-secondary/20 p-1 rounded-2xl border border-border/30 w-full sm:w-auto flex flex-wrap gap-1">
-              <TabsTrigger value="overview" className="gap-2 text-xs font-semibold rounded-xl data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
-                <Building2 className="h-3.5 w-3.5" /> Station Overview &amp; Ledger
+        {/* ──────────────── TABS LAYOUT: SIDEBAR NAVIGATION LIKE STATION OVERVIEW ──────────────── */}
+        <Tabs
+          value={activeTab}
+          onValueChange={setActiveTab}
+          className="flex w-full flex-col gap-6 md:flex-row"
+        >
+          {/* Sidebar Nav */}
+          <div className="w-full md:w-64 shrink-0 md:sticky md:top-24 h-max">
+            <TabsList className="glass-card flex flex-row md:flex-col p-2 gap-1.5 h-auto w-full items-stretch justify-start overflow-x-auto md:overflow-visible border border-border/30">
+              <TabsTrigger
+                value="overview"
+                className="justify-start gap-2.5 px-3 py-2.5 data-[state=active]:bg-primary/20 data-[state=active]:text-primary whitespace-nowrap rounded-xl text-xs font-semibold text-left transition-all"
+              >
+                <Building2 className="h-4 w-4 shrink-0" />
+                <div className="text-left hidden sm:block">
+                  <div className="font-bold">Station Overview</div>
+                  <div className="text-[10px] text-muted-foreground font-normal">Ledger &amp; trailheads</div>
+                </div>
+                <span className="sm:hidden">Overview</span>
               </TabsTrigger>
-              <TabsTrigger value="monitor" className="gap-2 text-xs font-semibold rounded-xl data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
-                <Compass className="h-3.5 w-3.5" /> Live GIS Trail Monitor
+
+              <TabsTrigger
+                value="accounts"
+                className="justify-start gap-2.5 px-3 py-2.5 data-[state=active]:bg-primary/20 data-[state=active]:text-primary whitespace-nowrap rounded-xl text-xs font-semibold text-left transition-all"
+              >
+                <Users className="h-4 w-4 shrink-0" />
+                <div className="text-left hidden sm:block">
+                  <div className="font-bold">Account Management</div>
+                  <div className="text-[10px] text-muted-foreground font-normal">Admins, guides &amp; hikers</div>
+                </div>
+                <span className="sm:hidden">Accounts</span>
               </TabsTrigger>
-              <TabsTrigger value="admins" className="gap-2 text-xs font-semibold rounded-xl data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
-                <ShieldCheck className="h-3.5 w-3.5" /> Station Administrators
+
+              <TabsTrigger
+                value="pricing"
+                className="justify-start gap-2.5 px-3 py-2.5 data-[state=active]:bg-primary/20 data-[state=active]:text-primary whitespace-nowrap rounded-xl text-xs font-semibold text-left transition-all"
+              >
+                <DollarSign className="h-4 w-4 shrink-0" />
+                <div className="text-left hidden sm:block">
+                  <div className="font-bold">Fare &amp; Capacity</div>
+                  <div className="text-[10px] text-muted-foreground font-normal">Fees &amp; daily quotas</div>
+                </div>
+                <span className="sm:hidden">Fare &amp; Capacity</span>
               </TabsTrigger>
-              <TabsTrigger value="guides" className="gap-2 text-xs font-semibold rounded-xl data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
-                <Users className="h-3.5 w-3.5" /> Guides &amp; Hikers
-              </TabsTrigger>
-              <TabsTrigger value="pricing" className="gap-2 text-xs font-semibold rounded-xl data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
-                <DollarSign className="h-3.5 w-3.5" /> Fare &amp; Capacity Control
+
+              <TabsTrigger
+                value="announcements"
+                className="justify-start gap-2.5 px-3 py-2.5 data-[state=active]:bg-primary/20 data-[state=active]:text-primary whitespace-nowrap rounded-xl text-xs font-semibold text-left transition-all"
+              >
+                <Megaphone className="h-4 w-4 shrink-0" />
+                <div className="text-left hidden sm:block">
+                  <div className="font-bold">Announcements</div>
+                  <div className="text-[10px] text-muted-foreground font-normal">Broadcast advisories</div>
+                </div>
+                <span className="sm:hidden">Broadcasts</span>
               </TabsTrigger>
             </TabsList>
           </div>
 
-          {/* -------------------- TAB 1: OVERVIEW & LEDGER -------------------- */}
-          <TabsContent value="overview" className="space-y-6 mt-0">
-            {/* Trailhead Station Cards Grid */}
-            <div>
-              <div className="flex items-center justify-between mb-3">
-                <h3 className="text-sm font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
-                  <Building2 className="h-4 w-4 text-primary" /> Official Jump-Off Stations (Mt. Kalisungan)
-                </h3>
-                <span className="text-xs text-muted-foreground">3 Official Active Stations</span>
-              </div>
+          {/* Main Content Area */}
+          <div className="flex-1 min-w-0">
+            {/* ──────────────── TAB 1: STATION OVERVIEW & LEDGER ──────────────── */}
+            <TabsContent value="overview" className="space-y-6 mt-0">
+              {/* Trailhead Station Cards Grid */}
+              <div>
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="text-sm font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+                    <Building2 className="h-4 w-4 text-primary" /> Official Jump-Off Stations (Mt. Kalisungan)
+                  </h3>
+                  <span className="text-xs text-muted-foreground">3 Official Active Stations</span>
+                </div>
 
-              <div className="grid md:grid-cols-3 gap-4">
-                {stats
-                  .filter((s) => !activeLocationId || s.id === activeLocationId)
-                  .map((s) => {
-                    const isSelected = activeLocationId === s.id;
-                    return (
-                      <Card
-                        key={s.id}
-                        className={`glass-card transition-all flex flex-col justify-between ${
-                          isSelected ? 'ring-2 ring-primary border-primary/50' : 'hover:border-border/60'
-                        }`}
-                      >
-                        <CardHeader className="pb-3 border-b border-border/20">
-                          <div className="flex items-start justify-between gap-2">
-                            <div>
-                              <CardTitle className="text-base font-bold flex items-center gap-2">
-                                <Building2 className="h-4 w-4 text-primary" /> {s.name}
-                              </CardTitle>
-                              <CardDescription className="text-xs mt-0.5">
-                                Brgy. {s.name.replace(' Trailhead', '')}, Calauan, Laguna
-                              </CardDescription>
-                            </div>
-                            {isSelected ? (
-                              <Badge className="text-[10px] bg-primary text-primary-foreground">
-                                Active Filter
-                              </Badge>
-                            ) : (
-                              <Badge variant="outline" className="text-[10px] bg-emerald-500/10 text-emerald-600 border-emerald-500/30">
-                                Operational
-                              </Badge>
-                            )}
-                          </div>
-                        </CardHeader>
-
-                        <CardContent className="py-3 text-xs space-y-2">
-                          <Row label="Total Bookings (All Time)" value={s.bookingsTotal} />
-                          <Row label="Current Month Ascents" value={s.bookingsMonth} />
-                          <Row label="Scheduled Today" value={s.bookingsToday} />
-                          <Row label="Total hikers (pax)" value={s.totalHikers} />
-                          <Row label="Recorded Tourism Revenue" value={`₱${s.revenue.toLocaleString()}`} />
-                          <Row label="Active Hikers on Trail Now" value={
-                            <span className="font-bold text-orange-500">{s.activeHikers}</span>
-                          } />
-                        </CardContent>
-
-                        <div className="p-3 pt-0 border-t border-border/20 mt-1 flex items-center justify-between bg-secondary/10 rounded-b-xl">
-                          <button
-                            type="button"
-                            onClick={() => setActiveLocationId(isSelected ? null : s.id)}
-                            className="text-xs text-primary hover:underline font-semibold flex items-center gap-1"
-                          >
-                            {isSelected ? 'Overview All' : 'Select Station'}
-                            <ArrowRight className="h-3 w-3" />
-                          </button>
-                        </div>
-                      </Card>
-                    );
-                  })}
-              </div>
-            </div>
-
-            {/* Actual Bookings Audit Ledger */}
-            <Card className="glass-card overflow-hidden border-border/30">
-              <CardHeader className="pb-3 border-b border-border/20 bg-secondary/10">
-                <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
-                  <div>
-                    <CardTitle className="text-base font-bold flex items-center gap-2">
-                      <CalendarCheck className="h-4 w-4 text-primary" />
-                      Actual Bookings Record — {activeLocationName}
-                    </CardTitle>
-                    <CardDescription className="text-xs mt-0.5">
-                      Showing records for {activeLocationName} ({filteredBookings.length} bookings)
-                    </CardDescription>
-                  </div>
-
-                  {/* Search and Status filter controls */}
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <div className="relative">
-                      <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-muted-foreground" />
-                      <Input
-                        placeholder="Search hiker, ID, date..."
-                        value={ledgerSearch}
-                        onChange={(e) => setLedgerSearch(e.target.value)}
-                        className="pl-8 text-xs h-8 w-44 lg:w-56"
-                      />
-                    </div>
-
-                    <div className="flex items-center gap-1 bg-background/80 p-0.5 rounded-lg border border-border/30">
-                      {(['all', 'confirmed', 'active', 'completed', 'cancelled'] as const).map((st) => (
-                        <button
-                          key={st}
-                          type="button"
-                          onClick={() => setLedgerStatusFilter(st)}
-                          className={`px-2 py-1 text-[11px] font-semibold rounded-md capitalize transition-all ${
-                            ledgerStatusFilter === st
-                              ? 'bg-primary text-primary-foreground'
-                              : 'text-muted-foreground hover:text-foreground'
+                <div className="grid md:grid-cols-3 gap-4">
+                  {stats
+                    .filter((s) => !activeLocationId || s.id === activeLocationId)
+                    .map((s) => {
+                      const isSelected = activeLocationId === s.id;
+                      return (
+                        <Card
+                          key={s.id}
+                          className={`glass-card transition-all flex flex-col justify-between ${
+                            isSelected ? 'ring-2 ring-primary border-primary/50' : 'hover:border-border/60'
                           }`}
                         >
-                          {st}
-                        </button>
-                      ))}
+                          <CardHeader className="pb-3 border-b border-border/20">
+                            <div className="flex items-start justify-between gap-2">
+                              <div>
+                                <CardTitle className="text-base font-bold flex items-center gap-2">
+                                  <Building2 className="h-4 w-4 text-primary" /> {s.name}
+                                </CardTitle>
+                                <CardDescription className="text-xs mt-0.5">
+                                  Brgy. {s.name.replace(' Trailhead', '')}, Calauan, Laguna
+                                </CardDescription>
+                              </div>
+                              {isSelected ? (
+                                <Badge className="text-[10px] bg-primary text-primary-foreground">
+                                  Active Filter
+                                </Badge>
+                              ) : (
+                                <Badge variant="outline" className="text-[10px] bg-emerald-500/10 text-emerald-600 border-emerald-500/30">
+                                  Operational
+                                </Badge>
+                              )}
+                            </div>
+                          </CardHeader>
+
+                          <CardContent className="py-3 text-xs space-y-2">
+                            <Row label="Total Bookings (All Time)" value={s.bookingsTotal} />
+                            <Row label="Current Month Ascents" value={s.bookingsMonth} />
+                            <Row label="Scheduled Today" value={s.bookingsToday} />
+                            <Row label="Total hikers (pax)" value={s.totalHikers} />
+                            <Row label="Recorded Tourism Revenue" value={`₱${s.revenue.toLocaleString()}`} />
+                            <Row label="Active Hikers on Trail Now" value={
+                              <span className="font-bold text-orange-500">{s.activeHikers}</span>
+                            } />
+                          </CardContent>
+
+                          <div className="p-3 pt-0 border-t border-border/20 mt-1 flex items-center justify-between bg-secondary/10 rounded-b-xl">
+                            <button
+                              type="button"
+                              onClick={() => setActiveLocationId(isSelected ? null : s.id)}
+                              className="text-xs text-primary hover:underline font-semibold flex items-center gap-1"
+                            >
+                              {isSelected ? 'Overview All' : 'Select Station'}
+                              <ArrowRight className="h-3 w-3" />
+                            </button>
+                          </div>
+                        </Card>
+                      );
+                    })}
+                </div>
+              </div>
+
+              {/* Actual Bookings Audit Ledger */}
+              <Card className="glass-card overflow-hidden border-border/30">
+                <CardHeader className="pb-3 border-b border-border/20 bg-secondary/10">
+                  <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+                    <div>
+                      <CardTitle className="text-base font-bold flex items-center gap-2">
+                        <CalendarCheck className="h-4 w-4 text-primary" />
+                        Actual Bookings Record — {activeLocationName}
+                      </CardTitle>
+                      <CardDescription className="text-xs mt-0.5">
+                        Showing records for {activeLocationName} ({filteredBookings.length} bookings)
+                      </CardDescription>
+                    </div>
+
+                    {/* Search and Status filter controls */}
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <div className="relative">
+                        <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-muted-foreground" />
+                        <Input
+                          placeholder="Search hiker, ID, date..."
+                          value={ledgerSearch}
+                          onChange={(e) => setLedgerSearch(e.target.value)}
+                          className="pl-8 text-xs h-8 w-44 lg:w-56"
+                        />
+                      </div>
+
+                      <div className="flex items-center gap-1 bg-background/80 p-0.5 rounded-lg border border-border/30">
+                        {(['all', 'confirmed', 'active', 'completed', 'cancelled'] as const).map((st) => (
+                          <button
+                            key={st}
+                            type="button"
+                            onClick={() => setLedgerStatusFilter(st)}
+                            className={`px-2 py-1 text-[11px] font-semibold rounded-md capitalize transition-all ${
+                              ledgerStatusFilter === st
+                                ? st === 'completed'
+                                  ? 'bg-blue-600 text-white shadow-sm'
+                                  : 'bg-primary text-primary-foreground shadow-sm'
+                                : 'text-muted-foreground hover:text-foreground'
+                            }`}
+                          >
+                            {st}
+                          </button>
+                        ))}
+                      </div>
                     </div>
                   </div>
-                </div>
-              </CardHeader>
+                </CardHeader>
 
-              <CardContent className="p-0">
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left text-xs">
-                    <thead className="bg-secondary/30 text-muted-foreground border-b border-border/20 font-semibold uppercase text-[10px] tracking-wider">
-                      <tr>
-                        <th className="px-4 py-3">Station</th>
-                        <th className="px-4 py-3">Hiker Lead</th>
-                        <th className="px-4 py-3">Date</th>
-                        <th className="px-4 py-3">Group Size</th>
-                        <th className="px-4 py-3">Status</th>
-                        <th className="px-4 py-3">Revenue</th>
-                        <th className="px-4 py-3">Created</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-border/10">
-                      {filteredBookings.map((b) => {
-                        const meta = parseMeta(b.notes);
-                        const fee = getRecordedRevenue(meta);
-                        return (
-                          <tr key={b.id} className="hover:bg-muted/30 transition-colors">
-                            <td className="px-4 py-3 font-semibold flex items-center gap-1.5">
-                              <MapPin className="h-3 w-3 text-primary shrink-0" />
-                              <span className="truncate max-w-[130px]">{getLocationName(b.location_id)}</span>
-                            </td>
-                            <td className="px-4 py-3">
-                              <div className="font-semibold text-foreground truncate max-w-[150px]">
-                                {meta.fullName || 'Lead Hiker'}
-                              </div>
-                              <div className="text-[10px] text-muted-foreground truncate max-w-[150px]">
-                                {meta.phoneNumber || b.id.slice(0, 8)}
-                              </div>
-                            </td>
-                            <td className="px-4 py-3 font-mono text-muted-foreground">{b.booking_date}</td>
-                            <td className="px-4 py-3 font-bold">{b.group_size || 1} pax</td>
-                            <td className="px-4 py-3">
-                              <span
-                                className={`inline-block px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${
-                                  b.status === 'confirmed' || b.status === 'completed'
-                                    ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400'
-                                    : b.status === 'active'
-                                    ? 'bg-sky-500/15 text-sky-600 dark:text-sky-400'
-                                    : b.status === 'cancelled'
-                                    ? 'bg-destructive/15 text-destructive'
-                                    : 'bg-amber-500/15 text-amber-700 dark:text-amber-300'
-                                }`}
-                              >
-                                {b.status}
-                              </span>
-                            </td>
-                            <td className="px-4 py-3 font-semibold text-emerald-600 dark:text-emerald-400">
-                              {fee > 0 ? formatPeso(fee) : '—'}
-                            </td>
-                            <td className="px-4 py-3 text-muted-foreground text-[11px]">
-                              {b.created_at ? format(new Date(b.created_at), 'MMM d, yyyy') : '—'}
+                <CardContent className="p-0">
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left text-xs">
+                      <thead className="bg-secondary/30 text-muted-foreground border-b border-border/20 font-semibold uppercase text-[10px] tracking-wider">
+                        <tr>
+                          <th className="px-4 py-3">Station</th>
+                          <th className="px-4 py-3">Hiker Lead</th>
+                          <th className="px-4 py-3">Date</th>
+                          <th className="px-4 py-3">Group Size</th>
+                          <th className="px-4 py-3">Status</th>
+                          <th className="px-4 py-3">Revenue</th>
+                          <th className="px-4 py-3">Created</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-border/10">
+                        {filteredBookings.map((b) => {
+                          const meta = parseMeta(b.notes);
+                          const fee = getRecordedRevenue(meta);
+                          const isCompleted = b.status === 'completed';
+                          const isConfirmed = b.status === 'confirmed';
+
+                          return (
+                            <tr key={b.id} className="hover:bg-muted/30 transition-colors">
+                              <td className="px-4 py-3 font-semibold flex items-center gap-1.5">
+                                <MapPin className="h-3 w-3 text-primary shrink-0" />
+                                <span className="truncate max-w-[130px]">{getLocationName(b.location_id)}</span>
+                              </td>
+                              <td className="px-4 py-3">
+                                <div className="font-semibold text-foreground truncate max-w-[150px]">
+                                  {meta.fullName || 'Lead Hiker'}
+                                </div>
+                                <div className="text-[10px] text-muted-foreground truncate max-w-[150px]">
+                                  {meta.phoneNumber || b.id.slice(0, 8)}
+                                </div>
+                              </td>
+                              <td className="px-4 py-3 font-mono text-muted-foreground">{b.booking_date}</td>
+                              <td className="px-4 py-3 font-bold">{b.group_size || 1} pax</td>
+                              <td className="px-4 py-3">
+                                <span
+                                  className={`inline-block px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase border ${
+                                    isCompleted
+                                      ? 'bg-blue-500/15 text-blue-600 dark:text-blue-400 border-blue-500/30'
+                                      : isConfirmed
+                                      ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/30'
+                                      : b.status === 'active'
+                                      ? 'bg-sky-500/15 text-sky-600 dark:text-sky-400 border-sky-500/30'
+                                      : b.status === 'cancelled'
+                                      ? 'bg-destructive/15 text-destructive border-destructive/30'
+                                      : 'bg-amber-500/15 text-amber-700 dark:text-amber-300 border-amber-500/30'
+                                  }`}
+                                >
+                                  {b.status}
+                                </span>
+                              </td>
+                              <td className="px-4 py-3 font-semibold text-emerald-600 dark:text-emerald-400">
+                                {fee > 0 ? formatPeso(fee) : '—'}
+                              </td>
+                              <td className="px-4 py-3 text-muted-foreground text-[11px]">
+                                {b.created_at ? format(new Date(b.created_at), 'MMM d, yyyy') : '—'}
+                              </td>
+                            </tr>
+                          );
+                        })}
+
+                        {filteredBookings.length === 0 && !loading && (
+                          <tr>
+                            <td colSpan={7} className="px-4 py-10 text-center text-muted-foreground">
+                              No matching booking records found.
                             </td>
                           </tr>
-                        );
-                      })}
-
-                      {filteredBookings.length === 0 && !loading && (
-                        <tr>
-                          <td colSpan={7} className="px-4 py-10 text-center text-muted-foreground">
-                            No matching booking records found.
-                          </td>
-                        </tr>
-                      )}
-                    </tbody>
-                  </table>
-                </div>
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          {/* -------------------- TAB 2: GIS LIVE MONITOR -------------------- */}
-          <TabsContent value="monitor" className="mt-0">
-            <Card className="glass-card overflow-hidden border-border/30">
-              <CardHeader className="pb-3 border-b border-border/20">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <CardTitle className="text-base font-bold flex items-center gap-2">
-                      <Compass className="h-4 w-4 text-primary" /> Real-Time GIS Trailhead Radar
-                    </CardTitle>
-                    <CardDescription className="text-xs">
-                      Live satellite tracking, station checkpoints, and group clusters for {activeLocationName}.
-                    </CardDescription>
+                        )}
+                      </tbody>
+                    </table>
                   </div>
-                </div>
-              </CardHeader>
-              <CardContent className="p-0">
-                <div className="h-[680px] w-full">
-                  <RealtimeMonitorMap locationId={activeLocationId} canAddCheckpoints={false} />
-                </div>
-              </CardContent>
-            </Card>
-          </TabsContent>
+                </CardContent>
+              </Card>
+            </TabsContent>
 
-          {/* -------------------- TAB 3: ADMIN MANAGEMENT -------------------- */}
-          <TabsContent value="admins" className="mt-0">
-            <CentralAdminManagement />
-          </TabsContent>
+            {/* ──────────────── TAB 2: UNIFIED ACCOUNT MANAGEMENT (ROSTER LIST) ──────────────── */}
+            <TabsContent value="accounts" className="mt-0">
+              <CentralAccountManagement />
+            </TabsContent>
 
-          {/* -------------------- TAB 4: GUIDES & HIKERS -------------------- */}
-          <TabsContent value="guides" className="mt-0">
-            <AdminUserManagement
-              locationId={activeLocationId}
-              locationName={activeLocationName}
-            />
-          </TabsContent>
+            {/* ──────────────── TAB 3: FARE & CAPACITY CONTROL ──────────────── */}
+            <TabsContent value="pricing" className="mt-0">
+              <CentralPricingManagement />
+            </TabsContent>
 
-          {/* -------------------- TAB 5: FARE & CAPACITY CONTROL -------------------- */}
-          <TabsContent value="pricing" className="mt-0">
-            <CentralPricingManagement />
-          </TabsContent>
+            {/* ──────────────── TAB 4: ANNOUNCEMENTS ──────────────── */}
+            <TabsContent value="announcements" className="mt-0">
+              <CentralAnnouncements />
+            </TabsContent>
+          </div>
         </Tabs>
       </div>
     </div>

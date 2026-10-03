@@ -207,6 +207,7 @@ function dayDifference(target: Date): number {
 export default function BookingPage() {
   const { user, role } = useAuth();
   const { pricing } = usePricing();
+  const maxPaxRatio = pricing?.maxPaxPerGuide || MAX_PAX_PER_GUIDE || 5;
   const navigate = useNavigate();
   const [step, setStep] = useState(1);
   const [adminWalkInOpen, setAdminWalkInOpen] = useState(false);
@@ -1413,11 +1414,11 @@ export default function BookingPage() {
                       </div>
                     </div>
 
-                    {groupSize > MAX_PAX_PER_GUIDE && (
+                    {groupSize > maxPaxRatio && (
                       <div className="flex items-center gap-2 p-2.5 rounded-xl bg-primary/10 border border-primary/20 text-xs text-primary">
                         <Users className="h-4 w-4 shrink-0" />
                         <span>
-                          Groups over {MAX_PAX_PER_GUIDE} hikers require <strong>{Math.ceil(groupSize / MAX_PAX_PER_GUIDE)} tour guides</strong> ({formatPeso(getGuideFeePerGuide(hikeType))} per guide) for trail safety.
+                          Groups over {maxPaxRatio} hikers require <strong>{Math.ceil(groupSize / maxPaxRatio)} tour guides</strong> ({formatPeso(getGuideFeePerGuide(hikeType))} per guide) for trail safety.
                         </span>
                       </div>
                     )}
@@ -1923,21 +1924,21 @@ export default function BookingPage() {
                         <div className="rounded-lg bg-background/50 border border-border/40 p-2.5 text-[11px] text-muted-foreground space-y-1">
                           <div className="flex items-center gap-1.5 font-medium text-foreground">
                             <Users className="h-3 w-3 text-primary" />
-                            {groupSize > 5 ? (
-                              <span>Group of {groupSize} hikers requires {Math.ceil(groupSize / 5)} guides</span>
+                            {groupSize > maxPaxRatio ? (
+                              <span>Group of {groupSize} hikers requires {Math.ceil(groupSize / maxPaxRatio)} guides</span>
                             ) : (
                               <span>System Auto-Rotation Assignment</span>
                             )}
                           </div>
-                          {groupSize > 5 ? (
+                          {groupSize > maxPaxRatio ? (
                             <p>
                               {preferredGuide ? (
                                 <>
-                                  Your referred guide <strong>{preferredGuide}</strong> will lead your trek. Because your group requires <strong>{Math.ceil(groupSize / 5)} guides</strong>, the additional guide(s) will be automatically assigned by the system upon station check-in.
+                                  Your referred guide <strong>{preferredGuide}</strong> will lead your trek. Because your group requires <strong>{Math.ceil(groupSize / maxPaxRatio)} guides</strong>, the additional guide(s) will be automatically assigned by the system upon station check-in.
                                 </>
                               ) : (
                                 <>
-                                  Because your group size requires <strong>{Math.ceil(groupSize / 5)} guides</strong>, all guides are automatically assigned by the system rotation upon arrival.
+                                  Because your group size requires <strong>{Math.ceil(groupSize / maxPaxRatio)} guides</strong>, all guides are automatically assigned by the system rotation upon arrival.
                                 </>
                               )}
                             </p>
@@ -2079,7 +2080,7 @@ export default function BookingPage() {
                         { label: 'Email', value: emailAddress },
                         { label: 'Address', value: [city, province].filter(Boolean).join(', ') || 'Not provided' },
                         { label: 'Companions', value: companions.map((name) => name.trim()).filter(Boolean).join(', ') || 'None listed' },
-                        { label: 'Guide Assignment', value: preferredGuide.trim() ? `${preferredGuide} (Referred)` : (groupSize > 5 ? `${Math.ceil(groupSize / 5)} guides (Auto-Assigned)` : 'System Auto-Assigned') },
+                        { label: 'Guide Assignment', value: preferredGuide.trim() ? `${preferredGuide} (Referred)` : (groupSize > maxPaxRatio ? `${Math.ceil(groupSize / maxPaxRatio)} guides (Auto-Assigned)` : 'System Auto-Assigned') },
                       ].map(({ label, value }) => (
                         <div key={label} className="flex justify-between items-center py-2 border-b border-border/10 last:border-0">
                           <span className="text-xs text-muted-foreground font-bold uppercase tracking-wider">{label}</span>
