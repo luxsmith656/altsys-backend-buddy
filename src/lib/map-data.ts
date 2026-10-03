@@ -25,11 +25,60 @@ export const TRAILS = [
       [14.1495, 121.3462],
     ] as LatLngTuple[],
   },
+  {
+    name: 'Lamot 1 Classic Summit Trail',
+    difficulty: 'moderate' as const,
+    color: '#2563eb',
+    elevation: '629m',
+    distance: '2.8 km',
+    path: [
+      [14.1475, 121.3390],
+      [14.1472, 121.3402],
+      [14.1469, 121.3414],
+      [14.1471, 121.3425],
+      [14.1476, 121.3436],
+      [14.1482, 121.3445],
+      [14.1489, 121.3453],
+      [14.1495, 121.3462],
+    ] as LatLngTuple[],
+  },
+  {
+    name: 'Sto. Tomas Southern Traverse Trail',
+    difficulty: 'hard' as const,
+    color: '#ea580c',
+    elevation: '629m',
+    distance: '3.8 km',
+    path: [
+      [14.1350, 121.3500],
+      [14.1368, 121.3492],
+      [14.1388, 121.3483],
+      [14.1408, 121.3475],
+      [14.1428, 121.3468],
+      [14.1448, 121.3465],
+      [14.1468, 121.3463],
+      [14.1485, 121.3462],
+      [14.1495, 121.3462],
+    ] as LatLngTuple[],
+  },
 ];
+
+export function getDefaultTrailForLocation(locationKey?: string | null) {
+  if (!locationKey) return TRAILS[0];
+  const lk = locationKey.toLowerCase();
+  if (lk.includes('lamot-1') || lk.includes('lamot 1') || lk.includes('lamot1')) {
+    return TRAILS[1];
+  }
+  if (lk.includes('tomas') || lk.includes('sto-tomas')) {
+    return TRAILS[2];
+  }
+  return TRAILS[0];
+}
 
 // Points of interest
 export const POI = [
-  { name: 'Trailhead / Registration', pos: [14.1440, 121.3430] as LatLngTuple, type: 'checkpoint' },
+  { name: 'Trailhead / Registration (Lamot 2)', pos: [14.1440, 121.3430] as LatLngTuple, type: 'checkpoint' },
+  { name: 'Trailhead / Registration (Lamot 1)', pos: [14.1475, 121.3390] as LatLngTuple, type: 'checkpoint' },
+  { name: 'Trailhead / Registration (Sto. Tomas)', pos: [14.1350, 121.3500] as LatLngTuple, type: 'checkpoint' },
   { name: 'Summit (629m)', pos: [14.1495, 121.3462] as LatLngTuple, type: 'summit' },
   { name: 'Campsite A', pos: [14.1465, 121.3445] as LatLngTuple, type: 'camp' },
   { name: 'Rest Station & Water Refill', pos: [14.1430, 121.3458] as LatLngTuple, type: 'water' },

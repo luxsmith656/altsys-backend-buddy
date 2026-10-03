@@ -5,6 +5,8 @@ import { useNavigate } from 'react-router-dom';
 import L from 'leaflet';
 import {
   routeStationsFromMetadata,
+  buildRouteStations,
+  getDefaultTrailForLocation,
   MT_KALISUNGAN_CENTER,
   DEFAULT_ZOOM,
   TRAILS,
@@ -200,7 +202,8 @@ export default function MapPage() {
   }, [activeSelfSession?.booking_id, activeSelfSession?.id, isSelfTrackingRole]);
   const availableTrails: MapTrail[] = dbTrails;
   // A local fallback is used only for the staff simulation canvas; it is never rendered as an official route.
-  const currentTrail: MapTrail = availableTrails[selectedTrail] || (TRAILS[0] as MapTrail);
+  const fallbackDefaultTrail = getDefaultTrailForLocation(activeLocationId);
+  const currentTrail: MapTrail = availableTrails[selectedTrail] || ({ ...fallbackDefaultTrail, stations: buildRouteStations(fallbackDefaultTrail.path) } as MapTrail);
   const currentRouteDistanceKm = currentTrail.path.reduce((total, point, index) => {
     if (index === 0) return total;
     const previous = currentTrail.path[index - 1];
