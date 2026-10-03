@@ -18,6 +18,9 @@ import {
   Area,
   BarChart,
   Bar,
+  PieChart,
+  Pie,
+  Cell,
   XAxis,
   YAxis,
   CartesianGrid,
@@ -42,6 +45,10 @@ import {
   ArrowUpRight,
   ShieldCheck,
   Building2,
+  Globe,
+  UserCheck,
+  HeartPulse,
+  User,
 } from 'lucide-react';
 import {
   format,
@@ -97,6 +104,55 @@ interface ProcessedBooking {
   totalFee: number;
   amountPaid: number;
   createdAt: string;
+  leadAge?: string;
+  leadSex?: string;
+  leadCity?: string;
+  leadNationality?: string;
+  companionDetails?: Array<{
+    name?: string;
+    age?: string | number;
+    sex?: string;
+    city?: string;
+    nationality?: string;
+  }>;
+}
+
+export interface VisitorRecord {
+  role: 'Lead Hiker' | 'Companion';
+  name: string;
+  age: number | null;
+  ageBracket: string;
+  sex: 'Male' | 'Female' | 'Other / Unspecified';
+  city: string;
+  nationality: string;
+  locationId: string;
+  locationName: string;
+  bookingDate: string;
+}
+
+function getAgeBracket(age: number | null | undefined): string {
+  if (age === null || age === undefined || isNaN(age) || age <= 0) return 'Unspecified';
+  if (age <= 12) return 'Children (0–12)';
+  if (age <= 17) return 'Youth (13–17)';
+  if (age <= 25) return 'Young Adults (18–25)';
+  if (age <= 35) return 'Adults (26–35)';
+  if (age <= 45) return 'Mid Adults (36–45)';
+  if (age <= 60) return 'Mature (46–60)';
+  return 'Seniors (61+)';
+}
+
+function normalizeSex(sex: string | undefined): 'Male' | 'Female' | 'Other / Unspecified' {
+  if (!sex) return 'Other / Unspecified';
+  const s = sex.toLowerCase().trim();
+  if (s === 'male' || s === 'm') return 'Male';
+  if (s === 'female' || s === 'f') return 'Female';
+  return 'Other / Unspecified';
+}
+
+function normalizeCity(city: string | undefined): string {
+  if (!city || !city.trim()) return 'Laguna (General)';
+  const c = city.trim();
+  return c.charAt(0).toUpperCase() + c.slice(1);
 }
 
 export default function CentralAnalyticsReporting() {
@@ -126,6 +182,7 @@ export default function CentralAnalyticsReporting() {
   const [customEndDate, setCustomEndDate] = useState(format(new Date(), 'yyyy-MM-dd'));
   const [selectedStation, setSelectedStation] = useState<string>('all');
   const [guideSearch, setGuideSearch] = useState('');
+  const [visitorSearch, setVisitorSearch] = useState('');
 
   // Fetch all real database records
   const fetchData = useCallback(async () => {
@@ -221,6 +278,11 @@ export default function CentralAnalyticsReporting() {
         totalFee: receipt.total,
         amountPaid: receipt.paid || receipt.total,
         createdAt: b.created_at,
+        leadAge: meta.age ? String(meta.age) : undefined,
+        leadSex: meta.sex,
+        leadCity: meta.city,
+        leadNationality: meta.nationality,
+        companionDetails: meta.companionDetails,
       };
     });
   }, [bookings, getLocationName, pricing]);
@@ -448,6 +510,179 @@ export default function CentralAnalyticsReporting() {
       .sort((a, b) => b.totalEarned - a.totalEarned);
   }, [guides, filteredBookings, getLocationName, guideSearch]);
 
+  // ──────────────── VISITOR DEMOGRAPHICS & GEOGRAPHIC ORIGINS AGGREGATION ────────────────
+  const demographics = useMemo(() => {
+    const validBookings = filteredBookings.filter((b) => b.status !== 'cancelled');
+    const visitors: VisitorRecord[] = [];
+
+    validBookings.forEach((b) => {
+      // 1. Lead Hiker
+      const leadAgeNum = b.leadAge ? parseInt(b.leadAge, 10) : null;
+      visitors.push({
+        role: 'Lead Hiker',
+        name: b.fullName,
+        age: leadAgeNum && !isNaN(leadAgeNum) && leadAgeNum > 0 ? leadAgeNum : null,
+        ageBracket: getAgeBracket(leadAgeNum),
+        sex: normalizeSex(b.leadSex),
+        city: normalizeCity(b.leadCity),
+        nationality: b.leadNationality || 'Philippines',
+        locationId: b.locationId,
+        locationName: b.locationName,
+        bookingDate: b.bookingDate,
+      });
+
+      // 2. Companions from manifest
+      let companionCount = 0;
+      if (Array.isArray(b.companionDetails)) {
+        b.companionDetails.forEach((c, idx) => {
+          if (!c) return;
+          companionCount++;
+          const cAge = c.age ? parseInt(String(c.age), 10) : null;
+          visitors.push({
+            role: 'Companion',
+            name: c.name || `Companion ${idx + 1} (${b.fullName}'s group)`,
+            age: cAge && !isNaN(cAge) && cAge > 0 ? cAge : null,
+            ageBracket: getAgeBracket(cAge),
+            sex: normalizeSex(c.sex),
+            city: normalizeCity(c.city || b.leadCity),
+            nationality: c.nationality || b.leadNationality || 'Philippines',
+            locationId: b.locationId,
+            locationName: b.locationName,
+            bookingDate: b.bookingDate,
+          });
+        });
+      }
+
+      // 3. Fallback for unlisted companions to match groupSize total
+      const missingCompanions = Math.max(0, b.groupSize - 1 - companionCount);
+      for (let i = 0; i < missingCompanions; i++) {
+        visitors.push({
+          role: 'Companion',
+          name: `Companion ${companionCount + i + 1} (${b.fullName}'s group)`,
+          age: null,
+          ageBracket: 'Unspecified',
+          sex: 'Other / Unspecified',
+          city: normalizeCity(b.leadCity),
+          nationality: b.leadNationality || 'Philippines',
+          locationId: b.locationId,
+          locationName: b.locationName,
+          bookingDate: b.bookingDate,
+        });
+      }
+    });
+
+    const totalVisitors = visitors.length;
+    const validAges = visitors.filter((v) => v.age !== null).map((v) => v.age as number);
+    const avgAge = validAges.length > 0 ? Math.round(validAges.reduce((a, b) => a + b, 0) / validAges.length) : null;
+    const minAge = validAges.length > 0 ? Math.min(...validAges) : null;
+    const maxAge = validAges.length > 0 ? Math.max(...validAges) : null;
+
+    // Counts by sex
+    const maleCount = visitors.filter((v) => v.sex === 'Male').length;
+    const femaleCount = visitors.filter((v) => v.sex === 'Female').length;
+    const otherSexCount = visitors.filter((v) => v.sex === 'Other / Unspecified').length;
+    const malePct = totalVisitors > 0 ? Math.round((maleCount / totalVisitors) * 100) : 0;
+    const femalePct = totalVisitors > 0 ? Math.round((femaleCount / totalVisitors) * 100) : 0;
+
+    // Age distribution data
+    const ageBrackets = [
+      'Children (0–12)',
+      'Youth (13–17)',
+      'Young Adults (18–25)',
+      'Adults (26–35)',
+      'Mid Adults (36–45)',
+      'Mature (46–60)',
+      'Seniors (61+)',
+      'Unspecified',
+    ];
+    const ageChartData = ageBrackets.map((bracket) => {
+      const count = visitors.filter((v) => v.ageBracket === bracket).length;
+      return {
+        bracket,
+        count,
+        pct: totalVisitors > 0 ? Math.round((count / totalVisitors) * 100) : 0,
+      };
+    });
+
+    // Gender Pie Data
+    const sexChartData = [
+      { name: 'Male', value: maleCount, color: '#3b82f6' },
+      { name: 'Female', value: femaleCount, color: '#ec4899' },
+      { name: 'Unspecified', value: otherSexCount, color: '#94a3b8' },
+    ].filter((d) => d.value > 0);
+
+    // Top originating feeder cities / provinces
+    const cityMap = new Map<string, number>();
+    visitors.forEach((v) => {
+      cityMap.set(v.city, (cityMap.get(v.city) || 0) + 1);
+    });
+    const topCitiesData = Array.from(cityMap.entries())
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 7)
+      .map(([city, count]) => ({
+        city,
+        count,
+        pct: totalVisitors > 0 ? Math.round((count / totalVisitors) * 100) : 0,
+      }));
+
+    // Station Demographics Breakdown
+    const stationDemo = jumpOffStations.map((station) => {
+      const stationVisitors = visitors.filter((v) => v.locationId === station.id);
+      const stValidAges = stationVisitors.filter((v) => v.age !== null).map((v) => v.age as number);
+      const stAvgAge = stValidAges.length > 0 ? Math.round(stValidAges.reduce((a, b) => a + b, 0) / stValidAges.length) : '—';
+      const stMale = stationVisitors.filter((v) => v.sex === 'Male').length;
+      const stFemale = stationVisitors.filter((v) => v.sex === 'Female').length;
+      const stTotal = stationVisitors.length;
+
+      const stCityMap = new Map<string, number>();
+      stationVisitors.forEach((v) => stCityMap.set(v.city, (stCityMap.get(v.city) || 0) + 1));
+      const stTopCity = Array.from(stCityMap.entries()).sort((a, b) => b[1] - a[1])[0]?.[0] || '—';
+
+      return {
+        stationId: station.id,
+        stationName: station.name,
+        total: stTotal,
+        avgAge: stAvgAge,
+        topCity: stTopCity,
+        malePct: stTotal > 0 ? Math.round((stMale / stTotal) * 100) : 0,
+        femalePct: stTotal > 0 ? Math.round((stFemale / stTotal) * 100) : 0,
+      };
+    });
+
+    return {
+      visitors,
+      totalVisitors,
+      avgAge,
+      minAge,
+      maxAge,
+      maleCount,
+      femaleCount,
+      malePct,
+      femalePct,
+      ageChartData,
+      sexChartData,
+      topCitiesData,
+      stationDemo,
+    };
+  }, [filteredBookings, jumpOffStations]);
+
+  // Search-filtered visitor manifest
+  const filteredVisitors = useMemo(() => {
+    if (!visitorSearch.trim()) return demographics.visitors.slice(0, 30);
+    const q = visitorSearch.toLowerCase();
+    return demographics.visitors
+      .filter(
+        (v) =>
+          v.name.toLowerCase().includes(q) ||
+          v.city.toLowerCase().includes(q) ||
+          v.locationName.toLowerCase().includes(q) ||
+          v.role.toLowerCase().includes(q) ||
+          v.nationality.toLowerCase().includes(q) ||
+          v.ageBracket.toLowerCase().includes(q)
+      )
+      .slice(0, 50);
+  }, [demographics.visitors, visitorSearch]);
+
   // Export to Excel handler
   const handleExportExcel = () => {
     try {
@@ -500,6 +735,14 @@ export default function CentralAnalyticsReporting() {
           Metric: 'Average Group Size (Pax)',
           Value: kpis.avgGroupSize,
         },
+        {
+          Metric: 'Average Visitor Age',
+          Value: demographics.avgAge ?? 'N/A',
+        },
+        {
+          Metric: 'Gender Balance',
+          Value: `${demographics.malePct}% Male / ${demographics.femalePct}% Female`,
+        },
       ];
 
       // Sheet 2: Bookings Audit Ledger
@@ -541,17 +784,31 @@ export default function CentralAnalyticsReporting() {
         'Mountain Guide Fees (PHP)': s.guideFees,
       }));
 
+      // Sheet 5: Visitor Demographics
+      const demographicsRows = demographics.visitors.map((v) => ({
+        'Role': v.role,
+        'Full Name': v.name,
+        'Age': v.age !== null ? v.age : 'Unspecified',
+        'Age Bracket': v.ageBracket,
+        'Sex': v.sex,
+        'Originating City / Province': v.city,
+        'Nationality': v.nationality,
+        'Jump-Off Station': v.locationName,
+        'Booking Date': v.bookingDate,
+      }));
+
       exportToExcelMultiSheet(
         [
           { name: 'KPI Summary', rows: summaryRows },
           { name: 'Bookings Audit', rows: bookingRows },
           { name: 'Mountain Guides Ledger', rows: guideRows },
           { name: 'Station Breakdown', rows: stationRows },
+          { name: 'Visitor Demographics', rows: demographicsRows },
         ],
         filename
       );
 
-      toast.success('Executive Analytics & Reporting workbook exported successfully!');
+      toast.success('Executive Analytics & Demographics workbook exported successfully!');
     } catch (err: any) {
       console.error('Export error:', err);
       toast.error('Failed to generate Excel report: ' + err.message);
@@ -926,6 +1183,377 @@ export default function CentralAnalyticsReporting() {
                 <Bar dataKey="hikers" name="Hiker Traffic" fill="#0284c7" radius={[6, 6, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* ──────────────── VISITOR DEMOGRAPHICS & GEOGRAPHIC ORIGINS ──────────────── */}
+      <Card className="glass-card border-border/30 overflow-hidden">
+        <CardHeader className="pb-3 border-b border-border/20 bg-secondary/10">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+            <div>
+              <CardTitle className="text-base font-bold flex items-center gap-2">
+                <Users className="h-4 w-4 text-primary" />
+                Visitor Demographics &amp; Geographic Origins
+              </CardTitle>
+              <CardDescription className="text-xs">
+                Real-time hiker profiling, age brackets, gender ratios, and feeder origins aggregated from verified bookings and companion manifests.
+              </CardDescription>
+            </div>
+            <div className="flex items-center gap-2">
+              <Badge variant="outline" className="text-xs font-medium">
+                {demographics.totalVisitors} Total Visitors Profiled
+              </Badge>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent className="p-4 space-y-6">
+          {/* Quick Demographics Metric Cards */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <div className="p-3.5 rounded-xl border border-border/40 bg-card/60">
+              <div className="text-xs text-muted-foreground font-medium flex items-center gap-1.5 mb-1">
+                <Users className="h-3.5 w-3.5 text-blue-500" />
+                Average Hiker Age
+              </div>
+              <div className="text-2xl font-black text-foreground">
+                {demographics.avgAge !== null ? `${demographics.avgAge} yrs` : '—'}
+              </div>
+              <p className="text-[11px] text-muted-foreground mt-0.5">
+                {demographics.minAge !== null && demographics.maxAge !== null
+                  ? `Observed range: ${demographics.minAge} – ${demographics.maxAge} yrs`
+                  : 'Derived from booking manifests'}
+              </p>
+            </div>
+
+            <div className="p-3.5 rounded-xl border border-border/40 bg-card/60">
+              <div className="text-xs text-muted-foreground font-medium flex items-center gap-1.5 mb-1">
+                <UserCheck className="h-3.5 w-3.5 text-pink-500" />
+                Gender Ratio
+              </div>
+              <div className="text-xl font-bold text-foreground flex items-baseline gap-2">
+                <span className="text-blue-500">{demographics.malePct}% M</span>
+                <span className="text-muted-foreground text-sm font-normal">/</span>
+                <span className="text-pink-500">{demographics.femalePct}% F</span>
+              </div>
+              <p className="text-[11px] text-muted-foreground mt-0.5">
+                {demographics.maleCount} male, {demographics.femaleCount} female hikers
+              </p>
+            </div>
+
+            <div className="p-3.5 rounded-xl border border-border/40 bg-card/60">
+              <div className="text-xs text-muted-foreground font-medium flex items-center gap-1.5 mb-1">
+                <MapPin className="h-3.5 w-3.5 text-emerald-500" />
+                Top Origin Feeder
+              </div>
+              <div className="text-lg font-bold text-foreground truncate" title={demographics.topCitiesData[0]?.city || 'N/A'}>
+                {demographics.topCitiesData[0]?.city || '—'}
+              </div>
+              <p className="text-[11px] text-muted-foreground mt-0.5">
+                {demographics.topCitiesData[0]
+                  ? `${demographics.topCitiesData[0].count} hikers (${demographics.topCitiesData[0].pct}% share)`
+                  : 'No location metadata yet'}
+              </p>
+            </div>
+
+            <div className="p-3.5 rounded-xl border border-border/40 bg-card/60">
+              <div className="text-xs text-muted-foreground font-medium flex items-center gap-1.5 mb-1">
+                <Globe className="h-3.5 w-3.5 text-purple-500" />
+                Dominant Nationality
+              </div>
+              <div className="text-lg font-bold text-foreground truncate">
+                {demographics.visitors[0]?.nationality || 'Philippines'}
+              </div>
+              <p className="text-[11px] text-muted-foreground mt-0.5">
+                Domestic &amp; eco-tourist visitors
+              </p>
+            </div>
+          </div>
+
+          {/* Charts Row: Age Distribution, Gender Donut & Top Feeder Cities */}
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
+            {/* Age Bracket Distribution */}
+            <div className="lg:col-span-5 p-4 rounded-xl border border-border/40 bg-card/40 flex flex-col">
+              <div className="flex items-center justify-between mb-3">
+                <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+                  <HeartPulse className="h-3.5 w-3.5 text-primary" />
+                  Age Bracket Distribution
+                </h4>
+                <span className="text-[11px] text-muted-foreground">Volume &amp; Share</span>
+              </div>
+              <div className="h-56 w-full">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart
+                    data={demographics.ageChartData}
+                    layout="vertical"
+                    margin={{ top: 0, right: 20, left: 10, bottom: 0 }}
+                  >
+                    <CartesianGrid strokeDasharray="3 3" stroke="#88888820" horizontal={false} />
+                    <XAxis type="number" stroke="#888888" fontSize={10} tickLine={false} />
+                    <YAxis
+                      dataKey="bracket"
+                      type="category"
+                      stroke="#888888"
+                      fontSize={10}
+                      tickLine={false}
+                      width={85}
+                      tickFormatter={(val) => val.split(' ')[0]}
+                    />
+                    <Tooltip
+                      formatter={(val: number) => [`${val} hikers`, 'Hiker Count']}
+                      contentStyle={{
+                        backgroundColor: 'hsl(var(--card))',
+                        borderRadius: '12px',
+                        border: '1px solid hsl(var(--border))',
+                      }}
+                    />
+                    <Bar dataKey="count" fill="#6366f1" radius={[0, 4, 4, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+              <div className="grid grid-cols-2 gap-2 mt-2 pt-2 border-t border-border/20 text-[11px]">
+                {demographics.ageChartData.slice(0, 4).map((item) => (
+                  <div key={item.bracket} className="flex justify-between items-center text-muted-foreground">
+                    <span className="truncate">{item.bracket.split(' ')[0]}</span>
+                    <span className="font-semibold text-foreground">{item.count} ({item.pct}%)</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Gender Pie Chart */}
+            <div className="lg:col-span-3 p-4 rounded-xl border border-border/40 bg-card/40 flex flex-col">
+              <div className="flex items-center justify-between mb-3">
+                <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+                  <UserCheck className="h-3.5 w-3.5 text-primary" />
+                  Gender Demographics
+                </h4>
+              </div>
+              <div className="h-44 w-full flex items-center justify-center">
+                {demographics.sexChartData.length > 0 ? (
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie
+                        data={demographics.sexChartData}
+                        dataKey="value"
+                        nameKey="name"
+                        cx="50%"
+                        cy="50%"
+                        innerRadius={36}
+                        outerRadius={58}
+                        paddingAngle={4}
+                      >
+                        {demographics.sexChartData.map((entry, index) => (
+                          <Cell key={`cell-${index}`} fill={entry.color} />
+                        ))}
+                      </Pie>
+                      <Tooltip
+                        formatter={(val: number) => [`${val} hikers`, 'Count']}
+                        contentStyle={{
+                          backgroundColor: 'hsl(var(--card))',
+                          borderRadius: '12px',
+                          border: '1px solid hsl(var(--border))',
+                        }}
+                      />
+                    </PieChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <p className="text-xs text-muted-foreground">No demographic gender data recorded</p>
+                )}
+              </div>
+              <div className="space-y-1.5 mt-auto pt-2 border-t border-border/20 text-xs">
+                {demographics.sexChartData.map((d) => (
+                  <div key={d.name} className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: d.color }} />
+                      <span className="text-muted-foreground">{d.name}</span>
+                    </div>
+                    <span className="font-semibold">{d.value}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Top Feeder Origins */}
+            <div className="lg:col-span-4 p-4 rounded-xl border border-border/40 bg-card/40 flex flex-col">
+              <div className="flex items-center justify-between mb-3">
+                <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+                  <MapPin className="h-3.5 w-3.5 text-primary" />
+                  Top Origin Municipalities / Feeder Cities
+                </h4>
+                <span className="text-[11px] text-muted-foreground">Share</span>
+              </div>
+              <div className="space-y-2.5 flex-1">
+                {demographics.topCitiesData.length === 0 ? (
+                  <p className="text-xs text-muted-foreground py-8 text-center">No feeder location records available</p>
+                ) : (
+                  demographics.topCitiesData.map((c, idx) => (
+                    <div key={c.city} className="space-y-1">
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="font-medium flex items-center gap-1.5 text-foreground">
+                          <span className="text-[10px] w-4 text-muted-foreground font-mono">#{idx + 1}</span>
+                          {c.city}
+                        </span>
+                        <span className="text-muted-foreground font-mono">
+                          {c.count} ({c.pct}%)
+                        </span>
+                      </div>
+                      <div className="w-full bg-secondary/50 rounded-full h-1.5 overflow-hidden">
+                        <div
+                          className="bg-primary h-1.5 rounded-full transition-all duration-300"
+                          style={{
+                            width: `${Math.max(4, c.pct)}%`,
+                            backgroundColor: idx === 0 ? '#10b981' : idx === 1 ? '#06b6d4' : idx === 2 ? '#6366f1' : '#a855f7',
+                          }}
+                        />
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Station Demographics Breakdown Table */}
+          <div className="space-y-2">
+            <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+              <Building2 className="h-3.5 w-3.5 text-primary" />
+              Station Visitor Demographics Breakdown
+            </h4>
+            <div className="rounded-xl border border-border/40 overflow-hidden">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="bg-secondary/30 border-b border-border/30 text-muted-foreground text-left">
+                    <th className="p-2.5 font-semibold">Jump-off Station</th>
+                    <th className="p-2.5 font-semibold text-right">Total Influx</th>
+                    <th className="p-2.5 font-semibold text-center">Avg Hiker Age</th>
+                    <th className="p-2.5 font-semibold text-center">Gender Split (M / F)</th>
+                    <th className="p-2.5 font-semibold">Top Feeder City</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border/20">
+                  {demographics.stationDemo.map((st) => (
+                    <tr key={st.stationId} className="hover:bg-secondary/10 transition-colors">
+                      <td className="p-2.5 font-medium flex items-center gap-1.5 text-foreground">
+                        <MapPin className="h-3.5 w-3.5 text-primary" />
+                        {st.stationName}
+                      </td>
+                      <td className="p-2.5 text-right font-bold text-foreground">
+                        {st.total.toLocaleString()}
+                      </td>
+                      <td className="p-2.5 text-center text-muted-foreground">
+                        {typeof st.avgAge === 'number' ? `${st.avgAge} yrs` : '—'}
+                      </td>
+                      <td className="p-2.5 text-center">
+                        <span className="text-blue-500 font-semibold">{st.malePct}% M</span>
+                        <span className="text-muted-foreground mx-1">/</span>
+                        <span className="text-pink-500 font-semibold">{st.femalePct}% F</span>
+                      </td>
+                      <td className="p-2.5 text-foreground font-medium">
+                        {st.topCity}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* Visitor Roster Manifest Audit */}
+          <div className="space-y-3 pt-2 border-t border-border/20">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <div>
+                <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+                  <User className="h-3.5 w-3.5 text-primary" />
+                  Visitor Manifest &amp; Companion Audit ({filteredVisitors.length} shown)
+                </h4>
+                <p className="text-[11px] text-muted-foreground">
+                  Individual profile records from confirmed lead hikers and companions.
+                </p>
+              </div>
+              <div className="relative w-full sm:w-64">
+                <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-muted-foreground" />
+                <Input
+                  placeholder="Filter manifest (name, city)..."
+                  value={visitorSearch}
+                  onChange={(e) => setVisitorSearch(e.target.value)}
+                  className="pl-8 text-xs h-8 bg-card/60"
+                />
+              </div>
+            </div>
+
+            <div className="rounded-xl border border-border/40 overflow-hidden">
+              <div className="max-h-64 overflow-y-auto">
+                <table className="w-full text-xs">
+                  <thead className="sticky top-0 bg-secondary/80 backdrop-blur border-b border-border/30 text-muted-foreground text-left z-10">
+                    <tr>
+                      <th className="p-2.5 font-semibold">Visitor Name</th>
+                      <th className="p-2.5 font-semibold">Role</th>
+                      <th className="p-2.5 font-semibold">Age / Bracket</th>
+                      <th className="p-2.5 font-semibold">Sex</th>
+                      <th className="p-2.5 font-semibold">Origin City</th>
+                      <th className="p-2.5 font-semibold">Station</th>
+                      <th className="p-2.5 font-semibold text-right">Date</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-border/20">
+                    {filteredVisitors.length === 0 ? (
+                      <tr>
+                        <td colSpan={7} className="p-6 text-center text-muted-foreground">
+                          No visitor manifest records found matching filter criteria.
+                        </td>
+                      </tr>
+                    ) : (
+                      filteredVisitors.map((v, i) => (
+                        <tr key={`${v.name}-${v.bookingDate}-${i}`} className="hover:bg-secondary/10 transition-colors">
+                          <td className="p-2.5 font-medium text-foreground">
+                            {v.name}
+                          </td>
+                          <td className="p-2.5">
+                            <Badge
+                              variant={v.role === 'Lead Hiker' ? 'default' : 'secondary'}
+                              className="text-[10px] px-1.5 py-0"
+                            >
+                              {v.role}
+                            </Badge>
+                          </td>
+                          <td className="p-2.5 text-muted-foreground">
+                            {v.age !== null ? (
+                              <span>
+                                <strong className="text-foreground">{v.age}</strong> ({v.ageBracket})
+                              </span>
+                            ) : (
+                              <span>{v.ageBracket}</span>
+                            )}
+                          </td>
+                          <td className="p-2.5">
+                            <span
+                              className={`text-[11px] font-medium ${
+                                v.sex === 'Male'
+                                  ? 'text-blue-500'
+                                  : v.sex === 'Female'
+                                  ? 'text-pink-500'
+                                  : 'text-muted-foreground'
+                              }`}
+                            >
+                              {v.sex}
+                            </span>
+                          </td>
+                          <td className="p-2.5 text-foreground">
+                            {v.city}
+                          </td>
+                          <td className="p-2.5 text-muted-foreground">
+                            {v.locationName}
+                          </td>
+                          <td className="p-2.5 text-right font-mono text-[11px] text-muted-foreground">
+                            {v.bookingDate ? format(parseISO(v.bookingDate), 'MMM dd, yyyy') : '—'}
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
           </div>
         </CardContent>
       </Card>
