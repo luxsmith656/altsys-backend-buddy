@@ -13,6 +13,7 @@ import LocationSwitcher from '@/components/layout/LocationSwitcher';
 import RealtimeMonitorMap from '@/components/admin/RealtimeMonitorMap';
 import CentralAdminManagement from '@/components/admin/CentralAdminManagement';
 import CentralPricingManagement from '@/components/admin/CentralPricingManagement';
+import AdminUserManagement from '@/components/admin/AdminUserManagement';
 import { format, startOfMonth } from 'date-fns';
 
 interface LocStats {
@@ -264,6 +265,7 @@ export default function CentralDashboard() {
               <TabsTrigger value="overview">Overview by location</TabsTrigger>
               <TabsTrigger value="monitor">Live monitor</TabsTrigger>
               <TabsTrigger value="admins">Admin Management</TabsTrigger>
+              <TabsTrigger value="guides">Guides & Hikers</TabsTrigger>
               <TabsTrigger value="pricing">Fare & Pricing Control</TabsTrigger>
             </TabsList>
           </div>
@@ -398,6 +400,13 @@ export default function CentralDashboard() {
 
           <TabsContent value="admins" className="mt-4">
             <CentralAdminManagement />
+          </TabsContent>
+
+          <TabsContent value="guides" className="mt-4">
+            <AdminUserManagement
+              locationId={activeLocationId}
+              locationName={activeLocationName}
+            />
           </TabsContent>
 
           <TabsContent value="pricing" className="mt-4">

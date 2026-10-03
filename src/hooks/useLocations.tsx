@@ -95,6 +95,19 @@ function getInitialLocations(): LocationRow[] {
 
 const Ctx = createContext<LocationsContextValue | undefined>(undefined);
 
+const userLocationsCacheKey = (userId: string) => `cached_user_locations:${userId}`;
+
+function readCachedUserLocations(userId: string | undefined): string[] {
+  if (!userId || typeof window === 'undefined') return [];
+  try {
+    const raw = localStorage.getItem(userLocationsCacheKey(userId));
+    const parsed = raw ? JSON.parse(raw) : [];
+    return Array.isArray(parsed) ? parsed.filter((id) => typeof id === 'string') : [];
+  } catch {
+    return [];
+  }
+}
+
 export function LocationsProvider({ children }: { children: ReactNode }) {
   const { user, role } = useAuth();
   const [locations, setLocations] = useState<LocationRow[]>(getInitialLocations);
@@ -110,19 +123,41 @@ export function LocationsProvider({ children }: { children: ReactNode }) {
   const isMappedLocationRole = role === 'admin' || role === 'ranger' || role === 'guide';
 
   const setActiveLocationId = (id: string | null) => {
+    // Trailhead staff can never widen their scope beyond their assigned station(s).
+    if (isMappedLocationRole && (id === null || (myLocationIds.length > 0 && !myLocationIds.includes(id)))) return;
     _setActiveLocationId(id);
     if (id) localStorage.setItem('activeLocationId', id);
     else localStorage.setItem('activeLocationId', 'all');
   };
 
+  const chooseActive = useCallback((ids: string[]) => {
+    const stored = localStorage.getItem('activeLocationId');
+    if (isAllLocationRole) {
+      _setActiveLocationId(stored && stored !== 'all' ? stored : null);
+    } else if (stored && ids.includes(stored)) {
+      _setActiveLocationId(stored);
+    } else {
+      _setActiveLocationId(ids[0] ?? null);
+    }
+  }, [isAllLocationRole]);
+
   const refresh = useCallback(async () => {
     const version = ++requestVersion.current;
-    try {
-      const { data: locs } = await Promise.race([
-        supabase.from('locations' as any).select('*').order('name'),
-        new Promise<{ data: null }>((r) => setTimeout(() => r({ data: null }), 3000)),
-      ]);
+    const needsScope = Boolean(user) && isMappedLocationRole;
 
+    // Use the last known station mapping immediately so the dashboard is scoped on first paint.
+    if (user) {
+      const cachedIds = readCachedUserLocations(user.id);
+      if (cachedIds.length > 0) {
+        setMyLocationIds(cachedIds);
+        chooseActive(cachedIds);
+      } else if (needsScope) {
+        setLoading(true);
+      }
+    }
+
+    try {
+      const { data: locs } = await supabase.from('locations' as any).select('*').order('name');
       if (version !== requestVersion.current) return;
 
       const list = (locs as unknown as LocationRow[] | null) ?? [];
@@ -136,28 +171,23 @@ export function LocationsProvider({ children }: { children: ReactNode }) {
       }
 
       if (user) {
-        const { data: maps } = await Promise.race([
-          supabase.from('user_locations' as any).select('location_id').eq('user_id', user.id),
-          new Promise<{ data: null }>((r) => setTimeout(() => r({ data: null }), 2500)),
-        ]);
+        // No artificial timeout here: dropping a trailhead admin to "all locations" on a slow
+        // network leaked other stations' routes and data into their dashboard.
+        const { data: maps, error: mapsError } = await supabase
+          .from('user_locations' as any)
+          .select('location_id')
+          .eq('user_id', user.id);
 
         if (version !== requestVersion.current) return;
-        const ids = ((maps as any[] | null) ?? []).map((m) => m.location_id);
+        if (mapsError) throw mapsError;
+        const ids = ((maps as any[] | null) ?? []).map((m) => m.location_id).filter(Boolean);
         setMyLocationIds(ids);
-
-        // Choose default active location
-        const stored = localStorage.getItem('activeLocationId');
-        if (isAllLocationRole && stored === 'all') {
-          _setActiveLocationId(null);
-        } else if (isMappedLocationRole && stored && ids.includes(stored)) {
-          _setActiveLocationId(stored);
-        } else if (isAllLocationRole) {
-          _setActiveLocationId(null);
-        } else if (ids.length > 0) {
-          _setActiveLocationId(ids[0]);
-        } else {
-          _setActiveLocationId(null);
+        try {
+          localStorage.setItem(userLocationsCacheKey(user.id), JSON.stringify(ids));
+        } catch {
+          /* ignore */
         }
+        chooseActive(ids);
       } else {
         setMyLocationIds([]);
         if (list.length > 0) {
@@ -167,10 +197,12 @@ export function LocationsProvider({ children }: { children: ReactNode }) {
     } catch (err) {
       console.warn('Locations fetch warning:', err);
     } finally {
-      resolvedIdentity.current = identity;
-      setLoading(false);
+      if (version === requestVersion.current) {
+        resolvedIdentity.current = identity;
+        setLoading(false);
+      }
     }
-  }, [user, identity, isAllLocationRole, isMappedLocationRole]);
+  }, [user, identity, isMappedLocationRole, chooseActive]);
 
   useEffect(() => {
     void refresh();

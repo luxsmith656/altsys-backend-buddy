@@ -114,14 +114,30 @@ Deno.serve(async (req) => {
     if (action === 'update_admin') {
       if (!isSuperAdmin) return json({ error: 'Forbidden: Super Admin access required' }, 403);
 
-      const { targetUserId, fullName, phone, locationId } = body;
+      const { targetUserId, fullName, phone, locationId, status } = body;
       if (!targetUserId) return json({ error: 'Target user ID required' }, 400);
 
-      if (fullName || phone !== undefined) {
+      const isDeactivated = status === 'deactivated';
+
+      if (fullName || phone !== undefined || status !== undefined) {
         await admin.from('profiles').upsert(
-          { user_id: targetUserId, full_name: fullName, phone: phone ?? '' },
+          {
+            user_id: targetUserId,
+            full_name: fullName,
+            phone: phone ?? '',
+            is_active: !isDeactivated,
+          },
           { onConflict: 'user_id' }
         );
+      }
+
+      if (status !== undefined) {
+        await admin.auth.admin.updateUserById(targetUserId, {
+          user_metadata: {
+            deactivated: isDeactivated,
+            ...(fullName ? { full_name: fullName } : {}),
+          },
+        });
       }
 
       if (locationId !== undefined) {
@@ -186,7 +202,7 @@ Deno.serve(async (req) => {
     // ──────────────────────────────────────────────
     // 6. Trailhead Admin: Delete User Account
     // ──────────────────────────────────────────────
-    if (action === 'delete_user_account') {
+    if (action === 'delete_user_account' || action === 'delete_user') {
       const { targetUserId } = body;
       if (!targetUserId) return json({ error: 'Target user ID required' }, 400);
 
@@ -203,6 +219,80 @@ Deno.serve(async (req) => {
       }
 
       return json({ success: true, message: 'User account removed successfully' });
+    }
+
+    // ──────────────────────────────────────────────
+    // 7. Central Admin: Create Admin Account
+    // ──────────────────────────────────────────────
+    if (action === 'create_admin') {
+      if (!isSuperAdmin) return json({ error: 'Forbidden: Super Admin access required' }, 403);
+
+      const { email, fullName, phone, locationId, password } = body;
+      if (!email || !fullName) {
+        return json({ error: 'Email and full name are required' }, 400);
+      }
+
+      const initialPassword = password || 'kalisungan2026';
+      if (initialPassword.length < 6) {
+        return json({ error: 'Password must be at least 6 characters' }, 400);
+      }
+
+      // Check if user already exists
+      const existingUsers = await admin.auth.admin.listUsers({ page: 1, perPage: 200 });
+      const found = existingUsers.data?.users?.find(
+        (u) => u.email?.toLowerCase().trim() === email.toLowerCase().trim()
+      );
+
+      let targetId: string;
+      if (found) {
+        targetId = found.id;
+        await admin.auth.admin.updateUserById(targetId, {
+          password: initialPassword,
+          email_confirm: true,
+          user_metadata: { full_name: fullName },
+        });
+      } else {
+        const createRes = await admin.auth.admin.createUser({
+          email: email.toLowerCase().trim(),
+          password: initialPassword,
+          email_confirm: true,
+          user_metadata: { full_name: fullName },
+        });
+        if (createRes.error) {
+          return json({ error: createRes.error.message }, 500);
+        }
+        targetId = createRes.data.user!.id;
+      }
+
+      // Upsert profile
+      await admin.from('profiles').upsert(
+        { user_id: targetId, full_name: fullName, phone: phone ?? '' },
+        { onConflict: 'user_id' }
+      );
+
+      // Assign admin role
+      await admin.from('user_roles').delete().eq('user_id', targetId);
+      await admin.from('user_roles').insert({ user_id: targetId, role: 'admin' });
+
+      // Link location
+      await admin.from('user_locations').delete().eq('user_id', targetId);
+      if (locationId) {
+        await admin.from('user_locations').insert({ user_id: targetId, location_id: locationId });
+      }
+
+      return json({
+        success: true,
+        message: `Admin account for ${fullName} created successfully`,
+        admin: {
+          id: targetId,
+          userId: targetId,
+          email,
+          fullName,
+          phone: phone ?? '',
+          role: 'admin',
+          locationId: locationId ?? null,
+        },
+      });
     }
 
     return json({ error: `Unknown action: ${action}` }, 400);
