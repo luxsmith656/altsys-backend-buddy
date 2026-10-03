@@ -420,14 +420,14 @@ export default function CentralAccountManagement() {
             <Badge variant="outline" className="text-[10px] uppercase font-bold tracking-wider bg-primary/10 text-primary border-primary/20">
               Unified Identity Directory
             </Badge>
-            <span className="text-xs text-muted-foreground">Admins, Guides &amp; Hikers</span>
+            <span className="text-xs text-muted-foreground">Local Admins, Guides &amp; Hikers</span>
           </div>
           <h2 className="text-xl lg:text-2xl font-bold flex items-center gap-2">
             <Users className="h-6 w-6 text-primary" />
             Account Management Roster
           </h2>
           <p className="text-xs lg:text-sm text-muted-foreground mt-0.5">
-            Single roster ledger for managing trailhead administrators, certified guides, and registered hikers with easy search, filter, and credentials control.
+            Single roster ledger for managing local trailhead administrators, certified guides, and registered hikers with easy search, filter, and credentials control.
           </p>
         </div>
 
@@ -460,10 +460,10 @@ export default function CentralAccountManagement() {
               <SelectValue placeholder="All Roles" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">👥 All Accounts ({counts.all})</SelectItem>
-              <SelectItem value="admin">🛡️ Station Admins ({counts.admin})</SelectItem>
-              <SelectItem value="guide">🧭 Tour Guides ({counts.guide})</SelectItem>
-              <SelectItem value="hiker">👤 Hikers ({counts.hiker})</SelectItem>
+              <SelectItem value="all">All Accounts ({counts.all})</SelectItem>
+              <SelectItem value="admin">Local Admins ({counts.admin})</SelectItem>
+              <SelectItem value="guide">Tour Guides ({counts.guide})</SelectItem>
+              <SelectItem value="hiker">Hikers ({counts.hiker})</SelectItem>
             </SelectContent>
           </Select>
 
@@ -473,7 +473,7 @@ export default function CentralAccountManagement() {
               <SelectValue placeholder="All Stations" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">📍 All Stations</SelectItem>
+              <SelectItem value="all">All Stations</SelectItem>
               {jumpOffStations.map((loc) => (
                 <SelectItem key={loc.id} value={loc.id}>
                   {loc.name}
@@ -564,7 +564,7 @@ export default function CentralAccountManagement() {
                       <td className="px-4 py-3">
                         {isAdmin && (
                           <Badge variant="outline" className="text-[10px] bg-purple-500/15 text-purple-600 border-purple-500/30 font-bold gap-1">
-                            <ShieldCheck className="h-3 w-3" /> Station Admin
+                            <ShieldCheck className="h-3 w-3" /> Local Admin
                           </Badge>
                         )}
                         {isGuide && (
@@ -677,9 +677,9 @@ export default function CentralAccountManagement() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="admin">🛡️ Station Administrator</SelectItem>
-                  <SelectItem value="guide">🧭 Licensed Tour Guide</SelectItem>
-                  <SelectItem value="hiker">🥾 Registered Hiker</SelectItem>
+                  <SelectItem value="admin">Local Administrator</SelectItem>
+                  <SelectItem value="guide">Licensed Tour Guide</SelectItem>
+                  <SelectItem value="hiker">Registered Hiker</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -724,10 +724,10 @@ export default function CentralAccountManagement() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="unassigned">🌐 All Stations / Unassigned</SelectItem>
+                  <SelectItem value="unassigned">All Stations / Unassigned</SelectItem>
                   {jumpOffStations.map((loc) => (
                     <SelectItem key={loc.id} value={loc.id}>
-                      📍 {loc.name}
+                      {loc.name}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -796,10 +796,10 @@ export default function CentralAccountManagement() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="unassigned">🌐 All Stations / Unassigned</SelectItem>
+                  <SelectItem value="unassigned">All Stations / Unassigned</SelectItem>
                   {jumpOffStations.map((loc) => (
                     <SelectItem key={loc.id} value={loc.id}>
-                      📍 {loc.name}
+                      {loc.name}
                     </SelectItem>
                   ))}
                 </SelectContent>

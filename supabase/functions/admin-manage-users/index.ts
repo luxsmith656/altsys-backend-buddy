@@ -174,15 +174,34 @@ Deno.serve(async (req) => {
       const { targetUserId, fullName, phone, emergencyContact, specialty, status, locationId } = body;
       if (!targetUserId) return json({ error: 'Target user ID required' }, 400);
 
+      const isDeactivated = status === 'deactivated';
+
       await admin.from('profiles').upsert(
         {
           user_id: targetUserId,
           full_name: fullName,
           phone: phone ?? '',
           emergency_contact: emergencyContact ?? '',
+          is_active: !isDeactivated,
         },
         { onConflict: 'user_id' }
       );
+
+      if (status !== undefined || fullName) {
+        await admin.auth.admin.updateUserById(targetUserId, {
+          user_metadata: {
+            deactivated: isDeactivated,
+            ...(fullName ? { full_name: fullName } : {}),
+          },
+        });
+      }
+
+      if (locationId !== undefined) {
+        await admin.from('user_locations').delete().eq('user_id', targetUserId);
+        if (locationId) {
+          await admin.from('user_locations').insert({ user_id: targetUserId, location_id: locationId });
+        }
+      }
 
       // If user is a guide, update guides table
       const { data: g } = await admin.from('guides').select('id').eq('user_id', targetUserId).maybeSingle();
@@ -191,8 +210,9 @@ Deno.serve(async (req) => {
           full_name: fullName,
           phone: phone ?? '',
           specialty: specialty ?? '',
-          status: status ?? 'available',
-          ...(locationId ? { location_id: locationId } : {}),
+          status: isDeactivated ? 'off-duty' : (status ?? 'available'),
+          is_active: !isDeactivated,
+          ...(locationId !== undefined ? { location_id: locationId } : {}),
         }).eq('id', g.id);
       }
 

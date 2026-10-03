@@ -292,13 +292,27 @@ export async function updateAdminInfo(
   } catch {}
 
   // Local & direct database fallback
-  if (updates.fullName || updates.phone !== undefined) {
-    try {
+  const isDeactivated = updates.status === 'deactivated';
+  try {
+    if (updates.fullName || updates.phone !== undefined || updates.status !== undefined) {
       await supabase.from('profiles').upsert(
-        { user_id: targetUserId, full_name: updates.fullName ?? '', phone: updates.phone ?? '' },
+        {
+          user_id: targetUserId,
+          full_name: updates.fullName ?? '',
+          phone: updates.phone ?? '',
+          is_active: !isDeactivated,
+        },
         { onConflict: 'user_id' }
       );
-    } catch {}
+    }
+    if (updates.locationId !== undefined) {
+      await supabase.from('user_locations').delete().eq('user_id', targetUserId);
+      if (updates.locationId) {
+        await supabase.from('user_locations').insert({ user_id: targetUserId, location_id: updates.locationId });
+      }
+    }
+  } catch (err) {
+    console.warn('Direct database admin update warning:', err);
   }
 
   const stored = currentAdmins.map((a) =>
@@ -629,9 +643,17 @@ export async function editUserInfo(
         full_name: updates.fullName,
         phone: updates.phone ?? '',
         emergency_contact: updates.emergencyContact ?? '',
+        is_active: !isDeactivated,
       },
       { onConflict: 'user_id' }
     );
+
+    if (updates.locationId !== undefined) {
+      await supabase.from('user_locations').delete().eq('user_id', targetUserId);
+      if (updates.locationId) {
+        await supabase.from('user_locations').insert({ user_id: targetUserId, location_id: updates.locationId });
+      }
+    }
 
     const { data: g } = await supabase.from('guides').select('id').eq('user_id', targetUserId).maybeSingle();
     if (g?.id) {
@@ -641,6 +663,7 @@ export async function editUserInfo(
         specialty: updates.specialty ?? '',
         status: isDeactivated ? 'off-duty' : (updates.status ?? 'available'),
         is_active: !isDeactivated,
+        ...(updates.locationId !== undefined ? { location_id: updates.locationId } : {}),
       }).eq('id', g.id);
     }
   } catch (err) {
