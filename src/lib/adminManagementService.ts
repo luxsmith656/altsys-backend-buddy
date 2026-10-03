@@ -472,12 +472,30 @@ export async function fetchUsersList(locationId?: string | null): Promise<UserAc
 
     const { data: bookingsData } = await bookingQuery;
 
-    const [{ data: profiles }, { data: locations }] = await Promise.all([
-      supabase.from('profiles').select('user_id, full_name, phone, emergency_contact, created_at'),
+    const [{ data: profiles }, { data: userRoles }, { data: locations }] = await Promise.all([
+      supabase.from('profiles').select('user_id, full_name, phone, emergency_contact, created_at, is_active'),
+      supabase.from('user_roles').select('user_id, role'),
       supabase.from('locations').select('id, name'),
     ]);
 
     const locMap = new Map((locations ?? []).map((l) => [l.id, l.name]));
+
+    // Known guide user_ids and admin user_ids
+    const guideUserIds = new Set<string>();
+    if (guidesData) {
+      for (const g of guidesData) {
+        if (g.user_id) guideUserIds.add(g.user_id);
+      }
+    }
+
+    const adminUserIds = new Set<string>();
+    if (userRoles) {
+      for (const r of userRoles) {
+        if (r.role === 'admin' || r.role === 'super_admin') {
+          adminUserIds.add(r.user_id);
+        }
+      }
+    }
 
     // Map guides
     if (guidesData) {
@@ -503,42 +521,96 @@ export async function fetchUsersList(locationId?: string | null): Promise<UserAc
       }
     }
 
-    // Map hikers
-    const seenEmails = new Set<string>();
+    // Group bookings by user_id to prevent creating separate profiles per booking
+    const userBookingsMap = new Map<string, any[]>();
     if (bookingsData) {
       for (const b of (bookingsData as any[])) {
-        const email = b.contact_email?.trim().toLowerCase();
-        if (email && seenEmails.has(email)) continue;
-        if (email) seenEmails.add(email);
+        if (!b.user_id) continue;
+        const list = userBookingsMap.get(b.user_id) || [];
+        list.push(b);
+        userBookingsMap.set(b.user_id, list);
+      }
+    }
 
-        const prof = (profiles ?? []).find((p) => p.user_id === b.user_id);
-        const uId = b.user_id || b.id;
-        const isDeact = isAccountDeactivated(uId, b.contact_email);
+    // Map hikers strictly anchored on their persistent profile (1 hiker = 1 profile)
+    const processedHikerUserIds = new Set<string>();
 
-        let leadName = prof?.full_name || '';
-        try {
-          if (b.notes) {
-            const meta = typeof b.notes === 'string' ? JSON.parse(b.notes) : b.notes;
-            if (meta?.fullName) leadName = meta.fullName;
-          }
-        } catch {}
-        if (!leadName) leadName = b.emergency_contact_name || 'Hiker';
+    if (profiles) {
+      for (const p of profiles) {
+        if (!p.user_id) continue;
+        if (adminUserIds.has(p.user_id) || guideUserIds.has(p.user_id)) continue;
+
+        processedHikerUserIds.add(p.user_id);
+        const userBookings = userBookingsMap.get(p.user_id) || [];
+        const latestBooking = userBookings[0];
+
+        let latestMeta: any = null;
+        if (latestBooking?.notes) {
+          try {
+            latestMeta = typeof latestBooking.notes === 'string' ? JSON.parse(latestBooking.notes) : latestBooking.notes;
+          } catch {}
+        }
+
+        const email = latestMeta?.emailAddress || latestMeta?.email || latestBooking?.contact_email || `${(p.full_name || 'hiker').toLowerCase().replace(/[^a-z0-9]/g, '')}@example.com`;
+        const phone = p.phone || latestMeta?.phoneNumber || latestBooking?.emergency_contact_phone || latestBooking?.contact_phone || '';
+        const emergency = p.emergency_contact || latestBooking?.emergency_contact_name || '';
+        const locId = latestBooking?.location_id || null;
+        const isDeact = isAccountDeactivated(p.user_id, email) || p.is_active === false;
 
         users.push({
-          id: b.id,
-          userId: uId,
-          email: b.contact_email || 'hiker@example.com',
-          fullName: leadName,
-          phone: prof?.phone || b.contact_phone || '',
-          emergencyContact: prof?.emergency_contact || b.emergency_contact_phone || '',
+          id: p.user_id,
+          userId: p.user_id,
+          email,
+          fullName: p.full_name || latestMeta?.fullName || 'Registered Hiker',
+          phone,
+          emergencyContact: emergency,
           role: 'hiker',
-          locationId: b.location_id,
-          locationName: locMap.get(b.location_id) || 'Visitor',
+          locationId: locId,
+          locationName: locMap.get(locId) || 'Trailhead Visitor',
           status: isDeact ? 'deactivated' : 'active',
           accountStatus: isDeact ? 'deactivated' : 'active',
-          createdAt: b.created_at || new Date().toISOString(),
+          createdAt: p.created_at || latestBooking?.created_at || new Date().toISOString(),
+          bookingsCount: userBookings.length,
         });
       }
+    }
+
+    // Include any bookings whose user_id wasn't in profiles table
+    for (const [uId, bList] of userBookingsMap.entries()) {
+      if (processedHikerUserIds.has(uId)) continue;
+      if (adminUserIds.has(uId) || guideUserIds.has(uId)) continue;
+
+      processedHikerUserIds.add(uId);
+      const latestBooking = bList[0];
+      let latestMeta: any = null;
+      if (latestBooking?.notes) {
+        try {
+          latestMeta = typeof latestBooking.notes === 'string' ? JSON.parse(latestBooking.notes) : latestBooking.notes;
+        } catch {}
+      }
+
+      const email = latestMeta?.emailAddress || latestMeta?.email || latestBooking?.contact_email || 'hiker@example.com';
+      const fullName = latestMeta?.fullName || latestBooking?.emergency_contact_name || 'Hiker';
+      const phone = latestMeta?.phoneNumber || latestBooking?.emergency_contact_phone || latestBooking?.contact_phone || '';
+      const emergency = latestBooking?.emergency_contact_name || '';
+      const locId = latestBooking?.location_id || null;
+      const isDeact = isAccountDeactivated(uId, email);
+
+      users.push({
+        id: uId,
+        userId: uId,
+        email,
+        fullName,
+        phone,
+        emergencyContact: emergency,
+        role: 'hiker',
+        locationId: locId,
+        locationName: locMap.get(locId) || 'Visitor',
+        status: isDeact ? 'deactivated' : 'active',
+        accountStatus: isDeact ? 'deactivated' : 'active',
+        createdAt: latestBooking?.created_at || new Date().toISOString(),
+        bookingsCount: bList.length,
+      });
     }
   } catch (err) {
     console.warn('Error fetching users list:', err);

@@ -1057,6 +1057,29 @@ export default function BookingPage() {
       originalQuote: { total: fees.totalFee, capturedAt: new Date().toISOString() },
     });
 
+    // Upsert single persistent hiker profile to ensure booking attaches to existing profile
+    try {
+      await supabase.from('profiles').upsert(
+        {
+          user_id: user.id,
+          full_name: fullName.trim(),
+          phone: phoneNumber.trim(),
+          emergency_contact: companionNames[0] ? `${companionNames[0]} (companion)` : '',
+          is_active: true,
+        },
+        { onConflict: 'user_id' }
+      );
+      await supabase.from('user_roles').upsert(
+        {
+          user_id: user.id,
+          role: 'hiker',
+        } as any,
+        { onConflict: 'user_id,role' }
+      );
+    } catch (profErr) {
+      console.warn('Could not sync user profile:', profErr);
+    }
+
     const { data, error } = await supabase
       .from('bookings')
       .insert({

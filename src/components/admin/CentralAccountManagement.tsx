@@ -81,6 +81,7 @@ export interface UnifiedAccount {
   specialty?: string;
   emergencyContact?: string;
   createdAt: string;
+  bookingsCount?: number;
 }
 
 export default function CentralAccountManagement() {
@@ -188,6 +189,7 @@ export default function CentralAccountManagement() {
         specialty: u.specialty,
         emergencyContact: u.emergencyContact,
         createdAt: u.createdAt,
+        bookingsCount: u.bookingsCount,
       }));
 
       // Combine and sort by creation
@@ -969,6 +971,16 @@ export default function CentralAccountManagement() {
                 <div className="p-2.5 rounded-lg border border-border/20 bg-background/50 space-y-0.5">
                   <div className="text-[10px] text-muted-foreground font-semibold">Guide Specialty &amp; Certification</div>
                   <div className="font-medium text-foreground">{viewTarget.specialty}</div>
+                </div>
+              )}
+
+              {/* Hiker Booking Count */}
+              {viewTarget.role === 'hiker' && typeof viewTarget.bookingsCount === 'number' && (
+                <div className="p-2.5 rounded-lg border border-border/20 bg-background/50 space-y-0.5">
+                  <div className="text-[10px] text-muted-foreground font-semibold">Total Linked Reservations</div>
+                  <div className="font-bold text-foreground">
+                    {viewTarget.bookingsCount} {viewTarget.bookingsCount === 1 ? 'Booking' : 'Bookings'}
+                  </div>
                 </div>
               )}
 
