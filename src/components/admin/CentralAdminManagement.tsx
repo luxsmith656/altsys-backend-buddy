@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -193,7 +193,26 @@ export default function CentralAdminManagement() {
     }
   };
 
+  const jumpOffStations = useMemo(() => {
+    return locations.filter(
+      (loc) => !loc.name.toLowerCase().includes('mount kalisungan') && loc.slug !== 'mt-kalisungan'
+    );
+  }, [locations]);
+
   const filteredAdmins = admins.filter((a) => {
+    const loc = (a.locationName || '').toLowerCase();
+    const name = (a.fullName || '').toLowerCase();
+    const email = (a.email || '').toLowerCase();
+    if (
+      loc.includes('mount kalisungan') ||
+      name.includes('mount kalisungan') ||
+      email.includes('mtkalisungan') ||
+      email === 'kalisungan@kalisungan.ph' ||
+      a.locationId === '3082d38d-6f8e-491e-8a4d-6497b88f973a'
+    ) {
+      return false;
+    }
+
     const q = search.toLowerCase();
     return (
       a.fullName.toLowerCase().includes(q) ||
@@ -424,7 +443,7 @@ export default function CentralAdminManagement() {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="unassigned">Unassigned / General</SelectItem>
-                    {locations.map((loc) => (
+                    {jumpOffStations.map((loc) => (
                       <SelectItem key={loc.id} value={loc.id}>
                         {loc.name}
                       </SelectItem>
@@ -525,7 +544,7 @@ export default function CentralAdminManagement() {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="unassigned">Unassigned / General</SelectItem>
-                    {locations.map((loc) => (
+                    {jumpOffStations.map((loc) => (
                       <SelectItem key={loc.id} value={loc.id}>
                         {loc.name}
                       </SelectItem>

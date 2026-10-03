@@ -37,6 +37,7 @@ import { QRCodeSVG } from 'qrcode.react';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 import { encodeMeta } from '@/lib/bookingMeta';
+import type { CompanionDetail } from '@/types';
 import {
   calculateFees,
   formatPeso,
@@ -80,6 +81,30 @@ export default function AdminWalkInDesk({
   const [assignedRouteName, setAssignedRouteName] = useState<string>('Summit Trail (Main Peak)');
   const [peakHours, setPeakHours] = useState<number>(0);
   const [horseCount, setHorseCount] = useState<number>(0);
+  const [companionDetails, setCompanionDetails] = useState<CompanionDetail[]>([]);
+
+  useEffect(() => {
+    const needed = Math.max(0, groupSize - 1);
+    setCompanionDetails((prev) => {
+      if (prev.length < needed) {
+        const extra: CompanionDetail[] = Array.from({ length: needed - prev.length }, () => ({
+          name: '',
+          age: '',
+          sex: 'prefer_not_to_say',
+          nationality: 'Filipino',
+          city: '',
+        }));
+        return [...prev, ...extra];
+      }
+      return prev.slice(0, needed);
+    });
+  }, [groupSize]);
+
+  const updateCompanionDetail = (idx: number, field: keyof CompanionDetail, value: string) => {
+    setCompanionDetails((prev) =>
+      prev.map((c, i) => (i === idx ? { ...c, [field]: value } : c))
+    );
+  };
 
   // Payment State
   const [paymentMethod, setPaymentMethod] = useState<'cash' | 'gcash' | 'onsite'>('cash');
@@ -145,6 +170,9 @@ export default function AdminWalkInDesk({
         isWalkIn: true,
       });
 
+      const companionNames = companionDetails.map((c) => c.name.trim()).filter(Boolean);
+      const enrichedCompanions = companionDetails.filter((c) => c.name.trim());
+
       const metaNotes = encodeMeta({
         fullName: fullName.trim(),
         phoneNumber: phoneNumber.trim(),
@@ -156,6 +184,8 @@ export default function AdminWalkInDesk({
         assignedGuide: selectedGuide?.full_name || 'Assigned On-Site',
         assignedGuideId: selectedGuide?.id || null,
         guideStatus: 'accepted',
+        companions: companionNames.length > 0 ? companionNames : undefined,
+        companionDetails: enrichedCompanions.length > 0 ? enrichedCompanions : undefined,
         medicalNotes: medicalNotes.trim() || undefined,
         userNotes: specialNotes.trim() || undefined,
         isWalkIn: true,
@@ -462,6 +492,86 @@ export default function AdminWalkInDesk({
                 </div>
               </CardContent>
             </Card>
+
+            {/* Companion Details (Pax 2 to N) */}
+            {groupSize > 1 && (
+              <Card className="glass-card rounded-3xl border-border/40">
+                <CardHeader className="pb-3">
+                  <div className="flex items-center justify-between">
+                    <CardTitle className="text-sm font-bold text-primary flex items-center gap-2 uppercase tracking-wide">
+                      <Users className="h-4 w-4" /> Group Companion Details ({groupSize - 1} members)
+                    </CardTitle>
+                    <Badge variant="outline" className="text-[10px] bg-primary/5 text-primary border-primary/20">
+                      Official Manifest
+                    </Badge>
+                  </div>
+                  <CardDescription className="text-xs">
+                    Record companion demographics for safety manifest and rescue logs.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-3 max-h-[320px] overflow-y-auto pr-1">
+                  {companionDetails.map((cd, idx) => (
+                    <div key={idx} className="p-3 rounded-2xl border border-border/30 bg-background/50 space-y-2.5">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-semibold text-foreground">
+                          Companion {idx + 1} (Hiker #{idx + 2})
+                        </span>
+                      </div>
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                        <div className="sm:col-span-2 space-y-1">
+                          <Label className="text-[11px]">Full Name</Label>
+                          <Input
+                            placeholder="Full Name"
+                            value={cd.name}
+                            onChange={(e) => updateCompanionDetail(idx, 'name', e.target.value)}
+                            className="text-xs h-8"
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <Label className="text-[11px]">Age</Label>
+                          <Input
+                            type="number"
+                            placeholder="Age"
+                            min={1}
+                            max={120}
+                            value={cd.age || ''}
+                            onChange={(e) => updateCompanionDetail(idx, 'age', e.target.value)}
+                            className="text-xs h-8"
+                          />
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-2 gap-2">
+                        <div className="space-y-1">
+                          <Label className="text-[11px]">Sex</Label>
+                          <Select
+                            value={cd.sex || 'prefer_not_to_say'}
+                            onValueChange={(val) => updateCompanionDetail(idx, 'sex', val)}
+                          >
+                            <SelectTrigger className="text-xs h-8">
+                              <SelectValue placeholder="Sex" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="male" className="text-xs">Male</SelectItem>
+                              <SelectItem value="female" className="text-xs">Female</SelectItem>
+                              <SelectItem value="prefer_not_to_say" className="text-xs">Prefer not to say</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div className="space-y-1">
+                          <Label className="text-[11px]">Origin / City</Label>
+                          <Input
+                            placeholder="e.g. Calauan, Laguna"
+                            value={cd.city || ''}
+                            onChange={(e) => updateCompanionDetail(idx, 'city', e.target.value)}
+                            className="text-xs h-8"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </CardContent>
+              </Card>
+            )}
 
             {/* Section 2: Schedule & Guide Assignment */}
             <Card className="glass-card rounded-3xl border-border/40">

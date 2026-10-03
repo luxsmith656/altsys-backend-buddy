@@ -13,7 +13,8 @@ interface Props {
 export default function LocationSwitcher({ allowAll = false, scope = 'all', className }: Props) {
   const { locations, myLocations, activeLocationId, setActiveLocationId, isSuperAdmin } = useLocations();
 
-  const list = scope === 'mine' && !isSuperAdmin ? myLocations : locations;
+  const list = (scope === 'mine' && !isSuperAdmin ? myLocations : locations)
+    .filter((loc) => !loc.name.toLowerCase().includes('mount kalisungan') && loc.slug !== 'mt-kalisungan');
 
   return (
     <div className={`flex items-center gap-2 ${className || ''}`}>

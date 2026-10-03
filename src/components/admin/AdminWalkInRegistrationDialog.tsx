@@ -41,6 +41,7 @@ import { QRCodeSVG } from 'qrcode.react';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 import { encodeMeta } from '@/lib/bookingMeta';
+import type { CompanionDetail } from '@/types';
 import { calculateFees, formatPeso } from '@/lib/payments';
 import { useAuth } from '@/hooks/useAuth';
 import { useNavigate } from 'react-router-dom';
@@ -73,6 +74,30 @@ export default function AdminWalkInRegistrationDialog({
   const [emergencyPhone, setEmergencyPhone] = useState('');
   const [medicalNotes, setMedicalNotes] = useState('');
   const [specialNotes, setSpecialNotes] = useState('');
+  const [companionDetails, setCompanionDetails] = useState<CompanionDetail[]>([]);
+
+  useEffect(() => {
+    const needed = Math.max(0, groupSize - 1);
+    setCompanionDetails((prev) => {
+      if (prev.length < needed) {
+        const extra: CompanionDetail[] = Array.from({ length: needed - prev.length }, () => ({
+          name: '',
+          age: '',
+          sex: 'prefer_not_to_say',
+          nationality: 'Filipino',
+          city: '',
+        }));
+        return [...prev, ...extra];
+      }
+      return prev.slice(0, needed);
+    });
+  }, [groupSize]);
+
+  const updateCompanionDetail = (idx: number, field: keyof CompanionDetail, value: string) => {
+    setCompanionDetails((prev) =>
+      prev.map((c, i) => (i === idx ? { ...c, [field]: value } : c))
+    );
+  };
   const [assignedGuideId, setAssignedGuideId] = useState<string>('');
   const [assignedRouteName, setAssignedRouteName] = useState<string>('Summit Trail (Main Peak)');
   const [paymentMethod, setPaymentMethod] = useState<'cash' | 'gcash' | 'onsite'>('cash');
@@ -375,6 +400,81 @@ export default function AdminWalkInRegistrationDialog({
                 />
               </div>
             </div>
+
+            {/* Companion Details (Pax 2 to N) */}
+            {groupSize > 1 && (
+              <div className="p-3.5 rounded-2xl bg-secondary/20 border border-border/30 space-y-3">
+                <div className="flex items-center justify-between">
+                  <p className="text-xs font-bold text-primary uppercase tracking-wider flex items-center gap-1.5">
+                    <Users className="h-4 w-4" /> Group Companion Details ({groupSize - 1} members)
+                  </p>
+                  <Badge variant="outline" className="text-[10px] bg-primary/5 text-primary border-primary/20">
+                    Official Hiker Manifest
+                  </Badge>
+                </div>
+                <div className="space-y-2.5 max-h-[280px] overflow-y-auto pr-1">
+                  {companionDetails.map((cd, idx) => (
+                    <div key={idx} className="p-3 rounded-xl border border-border/30 bg-background/50 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-semibold text-foreground">
+                          Companion {idx + 1} (Hiker #{idx + 2})
+                        </span>
+                      </div>
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                        <div className="sm:col-span-2 space-y-1">
+                          <Label className="text-[11px]">Full Name</Label>
+                          <Input
+                            placeholder="Companion Full Name"
+                            value={cd.name}
+                            onChange={(e) => updateCompanionDetail(idx, 'name', e.target.value)}
+                            className="text-xs h-8"
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <Label className="text-[11px]">Age</Label>
+                          <Input
+                            type="number"
+                            placeholder="Age"
+                            min={1}
+                            max={120}
+                            value={cd.age || ''}
+                            onChange={(e) => updateCompanionDetail(idx, 'age', e.target.value)}
+                            className="text-xs h-8"
+                          />
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-2 gap-2">
+                        <div className="space-y-1">
+                          <Label className="text-[11px]">Sex</Label>
+                          <Select
+                            value={cd.sex || 'prefer_not_to_say'}
+                            onValueChange={(val) => updateCompanionDetail(idx, 'sex', val)}
+                          >
+                            <SelectTrigger className="text-xs h-8">
+                              <SelectValue placeholder="Sex" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="male" className="text-xs">Male</SelectItem>
+                              <SelectItem value="female" className="text-xs">Female</SelectItem>
+                              <SelectItem value="prefer_not_to_say" className="text-xs">Prefer not to say</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div className="space-y-1">
+                          <Label className="text-[11px]">Origin / City</Label>
+                          <Input
+                            placeholder="e.g. Calauan, Manila..."
+                            value={cd.city || ''}
+                            onChange={(e) => updateCompanionDetail(idx, 'city', e.target.value)}
+                            className="text-xs h-8"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
 
             {/* Section 2: Trail & Tour Guide Assignment */}
             <div className="p-3.5 rounded-2xl bg-secondary/20 border border-border/30 space-y-3">

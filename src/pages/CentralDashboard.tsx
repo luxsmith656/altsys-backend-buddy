@@ -3,12 +3,29 @@ import { useLocations } from '@/hooks/useLocations';
 import { supabase } from '@/integrations/supabase/client';
 import { parseMeta } from '@/lib/bookingMeta';
 import { getRecordedRevenue, formatPeso } from '@/lib/payments';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { motion } from 'framer-motion';
-import { Building2, Users, DollarSign, TrendingUp, MapPin, Loader2, AlertTriangle, RefreshCw, Filter, CalendarCheck } from 'lucide-react';
+import {
+  Building2,
+  Users,
+  DollarSign,
+  TrendingUp,
+  MapPin,
+  Loader2,
+  AlertTriangle,
+  RefreshCw,
+  CalendarCheck,
+  Search,
+  Filter,
+  ShieldCheck,
+  Compass,
+  ArrowRight,
+  ExternalLink,
+} from 'lucide-react';
 import LocationSwitcher from '@/components/layout/LocationSwitcher';
 import RealtimeMonitorMap from '@/components/admin/RealtimeMonitorMap';
 import CentralAdminManagement from '@/components/admin/CentralAdminManagement';
@@ -41,10 +58,27 @@ interface BookingRecord {
 
 export default function CentralDashboard() {
   const { locations, activeLocationId, setActiveLocationId } = useLocations();
+
+  // Strict jump-off stations only (Lamot 2, Lamot 1, Sto. Tomas) — exclude generic Mt. Kalisungan
+  const jumpOffStations = useMemo(() => {
+    return locations
+      .filter((loc) => !loc.name.toLowerCase().includes('mount kalisungan') && loc.slug !== 'mt-kalisungan')
+      .sort((a, b) => {
+        const aText = `${a.slug} ${a.name}`.toLowerCase();
+        const bText = `${b.slug} ${b.name}`.toLowerCase();
+        const score = (t: string) => (t.includes('lamot') && t.includes('2') ? 1 : t.includes('lamot') && t.includes('1') ? 2 : 3);
+        return score(aText) - score(bText);
+      });
+  }, [locations]);
+
   const [stats, setStats] = useState<LocStats[]>([]);
   const [recentBookings, setRecentBookings] = useState<BookingRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
+
+  // Booking ledger search & status filter
+  const [ledgerSearch, setLedgerSearch] = useState('');
+  const [ledgerStatusFilter, setLedgerStatusFilter] = useState<'all' | 'confirmed' | 'active' | 'completed' | 'cancelled'>('all');
 
   const loadStats = useCallback(async () => {
     setLoading(true);
@@ -70,7 +104,8 @@ export default function CentralDashboard() {
 
       const bookingLocMap = new Map(bookingList.map((b) => [b.id, b.location_id]));
 
-      const grouped: LocStats[] = locations.map((loc) => {
+      // Only calculate stats for the real 3 jump-off stations
+      const grouped: LocStats[] = jumpOffStations.map((loc) => {
         const locBookings = bookingList.filter((b) => b.location_id === loc.id);
         const validBookings = locBookings.filter((b) => b.status !== 'cancelled');
         const monthBookings = validBookings.filter((b) => b.booking_date >= monthStart);
@@ -106,16 +141,15 @@ export default function CentralDashboard() {
     } finally {
       setLoading(false);
     }
-  }, [locations]);
+  }, [jumpOffStations]);
 
   useEffect(() => {
     void loadStats();
   }, [loadStats]);
 
-  // Compute displayed KPIs based on activeLocationId filter
+  // Displayed KPIs scoped by activeLocationId
   const activeStats = useMemo(() => {
     if (!activeLocationId) {
-      // Aggregated across all trailheads
       return stats.reduce(
         (acc, s) => ({
           bookingsTotal: acc.bookingsTotal + s.bookingsTotal,
@@ -125,7 +159,7 @@ export default function CentralDashboard() {
           revenue: acc.revenue + s.revenue,
           activeHikers: acc.activeHikers + s.activeHikers,
         }),
-        { bookingsTotal: 0, bookingsMonth: 0, bookingsToday: 0, totalHikers: 0, revenue: 0, activeHikers: 0 },
+        { bookingsTotal: 0, bookingsMonth: 0, bookingsToday: 0, totalHikers: 0, revenue: 0, activeHikers: 0 }
       );
     }
     const found = stats.find((s) => s.id === activeLocationId);
@@ -143,115 +177,173 @@ export default function CentralDashboard() {
 
   const activeLocationName = useMemo(() => {
     if (!activeLocationId) return 'All Trailheads';
-    const loc = locations.find((l) => l.id === activeLocationId);
+    const loc = jumpOffStations.find((l) => l.id === activeLocationId);
     return loc ? loc.name : 'Selected Trailhead';
-  }, [locations, activeLocationId]);
-
-  // Filter recent bookings list per selected trailhead
-  const filteredBookings = useMemo(() => {
-    if (!activeLocationId) return recentBookings.slice(0, 15);
-    return recentBookings.filter((b) => b.location_id === activeLocationId).slice(0, 15);
-  }, [recentBookings, activeLocationId]);
+  }, [jumpOffStations, activeLocationId]);
 
   const getLocationName = (locId: string) => {
-    const loc = locations.find((l) => l.id === locId);
-    return loc ? loc.name : locId;
+    const loc = jumpOffStations.find((l) => l.id === locId);
+    return loc ? loc.name : 'Station';
   };
 
+  // Filtered bookings for the audit table
+  const filteredBookings = useMemo(() => {
+    return recentBookings.filter((b) => {
+      if (activeLocationId && b.location_id !== activeLocationId) return false;
+      if (ledgerStatusFilter !== 'all' && b.status !== ledgerStatusFilter) return false;
+      if (ledgerSearch.trim()) {
+        const q = ledgerSearch.toLowerCase();
+        const meta = parseMeta(b.notes);
+        const name = (meta.fullName || '').toLowerCase();
+        const loc = getLocationName(b.location_id).toLowerCase();
+        if (!name.includes(q) && !b.id.toLowerCase().includes(q) && !loc.includes(q) && !b.booking_date.includes(q)) {
+          return false;
+        }
+      }
+      return true;
+    });
+  }, [recentBookings, activeLocationId, ledgerStatusFilter, ledgerSearch]);
+
   return (
-    <div className="min-h-screen px-3 pb-12 pt-20 sm:px-4">
-      <div className="container max-w-7xl mx-auto">
-        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="mb-6">
-          <div className="flex items-center justify-between flex-wrap gap-4">
+    <div className="min-h-screen px-4 pb-16 pt-20 lg:px-8 bg-gradient-to-b from-background via-background/95 to-secondary/10">
+      <div className="max-w-7xl mx-auto space-y-6">
+        {/* Executive Command Header */}
+        <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} className="space-y-4">
+          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-4 border-b border-border/30">
             <div>
-              <h1 className="text-2xl font-bold sm:text-3xl">
-                Central <span className="text-gradient">LGU Dashboard</span>
+              <div className="flex items-center gap-2 mb-1">
+                <Badge variant="outline" className="text-[10px] uppercase font-bold tracking-wider bg-primary/10 text-primary border-primary/20">
+                  Municipal Command
+                </Badge>
+                <span className="text-xs text-muted-foreground">Laguna Tourism & DRRM Oversight</span>
+              </div>
+              <h1 className="text-2xl lg:text-3xl font-extrabold tracking-tight">
+                Central <span className="text-gradient">Operations Console</span>
               </h1>
-              <p className="text-muted-foreground text-sm mt-1">
-                Cross-location oversight of bookings, revenue and live monitoring across all Mt. Kalisungan trailheads.
+              <p className="text-xs lg:text-sm text-muted-foreground mt-0.5">
+                Unified multi-trailhead oversight, realtime hiker tracking, and municipal tourism regulation.
               </p>
             </div>
-            <div className="flex items-center gap-2">
+
+            <div className="flex items-center gap-3">
               <LocationSwitcher allowAll />
-              <Button variant="outline" size="icon" onClick={loadStats} aria-label="Refresh" disabled={loading}>
-                {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={loadStats}
+                disabled={loading}
+                className="gap-1.5 text-xs h-9 font-semibold"
+              >
+                <RefreshCw className={`h-3.5 w-3.5 ${loading ? 'animate-spin' : ''}`} />
+                {loading ? 'Syncing...' : 'Refresh'}
               </Button>
             </div>
           </div>
 
-          </motion.div>
-
-        {loadError && (
-          <div role="alert" className="mb-4 flex items-center gap-2 rounded-md border border-destructive/40 p-3 text-sm text-destructive">
-            <AlertTriangle className="h-4 w-4 shrink-0" />
-            {loadError}
-          </div>
-        )}
-
-        {/* Filter status header badge */}
-        <div className="mb-3 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Filter className="h-3.5 w-3.5 text-muted-foreground" />
-            <span className="text-xs font-semibold text-muted-foreground">
-              Scope:{' '}
-              <span className="text-foreground font-bold">
-                {activeLocationName}
-              </span>
-            </span>
-          </div>
-          {activeLocationId && (
-            <button
-              type="button"
-              onClick={() => setActiveLocationId(null)}
-              className="text-xs text-primary hover:underline font-medium"
-            >
-              Reset to All Trailheads
-            </button>
+          {loadError && (
+            <div role="alert" className="flex items-center gap-2 rounded-xl border border-destructive/40 bg-destructive/10 p-3 text-xs text-destructive">
+              <AlertTriangle className="h-4 w-4 shrink-0" />
+              <span>{loadError}</span>
+            </div>
           )}
-        </div>
 
-        {/* KPIs — Filtered by active trailhead */}
-        <div className="mb-6 grid grid-cols-1 gap-3 min-[360px]:grid-cols-2 md:grid-cols-4 md:gap-4">
+          {/* Desktop Trailhead Scope Selector (Excludes Mt. Kalisungan) */}
+          <div className="flex items-center justify-between flex-wrap gap-2.5 p-2 rounded-2xl border border-border/30 bg-secondary/15 backdrop-blur-sm">
+            <div className="flex items-center gap-1.5 overflow-x-auto custom-scrollbar py-0.5">
+              <Button
+                size="sm"
+                variant={!activeLocationId ? 'default' : 'ghost'}
+                onClick={() => setActiveLocationId(null)}
+                className={`text-xs h-8 rounded-xl font-semibold gap-1.5 ${
+                  !activeLocationId ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                <Building2 className="h-3.5 w-3.5" />
+                All Jump-Off Stations
+              </Button>
+
+              {jumpOffStations.map((station) => {
+                const isActive = activeLocationId === station.id;
+                return (
+                  <Button
+                    key={station.id}
+                    size="sm"
+                    variant={isActive ? 'default' : 'ghost'}
+                    onClick={() => setActiveLocationId(station.id)}
+                    className={`text-xs h-8 rounded-xl font-semibold gap-1.5 ${
+                      isActive ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'
+                    }`}
+                  >
+                    <MapPin className="h-3.5 w-3.5" />
+                    {station.name}
+                  </Button>
+                );
+              })}
+            </div>
+
+            <div className="flex items-center gap-2 px-3 text-xs text-muted-foreground">
+              <span>Scope:</span>
+              <Badge variant="outline" className="font-bold text-[11px] text-foreground bg-background/60">
+                {activeLocationName}
+              </Badge>
+            </div>
+          </div>
+        </motion.div>
+
+        {/* Hero KPIs Grid */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           {[
             {
-              label: activeLocationId ? `Total Bookings (${activeLocationName})` : 'Total Bookings (All)',
+              label: activeLocationId ? `Total Bookings (${activeLocationName})` : 'Total Bookings (All Stations)',
               value: activeStats.bookingsTotal,
-              subtext: `${activeStats.totalHikers} registered hikers`,
+              subtext: `${activeStats.totalHikers.toLocaleString()} registered hikers`,
               icon: Users,
               color: 'text-primary',
+              bgGlow: 'from-primary/10 to-transparent',
             },
             {
-              label: 'Bookings This Month',
+              label: 'Scheduled This Month',
               value: activeStats.bookingsMonth,
-              subtext: `${activeStats.bookingsToday} scheduled today`,
+              subtext: `${activeStats.bookingsToday} ascents scheduled today`,
               icon: TrendingUp,
               color: 'text-sky-500',
+              bgGlow: 'from-sky-500/10 to-transparent',
             },
             {
-              label: 'Recorded Revenue',
+              label: 'Recorded Tourism Revenue',
               value: `₱${activeStats.revenue.toLocaleString()}`,
-              subtext: 'Actual collected payments',
+              subtext: 'Collected municipal & guide receipts',
               icon: DollarSign,
               color: 'text-emerald-500',
+              bgGlow: 'from-emerald-500/10 to-transparent',
             },
             {
-              label: 'Active Hikers Now',
+              label: 'Active Hikers On-Trail',
               value: activeStats.activeHikers,
-              subtext: 'Currently checked in on trail',
+              subtext: 'Live checked-in GPS telemetry',
               icon: MapPin,
               color: 'text-orange-500',
+              bgGlow: 'from-orange-500/10 to-transparent',
             },
-          ].map((s, i) => (
-            <motion.div key={s.label} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.05 }}>
-              <Card className="glass-card">
-                <CardContent className="p-4 flex items-center gap-3">
-                  <s.icon className={`h-7 w-7 ${s.color} opacity-60 shrink-0`} />
+          ].map((kpi, idx) => (
+            <motion.div
+              key={kpi.label}
+              initial={{ opacity: 0, y: 15 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: idx * 0.05 }}
+            >
+              <Card className="glass-card relative overflow-hidden border-border/30 hover:border-primary/40 transition-all">
+                <div className={`absolute top-0 right-0 w-32 h-32 bg-gradient-to-bl ${kpi.bgGlow} pointer-events-none rounded-full blur-2xl -mr-10 -mt-10`} />
+                <CardContent className="p-4 flex items-center gap-3.5 relative">
+                  <div className={`h-11 w-11 rounded-2xl bg-secondary/40 border border-border/30 grid place-items-center shrink-0 ${kpi.color}`}>
+                    <kpi.icon className="h-5 w-5" />
+                  </div>
                   <div className="min-w-0 flex-1">
-                    <p className="text-xs text-muted-foreground truncate">{s.label}</p>
-                    <p className="break-words text-lg font-bold sm:text-xl">
-                      {loading ? 'Loading...' : loadError ? 'Unavailable' : s.value}
+                    <p className="text-xs font-medium text-muted-foreground truncate">{kpi.label}</p>
+                    <p className="text-xl lg:text-2xl font-extrabold tracking-tight mt-0.5">
+                      {loading ? '...' : kpi.value}
                     </p>
-                    <p className="text-[11px] text-muted-foreground/80 mt-0.5">{s.subtext}</p>
+                    <p className="text-[11px] text-muted-foreground/80 mt-0.5">{kpi.subtext}</p>
                   </div>
                 </CardContent>
               </Card>
@@ -259,106 +351,181 @@ export default function CentralDashboard() {
           ))}
         </div>
 
-        <Tabs defaultValue="overview">
-          <div className="-mx-1 overflow-x-auto px-1 pb-2 custom-scrollbar">
-            <TabsList className="glass-card min-w-max">
-              <TabsTrigger value="overview">Overview by location</TabsTrigger>
-              <TabsTrigger value="monitor">Live monitor</TabsTrigger>
-              <TabsTrigger value="admins">Admin Management</TabsTrigger>
-              <TabsTrigger value="guides">Guides & Hikers</TabsTrigger>
-              <TabsTrigger value="pricing">Fare & Capacity Control</TabsTrigger>
+        {/* Desktop Tabs Layout */}
+        <Tabs defaultValue="overview" className="w-full space-y-6">
+          <div className="border-b border-border/30 pb-px">
+            <TabsList className="bg-secondary/20 p-1 rounded-2xl border border-border/30 w-full sm:w-auto flex flex-wrap gap-1">
+              <TabsTrigger value="overview" className="gap-2 text-xs font-semibold rounded-xl data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
+                <Building2 className="h-3.5 w-3.5" /> Station Overview &amp; Ledger
+              </TabsTrigger>
+              <TabsTrigger value="monitor" className="gap-2 text-xs font-semibold rounded-xl data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
+                <Compass className="h-3.5 w-3.5" /> Live GIS Trail Monitor
+              </TabsTrigger>
+              <TabsTrigger value="admins" className="gap-2 text-xs font-semibold rounded-xl data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
+                <ShieldCheck className="h-3.5 w-3.5" /> Station Administrators
+              </TabsTrigger>
+              <TabsTrigger value="guides" className="gap-2 text-xs font-semibold rounded-xl data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
+                <Users className="h-3.5 w-3.5" /> Guides &amp; Hikers
+              </TabsTrigger>
+              <TabsTrigger value="pricing" className="gap-2 text-xs font-semibold rounded-xl data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
+                <DollarSign className="h-3.5 w-3.5" /> Fare &amp; Capacity Control
+              </TabsTrigger>
             </TabsList>
           </div>
 
-          <TabsContent value="overview" className="mt-4 space-y-6">
-            {/* Trailhead cards */}
-            <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {stats
-                .filter((s) => !activeLocationId || s.id === activeLocationId)
-                .map((s) => {
-                  const isCurrentFilter = activeLocationId === s.id;
-                  return (
-                    <Card
-                      key={s.id}
-                      className={`glass-card transition-all ${
-                        isCurrentFilter ? 'ring-2 ring-primary border-primary/40' : ''
-                      }`}
-                    >
-                      <CardHeader className="pb-2">
-                        <div className="flex items-center justify-between">
-                          <CardTitle className="text-base flex items-center gap-2">
-                            <Building2 className="h-4 w-4 text-primary" /> {s.name}
-                          </CardTitle>
-                          {isCurrentFilter && (
-                            <Badge variant="outline" className="text-[10px] bg-primary/10 text-primary border-primary/30">
-                              Active Filter
-                            </Badge>
-                          )}
+          {/* -------------------- TAB 1: OVERVIEW & LEDGER -------------------- */}
+          <TabsContent value="overview" className="space-y-6 mt-0">
+            {/* Trailhead Station Cards Grid */}
+            <div>
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-sm font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+                  <Building2 className="h-4 w-4 text-primary" /> Official Jump-Off Stations (Mt. Kalisungan)
+                </h3>
+                <span className="text-xs text-muted-foreground">3 Official Active Stations</span>
+              </div>
+
+              <div className="grid md:grid-cols-3 gap-4">
+                {stats
+                  .filter((s) => !activeLocationId || s.id === activeLocationId)
+                  .map((s) => {
+                    const isSelected = activeLocationId === s.id;
+                    return (
+                      <Card
+                        key={s.id}
+                        className={`glass-card transition-all flex flex-col justify-between ${
+                          isSelected ? 'ring-2 ring-primary border-primary/50' : 'hover:border-border/60'
+                        }`}
+                      >
+                        <CardHeader className="pb-3 border-b border-border/20">
+                          <div className="flex items-start justify-between gap-2">
+                            <div>
+                              <CardTitle className="text-base font-bold flex items-center gap-2">
+                                <Building2 className="h-4 w-4 text-primary" /> {s.name}
+                              </CardTitle>
+                              <CardDescription className="text-xs mt-0.5">
+                                Brgy. {s.name.replace(' Trailhead', '')}, Calauan, Laguna
+                              </CardDescription>
+                            </div>
+                            {isSelected ? (
+                              <Badge className="text-[10px] bg-primary text-primary-foreground">
+                                Active Filter
+                              </Badge>
+                            ) : (
+                              <Badge variant="outline" className="text-[10px] bg-emerald-500/10 text-emerald-600 border-emerald-500/30">
+                                Operational
+                              </Badge>
+                            )}
+                          </div>
+                        </CardHeader>
+
+                        <CardContent className="py-3 text-xs space-y-2">
+                          <Row label="Total Bookings (All Time)" value={s.bookingsTotal} />
+                          <Row label="Current Month Ascents" value={s.bookingsMonth} />
+                          <Row label="Scheduled Today" value={s.bookingsToday} />
+                          <Row label="Total hikers (pax)" value={s.totalHikers} />
+                          <Row label="Recorded Tourism Revenue" value={`₱${s.revenue.toLocaleString()}`} />
+                          <Row label="Active Hikers on Trail Now" value={
+                            <span className="font-bold text-orange-500">{s.activeHikers}</span>
+                          } />
+                        </CardContent>
+
+                        <div className="p-3 pt-0 border-t border-border/20 mt-1 flex items-center justify-between bg-secondary/10 rounded-b-xl">
+                          <button
+                            type="button"
+                            onClick={() => setActiveLocationId(isSelected ? null : s.id)}
+                            className="text-xs text-primary hover:underline font-semibold flex items-center gap-1"
+                          >
+                            {isSelected ? 'Overview All' : 'Select Station'}
+                            <ArrowRight className="h-3 w-3" />
+                          </button>
                         </div>
-                        <p className="text-xs text-muted-foreground">{s.lgu}</p>
-                      </CardHeader>
-                      <CardContent className="text-sm space-y-2">
-                        <Row label="Total bookings" value={s.bookingsTotal} />
-                        <Row label="This month" value={s.bookingsMonth} />
-                        <Row label="Scheduled today" value={s.bookingsToday} />
-                        <Row label="Total hikers (pax)" value={s.totalHikers} />
-                        <Row label="Recorded revenue" value={`₱${s.revenue.toLocaleString()}`} />
-                        <Row label="Active hikers on trail" value={s.activeHikers} />
-                        
-                      </CardContent>
-                    </Card>
-                  );
-                })}
-              {stats.length === 0 && !loading && (
-                <Card className="glass-card md:col-span-3">
-                  <CardContent className="p-8 text-center text-muted-foreground text-sm">
-                    <AlertTriangle className="h-6 w-6 mx-auto mb-2 opacity-50" />
-                    No locations yet.
-                  </CardContent>
-                </Card>
-              )}
+                      </Card>
+                    );
+                  })}
+              </div>
             </div>
 
-            {/* Actual Bookings Breakdown Table */}
-            <Card className="glass-card overflow-hidden">
-              <CardHeader className="pb-3 border-b border-border/20">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <CalendarCheck className="h-4 w-4 text-primary" />
-                    <CardTitle className="text-sm font-semibold">
+            {/* Actual Bookings Audit Ledger */}
+            <Card className="glass-card overflow-hidden border-border/30">
+              <CardHeader className="pb-3 border-b border-border/20 bg-secondary/10">
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+                  <div>
+                    <CardTitle className="text-base font-bold flex items-center gap-2">
+                      <CalendarCheck className="h-4 w-4 text-primary" />
                       Actual Bookings Record — {activeLocationName}
                     </CardTitle>
+                    <CardDescription className="text-xs mt-0.5">
+                      Showing records for {activeLocationName} ({filteredBookings.length} bookings)
+                    </CardDescription>
                   </div>
-                  <Badge variant="secondary" className="text-xs font-normal">
-                    {filteredBookings.length} bookings shown
-                  </Badge>
+
+                  {/* Search and Status filter controls */}
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <div className="relative">
+                      <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-muted-foreground" />
+                      <Input
+                        placeholder="Search hiker, ID, date..."
+                        value={ledgerSearch}
+                        onChange={(e) => setLedgerSearch(e.target.value)}
+                        className="pl-8 text-xs h-8 w-44 lg:w-56"
+                      />
+                    </div>
+
+                    <div className="flex items-center gap-1 bg-background/80 p-0.5 rounded-lg border border-border/30">
+                      {(['all', 'confirmed', 'active', 'completed', 'cancelled'] as const).map((st) => (
+                        <button
+                          key={st}
+                          type="button"
+                          onClick={() => setLedgerStatusFilter(st)}
+                          className={`px-2 py-1 text-[11px] font-semibold rounded-md capitalize transition-all ${
+                            ledgerStatusFilter === st
+                              ? 'bg-primary text-primary-foreground'
+                              : 'text-muted-foreground hover:text-foreground'
+                          }`}
+                        >
+                          {st}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
                 </div>
               </CardHeader>
+
               <CardContent className="p-0">
                 <div className="overflow-x-auto">
                   <table className="w-full text-left text-xs">
-                    <thead className="bg-muted/40 text-muted-foreground border-b border-border/20">
+                    <thead className="bg-secondary/30 text-muted-foreground border-b border-border/20 font-semibold uppercase text-[10px] tracking-wider">
                       <tr>
-                        <th className="px-4 py-2.5 font-semibold">Trailhead</th>
-                        <th className="px-4 py-2.5 font-semibold">Booking Date</th>
-                        <th className="px-4 py-2.5 font-semibold">Group Size</th>
-                        <th className="px-4 py-2.5 font-semibold">Status</th>
-                        <th className="px-4 py-2.5 font-semibold">Revenue Collected</th>
-                        <th className="px-4 py-2.5 font-semibold">Created</th>
+                        <th className="px-4 py-3">Station</th>
+                        <th className="px-4 py-3">Hiker Lead</th>
+                        <th className="px-4 py-3">Date</th>
+                        <th className="px-4 py-3">Group Size</th>
+                        <th className="px-4 py-3">Status</th>
+                        <th className="px-4 py-3">Revenue</th>
+                        <th className="px-4 py-3">Created</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-border/10">
                       {filteredBookings.map((b) => {
-                        const fee = getRecordedRevenue(parseMeta(b.notes));
+                        const meta = parseMeta(b.notes);
+                        const fee = getRecordedRevenue(meta);
                         return (
-                          <tr key={b.id} className="hover:bg-muted/20 transition-colors">
-                            <td className="px-4 py-2.5 font-medium flex items-center gap-1.5">
+                          <tr key={b.id} className="hover:bg-muted/30 transition-colors">
+                            <td className="px-4 py-3 font-semibold flex items-center gap-1.5">
                               <MapPin className="h-3 w-3 text-primary shrink-0" />
-                              <span className="truncate max-w-[140px]">{getLocationName(b.location_id)}</span>
+                              <span className="truncate max-w-[130px]">{getLocationName(b.location_id)}</span>
                             </td>
-                            <td className="px-4 py-2.5 font-mono text-muted-foreground">{b.booking_date}</td>
-                            <td className="px-4 py-2.5 font-semibold">{b.group_size || 1} pax</td>
-                            <td className="px-4 py-2.5">
+                            <td className="px-4 py-3">
+                              <div className="font-semibold text-foreground truncate max-w-[150px]">
+                                {meta.fullName || 'Lead Hiker'}
+                              </div>
+                              <div className="text-[10px] text-muted-foreground truncate max-w-[150px]">
+                                {meta.phoneNumber || b.id.slice(0, 8)}
+                              </div>
+                            </td>
+                            <td className="px-4 py-3 font-mono text-muted-foreground">{b.booking_date}</td>
+                            <td className="px-4 py-3 font-bold">{b.group_size || 1} pax</td>
+                            <td className="px-4 py-3">
                               <span
                                 className={`inline-block px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${
                                   b.status === 'confirmed' || b.status === 'completed'
@@ -373,17 +540,20 @@ export default function CentralDashboard() {
                                 {b.status}
                               </span>
                             </td>
-                            <td className="px-4 py-2.5 font-semibold">{fee > 0 ? formatPeso(fee) : '—'}</td>
-                            <td className="px-4 py-2.5 text-muted-foreground text-[11px]">
+                            <td className="px-4 py-3 font-semibold text-emerald-600 dark:text-emerald-400">
+                              {fee > 0 ? formatPeso(fee) : '—'}
+                            </td>
+                            <td className="px-4 py-3 text-muted-foreground text-[11px]">
                               {b.created_at ? format(new Date(b.created_at), 'MMM d, yyyy') : '—'}
                             </td>
                           </tr>
                         );
                       })}
+
                       {filteredBookings.length === 0 && !loading && (
                         <tr>
-                          <td colSpan={6} className="px-4 py-8 text-center text-muted-foreground">
-                            No bookings recorded for this trailhead yet.
+                          <td colSpan={7} className="px-4 py-10 text-center text-muted-foreground">
+                            No matching booking records found.
                           </td>
                         </tr>
                       )}
@@ -394,22 +564,44 @@ export default function CentralDashboard() {
             </Card>
           </TabsContent>
 
-          <TabsContent value="monitor" className="mt-4">
-            <RealtimeMonitorMap locationId={activeLocationId} canAddCheckpoints={false} />
+          {/* -------------------- TAB 2: GIS LIVE MONITOR -------------------- */}
+          <TabsContent value="monitor" className="mt-0">
+            <Card className="glass-card overflow-hidden border-border/30">
+              <CardHeader className="pb-3 border-b border-border/20">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <CardTitle className="text-base font-bold flex items-center gap-2">
+                      <Compass className="h-4 w-4 text-primary" /> Real-Time GIS Trailhead Radar
+                    </CardTitle>
+                    <CardDescription className="text-xs">
+                      Live satellite tracking, station checkpoints, and group clusters for {activeLocationName}.
+                    </CardDescription>
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent className="p-0">
+                <div className="h-[680px] w-full">
+                  <RealtimeMonitorMap locationId={activeLocationId} canAddCheckpoints={false} />
+                </div>
+              </CardContent>
+            </Card>
           </TabsContent>
 
-          <TabsContent value="admins" className="mt-4">
+          {/* -------------------- TAB 3: ADMIN MANAGEMENT -------------------- */}
+          <TabsContent value="admins" className="mt-0">
             <CentralAdminManagement />
           </TabsContent>
 
-          <TabsContent value="guides" className="mt-4">
+          {/* -------------------- TAB 4: GUIDES & HIKERS -------------------- */}
+          <TabsContent value="guides" className="mt-0">
             <AdminUserManagement
               locationId={activeLocationId}
               locationName={activeLocationName}
             />
           </TabsContent>
 
-          <TabsContent value="pricing" className="mt-4">
+          {/* -------------------- TAB 5: FARE & CAPACITY CONTROL -------------------- */}
+          <TabsContent value="pricing" className="mt-0">
             <CentralPricingManagement />
           </TabsContent>
         </Tabs>
@@ -422,7 +614,7 @@ function Row({ label, value }: { label: string; value: React.ReactNode }) {
   return (
     <div className="flex items-center justify-between border-b border-border/20 last:border-0 py-1.5">
       <span className="text-xs text-muted-foreground">{label}</span>
-      <span className="font-semibold">{value}</span>
+      <span className="font-semibold text-foreground">{value}</span>
     </div>
   );
 }

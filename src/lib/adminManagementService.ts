@@ -108,6 +108,19 @@ const SEED_ADMINS: AdminAccount[] = [
   },
 ];
 
+function isMtKalisunganAccount(a: Partial<AdminAccount>): boolean {
+  const loc = (a.locationName || '').toLowerCase();
+  const name = (a.fullName || '').toLowerCase();
+  const email = (a.email || '').toLowerCase();
+  return (
+    loc.includes('mount kalisungan') ||
+    name.includes('mount kalisungan') ||
+    email.includes('mtkalisungan') ||
+    email === 'kalisungan@kalisungan.ph' ||
+    a.locationId === '3082d38d-6f8e-491e-8a4d-6497b88f973a'
+  );
+}
+
 const LOCAL_STORAGE_ADMIN_KEY = 'mtk_managed_admins';
 const LOCAL_STORAGE_USERS_KEY = 'mtk_managed_users';
 
@@ -116,7 +129,7 @@ function getStoredAdmins(): AdminAccount[] {
     const raw = localStorage.getItem(LOCAL_STORAGE_ADMIN_KEY);
     if (raw) {
       const parsed: AdminAccount[] = JSON.parse(raw);
-      return parsed.map((a) => ({
+      return parsed.filter((a) => !isMtKalisunganAccount(a)).map((a) => ({
         ...a,
         status: isAccountDeactivated(a.userId, a.email) ? 'deactivated' : (a.status || 'active'),
       }));
@@ -187,8 +200,9 @@ export async function fetchAdminsList(): Promise<AdminAccount[]> {
         }
       }
 
-      saveStoredAdmins(combined);
-      return combined;
+      const cleanCombined = combined.filter((a) => !isMtKalisunganAccount(a));
+      saveStoredAdmins(cleanCombined);
+      return cleanCombined;
     }
   } catch (err) {
     console.warn('Direct admin query failed, returning cached admins:', err);
