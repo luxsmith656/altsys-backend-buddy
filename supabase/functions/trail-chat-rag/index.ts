@@ -1,7 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.48.0";
 import { embed } from "../_shared/kb.ts";
-import { FEE_POLICY_TEXT } from '../_shared/payments.ts';
+import { FEE_POLICY_TEXT, formatFeePolicyText } from '../_shared/payments.ts';
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -357,7 +357,7 @@ serve(async (req) => {
         });
       }
     }
-    if (askedQuote) systemMessages.push({ role: "system", content: FEE_SCHEDULE });
+    if (askedQuote) systemMessages.push({ role: "system", content: buildDynamicFeeSchedule(bookingContext) });
     if (liveData) {
       systemMessages.push({
         role: "system",

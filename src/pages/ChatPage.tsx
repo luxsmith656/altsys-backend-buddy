@@ -12,6 +12,7 @@ import { getKaliExpression, getKaliQuickReplies } from '@/lib/kaliPersonality';
 import { getKaliRoleLabel } from '@/lib/kaliContext';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
+import { getPricingConfig, getDynamicFeePolicyText } from '@/lib/pricingService';
 
 const CHAT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/trail-chat-rag`;
 const QUICK_QUESTIONS = [
@@ -89,6 +90,8 @@ export default function ChatPage() {
             viewer_role: role ?? 'guest',
             viewer_name: user?.user_metadata?.full_name ?? null,
             current_page: 'Trail Chat',
+            pricing_policy: getDynamicFeePolicyText(),
+            pricing: getPricingConfig(),
             forecasting: forecastContext ? {
               summary: forecastContext.summaryText,
               horizonDays: forecastContext.horizonDays,

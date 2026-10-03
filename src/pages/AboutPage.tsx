@@ -2,9 +2,11 @@ import { Link } from 'react-router-dom';
 import { Mountain, MapPin, Compass, ShieldAlert, Trees, Sun, Clock, Users, ArrowRight, CheckCircle2, History, AlertTriangle, HelpCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { usePricing } from '@/hooks/usePricing';
 import heroImage from '@/assets/mt-kalisungan-hero.jpg';
 
 export default function AboutPage() {
+  const { pricing } = usePricing();
   return (
     <div className="min-h-screen bg-background text-foreground pt-16 pb-16">
       {/* Hero Banner */}
@@ -247,7 +249,7 @@ export default function AboutPage() {
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 text-xs sm:text-sm">
             <div className="space-y-1 p-3 rounded-xl bg-background/50 border border-border/40">
               <div className="font-semibold text-foreground">1. Mandatory Guide</div>
-              <p className="text-muted-foreground text-xs leading-relaxed">For safety and ecological preservation, all groups must be accompanied by an accredited local guide (1 guide : 5 hikers).</p>
+              <p className="text-muted-foreground text-xs leading-relaxed">For safety and ecological preservation, all groups must be accompanied by an accredited local guide (1 guide : {pricing.maxPaxPerGuide} hikers).</p>
             </div>
             <div className="space-y-1 p-3 rounded-xl bg-background/50 border border-border/40">
               <div className="font-semibold text-foreground">2. Carry Your Trash</div>
@@ -302,7 +304,7 @@ export default function AboutPage() {
                 Is a local guide mandatory for all hikers?
               </h4>
               <p className="text-xs sm:text-sm text-muted-foreground leading-relaxed pl-5">
-                <strong>Yes.</strong> By municipal tourism ordinance, every group must be accompanied by an accredited local guide (1 guide per 5 hikers) to ensure hiker safety, proper navigation, and environmental preservation.
+                <strong>Yes.</strong> By municipal tourism ordinance, every group must be accompanied by an accredited local guide (1 guide per {pricing.maxPaxPerGuide} hikers) to ensure hiker safety, proper navigation, and environmental preservation.
               </p>
             </Card>
 

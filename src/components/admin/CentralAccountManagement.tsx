@@ -451,64 +451,25 @@ export default function CentralAccountManagement() {
         </div>
       </div>
 
-      {/* Roster Controls: Role Pills, Station Filter, Status, Search */}
-      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 p-3 rounded-2xl border border-border/30 bg-secondary/15 backdrop-blur-sm">
-        {/* Role Pills */}
-        <div className="flex items-center gap-1.5 overflow-x-auto pb-1 lg:pb-0">
-          <button
-            type="button"
-            onClick={() => setRoleFilter('all')}
-            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${
-              roleFilter === 'all'
-                ? 'bg-primary text-primary-foreground shadow-sm'
-                : 'text-muted-foreground hover:text-foreground hover:bg-secondary/40'
-            }`}
-          >
-            All Accounts ({counts.all})
-          </button>
-          <button
-            type="button"
-            onClick={() => setRoleFilter('admin')}
-            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 whitespace-nowrap ${
-              roleFilter === 'admin'
-                ? 'bg-purple-600 text-white shadow-sm'
-                : 'text-muted-foreground hover:text-foreground hover:bg-secondary/40'
-            }`}
-          >
-            <ShieldCheck className="h-3.5 w-3.5" />
-            Station Admins ({counts.admin})
-          </button>
-          <button
-            type="button"
-            onClick={() => setRoleFilter('guide')}
-            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 whitespace-nowrap ${
-              roleFilter === 'guide'
-                ? 'bg-emerald-600 text-white shadow-sm'
-                : 'text-muted-foreground hover:text-foreground hover:bg-secondary/40'
-            }`}
-          >
-            <Compass className="h-3.5 w-3.5" />
-            Tour Guides ({counts.guide})
-          </button>
-          <button
-            type="button"
-            onClick={() => setRoleFilter('hiker')}
-            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 whitespace-nowrap ${
-              roleFilter === 'hiker'
-                ? 'bg-sky-600 text-white shadow-sm'
-                : 'text-muted-foreground hover:text-foreground hover:bg-secondary/40'
-            }`}
-          >
-            <UserCheck className="h-3.5 w-3.5" />
-            Hikers ({counts.hiker})
-          </button>
-        </div>
+      {/* Roster Controls: Role Dropdown, Station Filter, Status, Search */}
+      <div className="p-3 rounded-2xl border border-border/30 bg-secondary/15 backdrop-blur-sm">
+        <div className="flex flex-col md:flex-row items-stretch md:items-center gap-2.5">
+          {/* Role Dropdown */}
+          <Select value={roleFilter} onValueChange={(val: any) => setRoleFilter(val)}>
+            <SelectTrigger className="h-9 text-xs font-semibold w-full md:w-52 bg-background/80">
+              <SelectValue placeholder="All Roles" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">👥 All Accounts ({counts.all})</SelectItem>
+              <SelectItem value="admin">🛡️ Station Admins ({counts.admin})</SelectItem>
+              <SelectItem value="guide">🧭 Tour Guides ({counts.guide})</SelectItem>
+              <SelectItem value="hiker">👤 Hikers ({counts.hiker})</SelectItem>
+            </SelectContent>
+          </Select>
 
-        {/* Station, Status & Search Controls */}
-        <div className="flex items-center gap-2 flex-wrap">
           {/* Station Selector */}
           <Select value={stationFilter} onValueChange={setStationFilter}>
-            <SelectTrigger className="h-8 text-xs font-medium w-40 bg-background/80">
+            <SelectTrigger className="h-9 text-xs font-medium w-full md:w-44 bg-background/80">
               <SelectValue placeholder="All Stations" />
             </SelectTrigger>
             <SelectContent>
@@ -523,7 +484,7 @@ export default function CentralAccountManagement() {
 
           {/* Status Selector */}
           <Select value={statusFilter} onValueChange={(val: any) => setStatusFilter(val)}>
-            <SelectTrigger className="h-8 text-xs font-medium w-32 bg-background/80">
+            <SelectTrigger className="h-9 text-xs font-medium w-full md:w-36 bg-background/80">
               <SelectValue placeholder="Status" />
             </SelectTrigger>
             <SelectContent>
@@ -533,14 +494,14 @@ export default function CentralAccountManagement() {
             </SelectContent>
           </Select>
 
-          {/* Search Box */}
-          <div className="relative">
-            <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-muted-foreground" />
+          {/* Search Box - Flex aligned */}
+          <div className="relative flex-1 min-w-[200px]">
+            <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
             <Input
-              placeholder="Search name, email, phone..."
+              placeholder="Search name, email, phone, station..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="pl-8 text-xs h-8 w-48 lg:w-56 bg-background/80"
+              className="pl-9 text-xs h-9 w-full bg-background/80"
             />
           </div>
         </div>

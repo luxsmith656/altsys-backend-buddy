@@ -1,17 +1,17 @@
 // Offline knowledge base for Mt. Kalisungan trail assistant
 // Static entries + dynamic learning cache from previous AI responses
-import { FEE_POLICY_TEXT, getDynamicFeePolicyText } from './payments';
+import { FEE_POLICY_TEXT, getDynamicFeePolicyText, getPricingConfig } from './payments';
 
 const CACHE_KEY = 'kalisungan_learned_cache';
 const CACHE_MAX = 200;
 
 interface KBEntry {
   keywords: string[];
-  answer: string;
+  answer: string | (() => string);
 }
 
 const KB: KBEntry[] = [
-  { keywords: ['fee', 'fees', 'price', 'cost', 'rate', 'guide fee', 'walk-in', 'porter', 'horse'], answer: FEE_POLICY_TEXT },
+  { keywords: ['fee', 'fees', 'price', 'cost', 'rate', 'guide fee', 'walk-in', 'porter', 'horse'], answer: () => getDynamicFeePolicyText() },
   // ─── TRAILS ───
   {
     keywords: ['trail', 'available', 'trails', 'route', 'routes', 'path', 'which'],
@@ -223,16 +223,19 @@ Afternoon thunderstorms can occur year-round.`,
   // ─── REGISTRATION & FEES ───
   {
     keywords: ['register', 'registration', 'fee', 'permit', 'book', 'cost', 'price', 'entrance', 'how much'],
-    answer: `**Registration & Fees:**
+    answer: () => {
+      const p = getPricingConfig();
+      return `**Registration & Fees:**
 
 - Registration is **required** at the barangay hall / trailhead
-- Registration fee: ₱30 per person
-- Environmental fee: ₱20 per person
-- Mandatory Tour Guide fee: ₱800 per morning guide (1 guide per 1–5 hikers; groups over 5 require an additional guide)
+- Registration fee: ₱${p.entryFee} per person
+- Environmental fee: ₱${p.envFee} per person
+- Mandatory Tour Guide fee: ₱${p.guideFeeMorning} per morning guide (1 guide per ${p.maxPaxPerGuide} hikers; groups over ${p.maxPaxPerGuide} require an additional guide)
 - Groups should register together
 - Bring exact cash, GCash, or pre-book through the app
 
-💡 Book through the app to pre-register and skip the queue!`,
+💡 Book through the app to pre-register and skip the queue!`;
+    },
   },
 
   // ─── DIFFICULTY & FITNESS ───
@@ -472,15 +475,18 @@ Afternoon thunderstorms can occur year-round.`,
   // ─── GROUPS & GUIDES ───
   {
     keywords: ['guide', 'tour', 'group', 'hire', 'porter', 'organized', 'join'],
-    answer: `**Guides & Group Hikes:**
+    answer: () => {
+      const p = getPricingConfig();
+      return `**Guides & Group Hikes:**
 
-- A guide is mandatory: 1 guide covers 1–5 hikers
-- Guide rate: ₱800 morning, ₱1,000 night, or ₱1,600 overnight per guide
+- A guide is mandatory: 1 guide covers 1–${p.maxPaxPerGuide} hikers
+- Guide rate: ₱${p.guideFeeMorning} morning, ₱${p.guideFeeNight} night, or ₱${p.guideFeeOvernight} overnight per guide
 - Guides know the best routes and hidden viewpoints
 - Group hikes organized by local mountaineering clubs
 - Join Facebook groups for organized weekend hikes
 - Minimum group size: 2 (never hike alone)
-- Maximum group: Check with barangay for capacity limits`,
+- Maximum group: Check with barangay for capacity limits`;
+    },
   },
 
   // ─── NEARBY ATTRACTIONS ───
@@ -500,20 +506,23 @@ Afternoon thunderstorms can occur year-round.`,
   // ─── BUDGET ───
   {
     keywords: ['budget', 'expense', 'spend', 'cheap', 'affordable', 'money', 'total cost'],
-    answer: `**Estimated Budget (per person):**
+    answer: () => {
+      const p = getPricingConfig();
+      return `**Estimated Budget (per person):**
 
 | Item | Cost (₱) |
 |------|----------|
-| Registration / entry fee | ₱30 |
-| Environmental fee | ₱20 |
-| Morning guide (1–5 hikers) | ₱800 per guide |
-| Night guide (1–5 hikers) | ₱1,000 per guide |
-| Overnight guide (1–5 hikers) | ₱1,600 per guide |
+| Registration / entry fee | ₱${p.entryFee} |
+| Environmental fee | ₱${p.envFee} |
+| Morning guide (1–${p.maxPaxPerGuide} hikers) | ₱${p.guideFeeMorning} per guide |
+| Night guide (1–${p.maxPaxPerGuide} hikers) | ₱${p.guideFeeNight} per guide |
+| Overnight guide (1–${p.maxPaxPerGuide} hikers) | ₱${p.guideFeeOvernight} per guide |
 | Transportation (Manila roundtrip) | 300–600 |
 | Food & water | 200–400 |
 | Accommodation | Bring your own tent; no peak lodging |
 
-💡 Your final total depends on group size, hike type, transport, and optional emergency services.`,
+💡 Your final total depends on group size, hike type, transport, and optional emergency services.`;
+    },
   },
 
   // ─── BEST TIME TO VISIT ───
@@ -680,7 +689,7 @@ export function getOfflineAnswer(query: string): string {
 
   for (const entry of KB) {
     const score = entry.keywords.reduce((s, kw) => s + (q.includes(kw) ? 1 : 0), 0);
-    if (score > best.score) best = { score, answer: entry.answer };
+    if (score > best.score) { const ans = typeof entry.answer === "function" ? entry.answer() : entry.answer; best = { score, answer: ans }; }
   }
 
   // 2. Score learned cache entries

@@ -12,7 +12,7 @@ import { getKaliExpression, getKaliQuickReplies } from '@/lib/kaliPersonality';
 import { getKaliRoleLabel } from '@/lib/kaliContext';
 import { useAuth } from '@/hooks/useAuth';
 import ReactMarkdown from 'react-markdown';
-import { getPricingConfig } from '@/lib/pricingService';
+import { getPricingConfig, getDynamicFeePolicyText } from '@/lib/pricingService';
 
 
 interface WeatherSnapshot {
@@ -416,7 +416,7 @@ function generateResponse(
         `📋 **Mt. Kalisungan Official Published Fees & Fare Schedule:**\n\n` +
         `• **Registration Fee:** ₱${p.entryFee} per hiker\n` +
         `• **Environmental / DSPA Fee:** ₱${p.envFee} per hiker\n` +
-        `• **Tour Guide Fees:** (1 guide covers up to 5 hikers)\n` +
+        `• **Tour Guide Fees:** (1 guide covers up to ${p.maxPaxPerGuide} hikers)\n` +
         `  - Morning Hike: ₱${p.guideFeeMorning} per guide\n` +
         `  - Night Hike: ₱${p.guideFeeNight} per guide\n` +
         `  - Overnight Hike: ₱${p.guideFeeOvernight} per guide\n` +
@@ -686,6 +686,8 @@ export default function BookingAIChat({
               stationNames: publishedRoute.stationNames ?? [],
             } : null,
             weather_forecast: weatherInsight ?? null,
+            pricing_policy: getDynamicFeePolicyText(),
+            pricing: getPricingConfig(),
             forecasting: forecastContext ? {
               summary: forecastContext.summaryText,
               horizonDays: forecastContext.horizonDays,

@@ -1385,7 +1385,7 @@ export default function BookingPage() {
                         <Users className="h-4 w-4 text-muted-foreground" />
                         <div>
                           <p className="text-sm font-semibold leading-tight">Group Size</p>
-                          <p className="text-[11px] text-muted-foreground">1â€“30 hikers (1 guide per {MAX_PAX_PER_GUIDE} pax Â· {formatPeso(getGuideFeePerGuide(hikeType))}/guide)</p>
+                          <p className="text-[11px] text-muted-foreground">1–30 hikers (1 guide per {pricing.maxPaxPerGuide} pax · {formatPeso(getGuideFeePerGuide(hikeType))}/guide)</p>
                         </div>
                       </div>
                       <div className="flex items-center gap-2">
@@ -1849,7 +1849,7 @@ export default function BookingPage() {
                             Guide Assignment
                           </Label>
                           <Badge variant="outline" className="text-[10px] bg-primary/10 text-primary border-primary/20">
-                            1 Guide : 5 Hikers
+                            1 Guide : {pricing.maxPaxPerGuide} Hikers
                           </Badge>
                         </div>
 

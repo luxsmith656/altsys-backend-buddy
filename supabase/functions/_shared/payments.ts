@@ -20,6 +20,30 @@ export const HORSE_EMERGENCY_SERVICE_FEE = 500; // ₱500 emergency horse / port
 export const HORSE_HIGH_STATION_FEE = 1000;
 export const FEE_POLICY_TEXT = `Registration is PHP ${ENTRY_FEE_PER_PERSON} per hiker; environmental fee is PHP ${ENV_FEE_PER_PERSON} per hiker. One guide covers up to ${MAX_PAX_PER_GUIDE} hikers, rounding guide count upward. Each guide costs PHP ${GUIDE_FEE_BY_HIKE_TYPE.morning} for morning, PHP ${GUIDE_FEE_BY_HIKE_TYPE.night} for night, or PHP ${GUIDE_FEE_BY_HIKE_TYPE.overnight} for overnight. These rates apply to all jump-offs and walk-ins. Peak extension is PHP ${PEAK_EXTENSION_FEE_PER_HOUR} per hour. Horse help from Stations 5-3 costs PHP ${HORSE_HIGH_STATION_FEE}; Stations 2-1 costs PHP ${HORSE_EMERGENCY_SERVICE_FEE}. Water, porter and other optional expenses have no fixed published rate: quote only the recorded amount, never invent a price. Recorded admin adjustments and actual receipt charges take precedence over a new estimate. A confirmed booking is not proof of payment.`;
 
+export function formatFeePolicyText(pricing?: {
+  entryFee?: number;
+  envFee?: number;
+  guideFeeMorning?: number;
+  guideFeeNight?: number;
+  guideFeeOvernight?: number;
+  peakExtensionFeePerHour?: number;
+  horseEmergencyFee?: number;
+  horseHighStationFee?: number;
+  maxPaxPerGuide?: number;
+} | null): string {
+  const entryFee = pricing?.entryFee !== undefined && Number(pricing.entryFee) >= 0 ? Number(pricing.entryFee) : ENTRY_FEE_PER_PERSON;
+  const envFee = pricing?.envFee !== undefined && Number(pricing.envFee) >= 0 ? Number(pricing.envFee) : ENV_FEE_PER_PERSON;
+  const maxPax = pricing?.maxPaxPerGuide !== undefined && Number(pricing.maxPaxPerGuide) > 0 ? Number(pricing.maxPaxPerGuide) : MAX_PAX_PER_GUIDE;
+  const morning = pricing?.guideFeeMorning !== undefined && Number(pricing.guideFeeMorning) >= 0 ? Number(pricing.guideFeeMorning) : GUIDE_FEE_BY_HIKE_TYPE.morning;
+  const night = pricing?.guideFeeNight !== undefined && Number(pricing.guideFeeNight) >= 0 ? Number(pricing.guideFeeNight) : GUIDE_FEE_BY_HIKE_TYPE.night;
+  const overnight = pricing?.guideFeeOvernight !== undefined && Number(pricing.guideFeeOvernight) >= 0 ? Number(pricing.guideFeeOvernight) : GUIDE_FEE_BY_HIKE_TYPE.overnight;
+  const peak = pricing?.peakExtensionFeePerHour !== undefined && Number(pricing.peakExtensionFeePerHour) >= 0 ? Number(pricing.peakExtensionFeePerHour) : PEAK_EXTENSION_FEE_PER_HOUR;
+  const horseHigh = pricing?.horseHighStationFee !== undefined && Number(pricing.horseHighStationFee) >= 0 ? Number(pricing.horseHighStationFee) : HORSE_HIGH_STATION_FEE;
+  const horseEmerg = pricing?.horseEmergencyFee !== undefined && Number(pricing.horseEmergencyFee) >= 0 ? Number(pricing.horseEmergencyFee) : HORSE_EMERGENCY_SERVICE_FEE;
+
+  return `Registration is PHP ${entryFee} per hiker; environmental fee is PHP ${envFee} per hiker. One guide covers up to ${maxPax} hikers, rounding guide count upward. Each guide costs PHP ${morning} for morning, PHP ${night} for night, or PHP ${overnight} for overnight. These rates apply to all jump-offs and walk-ins. Peak extension is PHP ${peak} per hour. Horse help from Stations 5-3 costs PHP ${horseHigh}; Stations 2-1 costs PHP ${horseEmerg}. Water, porter and other optional expenses have no fixed published rate: quote only the recorded amount, never invent a price. Recorded admin adjustments and actual receipt charges take precedence over a new estimate. A confirmed booking is not proof of payment.`;
+}
+
 export interface FeeOptions {
   hikeType?: string | null;
   peakExtensionHours?: number | null;

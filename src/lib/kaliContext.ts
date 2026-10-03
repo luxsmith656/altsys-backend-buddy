@@ -1,3 +1,5 @@
+import { getMaxPaxPerGuide } from './pricingService';
+
 export type KaliRole = 'hiker' | 'guide' | 'admin' | 'super_admin' | 'ranger' | 'mdrrmo' | 'guest';
 export type KaliInsightKind = 'age-review' | 'minor-review' | 'weather' | 'group-guidance' | 'booking-reminder' | 'hike-type';
 export type KaliSeverity = 'info' | 'medium' | 'high';
@@ -41,6 +43,7 @@ export interface KaliContextInput {
   savedParticipants?: KaliParticipantInput[];
   currentParticipants?: KaliParticipantInput[];
   groupSize?: number;
+  maxPaxPerGuide?: number;
   weather?: KaliWeatherInput | null;
   booking?: KaliBookingInput | null;
   selectedDate?: string;
@@ -263,8 +266,11 @@ function weatherInsight(input: KaliContextInput): KaliInsight | null {
 
 function groupInsight(input: KaliContextInput): KaliInsight | null {
   const groupSize = Math.max(0, Math.round(Number(input.groupSize ?? 0)));
-  if (groupSize <= 5) return null;
+  const maxPax = Math.max(1, input.maxPaxPerGuide ?? getMaxPaxPerGuide());
+  if (groupSize <= maxPax) return null;
 
+  const guidesRequired = Math.ceil(groupSize / maxPax);
+  const planTitle = guidesRequired === 2 ? 'Two-guide safety plan' : `${guidesRequired}-guide safety plan`;
   const audience = input.role === 'mdrrmo'
     ? 'For emergency response planning, '
     : input.role === 'guide'
@@ -275,9 +281,9 @@ function groupInsight(input: KaliContextInput): KaliInsight | null {
     kind: 'group-guidance',
     severity: 'medium',
     expression: 'map',
-    title: 'Two-guide safety plan',
-    message: `${audience}2 guides for ${groupSize} hikers. You remain one group; the guides cover the front and back for safer headcounts and trail spacing.`,
-    meta: { groupSize, guidesRequired: 2 },
+    title: planTitle,
+    message: `${audience}${guidesRequired} guides for ${groupSize} hikers (1 guide per ${maxPax} hikers). You remain one group; the guides cover the front and back for safer headcounts and trail spacing.`,
+    meta: { groupSize, guidesRequired, maxPaxPerGuide: maxPax },
   };
 }
 
