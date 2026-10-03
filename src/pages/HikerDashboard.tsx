@@ -174,7 +174,7 @@ export default function HikerDashboard() {
       ]);
       setBookings(b || []);
       setSessions(s || []);
-      setImportantAnnouncements(loadAnnouncements().filter((a) => a.isImportant));
+      setImportantAnnouncements(loadAnnouncements('hiker').filter((a) => a.isImportant));
       const active = (s || []).find(
         (session) => session.status === 'active' &&
           String(session.client_session_id ?? '').startsWith(ADMIN_CHECKIN_TOKEN_PREFIX)

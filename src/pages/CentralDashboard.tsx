@@ -266,7 +266,7 @@ export default function CentralDashboard() {
               <TabsTrigger value="monitor">Live monitor</TabsTrigger>
               <TabsTrigger value="admins">Admin Management</TabsTrigger>
               <TabsTrigger value="guides">Guides & Hikers</TabsTrigger>
-              <TabsTrigger value="pricing">Fare & Pricing Control</TabsTrigger>
+              <TabsTrigger value="pricing">Fare & Capacity Control</TabsTrigger>
             </TabsList>
           </div>
 

@@ -323,6 +323,21 @@ export default function BookingPage() {
   // â”€â”€ Multi-location: hiker picks where to start (Lamot 1, Lamot 2, etc.) â”€â”€
   const { locations: allLocations } = useLocations();
   const [startLocationId, setStartLocationId] = useState<string>('');
+  // Scrape/filter jump-off locations to strictly Lamot 2, Lamot 1, and Sto. Tomas
+  const jumpOffLocations = useMemo(() => {
+    return allLocations
+      .filter((loc) => {
+        const text = `${loc.slug} ${loc.name}`.toLowerCase();
+        return text.includes('lamot') || text.includes('tomas');
+      })
+      .sort((a, b) => {
+        const aText = `${a.slug} ${a.name}`.toLowerCase();
+        const bText = `${b.slug} ${b.name}`.toLowerCase();
+        const score = (t: string) => (t.includes('lamot') && t.includes('2') ? 1 : t.includes('lamot') && t.includes('1') ? 2 : 3);
+        return score(aText) - score(bText);
+      });
+  }, [allLocations]);
+
   const [dbGuides, setDbGuides] = useState<Array<{ id: string; full_name: string; location_id: string; per_trip_fee: number }>>([]);
   const [preferredGuideId, setPreferredGuideId] = useState<string>('');
   const referralGuideId = searchParams.get('guide') || searchParams.get('referral') || String(user?.user_metadata?.referral_guide_id || '');
@@ -447,11 +462,12 @@ export default function BookingPage() {
 
   /* â”€â”€ Auto-pick first active location if none chosen â”€â”€ */
   useEffect(() => {
-    if (!startLocationId && allLocations.length > 0) {
-      const preferredEntry = allLocations.find((location) => /lamot[- _]?2/i.test(`${location.slug} ${location.name}`));
-      setStartLocationId((preferredEntry ?? allLocations[0]).id);
+    const pool = jumpOffLocations.length > 0 ? jumpOffLocations : allLocations;
+    if (!startLocationId && pool.length > 0) {
+      const preferredEntry = pool.find((location) => /lamot[- _]?2/i.test(`${location.slug} ${location.name}`));
+      setStartLocationId((preferredEntry ?? pool[0]).id);
     }
-  }, [allLocations, startLocationId]);
+  }, [allLocations, jumpOffLocations, startLocationId]);
 
   const selectedLocation = useMemo(
     () => allLocations.find((l) => l.id === startLocationId) || null,
@@ -1784,7 +1800,7 @@ export default function BookingPage() {
                             <SelectValue placeholder="Choose where you'll start hiking" />
                           </SelectTrigger>
                           <SelectContent>
-                            {allLocations.map((loc) => (
+                            {(jumpOffLocations.length > 0 ? jumpOffLocations : allLocations.filter(l => l.slug.includes("lamot") || l.slug.includes("tomas"))).map((loc) => (
                               <SelectItem key={loc.id} value={loc.id}>
                                 {loc.name}{loc.lgu ? ` â€” ${loc.lgu}` : ''}
                               </SelectItem>

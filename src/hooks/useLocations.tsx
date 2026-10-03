@@ -180,7 +180,40 @@ export function LocationsProvider({ children }: { children: ReactNode }) {
 
         if (version !== requestVersion.current) return;
         if (mapsError) throw mapsError;
-        const ids = ((maps as any[] | null) ?? []).map((m) => m.location_id).filter(Boolean);
+        let ids = ((maps as any[] | null) ?? []).map((m) => m.location_id).filter(Boolean);
+
+        // Fallback for local admins when user_locations row is not in DB yet (e.g., lamot2, lamot1, stotomas):
+        if (ids.length === 0 && (role === 'admin' || isMappedLocationRole)) {
+          const userEmail = user.email?.toLowerCase().trim() || '';
+          let matchedLocKey: string | null = null;
+          try {
+            const raw = localStorage.getItem('mtk_managed_admins');
+            if (raw) {
+              const managed = JSON.parse(raw);
+              if (Array.isArray(managed)) {
+                const match = managed.find((a: any) => a.email?.toLowerCase() === userEmail || a.userId === user.id);
+                if (match?.locationId) matchedLocKey = match.locationId;
+              }
+            }
+          } catch {}
+
+          if (!matchedLocKey) {
+            if (userEmail.includes('lamot2') || userEmail.includes('lamot 2')) matchedLocKey = 'lamot-2';
+            else if (userEmail.includes('lamot1') || userEmail.includes('lamot 1')) matchedLocKey = 'lamot-1';
+            else if (userEmail.includes('tomas')) matchedLocKey = 'sto-tomas';
+          }
+
+          if (matchedLocKey) {
+            const targetLoc = (list.length > 0 ? list : DEFAULT_LOCATIONS).find((l) =>
+              l.id === matchedLocKey ||
+              l.slug === matchedLocKey ||
+              l.slug.replace(/[^a-z0-9]/g, '') === matchedLocKey!.replace(/[^a-z0-9]/g, '') ||
+              l.name.toLowerCase().includes(matchedLocKey!.toLowerCase())
+            );
+            if (targetLoc) ids = [targetLoc.id];
+          }
+        }
+
         setMyLocationIds(ids);
         try {
           localStorage.setItem(userLocationsCacheKey(user.id), JSON.stringify(ids));
@@ -231,6 +264,17 @@ export function LocationsProvider({ children }: { children: ReactNode }) {
 
 export function useLocations() {
   const ctx = useContext(Ctx);
-  if (!ctx) throw new Error('useLocations must be used inside LocationsProvider');
+  if (!ctx) {
+    return {
+      locations: DEFAULT_LOCATIONS,
+      myLocations: [],
+      activeLocationId: null,
+      activeLocation: DEFAULT_LOCATIONS[0],
+      setActiveLocationId: () => {},
+      isSuperAdmin: false,
+      loading: false,
+      refresh: async () => {},
+    };
+  }
   return ctx;
 }

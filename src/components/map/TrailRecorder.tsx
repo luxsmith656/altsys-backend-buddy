@@ -4,6 +4,7 @@ import L from 'leaflet';
 import { createPortal } from 'react-dom';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { supabase } from '@/integrations/supabase/client';
@@ -44,6 +45,7 @@ import {
   stopNativeTrailRecording,
 } from '@/lib/tracking/nativeBackgroundRecorder';
 import { useAuth } from '@/hooks/useAuth';
+import { useLocations } from '@/hooks/useLocations';
 import type { LatLngTuple } from 'leaflet';
 import {
   canUsePlatformGeolocation,
@@ -199,7 +201,26 @@ type TrailRecordingRow = {
 
 export default function TrailRecorder({ existingTrails, locationId, onSaved }: TrailRecorderProps) {
   const { user } = useAuth();
+  const { locations } = useLocations();
   const map = useMap(); // Consume the parent leaflet map context directly!
+  // Scrape/filter available jump-offs strictly to Lamot 2, Lamot 1, and Sto. Tomas
+  const jumpOffLocations = useMemo(() => {
+    return (locations || [])
+      .filter((loc) => {
+        const text = `${loc.slug} ${loc.name}`.toLowerCase();
+        return text.includes('lamot') || text.includes('tomas');
+      })
+      .sort((a, b) => {
+        const aText = `${a.slug} ${a.name}`.toLowerCase();
+        const bText = `${b.slug} ${b.name}`.toLowerCase();
+        const score = (t: string) => (t.includes('lamot') && t.includes('2') ? 1 : t.includes('lamot') && t.includes('1') ? 2 : 3);
+        return score(aText) - score(bText);
+      });
+  }, [locations]);
+
+  const lamot2Id = useMemo(() => {
+    return jumpOffLocations.find((l) => `${l.slug} ${l.name}`.toLowerCase().includes('lamot 2') || l.slug === 'lamot-2')?.id ?? null;
+  }, [jumpOffLocations]);
 
   const visibleExistingTrails = existingTrails?.filter((trail) => trail.status !== 'deleted' && trail.review_status !== 'deleted') ?? [];
   const [mode, setMode] = useState<'idle' | 'drawing' | 'recording'>('idle');
@@ -226,6 +247,11 @@ export default function TrailRecorder({ existingTrails, locationId, onSaved }: T
   const [trailRecordings, setTrailRecordings] = useState<TrailRecordingRow[]>([]);
   const [recordingsLoading, setRecordingsLoading] = useState(false);
   const [selectedTrailLocationId, setSelectedTrailLocationId] = useState<string | null>(locationId ?? null);
+  useEffect(() => {
+    if (!selectedTrailLocationId && lamot2Id && !locationId) {
+      setSelectedTrailLocationId(lamot2Id);
+    }
+  }, [selectedTrailLocationId, lamot2Id, locationId]);
   const [selectedTrailRecordingCount, setSelectedTrailRecordingCount] = useState(0);
   const [recordingsModalOpen, setRecordingsModalOpen] = useState(false);
   const [recordingSort, setRecordingSort] = useState<'newest' | 'quality' | 'distance'>('newest');
@@ -1432,6 +1458,25 @@ export default function TrailRecorder({ existingTrails, locationId, onSaved }: T
                 </span>
                 
                 <div className="grid grid-cols-2 gap-2">
+                  <div className="col-span-2">
+                    <Label className="text-[11px] font-semibold mb-1 block">Trailhead / Jump-off Station</Label>
+                    <Select 
+                      value={selectedTrailLocationId || 'unassigned'} 
+                      onValueChange={(val) => setSelectedTrailLocationId(val === 'unassigned' ? null : val)}
+                    >
+                      <SelectTrigger className="text-xs h-9 bg-slate-50/50 dark:bg-slate-950/40 border border-slate-200/60 dark:border-slate-800/60 rounded-xl">
+                        <SelectValue placeholder="Choose Jump-off Station" />
+                      </SelectTrigger>
+                      <SelectContent className="z-[3200]">
+                        <SelectItem value="unassigned" className="text-xs">General / Unassigned</SelectItem>
+                        {(jumpOffLocations.length > 0 ? jumpOffLocations : locations).map((loc) => (
+                          <SelectItem key={loc.id} value={loc.id} className="text-xs">
+                            {loc.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
                   <div className="col-span-2">
                     <Input 
                       placeholder="Trail name" 

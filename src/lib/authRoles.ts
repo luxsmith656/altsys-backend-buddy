@@ -53,6 +53,19 @@ export function resolveKnownAccountRole(identity?: RoleIdentity | null): AppRole
   const email = identity?.email?.trim().toLowerCase();
   if (email && SEEDED_ACCOUNT_ROLES[email]) return SEEDED_ACCOUNT_ROLES[email];
 
+  if (email && typeof window !== 'undefined') {
+    try {
+      const raw = localStorage.getItem('mtk_managed_admins');
+      if (raw) {
+        const managed = JSON.parse(raw);
+        if (Array.isArray(managed)) {
+          const match = managed.find((a: any) => a.email?.trim().toLowerCase() === email);
+          if (match?.role && isAppRole(match.role)) return match.role;
+        }
+      }
+    } catch {}
+  }
+
   return null;
 }
 

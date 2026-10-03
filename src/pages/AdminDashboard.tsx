@@ -100,7 +100,7 @@ import AdminUserManagement from '@/components/admin/AdminUserManagement';
 import { useAuth } from '@/hooks/useAuth';
 import { parseMeta, encodeMeta } from '@/lib/bookingMeta';
 import { calculateFees, calculatePeakExtensionFee, formatPeso, PAYMENT_METHOD_LABELS, type PaymentMethod } from '@/lib/payments';
-import { addAnnouncement, loadAnnouncements, removeAnnouncement, type AdminAnnouncement } from '@/lib/announcements';
+import { addAnnouncement, loadAnnouncements, removeAnnouncement, type AdminAnnouncement, type AnnouncementTarget } from '@/lib/announcements';
 import { writeActivityLog } from '@/lib/activity-log';
 import { confirmReservation } from '@/lib/notification-service';
 import { motion } from 'framer-motion';
@@ -173,7 +173,7 @@ const ANNOUNCEMENT_TYPE_STYLES: Record<string, string> = {
 const getMappedTab = (tab: string) => {
   if (['overview', 'demographics'].includes(tab)) return 'overview';
   if (['operations', 'requests', 'scan', 'live-map'].includes(tab)) return 'operations';
-  if (['management', 'users', 'guides', 'announcements', 'capacity'].includes(tab)) return 'management';
+  if (['management', 'users', 'guides', 'announcements'].includes(tab)) return 'management';
   if (['finance', 'payment-summary'].includes(tab)) return 'finance';
   return 'overview';
 };
@@ -188,7 +188,7 @@ export default function AdminDashboard() {
   });
   const [managementTab, setManagementTab] = useState<string>(() => {
     const initialTab = searchParams.get('tab');
-    return ['users', 'guides', 'announcements', 'capacity'].includes(initialTab || '')
+    return ['users', 'guides', 'announcements'].includes(initialTab || '')
       ? initialTab!
       : 'guides';
   });
@@ -202,6 +202,7 @@ export default function AdminDashboard() {
   const [annBody, setAnnBody] = useState('');
   const [annType, setAnnType] = useState<'info' | 'warning' | 'closure'>('info');
   const [annImportant, setAnnImportant] = useState(false);
+  const [annTarget, setAnnTarget] = useState<AnnouncementTarget>('all');
   const [annStartDate, setAnnStartDate] = useState('');
   const [annEndDate, setAnnEndDate] = useState('');
   const [annSending, setAnnSending] = useState(false);
@@ -230,7 +231,7 @@ export default function AdminDashboard() {
     if (tab === 'requests' || tab === 'scan' || tab === 'live-map') {
       if (tab !== operationsTab) setOperationsTab(tab);
     }
-    if (['users', 'guides', 'announcements', 'capacity'].includes(tab || '')) {
+    if (['users', 'guides', 'announcements'].includes(tab || '')) {
       if (tab !== managementTab) setManagementTab(tab!);
     }
   }, [activeTab, operationsTab, managementTab, searchParams]);
@@ -442,7 +443,7 @@ export default function AdminDashboard() {
     void loadAllTabBookings();
     void loadPendingBookings();
     void loadUpcomingCapacities();
-    setAnnouncements(loadAnnouncements());
+    setAnnouncements(loadAnnouncements(role));
 
     // Listen for realtime booking changes & assignments with immediate optimistic state update
     const ch = supabase
@@ -1322,7 +1323,13 @@ export default function AdminDashboard() {
       { data: zonesData },
     ] = await Promise.all([
       scopeBookings(supabase.from('bookings').select('*').order('created_at', { ascending: false }).limit(20)),
-      supabase.from('trail_zones').select(DISPATCH_ROUTE_FIELDS),
+      (() => {
+        let q: any = supabase.from('trail_zones').select(DISPATCH_ROUTE_FIELDS);
+        if (activeLocationId && !isSuperAdmin) {
+          q = q.eq('location_id', activeLocationId);
+        }
+        return q;
+      })(),
     ]);
 
     setBookings(bookingsData || []);
@@ -1409,6 +1416,7 @@ export default function AdminDashboard() {
       title: annTitle.trim(),
       body: annBody.trim(),
       type: annType,
+      target: annTarget,
       created_at: new Date().toISOString(),
       isImportant: annImportant || annType === 'warning' || annType === 'closure',
       starts_at: startsAt,
@@ -1418,6 +1426,7 @@ export default function AdminDashboard() {
     setAnnTitle('');
     setAnnBody('');
     setAnnType('info');
+    setAnnTarget('all');
     setAnnImportant(false);
     setAnnStartDate('');
     setAnnEndDate('');
@@ -2747,8 +2756,7 @@ export default function AdminDashboard() {
                   <TabsTrigger value="users">Manage Users</TabsTrigger>
                   <TabsTrigger value="guides">Guide Roster</TabsTrigger>
                   <TabsTrigger value="announcements">Announcements</TabsTrigger>
-                  <TabsTrigger value="capacity">Daily Capacity</TabsTrigger>
-
+                  
                 </TabsList>
               </div>
               <TabsContent value="users" className="space-y-6 mt-0">
@@ -2789,7 +2797,7 @@ export default function AdminDashboard() {
                 <Input placeholder="Login email *" type="email" value={newGuideEmail} onChange={(e) => setNewGuideEmail(e.target.value)} />
                 <Input placeholder="Temp password (min 8) *" type="text" value={newGuidePassword} onChange={(e) => setNewGuidePassword(e.target.value)} />
                 <Input placeholder="Phone" value={newGuidePhone} onChange={(e) => setNewGuidePhone(e.target.value)} />
-                <Input placeholder="Per-trip fee (PHP)" type="number" value={newGuideFee} onChange={(e) => setNewGuideFee(e.target.value)} />
+                <div className="text-xs text-muted-foreground self-center px-1">Guide Rate: <span className="font-semibold text-foreground">₱600</span> (Centrally Regulated)</div>
                 <div className="text-xs text-muted-foreground self-center px-1">
                   Trail: <span className="text-foreground font-medium">{locations.find((l) => l.id === activeLocationId)?.name || 'Pick active location'}</span> (auto-assigned)
                 </div>
@@ -2949,6 +2957,18 @@ export default function AdminDashboard() {
               <Card className="glass-card">
                 <CardHeader><CardTitle className="text-lg flex items-center gap-2"><Megaphone className="h-5 w-5 text-primary" /> Post Announcement</CardTitle></CardHeader>
                 <CardContent className="space-y-4">
+                                    <div className="space-y-2">
+                    <Label>Audience / Target</Label>
+                    <Select value={annTarget} onValueChange={(v) => setAnnTarget(v as AnnouncementTarget)}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">🌐 All (Admins, Hikers & Guides)</SelectItem>
+                        <SelectItem value="admins">🛡️ Trailhead Admins Only</SelectItem>
+                        <SelectItem value="hikers">🥾 Hikers Only</SelectItem>
+                        <SelectItem value="guides">🧭 Guides Only</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
                   <div className="space-y-2">
                     <Label>Type</Label>
                     <Select value={annType} onValueChange={(v) => setAnnType(v as any)}>
@@ -3027,154 +3047,7 @@ export default function AdminDashboard() {
               </Card>
             </div>
           </TabsContent>
-              <TabsContent value="capacity" className="space-y-6 mt-0">
-            <div>
-              <h2 className="text-lg font-semibold">Daily Hiker Capacity</h2>
-              <p className="text-sm text-muted-foreground">Set the maximum number of hikers allowed per day. Default is 100 if not set.</p>
-            </div>
-
-            <div className="grid lg:grid-cols-2 gap-6">
-              <Card className="glass-card">
-                <CardHeader><CardTitle className="text-lg flex items-center gap-2"><SlidersHorizontal className="h-5 w-5 text-primary" /> Set Limit for a Date</CardTitle></CardHeader>
-                <CardContent className="space-y-4">
-                  <p className="text-sm text-muted-foreground">Choose a future date and set how many total hiker slots are available. This updates the booking calendar in real-time.</p>
-                  <div className="space-y-2">
-                    <Label htmlFor="capDate">Date</Label>
-                    <Input id="capDate" type="date" value={capDate} onChange={(e) => setCapDate(e.target.value)} min={format(new Date(), 'yyyy-MM-dd')} />
-                  </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
-                    <div className="space-y-1 sm:col-span-3">
-                      <Label htmlFor="capMax">Total Max Hikers</Label>
-                      <Input
-                        id="capMax"
-                        type="number"
-                        min={1}
-                        max={500}
-                        value={capMax}
-                        onChange={(e) => {
-                          const val = Math.max(1, parseInt(e.target.value) || 1);
-                          setCapMax(val);
-                          setCapDayMax(Math.round(val * 0.7));
-                          setCapNightMax(Math.max(1, val - Math.round(val * 0.7)));
-                        }}
-                        placeholder="100"
-                        className="font-bold text-base h-10"
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <Label htmlFor="capDayMax" className="text-xs text-amber-600 dark:text-amber-400">☀️ Day Hike Slots</Label>
-                      <Input
-                        id="capDayMax"
-                        type="number"
-                        min={1}
-                        max={capMax}
-                        value={capDayMax}
-                        onChange={(e) => setCapDayMax(Math.max(1, parseInt(e.target.value) || 1))}
-                        className="font-bold text-sm h-9"
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <Label htmlFor="capNightMax" className="text-xs text-sky-600 dark:text-sky-400">🌙 Night Hike Slots</Label>
-                      <Input
-                        id="capNightMax"
-                        type="number"
-                        min={1}
-                        max={capMax}
-                        value={capNightMax}
-                        onChange={(e) => setCapNightMax(Math.max(1, parseInt(e.target.value) || 1))}
-                        className="font-bold text-sm h-9"
-                      />
-                    </div>
-                    <div className="flex items-end text-xs text-muted-foreground pb-1">
-                      <span>Sum: {capDayMax + capNightMax} slots</span>
-                    </div>
-                  </div>
-                  <Button className="w-full gap-2" onClick={saveCapacity} disabled={capSaving || !capDate}>
-                    {capSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <CalendarCheck className="h-4 w-4" />}
-                    Save Day &amp; Night Capacity Limit
-                  </Button>
-                  <div className="h-px bg-border/30 my-2" />
-                  <p className="text-sm font-semibold">Bulk date-range update</p>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <div className="space-y-2">
-                      <Label htmlFor="capRangeStart">Start Date</Label>
-                      <Input id="capRangeStart" type="date" value={capRangeStart} onChange={(e) => setCapRangeStart(e.target.value)} min={format(new Date(), 'yyyy-MM-dd')} />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="capRangeEnd">End Date</Label>
-                      <Input id="capRangeEnd" type="date" value={capRangeEnd} onChange={(e) => setCapRangeEnd(e.target.value)} min={capRangeStart || format(new Date(), 'yyyy-MM-dd')} />
-                    </div>
-                  </div>
-                  <Button variant="secondary" className="w-full gap-2" onClick={saveCapacityRange} disabled={capSaving || !capRangeStart || !capRangeEnd}>
-                    {capSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <CalendarCheck className="h-4 w-4" />}
-                    Apply to Date Range
-                  </Button>
-                </CardContent>
-              </Card>
-
-              <Card className="glass-card">
-                <CardHeader><CardTitle className="text-lg flex items-center gap-2"><CalendarCheck className="h-5 w-5 text-primary" /> Upcoming Limits</CardTitle></CardHeader>
-                <CardContent>
-                  {upcomingCapacities.length === 0 ? (
-                    <div className="text-center py-12">
-                      <SlidersHorizontal className="h-10 w-10 text-muted-foreground/30 mx-auto mb-3" />
-                      <p className="text-muted-foreground text-sm">No custom limits set. All dates use the default of 100 hikers/day.</p>
-                    </div>
-                  ) : (
-                    <div className="space-y-2 max-h-[380px] overflow-y-auto pr-1">
-                      {upcomingCapacities.map((cap) => {
-                        const dayMax = cap.day_max_capacity ?? Math.round(cap.max_capacity * 0.65);
-                        const nightMax = cap.night_max_capacity ?? Math.max(1, cap.max_capacity - dayMax);
-                        const available = Math.max(0, cap.max_capacity - cap.current_count);
-                        const ratio = cap.max_capacity > 0 ? available / cap.max_capacity : 0;
-                        const statusColor = available === 0
-                          ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'
-                          : ratio <= 0.3 ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400'
-                          : 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400';
-                        return (
-                          <div key={cap.id} className="flex items-center justify-between p-3 rounded-xl border border-border/20 bg-secondary/20">
-                            <div className="space-y-1">
-                              <p className="text-sm font-semibold">{cap.date}</p>
-                              <div className="flex items-center gap-2 flex-wrap">
-                                <span className="text-xs text-muted-foreground">Booked: <strong>{cap.current_count}</strong> / {cap.max_capacity}</span>
-                                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${statusColor}`}>{available === 0 ? 'Full' : `${available} left`}</span>
-                              </div>
-                              <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
-                                <span className="text-amber-600 dark:text-amber-400 font-medium">☀️ Day: {dayMax}</span>
-                                <span>•</span>
-                                <span className="text-sky-600 dark:text-sky-400 font-medium">🌙 Night: {nightMax}</span>
-                              </div>
-                            </div>
-                            <div className="flex items-center gap-2">
-                              <div className="w-16 h-1.5 rounded-full bg-border/30 overflow-hidden">
-                                <div className={`h-full rounded-full transition-all ${ratio <= 0.3 ? 'bg-amber-500' : ratio === 0 ? 'bg-red-500' : 'bg-emerald-500'}`} style={{ width: `${(cap.current_count / cap.max_capacity) * 100}%` }} />
-                              </div>
-                              <button onClick={() => deleteCapacityLimit(cap.id)} className="text-muted-foreground hover:text-destructive transition-colors" aria-label={`Remove limit for ${cap.date}`}>
-                                <Trash2 className="h-4 w-4" />
-                              </button>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-            </div>
-
-            <Card className="glass-card border-primary/20">
-              <CardContent className="p-4">
-                <div className="flex gap-3 items-start text-sm">
-                  <CheckCircle2 className="h-4 w-4 text-primary flex-shrink-0 mt-0.5" />
-                  <p className="text-muted-foreground leading-relaxed">
-                    <strong className="text-foreground">How it works:</strong>{' '}
-                    When a booking is confirmed, slots are automatically deducted. When cancelled, they are restored. Hikers see live availability on the booking calendar.
-                  </p>
-                </div>
-              </CardContent>
-            </Card>
-          </TabsContent>
-            </Tabs>
+                          </Tabs>
           </TabsContent>
 
           <TabsContent value="finance" className="mt-0">
