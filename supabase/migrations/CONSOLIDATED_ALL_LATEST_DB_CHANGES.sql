@@ -648,6 +648,37 @@ CREATE POLICY bk_assigned_guide_update ON public.bookings
   WITH CHECK (public.guide_can_manage_booking(id));
 
 -- ─────────────────────────────────────────────────────────────────────────────
--- SECTION 12: RELOAD SUPABASE API SCHEMA CACHE
+-- SECTION 12: SLOT CAPACITY PERMISSION FOR ANON & ACCOUNT SYNC
+-- ─────────────────────────────────────────────────────────────────────────────
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM pg_proc p
+    JOIN pg_namespace n ON p.pronamespace = n.oid
+    WHERE n.nspname = 'public' AND p.proname = 'get_booking_slot_capacity'
+  ) THEN
+    GRANT EXECUTE ON FUNCTION public.get_booking_slot_capacity(date, date) TO anon, authenticated, service_role;
+  END IF;
+END $$;
+
+DO $$
+DECLARE
+  v_central_id uuid;
+BEGIN
+  SELECT id INTO v_central_id
+  FROM auth.users
+  WHERE lower(email) = 'central@kalisungan.ph'
+  LIMIT 1;
+
+  IF v_central_id IS NOT NULL THEN
+    INSERT INTO public.user_roles (user_id, role)
+    VALUES (v_central_id, 'super_admin')
+    ON CONFLICT (user_id, role) DO NOTHING;
+  END IF;
+END $$;
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- SECTION 13: RELOAD SUPABASE API SCHEMA CACHE
 -- ─────────────────────────────────────────────────────────────────────────────
 NOTIFY pgrst, 'reload schema';
+

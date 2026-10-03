@@ -157,8 +157,16 @@ export async function fetchAdminsList(): Promise<AdminAccount[]> {
         ...a,
         status: isAccountDeactivated(a.userId, a.email) ? 'deactivated' : (a.status || 'active'),
       }));
-      saveStoredAdmins(list);
-      return list;
+      const stored = getStoredAdmins();
+      const combined = [...list];
+      for (const s of stored) {
+        if (!combined.some((c) => c.userId === s.userId || (c.email && c.email.toLowerCase() === s.email?.toLowerCase()))) {
+          combined.push(s);
+        }
+      }
+      const cleanCombined = combined.filter((a) => !isMtKalisunganAccount(a));
+      saveStoredAdmins(cleanCombined);
+      return cleanCombined;
     }
   } catch {}
 
@@ -397,6 +405,33 @@ export async function createAdminAccount(params: {
     createdAt: new Date().toISOString(),
     status: 'active',
   };
+
+  try {
+    await supabase.from('profiles').upsert(
+      {
+        user_id: newId,
+        full_name: fullName,
+        phone: phone,
+      },
+      { onConflict: 'user_id' }
+    );
+    await supabase.from('user_roles').upsert(
+      {
+        user_id: newId,
+        role: 'admin',
+      } as any,
+      { onConflict: 'user_id,role' }
+    );
+    if (locationId) {
+      await supabase.from('user_locations').upsert(
+        {
+          user_id: newId,
+          location_id: locationId,
+        },
+        { onConflict: 'user_id' }
+      );
+    }
+  } catch {}
 
   const current = getStoredAdmins();
   saveStoredAdmins([newAdmin, ...current.filter((a) => a.email !== email)]);

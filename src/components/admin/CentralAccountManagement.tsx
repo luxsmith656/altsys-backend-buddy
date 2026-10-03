@@ -49,6 +49,8 @@ import {
   Mail,
   Loader2,
   Filter,
+  Eye,
+  Info,
 } from 'lucide-react';
 import { useLocations } from '@/hooks/useLocations';
 import {
@@ -132,6 +134,9 @@ export default function CentralAccountManagement() {
   // Delete Dialog
   const [deleteTarget, setDeleteTarget] = useState<UnifiedAccount | null>(null);
   const [deleting, setDeleting] = useState(false);
+
+  // View Details Dialog (Read-only for Guide and Hiker)
+  const [viewTarget, setViewTarget] = useState<UnifiedAccount | null>(null);
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -225,52 +230,15 @@ export default function CentralAccountManagement() {
       const selectedLoc = jumpOffStations.find((l) => l.id === addLocationId);
       const locName = selectedLoc ? selectedLoc.name : 'Unassigned';
 
-      if (addRole === 'admin') {
-        const res = await createAdminAccount({
-          fullName: addFullName.trim(),
-          email: addEmail.trim(),
-          phone: addPhone.trim(),
-          locationId: addLocationId === 'unassigned' ? null : addLocationId,
-          locationName: locName,
-          password: addPassword || undefined,
-        });
-        toast.success(res.message);
-      } else {
-        // Create Guide or Hiker in Supabase auth / profiles
-        const { data: authData, error: authError } = await supabase.auth.signUp({
-          email: addEmail.trim(),
-          password: addPassword || 'Trail@2026',
-          options: {
-            data: {
-              full_name: addFullName.trim(),
-              phone: addPhone.trim(),
-              role: addRole,
-              location_id: addLocationId === 'unassigned' ? null : addLocationId,
-            },
-          },
-        });
-        if (authError) throw authError;
-
-        if (authData.user) {
-          await supabase.from('profiles').upsert({
-            id: authData.user.id,
-            full_name: addFullName.trim(),
-            role: addRole,
-            phone: addPhone.trim(),
-            location_id: addLocationId === 'unassigned' ? null : addLocationId,
-          } as any);
-
-          if (addRole === 'guide') {
-            await (supabase as any).from('guides').upsert({
-              user_id: authData.user.id,
-              full_name: addFullName.trim(),
-              status: 'available',
-              location_id: addLocationId === 'unassigned' ? null : addLocationId,
-            });
-          }
-        }
-        toast.success(`Successfully registered ${addRole} account for ${addFullName.trim()}`);
-      }
+      const res = await createAdminAccount({
+        fullName: addFullName.trim(),
+        email: addEmail.trim(),
+        phone: addPhone.trim(),
+        locationId: addLocationId === 'unassigned' ? null : addLocationId,
+        locationName: locName,
+        password: addPassword || undefined,
+      });
+      toast.success(res.message);
 
       setAddOpen(false);
       await loadData();
@@ -611,34 +579,47 @@ export default function CentralAccountManagement() {
 
                       {/* Actions */}
                       <td className="px-4 py-3 text-right">
-                        <div className="flex items-center justify-end gap-1.5">
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => handleOpenEdit(acc)}
-                            className="h-7 px-2 text-[11px] gap-1"
-                          >
-                            <Edit className="h-3 w-3" /> Edit Info
-                          </Button>
+                        {isAdmin ? (
+                          <div className="flex items-center justify-end gap-1.5">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleOpenEdit(acc)}
+                              className="h-7 px-2 text-[11px] gap-1"
+                            >
+                              <Edit className="h-3 w-3" /> Edit Info
+                            </Button>
 
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => handleOpenPassword(acc)}
-                            className="h-7 px-2 text-[11px] gap-1"
-                          >
-                            <KeyRound className="h-3 w-3" /> Reset Pass
-                          </Button>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleOpenPassword(acc)}
+                              className="h-7 px-2 text-[11px] gap-1"
+                            >
+                              <KeyRound className="h-3 w-3" /> Reset Pass
+                            </Button>
 
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => setDeleteTarget(acc)}
-                            className="h-7 w-7 p-0 text-destructive hover:bg-destructive/10"
-                          >
-                            <Trash2 className="h-3.5 w-3.5" />
-                          </Button>
-                        </div>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => setDeleteTarget(acc)}
+                              className="h-7 w-7 p-0 text-destructive hover:bg-destructive/10"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </Button>
+                          </div>
+                        ) : (
+                          <div className="flex items-center justify-end">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => setViewTarget(acc)}
+                              className="h-7 px-2.5 text-[11px] gap-1.5 bg-secondary/30 hover:bg-secondary/60 text-foreground"
+                            >
+                              <Eye className="h-3 w-3 text-primary" /> View Details
+                            </Button>
+                          </div>
+                        )}
                       </td>
                     </tr>
                   );
@@ -657,32 +638,19 @@ export default function CentralAccountManagement() {
         </CardContent>
       </Card>
 
-      {/* ──────────────── MODAL 1: ADD ACCOUNT ──────────────── */}
+      {/* ──────────────── MODAL 1: ADD LOCAL ADMIN ACCOUNT ──────────────── */}
       <Dialog open={addOpen} onOpenChange={setAddOpen}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-base">
-              <Plus className="h-4 w-4 text-primary" /> Create System Account
+              <Plus className="h-4 w-4 text-primary" /> Register Local Administrator
             </DialogTitle>
             <DialogDescription className="text-xs">
-              Provision a new Trailhead Admin, Tour Guide, or Hiker with instant credential access.
+              Provision a new Trailhead Local Administrator for station operations (Lamot 2, Lamot 1, or Sto. Tomas).
             </DialogDescription>
           </DialogHeader>
 
           <form onSubmit={handleCreateAccount} className="space-y-3.5 text-xs">
-            <div className="space-y-1">
-              <Label className="text-xs font-semibold">Account Role</Label>
-              <Select value={addRole} onValueChange={(val: any) => setAddRole(val)}>
-                <SelectTrigger className="h-8 text-xs">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="admin">Local Administrator</SelectItem>
-                  <SelectItem value="guide">Licensed Tour Guide</SelectItem>
-                  <SelectItem value="hiker">Registered Hiker</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
 
             <div className="space-y-1">
               <Label className="text-xs font-semibold">Full Legal Name *</Label>
@@ -915,6 +883,120 @@ export default function CentralAccountManagement() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* ──────────────── MODAL 5: VIEW DETAILS (READ-ONLY FOR GUIDES & HIKERS) ──────────────── */}
+      <Dialog open={!!viewTarget} onOpenChange={(open) => !open && setViewTarget(null)}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-base">
+              <Eye className="h-4 w-4 text-primary" /> Account Details &amp; Profile
+            </DialogTitle>
+            <DialogDescription className="text-xs">
+              Unified cross-station overview for <strong className="text-foreground">{viewTarget?.fullName}</strong>.
+            </DialogDescription>
+          </DialogHeader>
+
+          {viewTarget && (
+            <div className="space-y-4 py-1 text-xs">
+              {/* Header profile chip */}
+              <div className="p-3 rounded-xl border border-border/30 bg-secondary/15 flex items-center justify-between">
+                <div>
+                  <h4 className="font-bold text-sm text-foreground">{viewTarget.fullName}</h4>
+                  <p className="text-[11px] text-muted-foreground font-mono">{viewTarget.email}</p>
+                </div>
+                <div>
+                  {viewTarget.role === 'guide' ? (
+                    <Badge variant="outline" className="text-[11px] bg-emerald-500/15 text-emerald-600 border-emerald-500/30 font-bold gap-1">
+                      <Compass className="h-3 w-3" /> Tour Guide
+                    </Badge>
+                  ) : (
+                    <Badge variant="outline" className="text-[11px] bg-sky-500/15 text-sky-600 border-sky-500/30 font-bold gap-1">
+                      <UserCheck className="h-3 w-3" /> Hiker
+                    </Badge>
+                  )}
+                </div>
+              </div>
+
+              {/* Detail fields grid */}
+              <div className="grid grid-cols-2 gap-3">
+                <div className="p-2.5 rounded-lg border border-border/20 bg-background/50 space-y-0.5">
+                  <div className="text-[10px] text-muted-foreground font-semibold flex items-center gap-1">
+                    <Phone className="h-3 w-3 text-primary" /> Contact Phone
+                  </div>
+                  <div className="font-medium text-foreground">{viewTarget.phone || 'None provided'}</div>
+                </div>
+
+                <div className="p-2.5 rounded-lg border border-border/20 bg-background/50 space-y-0.5">
+                  <div className="text-[10px] text-muted-foreground font-semibold flex items-center gap-1">
+                    <MapPin className="h-3 w-3 text-primary" /> Assigned Trailhead
+                  </div>
+                  <div className="font-medium text-foreground">
+                    {viewTarget.locationName || (viewTarget.locationId ? jumpOffStations.find((l) => l.id === viewTarget.locationId)?.name : 'All Stations / Roaming')}
+                  </div>
+                </div>
+
+                <div className="p-2.5 rounded-lg border border-border/20 bg-background/50 space-y-0.5">
+                  <div className="text-[10px] text-muted-foreground font-semibold flex items-center gap-1">
+                    <ShieldCheck className="h-3 w-3 text-primary" /> Status
+                  </div>
+                  <div>
+                    {viewTarget.accountStatus === 'deactivated' || viewTarget.status === 'deactivated' ? (
+                      <Badge variant="outline" className="text-[10px] bg-destructive/15 text-destructive border-destructive/30">
+                        Deactivated
+                      </Badge>
+                    ) : viewTarget.status === 'on_trail' ? (
+                      <Badge variant="outline" className="text-[10px] bg-sky-500/15 text-sky-600 border-sky-500/30">
+                        On Trail
+                      </Badge>
+                    ) : (
+                      <Badge variant="outline" className="text-[10px] bg-emerald-500/15 text-emerald-600 border-emerald-500/30">
+                        Active
+                      </Badge>
+                    )}
+                  </div>
+                </div>
+
+                <div className="p-2.5 rounded-lg border border-border/20 bg-background/50 space-y-0.5">
+                  <div className="text-[10px] text-muted-foreground font-semibold">Registered Date</div>
+                  <div className="font-mono text-foreground">
+                    {viewTarget.createdAt ? format(new Date(viewTarget.createdAt), 'MMM d, yyyy') : '—'}
+                  </div>
+                </div>
+              </div>
+
+              {/* Tour Guide Specialty if available */}
+              {viewTarget.role === 'guide' && viewTarget.specialty && (
+                <div className="p-2.5 rounded-lg border border-border/20 bg-background/50 space-y-0.5">
+                  <div className="text-[10px] text-muted-foreground font-semibold">Guide Specialty &amp; Certification</div>
+                  <div className="font-medium text-foreground">{viewTarget.specialty}</div>
+                </div>
+              )}
+
+              {/* Emergency Contact if available */}
+              {viewTarget.emergencyContact && (
+                <div className="p-2.5 rounded-lg border border-border/20 bg-background/50 space-y-0.5">
+                  <div className="text-[10px] text-muted-foreground font-semibold">Emergency Contact</div>
+                  <div className="font-medium text-foreground">{viewTarget.emergencyContact}</div>
+                </div>
+              )}
+
+              {/* Informational callout explaining roles & permissions */}
+              <div className="p-3 rounded-xl border border-primary/20 bg-primary/5 flex items-start gap-2.5">
+                <Info className="h-4 w-4 text-primary shrink-0 mt-0.5" />
+                <p className="text-[11px] text-muted-foreground leading-relaxed">
+                  <strong className="text-foreground">Trailhead Local Governance:</strong> Tour Guide and Hiker credentials, passwords, and assignments are managed locally by their assigned Trailhead Admin. Central Admin has unified, read-only operational visibility.
+                </p>
+              </div>
+
+              <DialogFooter className="pt-2">
+                <Button variant="outline" size="sm" onClick={() => setViewTarget(null)} className="text-xs w-full">
+                  Close
+                </Button>
+              </DialogFooter>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

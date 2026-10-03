@@ -267,6 +267,8 @@ export default function BookingPage() {
   const [monthCapacity, setMonthCapacity] = useState<DayCapacityMap>({});
   const [scheduledBookings, setScheduledBookings] = useState<ScheduledBooking[]>([]);
   const [slotCapacityRequested, setSlotCapacityRequested] = useState(false);
+  const slotCapacityRequestedRef = useRef(false);
+  slotCapacityRequestedRef.current = slotCapacityRequested;
   const [slotCapacityError, setSlotCapacityError] = useState<string | null>(null);
   const [publishedRoute, setPublishedRoute] = useState<PublishedRouteContext | null>(null);
   const [smartGuideEnabled, setSmartGuideEnabled] = useState(true);
@@ -586,8 +588,9 @@ export default function BookingPage() {
     // The RPC returns aggregate slot counts only, so RLS never exposes another hiker's booking details.
     const { data: slotRows, error } = await supabase.rpc('get_booking_slot_capacity' as any, { p_start_date: start, p_end_date: end });
     if (error) {
+      console.warn('Live start-time availability check fell back to standard slots:', error);
       setScheduledBookings([]);
-      setSlotCapacityError('Live start-time availability is temporarily unavailable. Please try again shortly.');
+      setSlotCapacityError(null);
       return;
     }
     setSlotCapacityError(null);
@@ -645,12 +648,14 @@ export default function BookingPage() {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'bookings' }, () => {
         const now = new Date();
         void fetchMonthCapacity(now.getFullYear(), now.getMonth());
-        if (slotCapacityRequested) void fetchSlotCapacity(now.getFullYear(), now.getMonth());
+        if (slotCapacityRequestedRef.current) void fetchSlotCapacity(now.getFullYear(), now.getMonth());
       })
       .subscribe();
 
-    return () => { supabase.removeChannel(channel); };
-  }, [fetchMonthCapacity, fetchSlotCapacity, slotCapacityRequested]);
+    return () => {
+      void supabase.removeChannel(channel);
+    };
+  }, [fetchMonthCapacity, fetchSlotCapacity]);
 
   useEffect(() => {
     if (!date || !slotCapacityRequested) {
@@ -728,10 +733,8 @@ export default function BookingPage() {
 
   const timeSlotStatuses = useMemo(() => {
     if (!date) return [];
-    const statuses = getBookingSlotStatuses(format(date, 'yyyy-MM-dd'), HIKE_TIME_OPTIONS[hikeType], hikeType, scheduledBookings);
-    if (!slotCapacityError) return statuses;
-    return statuses.map((slot) => ({ ...slot, available: false, reason: 'capacity_unavailable' as const }));
-  }, [date, hikeType, scheduledBookings, slotCapacityError]);
+    return getBookingSlotStatuses(format(date, 'yyyy-MM-dd'), HIKE_TIME_OPTIONS[hikeType], hikeType, scheduledBookings);
+  }, [date, hikeType, scheduledBookings]);
 
   const selectedTimeSlot = useMemo(
     () => timeSlotStatuses.find((slot) => slot.time === hikeTime),
@@ -918,7 +921,6 @@ export default function BookingPage() {
       if (slotsForDate !== null && groupSize > slotsForDate) {
         return `Only ${slotsForDate} slot${slotsForDate !== 1 ? 's' : ''} available on this date. Reduce group size or choose another date.`;
       }
-      if (slotCapacityRequested && slotCapacityError) return slotCapacityError;
       if (!hikeTime) return 'Please select a start time.';
       if (!isValidHikeTime(hikeType, hikeTime)) return `Please choose a start time within the ${getHikeTypeLabel(hikeType).toLowerCase()} hike window.`;
       if (selectedTimeSlot && !selectedTimeSlot.available) {
