@@ -129,9 +129,12 @@ export default function ProfilePage() {
       .from('profiles')
       .upsert({ user_id: user.id, ...profile, full_name: profile.full_name.trim(), updated_at: new Date().toISOString() }, { onConflict: 'user_id' });
 
-    if (error) toast.error(`Failed to save profile: ${error.message}`);
-    else void supabase.auth.updateUser({ data: { full_name: profile.full_name.trim() } });
-    else toast.success('Profile updated successfully!');
+    if (error) {
+      toast.error(`Failed to save profile: ${error.message}`);
+    } else {
+      void supabase.auth.updateUser({ data: { full_name: profile.full_name.trim() } });
+      toast.success('Profile updated successfully!');
+    }
     setSaving(false);
   };
 
