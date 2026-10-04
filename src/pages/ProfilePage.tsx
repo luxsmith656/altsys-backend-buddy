@@ -34,11 +34,14 @@ import { QRCodeSVG } from 'qrcode.react';
 import { toast } from 'sonner';
 import { motion } from 'framer-motion';
 import { format } from 'date-fns';
+import { optimizeAvatar } from '@/lib/avatarImage';
+import { Camera } from 'lucide-react';
 
 interface Profile {
   full_name: string;
   phone: string;
   emergency_contact: string;
+  avatar_url: string;
 }
 
 interface Booking {
@@ -61,7 +64,8 @@ export default function ProfilePage() {
   const { user, role } = useAuth();
 
   /* ── Profile state ── */
-  const [profile, setProfile] = useState<Profile>({ full_name: '', phone: '', emergency_contact: '' });
+  const [profile, setProfile] = useState<Profile>({ full_name: '', phone: '', emergency_contact: '', avatar_url: '' })
+  const [uploading, setUploading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [profileLoading, setProfileLoading] = useState(true);
 
@@ -84,15 +88,16 @@ export default function ProfilePage() {
     setProfileLoading(true);
     const { data } = await supabase
       .from('profiles')
-      .select('full_name, phone, emergency_contact')
+      .select('full_name, phone, emergency_contact, avatar_url')
       .eq('user_id', user!.id)
-      .single();
+      .maybeSingle();
 
     if (data) {
       setProfile({
         full_name: data.full_name ?? '',
         phone: data.phone ?? '',
         emergency_contact: data.emergency_contact ?? '',
+        avatar_url: data.avatar_url ?? '',
       });
     }
     setProfileLoading(false);
@@ -122,11 +127,31 @@ export default function ProfilePage() {
     setSaving(true);
     const { error } = await supabase
       .from('profiles')
-      .upsert({ user_id: user.id, ...profile, updated_at: new Date().toISOString() });
+      .upsert({ user_id: user.id, ...profile, full_name: profile.full_name.trim(), updated_at: new Date().toISOString() }, { onConflict: 'user_id' });
 
-    if (error) toast.error('Failed to save profile');
+    if (error) toast.error(`Failed to save profile: ${error.message}`);
+    else void supabase.auth.updateUser({ data: { full_name: profile.full_name.trim() } });
+    if (error) {}
     else toast.success('Profile updated successfully!');
     setSaving(false);
+  };
+
+  const handleAvatar = async (file?: File) => {
+    if (!file || !user) return;
+    setUploading(true);
+    try {
+      const avatar_url = await optimizeAvatar(file);
+      const { error } = await supabase
+        .from('profiles')
+        .upsert({ user_id: user.id, avatar_url, updated_at: new Date().toISOString() }, { onConflict: 'user_id' });
+      if (error) throw error;
+      setProfile((p) => ({ ...p, avatar_url }));
+      toast.success('Profile photo updated');
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Could not upload photo');
+    } finally {
+      setUploading(false);
+    }
   };
 
   /* ────────────────────────────── Cancel Booking ── */
@@ -165,9 +190,17 @@ export default function ProfilePage() {
         {/* ── Header ── */}
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
           <div className="flex items-center gap-3 sm:gap-4 mb-8 flex-wrap">
-            <div className="w-16 h-16 rounded-full bg-primary/20 flex items-center justify-center flex-shrink-0">
-              <User className="h-8 w-8 text-primary" />
-            </div>
+            <label className="relative w-16 h-16 rounded-full bg-primary/20 flex items-center justify-center flex-shrink-0 cursor-pointer overflow-hidden group" aria-label="Change profile photo">
+              {profile.avatar_url ? (
+                <img src={profile.avatar_url} alt="Profile" className="w-full h-full object-cover" loading="lazy" decoding="async" />
+              ) : (
+                <User className="h-8 w-8 text-primary" />
+              )}
+              <span className="absolute inset-0 flex items-center justify-center bg-background/60 opacity-0 group-hover:opacity-100 transition-opacity">
+                {uploading ? <Loader2 className="h-5 w-5 animate-spin" /> : <Camera className="h-5 w-5" />}
+              </span>
+              <input type="file" accept="image/*" className="hidden" disabled={uploading} onChange={(e) => { void handleAvatar(e.target.files?.[0]); e.target.value = ''; }} />
+            </label>
             <div className="min-w-0">
               <h1 className="text-3xl font-bold">
                 My <span className="text-gradient">Profile</span>
