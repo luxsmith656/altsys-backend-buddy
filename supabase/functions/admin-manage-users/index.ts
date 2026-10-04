@@ -65,7 +65,7 @@ Deno.serve(async (req) => {
       const { data: adminRoles } = await admin.from('user_roles').select('user_id, role').eq('role', 'admin');
       const adminUserIds = (adminRoles ?? []).map((r: any) => r.user_id);
 
-      const authUsers = await admin.auth.admin.listUsers({ page: 1, perPage: 200 });
+      const authUsers = await admin.auth.admin.listUsers({ page: 1, perPage: 1000 });
       const { data: profiles } = await admin.from('profiles').select('*').in('user_id', adminUserIds);
       const { data: userLocs } = await admin.from('user_locations').select('user_id, location_id');
       const { data: locs } = await admin.from('locations').select('id, name, slug');
@@ -139,6 +139,7 @@ Deno.serve(async (req) => {
 
       if (status !== undefined) {
         await admin.auth.admin.updateUserById(targetUserId, {
+          ban_duration: isDeactivated ? '876000h' : 'none',
           user_metadata: {
             deactivated: isDeactivated,
             ...(fullName ? { full_name: fullName } : {}),
@@ -195,6 +196,7 @@ Deno.serve(async (req) => {
 
       if (status !== undefined || fullName) {
         await admin.auth.admin.updateUserById(targetUserId, {
+          ban_duration: isDeactivated ? '876000h' : 'none',
           user_metadata: {
             deactivated: isDeactivated,
             ...(fullName ? { full_name: fullName } : {}),
@@ -264,7 +266,7 @@ Deno.serve(async (req) => {
       }
 
       // Check if user already exists
-      const existingUsers = await admin.auth.admin.listUsers({ page: 1, perPage: 200 });
+      const existingUsers = await admin.auth.admin.listUsers({ page: 1, perPage: 1000 });
       const found = existingUsers.data?.users?.find(
         (u) => u.email?.toLowerCase().trim() === email.toLowerCase().trim()
       );
