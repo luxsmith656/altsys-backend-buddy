@@ -147,76 +147,33 @@ function saveStoredAdmins(admins: AdminAccount[]) {
   } catch {}
 }
 
-export async function fetchAdminsList(): Promise<AdminAccount[]> {
-  try {
-    const { data: fnData, error: fnError } = await supabase.functions.invoke('admin-manage-users', {
-      body: { action: 'list_admins' },
-    });
-    if (!fnError && fnData?.admins && Array.isArray(fnData.admins) && fnData.admins.length > 0) {
-      const list = fnData.admins.map((a: AdminAccount) => ({
-        ...a,
-        status: isAccountDeactivated(a.userId, a.email) ? 'deactivated' : (a.status || 'active'),
-      }));
-      const stored = getStoredAdmins();
-      const combined = [...list];
-      for (const s of stored) {
-        if (!combined.some((c) => c.userId === s.userId || (c.email && c.email.toLowerCase() === s.email?.toLowerCase()))) {
-          combined.push(s);
-        }
+/** Calls the server-side account manager and throws a readable error on any failure (no fake success). */
+async function invokeManageUsers(body: Record<string, unknown>): Promise<any> {
+  const { data, error } = await supabase.functions.invoke('admin-manage-users', { body });
+  if (error) {
+    let msg = error.message;
+    try {
+      const ctx: any = (error as any).context;
+      if (ctx && typeof ctx.json === 'function') {
+        const j = await ctx.json();
+        if (j?.error) msg = j.error;
       }
-      const cleanCombined = combined.filter((a) => !isMtKalisunganAccount(a));
-      saveStoredAdmins(cleanCombined);
-      return cleanCombined;
-    }
-  } catch {}
-
-  try {
-    const [{ data: adminRoles }, { data: profiles }, { data: userLocs }, { data: locations }] = await Promise.all([
-      supabase.from('user_roles').select('user_id, role').eq('role', 'admin'),
-      supabase.from('profiles').select('user_id, full_name, phone, created_at'),
-      supabase.from('user_locations').select('user_id, location_id'),
-      supabase.from('locations').select('id, name, slug'),
-    ]);
-
-    const locMap = new Map((locations ?? []).map((l) => [l.id, l.name]));
-    const stored = getStoredAdmins();
-
-    if (adminRoles && adminRoles.length > 0) {
-      const combined: AdminAccount[] = adminRoles.map((r) => {
-        const prof = (profiles ?? []).find((p) => p.user_id === r.user_id);
-        const ul = (userLocs ?? []).find((l) => l.user_id === r.user_id);
-        const seed = stored.find((s) => s.userId === r.user_id);
-        const email = seed?.email || `admin-${r.user_id.slice(0, 6)}@kalisungan.ph`;
-
-        return {
-          id: r.user_id,
-          userId: r.user_id,
-          email,
-          fullName: prof?.full_name || seed?.fullName || 'Trailhead Admin',
-          phone: prof?.phone || seed?.phone || '',
-          role: 'admin',
-          locationId: ul?.location_id || seed?.locationId || null,
-          locationName: ul?.location_id ? locMap.get(ul.location_id) || 'Assigned Trailhead' : seed?.locationName || 'Unassigned',
-          createdAt: prof?.created_at || seed?.createdAt || new Date().toISOString(),
-          status: isAccountDeactivated(r.user_id, email) ? ('deactivated' as const) : ('active' as const),
-        };
-      });
-
-      for (const s of stored) {
-        if (!combined.some((c) => c.userId === s.userId || c.email === s.email)) {
-          combined.push(s);
-        }
-      }
-
-      const cleanCombined = combined.filter((a) => !isMtKalisunganAccount(a));
-      saveStoredAdmins(cleanCombined);
-      return cleanCombined;
-    }
-  } catch (err) {
-    console.warn('Direct admin query failed, returning cached admins:', err);
+    } catch {}
+    throw new Error(msg || 'Server request failed');
   }
+  if (data?.error) throw new Error(data.error);
+  if (data && data.success === false) throw new Error(data.message || 'Request failed');
+  return data ?? {};
+}
 
-  return getStoredAdmins();
+export async function fetchAdminsList(): Promise<AdminAccount[]> {
+  const data = await invokeManageUsers({ action: 'list_admins' });
+  const list: AdminAccount[] = (data.admins ?? []).map((a: AdminAccount) => ({
+    ...a,
+    status: isAccountDeactivated(a.userId, a.email) ? 'deactivated' : (a.status || 'active'),
+  }));
+  saveStoredAdmins(list);
+  return list;
 }
 
 export async function resetAdminPassword(
@@ -227,30 +184,8 @@ export async function resetAdminPassword(
   if (!newPassword || newPassword.length < 6) {
     throw new Error('Password must be at least 6 characters');
   }
-
-  try {
-    const { data, error } = await supabase.functions.invoke('admin-manage-users', {
-      body: {
-        action: 'reset_admin_password',
-        targetUserId,
-        newPassword,
-      },
-    });
-
-    if (!error && data?.success) {
-      return { success: true, message: data.message || 'Password reset successfully' };
-    }
-  } catch (err) {
-    console.warn('Edge function password reset fell back:', err);
-  }
-
-  if (targetEmail && targetEmail.includes('@')) {
-    try {
-      await supabase.auth.resetPasswordForEmail(targetEmail);
-    } catch {}
-  }
-
-  return { success: true, message: `Password for ${targetEmail} has been updated.` };
+  const data = await invokeManageUsers({ action: 'reset_admin_password', targetUserId, newPassword });
+  return { success: true, message: data.message || `Password for ${targetEmail} has been updated.` };
 }
 
 export async function updateAdminInfo(
@@ -263,80 +198,19 @@ export async function updateAdminInfo(
     status?: 'active' | 'deactivated';
   }
 ): Promise<{ success: boolean; message: string }> {
-  const currentAdmins = getStoredAdmins();
-  const currentAdmin = currentAdmins.find((a) => a.userId === targetUserId);
-
+  const currentAdmin = getStoredAdmins().find((a) => a.userId === targetUserId);
+  await invokeManageUsers({
+    action: 'update_admin',
+    targetUserId,
+    fullName: updates.fullName,
+    phone: updates.phone,
+    locationId: updates.locationId,
+    status: updates.status,
+  });
   if (updates.status !== undefined) {
     setAccountDeactivated(targetUserId, currentAdmin?.email, updates.status === 'deactivated');
   }
-
-  try {
-    const { data, error } = await supabase.functions.invoke('admin-manage-users', {
-      body: {
-        action: 'update_admin',
-        targetUserId,
-        fullName: updates.fullName,
-        phone: updates.phone,
-        locationId: updates.locationId,
-        status: updates.status,
-      },
-    });
-    if (!error && data?.success) {
-      const stored = currentAdmins.map((a) =>
-        a.userId === targetUserId
-          ? {
-              ...a,
-              ...(updates.fullName ? { fullName: updates.fullName } : {}),
-              ...(updates.phone !== undefined ? { phone: updates.phone } : {}),
-              ...(updates.locationId !== undefined ? { locationId: updates.locationId } : {}),
-              ...(updates.locationName ? { locationName: updates.locationName } : {}),
-              ...(updates.status ? { status: updates.status } : {}),
-            }
-          : a
-      );
-      saveStoredAdmins(stored);
-      return { success: true, message: 'Admin details updated' };
-    }
-  } catch {}
-
-  // Local & direct database fallback
-  const isDeactivated = updates.status === 'deactivated';
-  try {
-    if (updates.fullName || updates.phone !== undefined || updates.status !== undefined) {
-      await supabase.from('profiles').upsert(
-        {
-          user_id: targetUserId,
-          full_name: updates.fullName ?? '',
-          phone: updates.phone ?? '',
-          is_active: !isDeactivated,
-        },
-        { onConflict: 'user_id' }
-      );
-    }
-    if (updates.locationId !== undefined) {
-      await supabase.from('user_locations').delete().eq('user_id', targetUserId);
-      if (updates.locationId) {
-        await supabase.from('user_locations').insert({ user_id: targetUserId, location_id: updates.locationId });
-      }
-    }
-  } catch (err) {
-    console.warn('Direct database admin update warning:', err);
-  }
-
-  const stored = currentAdmins.map((a) =>
-    a.userId === targetUserId
-      ? {
-          ...a,
-          ...(updates.fullName ? { fullName: updates.fullName } : {}),
-          ...(updates.phone !== undefined ? { phone: updates.phone } : {}),
-          ...(updates.locationId !== undefined ? { locationId: updates.locationId } : {}),
-          ...(updates.locationName ? { locationName: updates.locationName } : {}),
-          ...(updates.status ? { status: updates.status } : {}),
-        }
-      : a
-  );
-  saveStoredAdmins(stored);
-  return { success: true, message: 'Admin information saved successfully' };
+  return { success: true, message: 'Admin details updated' };
 }
 
 export async function createAdminAccount(params: {
@@ -358,44 +232,12 @@ export async function createAdminAccount(params: {
     throw new Error('Email and full name are required');
   }
 
-  // 1. Try Supabase Edge function invoke
-  try {
-    const { data, error } = await supabase.functions.invoke('admin-manage-users', {
-      body: {
-        action: 'create_admin',
-        email,
-        fullName,
-        phone,
-        locationId,
-        password,
-      },
-    });
-    if (!error && data?.success) {
-      const newAdmin: AdminAccount = {
-        id: data.admin?.id || `admin-${Date.now()}`,
-        userId: data.admin?.userId || data.admin?.id || `admin-${Date.now()}`,
-        email,
-        fullName,
-        phone,
-        role: 'admin',
-        locationId,
-        locationName,
-        createdAt: new Date().toISOString(),
-        status: 'active',
-      };
-      const current = getStoredAdmins();
-      saveStoredAdmins([newAdmin, ...current.filter((a) => a.email !== email)]);
-      return { success: true, message: `Admin account for ${fullName} created successfully`, admin: newAdmin };
-    }
-  } catch (err) {
-    console.warn('Edge function create_admin fallback:', err);
-  }
-
-  // 2. Direct or local fallback
-  const newId = `admin-${Date.now()}`;
+  const data = await invokeManageUsers({ action: 'create_admin', email, fullName, phone, locationId, password });
+  const uid = data.admin?.userId || data.admin?.id;
+  if (!uid) throw new Error('Account was not created on the server. Please try again.');
   const newAdmin: AdminAccount = {
-    id: newId,
-    userId: newId,
+    id: uid,
+    userId: uid,
     email,
     fullName,
     phone,
@@ -405,42 +247,7 @@ export async function createAdminAccount(params: {
     createdAt: new Date().toISOString(),
     status: 'active',
   };
-
-  try {
-    await supabase.from('profiles').upsert(
-      {
-        user_id: newId,
-        full_name: fullName,
-        phone: phone,
-      },
-      { onConflict: 'user_id' }
-    );
-    await supabase.from('user_roles').upsert(
-      {
-        user_id: newId,
-        role: 'admin',
-      } as any,
-      { onConflict: 'user_id,role' }
-    );
-    if (locationId) {
-      await supabase.from('user_locations').upsert(
-        {
-          user_id: newId,
-          location_id: locationId,
-        },
-        { onConflict: 'user_id' }
-      );
-    }
-  } catch {}
-
-  const current = getStoredAdmins();
-  saveStoredAdmins([newAdmin, ...current.filter((a) => a.email !== email)]);
-
-  return {
-    success: true,
-    message: `Admin account for ${fullName} created successfully.`,
-    admin: newAdmin,
-  };
+  return { success: true, message: `Admin account for ${fullName} created. They can sign in with ${email}.`, admin: newAdmin };
 }
 
 // ────────────────────────────────────────────────────────
@@ -689,27 +496,8 @@ export async function changeUserPassword(
     throw new Error('Password must be at least 6 characters');
   }
 
-  try {
-    const { data, error } = await supabase.functions.invoke('admin-manage-users', {
-      body: {
-        action: 'change_user_password',
-        targetUserId,
-        newPassword,
-      },
-    });
-
-    if (!error && data?.success) {
-      return { success: true, message: data.message || 'Password changed successfully' };
-    }
-  } catch {}
-
-  if (targetEmail && targetEmail.includes('@')) {
-    try {
-      await supabase.auth.resetPasswordForEmail(targetEmail);
-    } catch {}
-  }
-
-  return { success: true, message: `Password for ${targetEmail} updated successfully` };
+  const data = await invokeManageUsers({ action: 'change_user_password', targetUserId, newPassword });
+  return { success: true, message: data.message || `Password for ${targetEmail} updated successfully` };
 }
 
 export async function editUserInfo(
@@ -725,75 +513,11 @@ export async function editUserInfo(
   }
 ): Promise<{ success: boolean; message: string }> {
   const isDeactivated = updates.accountStatus === 'deactivated' || updates.status === 'deactivated';
+  await invokeManageUsers({ action: 'edit_user_info', targetUserId, ...updates });
   if (updates.accountStatus !== undefined || updates.status === 'deactivated') {
     setAccountDeactivated(targetUserId, undefined, isDeactivated);
   }
-
-  try {
-    const { data, error } = await supabase.functions.invoke('admin-manage-users', {
-      body: {
-        action: 'edit_user_info',
-        targetUserId,
-        ...updates,
-      },
-    });
-
-    if (!error && data?.success) {
-      return { success: true, message: 'User information updated' };
-    }
-  } catch {}
-
-  try {
-    await supabase.from('profiles').upsert(
-      {
-        user_id: targetUserId,
-        full_name: updates.fullName,
-        phone: updates.phone ?? '',
-        emergency_contact: updates.emergencyContact ?? '',
-        is_active: !isDeactivated,
-      },
-      { onConflict: 'user_id' }
-    );
-
-    if (updates.locationId !== undefined) {
-      await supabase.from('user_locations').delete().eq('user_id', targetUserId);
-      if (updates.locationId) {
-        await supabase.from('user_locations').insert({ user_id: targetUserId, location_id: updates.locationId });
-      }
-    }
-
-    const { data: g } = await supabase.from('guides').select('id').eq('user_id', targetUserId).maybeSingle();
-    if (g?.id) {
-      await supabase.from('guides').update({
-        full_name: updates.fullName,
-        phone: updates.phone ?? '',
-        specialty: updates.specialty ?? '',
-        status: isDeactivated ? 'off-duty' : (updates.status ?? 'available'),
-        is_active: !isDeactivated,
-        ...(updates.locationId !== undefined ? { location_id: updates.locationId } : {}),
-      }).eq('id', g.id);
-    }
-  } catch (err) {
-    console.warn('Database user update fallback warning:', err);
-  }
-
-  // Update local storage overrides
-  try {
-    const raw = localStorage.getItem(LOCAL_STORAGE_USERS_KEY) || '{}';
-    const store = JSON.parse(raw);
-    store[targetUserId] = {
-      ...(store[targetUserId] || {}),
-      fullName: updates.fullName,
-      ...(updates.phone !== undefined ? { phone: updates.phone } : {}),
-      ...(updates.emergencyContact !== undefined ? { emergencyContact: updates.emergencyContact } : {}),
-      ...(updates.specialty !== undefined ? { specialty: updates.specialty } : {}),
-      ...(updates.status !== undefined ? { status: updates.status } : {}),
-      accountStatus: isDeactivated ? 'deactivated' : 'active',
-    };
-    localStorage.setItem(LOCAL_STORAGE_USERS_KEY, JSON.stringify(store));
-  } catch {}
-
-  return { success: true, message: 'User details updated successfully' };
+  return { success: true, message: 'User information updated' };
 }
 
 export async function deleteUserAccount(
@@ -807,29 +531,6 @@ export async function deleteUserAccount(
     saveStoredAdmins(current.filter((a) => a.userId !== targetUserId && a.id !== targetUserId));
   }
 
-  try {
-    const { data, error } = await supabase.functions.invoke('admin-manage-users', {
-      body: {
-        action: 'delete_user',
-        targetUserId,
-        role,
-      },
-    });
-
-    if (!error && data?.success) {
-      return { success: true, message: 'User account deleted successfully' };
-    }
-  } catch {}
-
-  try {
-    if (role === 'guide') {
-      await supabase.from('guides').delete().eq('user_id', targetUserId);
-    }
-    await supabase.from('user_roles').delete().eq('user_id', targetUserId);
-    await supabase.from('profiles').delete().eq('user_id', targetUserId);
-  } catch (err) {
-    console.warn('Direct delete warning:', err);
-  }
-
-  return { success: true, message: 'Account removed successfully' };
+  await invokeManageUsers({ action: 'delete_user', targetUserId, role });
+  return { success: true, message: 'User account deleted successfully' };
 }
