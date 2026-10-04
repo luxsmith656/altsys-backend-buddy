@@ -60,50 +60,6 @@ export default function Login() {
     }
   };
 
-  const quickLogin = async (qEmail: string, qPassword: string) => {
-    if (loading) return;
-    setEmail(qEmail);
-    setPassword(qPassword);
-    setLoading(true);
-    const { error } = await signIn(qEmail, qPassword);
-    setLoading(false);
-    if (error) {
-      toast.error(`${error.message}. Try "Reset test accounts" below.`);
-      return;
-    }
-    const redirectPath = searchParams.get('redirect');
-    navigate(redirectPath || '/dashboard');
-  };
-
-  const [reseeding, setReseeding] = useState(false);
-  const reseedTestAccounts = async () => {
-    setReseeding(true);
-    try {
-      const r = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/admin-seed-accounts`, {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}` },
-      });
-      const j = await r.json();
-      if (!r.ok) throw new Error(j?.error || 'Reseed failed');
-      const seededEmails = new Set(
-        Array.isArray(j.results)
-          ? j.results.map((result: { email?: unknown }) => result.email).filter((email): email is string => typeof email === 'string')
-          : [],
-      );
-      const requiredAccounts = ['mdrrmo@kalisungan.ph', 'stotomas@kalisungan.ph'];
-      const missingAccounts = requiredAccounts.filter((account) => !seededEmails.has(account));
-      if (missingAccounts.length) {
-        throw new Error(`The deployed account reset is outdated. Deploy the latest Supabase seed function first (missing ${missingAccounts.join(' and ')}).`);
-      }
-      const removed = Array.isArray(j.removed) ? j.removed.length : 0;
-      toast.success(`Reset ${j.results?.length ?? 0} test accounts${removed ? `; removed ${removed} retired account` : ''}`);
-    } catch (e: any) {
-      toast.error(e.message);
-    } finally {
-      setReseeding(false);
-    }
-  };
-
   const handleGoogle = async () => {
     if (googleLoading) return;
     if (!isFirebaseConfigured()) {
@@ -209,44 +165,6 @@ export default function Login() {
               Sign Up
             </Link>
           </div>
-        </div>
-
-        {/* Quick login buttons for testing */}
-        <div className="mt-6 glass-card rounded-xl p-4">
-          <p className="text-xs text-muted-foreground mb-3 text-center">Quick Login (Test Accounts)</p>
-          <div className="grid grid-cols-2 gap-2">
-            <Button variant="outline" size="sm" className="text-xs" onClick={() => quickLogin('central@kalisungan.ph', 'central123')}>
-              LGU Central (super admin)
-            </Button>
-            <Button variant="outline" size="sm" className="text-xs" onClick={() => quickLogin('mdrrmo@kalisungan.ph', 'mdrrmo123')}>
-              MDRRMO Emergency Desk
-            </Button>
-            <Button variant="outline" size="sm" className="text-xs" onClick={() => quickLogin('lamot1@kalisungan.ph', 'lamot123')}>
-              Lamot 1 Admin
-            </Button>
-            <Button variant="outline" size="sm" className="text-xs" onClick={() => quickLogin('lamot2@kalisungan.ph', 'lamot123')}>
-              Lamot 2 Admin
-            </Button>
-            <Button variant="outline" size="sm" className="text-xs" onClick={() => quickLogin('stotomas@kalisungan.ph', 'stotomas123')}>
-              Sto. Tomas Admin
-            </Button>
-            <Button variant="outline" size="sm" className="text-xs" onClick={() => quickLogin('guide@kalisungan.ph', 'guide123')}>
-              Guide
-            </Button>
-            <Button variant="outline" size="sm" className="text-xs" onClick={() => quickLogin('hiker@kalisungan.ph', 'hiker123')}>
-              Hiker
-            </Button>
-          </div>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="w-full mt-3 text-[11px] text-muted-foreground"
-            onClick={reseedTestAccounts}
-            disabled={reseeding}
-          >
-            {reseeding ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : null}
-            Reset test accounts
-          </Button>
         </div>
       </div>
 

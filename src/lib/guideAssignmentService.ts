@@ -338,15 +338,16 @@ export async function reassignGuideByAdmin({
 
     // 1. Mark current guide assignment as declined/reassigned
     if (currentGuideId) {
-      await supabase
+      const { error: declineError } = await supabase
         .from('booking_assignments' as any)
-          .update({
-            status: 'declined',
-            decided_at: changedAt,
-            reassignment_reason: `Reassigned by admin: ${cleanReason}`,
+        .update({
+          status: 'declined',
+          decided_at: changedAt,
+          reassignment_reason: `Reassigned by admin: ${cleanReason}`,
         } as any)
         .eq('booking_id', bookingId)
         .eq('guide_id', currentGuideId);
+      if (declineError) throw declineError;
 
       // Free previous guide status if not on duty
       await supabase
@@ -357,20 +358,23 @@ export async function reassignGuideByAdmin({
     }
 
     // 2. Insert or update replacement guide assignment
-    const { data: existingAss } = await supabase
+    const { data: existingRows, error: existingError } = await supabase
       .from('booking_assignments' as any)
       .select('id')
       .eq('booking_id', bookingId)
       .eq('guide_id', newGuideId)
-      .maybeSingle();
+      .limit(1);
+    if (existingError) throw existingError;
+    const existingId = (existingRows as unknown as { id: string }[] | null)?.[0]?.id;
 
-    if ((existingAss as any)?.id) {
-      await supabase
+    if (existingId) {
+      const { error } = await supabase
         .from('booking_assignments' as any)
         .update({ status: 'pending', decided_at: null, reassignment_reason: null } as any)
-        .eq('id', (existingAss as any).id);
+        .eq('id', existingId);
+      if (error) throw error;
     } else {
-      await supabase
+      const { error } = await supabase
         .from('booking_assignments' as any)
         .insert({
           booking_id: bookingId,
@@ -378,14 +382,16 @@ export async function reassignGuideByAdmin({
           location_id: locationId,
           status: 'pending',
         } as any);
+      if (error) throw error;
     }
 
     // 3. Update booking metadata
-    const { data: booking } = await supabase
+    const { data: booking, error: fetchError } = await supabase
       .from('bookings')
       .select('notes, user_id, booking_date')
       .eq('id', bookingId)
       .single();
+    if (fetchError) throw fetchError;
 
     const effectiveHikerId = hikerUserId || booking?.user_id;
     const effectiveDate = bookingDate || booking?.booking_date || 'your scheduled date';
@@ -402,10 +408,11 @@ export async function reassignGuideByAdmin({
       guideChangedAt: changedAt,
     });
 
-    await supabase
+    const { error: bookingError } = await supabase
       .from('bookings')
       .update({ notes: updatedMeta } as any)
       .eq('id', bookingId);
+    if (bookingError) throw bookingError;
 
     // 4. System chat messages
     await supabase.from('booking_messages' as any).insert([
@@ -454,5 +461,117 @@ export async function reassignGuideByAdmin({
   } catch (err: any) {
     console.error('reassignGuideByAdmin error:', err);
     return { success: false, error: err?.message || 'Failed to reassign guide' };
+  }
+}
+
+export interface AdminAssignParams {
+  bookingId: string;
+  guideId: string;
+  guideName: string;
+  guideUserId?: string | null;
+  locationId?: string | null;
+  /** Extra booking-meta fields to persist with the assignment (e.g. assigned trail). */
+  extraMeta?: Record<string, unknown>;
+}
+
+/**
+ * Admin assigns a mountain guide to a booking (first assignment from dispatch).
+ * Every write is checked so the admin never sees a success toast for an
+ * assignment the guide cannot actually see.
+ */
+export async function assignGuideToBooking({
+  bookingId,
+  guideId,
+  guideName,
+  guideUserId,
+  locationId,
+  extraMeta = {},
+}: AdminAssignParams): Promise<{ success: boolean; error?: string; warnings?: string[] }> {
+  try {
+    const assignedAt = new Date().toISOString();
+    const warnings: string[] = [];
+
+    const { data: booking, error: fetchError } = await supabase
+      .from('bookings')
+      .select('notes, user_id, booking_date, location_id')
+      .eq('id', bookingId)
+      .single();
+    if (fetchError) throw fetchError;
+    if (!booking) throw new Error('Booking was not found.');
+
+    const effectiveLocationId = locationId || (booking as any).location_id || null;
+
+    // 1. Withdraw any open offers to other guides so only one guide is pending.
+    const { error: withdrawError } = await supabase
+      .from('booking_assignments' as any)
+      .update({ status: 'declined', decided_at: assignedAt, reassignment_reason: 'Superseded by admin assignment' } as any)
+      .eq('booking_id', bookingId)
+      .neq('guide_id', guideId)
+      .in('status', ['pending', 'accepted']);
+    if (withdrawError) throw withdrawError;
+
+    // 2. Create or reopen this guide's assignment row.
+    const { data: existingRows, error: existingError } = await supabase
+      .from('booking_assignments' as any)
+      .select('id')
+      .eq('booking_id', bookingId)
+      .eq('guide_id', guideId)
+      .limit(1);
+    if (existingError) throw existingError;
+    const existingId = (existingRows as unknown as { id: string }[] | null)?.[0]?.id;
+
+    if (existingId) {
+      const { error } = await supabase
+        .from('booking_assignments' as any)
+        .update({ status: 'pending', decided_at: null, reassignment_reason: null } as any)
+        .eq('id', existingId);
+      if (error) throw error;
+    } else {
+      const { error } = await supabase
+        .from('booking_assignments' as any)
+        .insert({ booking_id: bookingId, guide_id: guideId, location_id: effectiveLocationId, status: 'pending' } as any);
+      if (error) throw error;
+    }
+
+    // 3. Persist the assignment on the booking only after the guide row exists.
+    const meta = parseMeta((booking as any).notes);
+    const updatedMeta = encodeMeta({
+      ...meta,
+      ...extraMeta,
+      assignedGuide: guideName,
+      assignedGuideId: guideId,
+      guideStatus: 'pending',
+      assignedAt,
+    });
+    const { error: bookingError } = await supabase
+      .from('bookings')
+      .update({ status: 'pending', notes: updatedMeta } as any)
+      .eq('id', bookingId);
+    if (bookingError) throw bookingError;
+
+    // 4. Non-blocking side effects.
+    const { error: messageError } = await supabase.from('booking_messages' as any).insert({
+      booking_id: bookingId,
+      sender_role: 'system',
+      kind: 'system',
+      content: `Admin assigned mountain guide ${guideName}. Guide must accept before booking confirmation.`,
+    } as any);
+    if (messageError) warnings.push(`Booking chat: ${messageError.message}`);
+
+    if (guideUserId) {
+      const effectiveDate = (booking as any).booking_date || 'your scheduled date';
+      await notifyUser(guideUserId, {
+        title: '📋 New Hike Booking Assignment',
+        body: `You have been assigned to lead Booking #${bookingId.slice(0, 8)} on ${effectiveDate}. Please review and accept.`,
+        category: 'booking',
+      }).catch(() => warnings.push('Guide notification could not be delivered.'));
+    } else {
+      warnings.push('This guide has no linked login account, so they cannot see or accept the assignment.');
+    }
+
+    return warnings.length ? { success: true, warnings } : { success: true };
+  } catch (err: any) {
+    console.error('assignGuideToBooking error:', err);
+    return { success: false, error: err?.message || 'Failed to assign guide' };
   }
 }

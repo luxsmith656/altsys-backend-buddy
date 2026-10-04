@@ -167,28 +167,13 @@ async function invokeManageUsers(body: Record<string, unknown>): Promise<any> {
 }
 
 export async function fetchAdminsList(): Promise<AdminAccount[]> {
-  try {
-    const data = await invokeManageUsers({ action: 'list_admins' });
-    if (Array.isArray(data?.admins) && data.admins.length > 0) {
-      const list: AdminAccount[] = data.admins.map((a: AdminAccount) => ({
-        ...a,
-        status: isAccountDeactivated(a.userId, a.email) ? 'deactivated' : (a.status || 'active'),
-      }));
-      const stored = getStoredAdmins();
-      const combined = [...list];
-      for (const s of stored) {
-        if (!combined.some((c) => c.userId === s.userId || (c.email && c.email.toLowerCase() === s.email?.toLowerCase()))) {
-          combined.push(s);
-        }
-      }
-      const cleanCombined = combined.filter((a) => !isMtKalisunganAccount(a));
-      saveStoredAdmins(cleanCombined);
-      return cleanCombined;
-    }
-  } catch (err) {
-    console.warn('Edge function list_admins error/offline:', err);
-  }
-  return getStoredAdmins();
+  const data = await invokeManageUsers({ action: 'list_admins' });
+  const list: AdminAccount[] = (data.admins ?? []).map((a: AdminAccount) => ({
+    ...a,
+    status: isAccountDeactivated(a.userId, a.email) ? 'deactivated' : (a.status || 'active'),
+  }));
+  saveStoredAdmins(list);
+  return list;
 }
 
 export async function resetAdminPassword(
@@ -199,13 +184,8 @@ export async function resetAdminPassword(
   if (!newPassword || newPassword.length < 6) {
     throw new Error('Password must be at least 6 characters');
   }
-  try {
-    const data = await invokeManageUsers({ action: 'reset_admin_password', targetUserId, newPassword });
-    return { success: true, message: data.message || `Password for ${targetEmail} has been updated.` };
-  } catch (err) {
-    console.warn('Reset admin password on server failed/offline:', err);
-    return { success: true, message: `Password for ${targetEmail} has been updated.` };
-  }
+  const data = await invokeManageUsers({ action: 'reset_admin_password', targetUserId, newPassword });
+  return { success: true, message: data.message || `Password for ${targetEmail} has been updated.` };
 }
 
 export async function updateAdminInfo(
@@ -218,36 +198,18 @@ export async function updateAdminInfo(
     status?: 'active' | 'deactivated';
   }
 ): Promise<{ success: boolean; message: string }> {
-  const currentAdmins = getStoredAdmins();
-  const currentAdmin = currentAdmins.find((a) => a.userId === targetUserId || a.id === targetUserId);
-  try {
-    await invokeManageUsers({
-      action: 'update_admin',
-      targetUserId,
-      fullName: updates.fullName,
-      phone: updates.phone,
-      locationId: updates.locationId,
-      status: updates.status,
-    });
-  } catch (err) {
-    console.warn('Update admin on server failed/offline:', err);
-  }
+  const currentAdmin = getStoredAdmins().find((a) => a.userId === targetUserId);
+  await invokeManageUsers({
+    action: 'update_admin',
+    targetUserId,
+    fullName: updates.fullName,
+    phone: updates.phone,
+    locationId: updates.locationId,
+    status: updates.status,
+  });
   if (updates.status !== undefined) {
     setAccountDeactivated(targetUserId, currentAdmin?.email, updates.status === 'deactivated');
   }
-  const updatedAdmins = currentAdmins.map((a) =>
-    a.userId === targetUserId || a.id === targetUserId
-      ? {
-          ...a,
-          ...(updates.fullName !== undefined ? { fullName: updates.fullName } : {}),
-          ...(updates.phone !== undefined ? { phone: updates.phone } : {}),
-          ...(updates.locationId !== undefined ? { locationId: updates.locationId } : {}),
-          ...(updates.locationName !== undefined ? { locationName: updates.locationName } : {}),
-          ...(updates.status !== undefined ? { status: updates.status } : {}),
-        }
-      : a
-  );
-  saveStoredAdmins(updatedAdmins);
   return { success: true, message: 'Admin details updated' };
 }
 
@@ -270,16 +232,9 @@ export async function createAdminAccount(params: {
     throw new Error('Email and full name are required');
   }
 
-  let uid = `admin-${Date.now()}`;
-  try {
-    const data = await invokeManageUsers({ action: 'create_admin', email, fullName, phone, locationId, password });
-    if (data.admin?.userId || data.admin?.id) {
-      uid = data.admin.userId || data.admin.id;
-    }
-  } catch (err) {
-    console.warn('Create admin on server failed/offline:', err);
-  }
-
+  const data = await invokeManageUsers({ action: 'create_admin', email, fullName, phone, locationId, password });
+  const uid = data.admin?.userId || data.admin?.id;
+  if (!uid) throw new Error('Account was not created on the server. Please try again.');
   const newAdmin: AdminAccount = {
     id: uid,
     userId: uid,
@@ -292,8 +247,6 @@ export async function createAdminAccount(params: {
     createdAt: new Date().toISOString(),
     status: 'active',
   };
-  const current = getStoredAdmins();
-  saveStoredAdmins([newAdmin, ...current.filter((a) => a.email !== email)]);
   return { success: true, message: `Admin account for ${fullName} created. They can sign in with ${email}.`, admin: newAdmin };
 }
 
@@ -543,13 +496,8 @@ export async function changeUserPassword(
     throw new Error('Password must be at least 6 characters');
   }
 
-  try {
-    const data = await invokeManageUsers({ action: 'change_user_password', targetUserId, newPassword });
-    return { success: true, message: data.message || `Password for ${targetEmail} updated successfully` };
-  } catch (err) {
-    console.warn('Change user password on server failed/offline:', err);
-    return { success: true, message: `Password for ${targetEmail} updated successfully` };
-  }
+  const data = await invokeManageUsers({ action: 'change_user_password', targetUserId, newPassword });
+  return { success: true, message: data.message || `Password for ${targetEmail} updated successfully` };
 }
 
 export async function editUserInfo(
@@ -565,11 +513,7 @@ export async function editUserInfo(
   }
 ): Promise<{ success: boolean; message: string }> {
   const isDeactivated = updates.accountStatus === 'deactivated' || updates.status === 'deactivated';
-  try {
-    await invokeManageUsers({ action: 'edit_user_info', targetUserId, ...updates });
-  } catch (err) {
-    console.warn('Edit user info on server failed/offline:', err);
-  }
+  await invokeManageUsers({ action: 'edit_user_info', targetUserId, ...updates });
   if (updates.accountStatus !== undefined || updates.status === 'deactivated') {
     setAccountDeactivated(targetUserId, undefined, isDeactivated);
   }
@@ -587,11 +531,6 @@ export async function deleteUserAccount(
     saveStoredAdmins(current.filter((a) => a.userId !== targetUserId && a.id !== targetUserId));
   }
 
-  try {
-    await invokeManageUsers({ action: 'delete_user', targetUserId, role });
-  } catch (err) {
-    console.warn('Delete user on server failed/offline:', err);
-  }
+  await invokeManageUsers({ action: 'delete_user', targetUserId, role });
   return { success: true, message: 'User account deleted successfully' };
 }
-

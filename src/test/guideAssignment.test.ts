@@ -3,6 +3,7 @@ import { parseMeta } from '@/lib/bookingMeta';
 import {
   STANDARD_DECLINE_REASONS,
   acceptGuideAssignment,
+  assignGuideToBooking,
   declineAndReassignGuide,
   reassignGuideByAdmin,
 } from '@/lib/guideAssignmentService';
@@ -36,6 +37,8 @@ function createQueryChain() {
   chain.select = vi.fn(() => chain);
   chain.eq = vi.fn(() => chain);
   chain.neq = vi.fn(() => chain);
+  chain.in = vi.fn(() => chain);
+  chain.limit = vi.fn(() => chain);
   chain.update = vi.fn(() => chain);
   chain.insert = vi.fn(() => Promise.resolve({ data: null, error: null }));
   chain.maybeSingle = vi.fn().mockResolvedValue({ data: null, error: null });
@@ -184,5 +187,37 @@ describe('Guide Assignment & Confirmation Service', () => {
     }));
     expect(mockState.notifyUser).toHaveBeenCalledTimes(3);
     expect(mockState.notifyUser).toHaveBeenCalledWith('user-hiker-1', expect.objectContaining({ category: 'booking' }));
+  });
+
+  it('admin assignment creates a pending guide row, then records the guide on the booking and notifies the guide', async () => {
+    const result = await assignGuideToBooking({
+      bookingId: 'booking-123', guideId: 'guide-2', guideName: 'Maria Santos', guideUserId: 'user-guide-2', locationId: 'loc-1',
+      extraMeta: { assignedTrailName: 'Lamot 2 Trail' },
+    });
+
+    expect(result).toEqual({ success: true });
+    const insertIdx = mockState.operations.findIndex((o) => o.table === 'booking_assignments' && o.method === 'insert');
+    const bookingIdx = mockState.operations.findIndex((o) => o.table === 'bookings' && o.method === 'update');
+    expect(mockState.operations[insertIdx].payload).toEqual(expect.objectContaining({ guide_id: 'guide-2', location_id: 'loc-1', status: 'pending' }));
+    expect(insertIdx).toBeLessThan(bookingIdx);
+    const notes = parseMeta((mockState.operations[bookingIdx].payload as { notes: string }).notes);
+    expect(notes).toMatchObject({ assignedGuideId: 'guide-2', guideStatus: 'pending', assignedTrailName: 'Lamot 2 Trail' });
+    expect(mockState.notifyUser).toHaveBeenCalledWith('user-guide-2', expect.objectContaining({ category: 'booking' }));
+  });
+
+  it('admin assignment reports failure and leaves the booking untouched when the guide row cannot be written', async () => {
+    mockState.failInsertTable = 'booking_assignments';
+
+    const result = await assignGuideToBooking({ bookingId: 'booking-123', guideId: 'guide-2', guideName: 'Maria Santos', guideUserId: 'user-guide-2' });
+
+    expect(result).toEqual({ success: false, error: 'booking_assignments insert denied' });
+    expect(mockState.operations).not.toContainEqual(expect.objectContaining({ table: 'bookings', method: 'update' }));
+    expect(mockState.notifyUser).not.toHaveBeenCalled();
+  });
+
+  it('warns when the assigned guide has no linked login account', async () => {
+    const result = await assignGuideToBooking({ bookingId: 'booking-123', guideId: 'guide-3', guideName: 'Offline Guide', guideUserId: null });
+    expect(result.success).toBe(true);
+    expect(result.warnings).toEqual(expect.arrayContaining([expect.stringContaining('no linked login account')]));
   });
 });

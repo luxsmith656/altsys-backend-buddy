@@ -7,6 +7,7 @@ import { isAccountDeactivated } from '@/lib/adminManagementService';
 
 interface AuthContextType {
   user: User | null;
+  session: Session | null;
   role: AppRole | null;
   loading: boolean;
   roleError: string | null;
@@ -20,6 +21,7 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
+  const [session, setSession] = useState<Session | null>(null);
   const [role, setRole] = useState<AppRole | null>(null);
   const [loading, setLoading] = useState(true);
   const [roleError, setRoleError] = useState<string | null>(null);
@@ -69,7 +71,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return knownRole ?? 'hiker';
   }, []);
 
-  const syncSession = useCallback(async (session: { user: User } | null) => {
+  const syncSession = useCallback(async (sessionPayload: Session | { user: User } | null) => {
+    const currentSession = sessionPayload && 'access_token' in sessionPayload ? (sessionPayload as Session) : null;
+    setSession(currentSession);
+    const session = sessionPayload;
     if (session?.user) {
       setLoading(true);
       setRole(null);
@@ -193,6 +198,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const signOut = async () => {
     // Instant UI update for 0ms perceptible lag
     setUser(null);
+    setSession(null);
     setRole(null);
     setRoleError(null);
     setLoading(false);
@@ -208,7 +214,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, role, loading, roleError, retryRole, signIn, signUp, signOut }}>
+    <AuthContext.Provider value={{ user, session, role, loading, roleError, retryRole, signIn, signUp, signOut }}>
       {children}
     </AuthContext.Provider>
   );

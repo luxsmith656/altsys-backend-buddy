@@ -41,6 +41,7 @@ interface LocStats {
   bookingsToday: number;
   totalHikers: number;
   activeHikers: number;
+  activeSessions: number;
   revenue: number;
   monthRevenue: number;
 }
@@ -115,10 +116,12 @@ export default function CentralDashboard() {
         const monthRevenue = monthBookings.reduce((sum, b) => sum + getRecordedRevenue(parseMeta(b.notes)), 0);
         const totalHikers = validBookings.reduce((sum, b) => sum + (Number(b.group_size) || 1), 0);
 
-        const active = (sessions ?? []).filter((s) => {
+        const locSessions = (sessions ?? []).filter((s) => {
           const locId = s.location_id || bookingLocMap.get(s.booking_id);
-          return locId === loc.id && s.participant_role !== 'guide';
-        }).length;
+          return locId === loc.id;
+        });
+        const active = locSessions.filter((s) => s.participant_role !== 'guide').length;
+        const activeSessions = new Set(locSessions.map((s) => s.booking_id).filter(Boolean)).size;
 
         return {
           id: loc.id,
@@ -131,6 +134,7 @@ export default function CentralDashboard() {
           revenue,
           monthRevenue,
           activeHikers: active,
+          activeSessions,
         };
       });
 
@@ -158,8 +162,9 @@ export default function CentralDashboard() {
           totalHikers: acc.totalHikers + s.totalHikers,
           revenue: acc.revenue + s.revenue,
           activeHikers: acc.activeHikers + s.activeHikers,
+          activeSessions: acc.activeSessions + s.activeSessions,
         }),
-        { bookingsTotal: 0, bookingsMonth: 0, bookingsToday: 0, totalHikers: 0, revenue: 0, activeHikers: 0 }
+        { bookingsTotal: 0, bookingsMonth: 0, bookingsToday: 0, totalHikers: 0, revenue: 0, activeHikers: 0, activeSessions: 0 }
       );
     }
     const found = stats.find((s) => s.id === activeLocationId);
@@ -171,6 +176,7 @@ export default function CentralDashboard() {
         totalHikers: 0,
         revenue: 0,
         activeHikers: 0,
+        activeSessions: 0,
       }
     );
   }, [stats, activeLocationId]);
@@ -278,7 +284,7 @@ export default function CentralDashboard() {
             {
               label: 'Active Hikers On-Trail',
               value: activeStats.activeHikers,
-              subtext: 'Live checked-in GPS telemetry',
+              subtext: `${activeStats.activeSessions} active session${activeStats.activeSessions === 1 ? '' : 's'} on site`,
               icon: MapPin,
               color: 'text-orange-500',
               bgGlow: 'from-orange-500/10 to-transparent',
@@ -433,6 +439,9 @@ export default function CentralDashboard() {
                             <Row label="Scheduled Today" value={s.bookingsToday} />
                             <Row label="Total hikers (pax)" value={s.totalHikers} />
                             <Row label="Recorded Tourism Revenue" value={`₱${s.revenue.toLocaleString()}`} />
+                            <Row label="Active Sessions on Site" value={
+                              <span className="font-bold text-emerald-500">{s.activeSessions} group{s.activeSessions === 1 ? '' : 's'}</span>
+                            } />
                             <Row label="Active Hikers on Trail Now" value={
                               <span className="font-bold text-orange-500">{s.activeHikers}</span>
                             } />

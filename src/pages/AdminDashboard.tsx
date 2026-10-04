@@ -94,6 +94,7 @@ import {
 } from 'lucide-react';
 import BookingChat from '@/components/booking/BookingChat';
 import ReassignGuideDialog from '@/components/booking/ReassignGuideDialog';
+import { assignGuideToBooking } from '@/lib/guideAssignmentService';
 import EditBookingDialog from '@/components/booking/EditBookingDialog';
 import { AdminOffDutyApprovals } from '@/components/booking/OffDutyManager';
 import AdminUserManagement from '@/components/admin/AdminUserManagement';
@@ -182,9 +183,9 @@ export default function AdminDashboard() {
   const [searchParams, setSearchParams] = useSearchParams();
   const routeEditorRef = useRef<HTMLDivElement | null>(null);
   const [activeTab, setActiveTab] = useState(getMappedTab(searchParams.get('tab') || 'overview'));
-  const [operationsTab, setOperationsTab] = useState<'requests' | 'scan' | 'live-map'>(() => {
+  const [operationsTab, setOperationsTab] = useState<'requests' | 'scan' | 'live-map' | 'sessions'>(() => {
     const initialTab = searchParams.get('tab');
-    return initialTab === 'scan' || initialTab === 'live-map' ? initialTab : 'requests';
+    return initialTab === 'scan' || initialTab === 'live-map' || initialTab === 'sessions' ? initialTab : 'requests';
   });
   const [managementTab, setManagementTab] = useState<string>(() => {
     const initialTab = searchParams.get('tab');
@@ -224,11 +225,121 @@ export default function AdminDashboard() {
   const [companionQROpen, setCompanionQROpen] = useState(false);
   const [walkInOpen, setWalkInOpen] = useState(false);
 
+  /* ── Hike Sessions state for this station site ── */
+  interface SiteHikeSession {
+    id: string;
+    bookingId: string;
+    locationId: string | null;
+    hikerName: string;
+    hikerPhone: string;
+    groupSize: number;
+    guideName: string;
+    startTime: string;
+    endTime: string | null;
+    status: string;
+    trackingPhase: string;
+    trailName: string;
+    booking?: any;
+  }
+  const [siteSessions, setSiteSessions] = useState<SiteHikeSession[]>([]);
+  const [sessionsLoading, setSessionsLoading] = useState(false);
+  const [sessionSearch, setSessionSearch] = useState('');
+  const [sessionPhaseFilter, setSessionPhaseFilter] = useState<'all' | 'active' | 'completed'>('all');
+
+  const loadSiteSessions = useCallback(async () => {
+    setSessionsLoading(true);
+    try {
+      let q = supabase
+        .from('hiker_sessions')
+        .select('id, booking_id, user_id, location_id, participant_role, tracking_phase, start_time, end_time, status')
+        .order('start_time', { ascending: false })
+        .limit(100);
+
+      if (activeLocationId) {
+        q = q.eq('location_id', activeLocationId);
+      }
+
+      const { data: rawSessions, error } = await q;
+      if (error) throw error;
+
+      const bookingIds = Array.from(new Set((rawSessions ?? []).map((s) => s.booking_id).filter(Boolean)));
+      const bookingMap: Record<string, any> = {};
+      if (bookingIds.length > 0) {
+        const { data: bData } = await supabase
+          .from('bookings')
+          .select('id, notes, status, group_size, booking_date, emergency_contact_name, emergency_contact_phone, location_id')
+          .in('id', bookingIds);
+        (bData ?? []).forEach((b) => {
+          bookingMap[b.id] = b;
+        });
+      }
+
+      const groupMap = new Map<string, SiteHikeSession>();
+      (rawSessions ?? []).forEach((s) => {
+        if (!s.booking_id) return;
+        const b = bookingMap[s.booking_id];
+        const meta = parseMeta(b?.notes);
+        if (!groupMap.has(s.booking_id)) {
+          groupMap.set(s.booking_id, {
+            id: s.id,
+            bookingId: s.booking_id,
+            locationId: s.location_id || b?.location_id || activeLocationId,
+            hikerName: meta.fullName || b?.emergency_contact_name || 'Hiker Group',
+            hikerPhone: meta.phoneNumber || b?.emergency_contact_phone || '—',
+            groupSize: Number(b?.group_size) || 1,
+            guideName: meta.assignedGuide || 'Assigned Mountain Guide',
+            startTime: s.start_time || new Date().toISOString(),
+            endTime: s.end_time || null,
+            status: s.status || 'active',
+            trackingPhase: s.tracking_phase || 'ascent',
+            trailName: meta.assignedTrailName || 'Official Route',
+            booking: b,
+          });
+        } else {
+          const existing = groupMap.get(s.booking_id)!;
+          if (s.status === 'active' && existing.status !== 'active') {
+            existing.status = 'active';
+            existing.trackingPhase = s.tracking_phase || existing.trackingPhase;
+          }
+        }
+      });
+
+      setSiteSessions(Array.from(groupMap.values()));
+    } catch (err) {
+      console.warn('loadSiteSessions error:', err);
+    } finally {
+      setSessionsLoading(false);
+    }
+  }, [activeLocationId]);
+
+  useEffect(() => {
+    void loadSiteSessions();
+  }, [loadSiteSessions]);
+
+  const activeSiteSessions = useMemo(() => {
+    return siteSessions.filter((s) => s.status === 'active');
+  }, [siteSessions]);
+
+  const filteredSiteSessions = useMemo(() => {
+    return siteSessions.filter((s) => {
+      if (sessionPhaseFilter === 'active' && s.status !== 'active') return false;
+      if (sessionPhaseFilter === 'completed' && s.status !== 'completed') return false;
+      if (!sessionSearch.trim()) return true;
+      const q = sessionSearch.toLowerCase();
+      return (
+        s.hikerName.toLowerCase().includes(q) ||
+        s.bookingId.toLowerCase().includes(q) ||
+        s.guideName.toLowerCase().includes(q) ||
+        s.trailName.toLowerCase().includes(q)
+      );
+    });
+  }, [siteSessions, sessionPhaseFilter, sessionSearch]);
+
   useEffect(() => {
     const tab = searchParams.get('tab');
     const mappedTab = getMappedTab(tab || 'overview');
     if (mappedTab !== activeTab) setActiveTab(mappedTab);
-    if (tab === 'requests' || tab === 'scan' || tab === 'live-map') {
+    if (tab === 'requests' || tab === 'scan' || tab === 'live-map' || tab === 'sessions') {
       if (tab !== operationsTab) setOperationsTab(tab);
     }
     if (['users', 'guides', 'announcements'].includes(tab || '')) {
@@ -485,6 +596,9 @@ export default function AdminDashboard() {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'booking_assignments' }, () => {
         void loadAllTabBookings();
         void loadPendingBookings();
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'hiker_sessions' }, () => {
+        void loadSiteSessions();
       })
       .subscribe();
 
@@ -1115,7 +1229,6 @@ export default function AdminDashboard() {
     if (!acceptDialogId || !selectedGuide) return;
     setAcceptSaving(true);
     const booking = allTabBookings.find((b) => b.id === acceptDialogId);
-    const meta = parseMeta(booking?.notes);
     // selectedGuide now stores guide.id; resolve display name
     const guideRow = guides.find((g) => g.id === selectedGuide);
     const guideName = guideRow?.name ?? selectedGuide;
@@ -1125,51 +1238,27 @@ export default function AdminDashboard() {
       setAcceptSaving(false);
       return;
     }
-    const updatedMeta = encodeMeta({
-      ...meta,
-      assignedGuide: guideName,
-      assignedGuideId: guideRow?.id,
-      guideStatus: 'pending',
-      assignedAt: new Date().toISOString(),
-      assignedTrailZoneId: routeInfo.route?.id,
-      assignedTrailName: routeInfo.route?.name,
-      assignedTrailAuto: routeInfo.auto,
+    if (!guideRow) {
+      toast.error('Selected mountain guide was not found. Refresh the guide list and try again.');
+      setAcceptSaving(false);
+      return;
+    }
+    const result = await assignGuideToBooking({
+      bookingId: acceptDialogId,
+      guideId: guideRow.id,
+      guideName,
+      guideUserId: guideRow.user_id,
+      locationId: booking?.location_id ?? guideRow.location_id,
+      extraMeta: {
+        assignedTrailZoneId: routeInfo.route?.id,
+        assignedTrailName: routeInfo.route?.name,
+        assignedTrailAuto: routeInfo.auto,
+      },
     });
-    const { error } = await supabase
-      .from('bookings')
-      .update({ status: 'pending', notes: updatedMeta })
-      .eq('id', acceptDialogId);
-    if (error) {
-      toast.error('Failed to assign guide to booking');
+    if (!result.success) {
+      toast.error(`Failed to assign guide: ${result.error}`);
     } else {
-      // Notify the guide immediately by upserting an assignment row
-      if (guideRow) {
-        const { data: existingRaw } = await supabase
-          .from('booking_assignments' as any)
-          .select('id')
-          .eq('booking_id', acceptDialogId)
-          .eq('guide_id', guideRow.id)
-          .maybeSingle();
-        const existing = existingRaw as unknown as { id: string } | null;
-        if (existing?.id) {
-          await supabase.from('booking_assignments' as any)
-            .update({ status: 'pending', decided_at: null } as any)
-            .eq('id', existing.id);
-        } else {
-          await supabase.from('booking_assignments' as any).insert({
-            booking_id: acceptDialogId,
-            guide_id: guideRow.id,
-            location_id: guideRow.location_id ?? booking?.location_id,
-            status: 'pending',
-          } as any);
-        }
-        await supabase.from('booking_messages' as any).insert({
-          booking_id: acceptDialogId,
-          sender_role: 'system',
-          kind: 'system',
-          content: `Admin assigned guide ${guideName}. Guide must accept before booking confirmation.`,
-        } as any);
-      }
+      result.warnings?.forEach((w) => toast.warning(w));
       toast.success(`📋 Assignment offer sent to Guide "${guideName}". Awaiting guide acceptance to confirm booking.`);
       if (booking) await updateDailySlots(booking.booking_date, booking.group_size, 1);
       void writeActivityLog({
@@ -1784,6 +1873,15 @@ export default function AdminDashboard() {
                 <TabsList className="glass-card">
                   <TabsTrigger value="requests">Bookings</TabsTrigger>
                   <TabsTrigger value="scan">Check in</TabsTrigger>
+                  <TabsTrigger value="sessions" className="gap-1.5">
+                    <Activity className="h-3.5 w-3.5" />
+                    <span>Hike Sessions</span>
+                    {activeSiteSessions.length > 0 && (
+                      <Badge className="px-1.5 py-0 text-[10px] bg-primary text-primary-foreground font-bold">
+                        {activeSiteSessions.length}
+                      </Badge>
+                    )}
+                  </TabsTrigger>
                   <TabsTrigger value="live-map">Live Map</TabsTrigger>
                 </TabsList>
               </div>
@@ -2737,6 +2835,207 @@ export default function AdminDashboard() {
               <TabsContent value="live-map" className="relative mt-0 h-[calc(100dvh-9rem)] min-h-[28rem] overflow-hidden rounded-lg border border-border/30 sm:min-h-[600px]">
             <RealtimeMonitorMap locationId={activeLocationId} canAddCheckpoints={false} />
           </TabsContent>
+
+              <TabsContent value="sessions" className="space-y-4 mt-0">
+                <Card className="glass-card border-border/30 overflow-hidden">
+                  <CardHeader className="pb-3 border-b border-border/20 bg-secondary/10">
+                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+                      <div>
+                        <CardTitle className="text-base font-bold flex items-center gap-2">
+                          <Activity className="h-4 w-4 text-primary" />
+                          Hike Sessions &amp; Trail Progress — {activeLocation?.name || 'All Jump-Off Sites'}
+                        </CardTitle>
+                        <p className="text-xs text-muted-foreground mt-0.5">
+                          Live tracking and lifecycle of checked-in hiking groups for this station site.
+                        </p>
+                      </div>
+
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <div className="relative">
+                          <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-muted-foreground" />
+                          <Input
+                            placeholder="Filter session by hiker, ID, guide..."
+                            value={sessionSearch}
+                            onChange={(e) => setSessionSearch(e.target.value)}
+                            className="pl-8 text-xs h-8 w-44 lg:w-56"
+                          />
+                        </div>
+
+                        <div className="flex items-center gap-1 bg-background/80 p-0.5 rounded-lg border border-border/30">
+                          {(['all', 'active', 'completed'] as const).map((filter) => (
+                            <button
+                              key={filter}
+                              type="button"
+                              onClick={() => setSessionPhaseFilter(filter)}
+                              className={`px-2.5 py-1 text-[11px] font-semibold rounded-md capitalize transition-all ${
+                                sessionPhaseFilter === filter
+                                  ? filter === 'active'
+                                    ? 'bg-emerald-600 text-white shadow-sm'
+                                    : 'bg-primary text-primary-foreground shadow-sm'
+                                  : 'text-muted-foreground hover:text-foreground'
+                              }`}
+                            >
+                              {filter === 'active' ? `Active (${activeSiteSessions.length})` : filter}
+                            </button>
+                          ))}
+                        </div>
+
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => void loadSiteSessions()}
+                          disabled={sessionsLoading}
+                          className="h-8 gap-1.5 text-xs"
+                        >
+                          <RefreshCw className={`h-3 w-3 ${sessionsLoading ? 'animate-spin' : ''}`} />
+                          Sync
+                        </Button>
+                      </div>
+                    </div>
+                  </CardHeader>
+
+                  <CardContent className="p-0">
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-left text-xs">
+                        <thead className="bg-secondary/30 text-muted-foreground border-b border-border/20 font-semibold uppercase text-[10px] tracking-wider">
+                          <tr>
+                            <th className="px-4 py-3">Group &amp; Lead Hiker</th>
+                            <th className="px-4 py-3">Assigned Mountain Guide</th>
+                            <th className="px-4 py-3">Route</th>
+                            <th className="px-4 py-3">Start &amp; Duration</th>
+                            <th className="px-4 py-3">Trail Phase</th>
+                            <th className="px-4 py-3">Status</th>
+                            <th className="px-4 py-3 text-right">Actions</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-border/10">
+                          {filteredSiteSessions.length === 0 ? (
+                            <tr>
+                              <td colSpan={7} className="px-4 py-12 text-center text-muted-foreground">
+                                {sessionsLoading ? 'Loading sessions...' : 'No hike sessions found for this station site.'}
+                              </td>
+                            </tr>
+                          ) : (
+                            filteredSiteSessions.map((s) => {
+                              const isActive = s.status === 'active';
+                              const phaseLabel =
+                                s.trackingPhase === 'peak'
+                                  ? 'At Summit / Peak Stay'
+                                  : s.trackingPhase === 'descent'
+                                  ? 'Descent (Heading Down)'
+                                  : s.trackingPhase === 'completed'
+                                  ? 'Hike Completed'
+                                  : 'Ascent (Climbing)';
+
+                              const startMs = new Date(s.startTime).getTime();
+                              const diffMin = Math.max(0, Math.floor((Date.now() - startMs) / 60000));
+                              const durationText = Math.floor(diffMin / 60) > 0
+                                ? `${Math.floor(diffMin / 60)}h ${diffMin % 60}m`
+                                : `${diffMin}m`;
+
+                              return (
+                                <tr key={s.id} className="hover:bg-secondary/10 transition-colors">
+                                  <td className="px-4 py-3">
+                                    <div className="font-semibold text-foreground">{s.hikerName}</div>
+                                    <div className="text-[11px] text-muted-foreground flex items-center gap-1.5 mt-0.5">
+                                      <span className="font-mono text-[10px] text-primary">#{s.bookingId.slice(0, 8)}</span>
+                                      <span>•</span>
+                                      <span>{s.groupSize} {s.groupSize === 1 ? 'hiker' : 'hikers'}</span>
+                                      <span>•</span>
+                                      <span>{s.hikerPhone}</span>
+                                    </div>
+                                  </td>
+                                  <td className="px-4 py-3">
+                                    <div className="flex items-center gap-1.5 font-medium text-foreground">
+                                      <Compass className="h-3.5 w-3.5 text-primary shrink-0" />
+                                      {s.guideName}
+                                    </div>
+                                  </td>
+                                  <td className="px-4 py-3 text-muted-foreground">
+                                    <div className="flex items-center gap-1">
+                                      <MapPin className="h-3 w-3 text-primary shrink-0" />
+                                      <span className="truncate max-w-[140px]">{s.trailName}</span>
+                                    </div>
+                                  </td>
+                                  <td className="px-4 py-3">
+                                    <div className="font-medium text-foreground">
+                                      {new Date(s.startTime).toLocaleTimeString('en-PH', {
+                                        timeZone: 'Asia/Manila',
+                                        hour: 'numeric',
+                                        minute: '2-digit',
+                                      })}
+                                    </div>
+                                    <div className="text-[10px] text-muted-foreground mt-0.5 font-mono">
+                                      {isActive ? `⏱️ ${durationText} on trail` : 'Finished'}
+                                    </div>
+                                  </td>
+                                  <td className="px-4 py-3">
+                                    <Badge
+                                      variant="outline"
+                                      className={`text-[10px] font-semibold ${
+                                        s.trackingPhase === 'peak'
+                                          ? 'bg-amber-500/10 text-amber-600 border-amber-500/30'
+                                          : s.trackingPhase === 'descent'
+                                          ? 'bg-purple-500/10 text-purple-600 border-purple-500/30'
+                                          : s.trackingPhase === 'completed'
+                                          ? 'bg-blue-500/10 text-blue-600 border-blue-500/30'
+                                          : 'bg-emerald-500/10 text-emerald-600 border-emerald-500/30'
+                                      }`}
+                                    >
+                                      {phaseLabel}
+                                    </Badge>
+                                  </td>
+                                  <td className="px-4 py-3">
+                                    <Badge
+                                      variant={isActive ? 'default' : 'secondary'}
+                                      className={`text-[10px] font-semibold ${
+                                        isActive ? 'bg-emerald-600 text-white' : 'bg-muted text-muted-foreground'
+                                      }`}
+                                    >
+                                      {isActive ? 'Active Session' : 'Ended'}
+                                    </Badge>
+                                  </td>
+                                  <td className="px-4 py-3 text-right">
+                                    <div className="flex items-center justify-end gap-1.5">
+                                      <Button
+                                        size="sm"
+                                        variant="outline"
+                                        onClick={() => {
+                                          setOperationsTab('live-map');
+                                          const next = new URLSearchParams(searchParams);
+                                          next.set('tab', 'live-map');
+                                          setSearchParams(next, { replace: true });
+                                        }}
+                                        className="h-7 text-[11px] gap-1 px-2"
+                                        title="View live GPS telemetry on Map"
+                                      >
+                                        <MapPin className="h-3 w-3 text-emerald-600" />
+                                        Map
+                                      </Button>
+                                      {isActive && s.booking && (
+                                        <Button
+                                          size="sm"
+                                          variant="secondary"
+                                          onClick={() => setEndHikeBooking(s.booking)}
+                                          className="h-7 text-[11px] gap-1 px-2 font-semibold text-primary hover:text-primary-foreground hover:bg-primary"
+                                          title="Check-out and record hike settlement"
+                                        >
+                                          <CheckCircle2 className="h-3 w-3" />
+                                          Check-out
+                                        </Button>
+                                      )}
+                                    </div>
+                                  </td>
+                                </tr>
+                              );
+                            })
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  </CardContent>
+                </Card>
+              </TabsContent>
             </Tabs>
           </TabsContent>
 

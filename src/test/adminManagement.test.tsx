@@ -36,7 +36,26 @@ vi.mock('@/integrations/supabase/client', () => ({
       maybeSingle: vi.fn().mockResolvedValue({ data: null, error: null }),
     }),
     functions: {
-      invoke: vi.fn().mockResolvedValue({ data: { success: true }, error: null }),
+      invoke: vi.fn().mockImplementation(async (_name: string, opts?: { body?: { action?: string } }) => {
+        if (opts?.body?.action === 'list_admins') {
+          const mk = (slug: string, name: string, loc: string) => ({
+            id: `admin-${slug}`, userId: `admin-${slug}`, email: `${slug}@kalisungan.ph`, fullName: name,
+            phone: '', role: 'admin', locationId: slug, locationName: loc, createdAt: '2026-06-01T00:00:00Z', status: 'active',
+          });
+          return {
+            data: {
+              success: true,
+              admins: [
+                mk('lamot1', 'Lamot 1 Admin', 'Lamot 1 Trailhead'),
+                mk('lamot2', 'Lamot 2 Admin', 'Lamot 2 Trailhead'),
+                mk('stotomas', 'Sto. Tomas Admin', 'Sto. Tomas Trailhead'),
+              ],
+            },
+            error: null,
+          };
+        }
+        return { data: { success: true }, error: null };
+      }),
     },
     auth: {
       resetPasswordForEmail: vi.fn().mockResolvedValue({ error: null }),
