@@ -35,6 +35,7 @@ export function brokeredPreviewStorage() {
     new Promise((resolve) => {
       const requestId = newId();
       let done = false;
+      let timer: ReturnType<typeof setTimeout>;
       const finish = (r: { ok: boolean; value?: string | null } | null) => {
         if (done) return;
         done = true;
@@ -47,12 +48,12 @@ export function brokeredPreviewStorage() {
         const d = e.data;
         if (d && d.type === RESULT && d.requestId === requestId) finish(d);
       };
-      const timer: ReturnType<typeof setTimeout> = setTimeout(() => finish(null), TIMEOUT);
       window.addEventListener('message', onMessage);
       const msg: Record<string, unknown> = { type, requestId, projectId, key };
       if (value !== undefined) msg['value'] = value;
       // targetOrigin per trusted editor origin, so a session token never reaches an arbitrary embedder.
       for (const origin of editorOrigins) window.parent.postMessage(msg, origin);
+      timer = setTimeout(() => finish(null), TIMEOUT);
     });
 
   // The editor may not be listening yet at the first getItem, so retry once.
@@ -77,7 +78,12 @@ export function brokeredPreviewStorage() {
     },
     setItem: (key: string, value: string) => {
       localStorage.setItem(key, value);
-      return request('lovable-preview-auth:set', key, value).then(() => undefined);
+      return request('lovable-preview-auth:set', key, value).then((res) => {
+        if (res && res.ok && typeof res.value === 'string' && localStorage.getItem(key) === value) {
+          if (res.value === '') localStorage.removeItem(key);
+          else localStorage.setItem(key, res.value);
+        }
+      });
     },
     removeItem: (key: string) => {
       localStorage.removeItem(key);
