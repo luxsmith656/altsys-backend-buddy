@@ -131,7 +131,6 @@ export default function ProfilePage() {
 
     if (error) toast.error(`Failed to save profile: ${error.message}`);
     else void supabase.auth.updateUser({ data: { full_name: profile.full_name.trim() } });
-    if (error) {}
     else toast.success('Profile updated successfully!');
     setSaving(false);
   };
