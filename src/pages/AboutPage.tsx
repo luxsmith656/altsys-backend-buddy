@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { usePricing } from '@/hooks/usePricing';
 import heroImage from '@/assets/mt-kalisungan-hero.jpg';
+import GettingHere from '@/components/landing/GettingHere';
 
 export default function AboutPage() {
   const { pricing } = usePricing();
@@ -36,11 +37,8 @@ export default function AboutPage() {
           <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
             <Button asChild size="lg" className="glow-primary">
               <Link to="/booking">
-                Book a Hike <ArrowRight className="ml-2 h-4 w-4" />
+                Start with a trail <ArrowRight className="ml-2 h-4 w-4" />
               </Link>
-            </Button>
-            <Button asChild variant="outline" size="lg">
-              <Link to="/map">Explore 3D Map</Link>
             </Button>
           </div>
         </div>
@@ -86,8 +84,7 @@ export default function AboutPage() {
             </div>
             <h2 className="text-2xl sm:text-3xl font-bold">Location & Jump-Offs</h2>
             <p className="text-muted-foreground text-sm sm:text-base leading-relaxed">
-              Mount Kalisungan is situated in the municipality of <strong>Calauan, Laguna</strong> (approximately 14.1378° N, 121.3283° E).
-              It forms an iconic natural landmark visible from the highway between San Pablo City and Calauan.
+              Mount Kalisungan is situated in the municipality of <strong>Calauan, Laguna</strong>, with registered jump-offs in Lamot 1, Lamot 2, and Sto. Tomas.
             </p>
             <div className="p-4 rounded-xl bg-secondary/50 border border-border/50 text-xs text-muted-foreground space-y-1.5">
               <div className="font-semibold text-foreground">Official LGU Jurisdiction:</div>
@@ -103,8 +100,8 @@ export default function AboutPage() {
                 <CardTitle className="text-lg">Sitio Lamot 1</CardTitle>
               </CardHeader>
               <CardContent className="p-4 pt-1 text-xs text-muted-foreground space-y-2">
-                <p>The primary and traditional jump-off point. Features the central registration post, parking area, and guide briefing terminal.</p>
-                <div className="font-medium text-foreground text-[11px]">Highlights: Farm orchards, coconut plantations, main summit ridge.</div>
+                <p>An alternate northern jump-off with a direct connection to the shared summit route.</p>
+                <div className="font-medium text-foreground text-[11px]">Highlights: Farm orchards, coconut plantations, northern ridge.</div>
               </CardContent>
             </Card>
 
@@ -114,8 +111,8 @@ export default function AboutPage() {
                 <CardTitle className="text-lg">Sitio Lamot 2</CardTitle>
               </CardHeader>
               <CardContent className="p-4 pt-1 text-xs text-muted-foreground space-y-2">
-                <p>A tranquil alternative route passing through quiet local communities, lush banana groves, and fruit farms before merging with the upper ridge.</p>
-                <div className="font-medium text-foreground text-[11px]">Highlights: Gentle ascent, shaded plantation walks.</div>
+                <p>The primary registered jump-off for the current official route, passing through local communities, banana groves, and fruit farms before the upper ridge.</p>
+                <div className="font-medium text-foreground text-[11px]">Highlights: Primary registration point, shaded plantation walks.</div>
               </CardContent>
             </Card>
 
@@ -131,6 +128,8 @@ export default function AboutPage() {
             </Card>
           </div>
         </div>
+
+        <GettingHere />
 
         {/* 0 River Crossing Fact Callout */}
         <Card className="border-emerald-500/40 bg-gradient-to-r from-emerald-500/10 via-background to-teal-500/10 p-6 rounded-2xl">
@@ -373,24 +372,6 @@ export default function AboutPage() {
           </div>
         </div>
 
-        {/* CTA Banner */}
-        <div className="rounded-3xl p-8 sm:p-12 text-center bg-gradient-to-br from-emerald-950/80 via-emerald-900/60 to-slate-900/90 border border-emerald-500/30 shadow-2xl relative overflow-hidden">
-          <Mountain className="h-12 w-12 text-emerald-400 mx-auto mb-4 opacity-80" />
-          <h2 className="text-2xl sm:text-4xl font-extrabold text-white mb-3">
-            Ready to Hike Mount Kalisungan?
-          </h2>
-          <p className="text-sm sm:text-base text-white/80 max-w-xl mx-auto mb-6">
-            Book your hike online, receive instant permit verification, and be assigned a licensed local guide.
-          </p>
-          <div className="flex flex-wrap gap-3 justify-center">
-            <Button asChild size="lg" className="bg-emerald-500 hover:bg-emerald-600 text-white shadow-lg">
-              <Link to="/booking">Reserve Slot Now</Link>
-            </Button>
-            <Button asChild variant="outline" size="lg" className="border-white/30 text-white hover:bg-white/10">
-              <Link to="/chat">Ask Kali AI About the Mountain</Link>
-            </Button>
-          </div>
-        </div>
       </section>
     </div>
   );

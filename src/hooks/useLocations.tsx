@@ -39,8 +39,8 @@ const DEFAULT_LOCATIONS: LocationRow[] = [
     lgu: 'Calauan',
     region: 'Laguna',
     address: 'Sitio Lamot 1, Brgy. Lamot 1, Calauan, Laguna',
-    center_lat: 14.1475,
-    center_lng: 121.3454,
+    center_lat: 14.147385047365747,
+    center_lng: 121.32372794241525,
     status: 'active',
     entry_fee: 50,
     default_guide_fee: 600,
@@ -69,8 +69,8 @@ const DEFAULT_LOCATIONS: LocationRow[] = [
     lgu: 'Calauan',
     region: 'Laguna',
     address: 'Brgy. Sto. Tomas, Calauan, Laguna',
-    center_lat: 14.1350,
-    center_lng: 121.3500,
+    center_lat: 14.166631,
+    center_lng: 121.339746,
     status: 'active',
     entry_fee: 50,
     default_guide_fee: 600,
@@ -124,7 +124,7 @@ export function LocationsProvider({ children }: { children: ReactNode }) {
 
   const setActiveLocationId = (id: string | null) => {
     // Trailhead staff can never widen their scope beyond their assigned station(s).
-    if (isMappedLocationRole && (id === null || (myLocationIds.length > 0 && !myLocationIds.includes(id)))) return;
+    if (isMappedLocationRole && (id === null || !myLocationIds.includes(id))) return;
     _setActiveLocationId(id);
     if (id) localStorage.setItem('activeLocationId', id);
     else localStorage.setItem('activeLocationId', 'all');
@@ -195,7 +195,7 @@ export function LocationsProvider({ children }: { children: ReactNode }) {
                 if (match?.locationId) matchedLocKey = match.locationId;
               }
             }
-          } catch {}
+          } catch { /* Keep resolving the location if optional local cache is invalid. */ }
 
           if (!matchedLocKey) {
             if (userEmail.includes('lamot2') || userEmail.includes('lamot 2')) matchedLocKey = 'lamot-2';
@@ -253,7 +253,7 @@ export function LocationsProvider({ children }: { children: ReactNode }) {
         activeLocation,
         setActiveLocationId,
         isSuperAdmin,
-        loading: loading && locations.length === 0,
+        loading: loading || (Boolean(user) && resolvedIdentity.current !== identity),
         refresh,
       }}
     >

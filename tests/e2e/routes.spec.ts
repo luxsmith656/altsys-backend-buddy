@@ -4,6 +4,7 @@ import { attachRuntimeMonitor, expectRenderedPage } from '../support/runtime-mon
 
 const PUBLIC_EXPECTATIONS: Record<string, string | RegExp> = {
   '/': 'Mt. Kalisungan',
+  '/about': 'Geography & Access',
   '/login': 'Welcome Back',
   '/register': 'Create Account',
   '/map': 'Check in at your jump-off to start your hike.',

@@ -2,7 +2,58 @@ import type { LatLngTuple } from 'leaflet';
 
 // Mount Kalisungan center coordinates (Calauan, Laguna, Philippines)
 export const MT_KALISUNGAN_CENTER: LatLngTuple = [14.1475, 121.3454];
+// Summit marker is taken from the endpoint of Lamot 2's active published GPS route.
+export const MT_KALISUNGAN_PEAK: LatLngTuple = [14.14669032170505, 121.34512701965895];
+export const TRAILHEAD_COORDINATES: Record<string, LatLngTuple> = {
+  'lamot-1': [14.147385047365747, 121.32372794241525],
+  'lamot-2': [14.1440, 121.3430],
+  'sto-tomas': [14.166631, 121.339746],
+};
 export const DEFAULT_ZOOM = 15;
+
+// Representative samples of the active Lamot 2 recording, used to keep the
+// other jump-off previews visually tied to the same summit trail shape.
+const LAMOT_2_REFERENCE_PATH: LatLngTuple[] = [
+  [14.1486888, 121.3291523], [14.1470504, 121.3298789], [14.1472665, 121.3315418],
+  [14.1476030, 121.3325735], [14.1475829, 121.3331803], [14.1480986, 121.3338370],
+  [14.1483774, 121.3344008], [14.1482683, 121.3349531], [14.1481253, 121.3355555],
+  [14.1479074, 121.3360883], [14.1477896, 121.3365060], [14.1474764, 121.3369808],
+  [14.1475823, 121.3376279], [14.1477097, 121.3383561], [14.1478413, 121.3386814],
+  [14.1480733, 121.3390284], [14.1481372, 121.3394095], [14.1479998, 121.3399396],
+  [14.1480275, 121.3401405], [14.1482238, 121.3404269], [14.1483616, 121.3409679],
+  [14.1477756, 121.3413722], [14.1482473, 121.3415574], [14.1494729, 121.3420641],
+  [14.1493538, 121.3427719], [14.1489019, 121.3434760], [14.1474890, 121.3441621],
+  MT_KALISUNGAN_PEAK,
+];
+
+function createReferenceShapedPath(start: LatLngTuple, variant: number, laneOffsetMeters: number): LatLngTuple[] {
+  const referenceStart = LAMOT_2_REFERENCE_PATH[0];
+  const lastIndex = LAMOT_2_REFERENCE_PATH.length - 1;
+  return LAMOT_2_REFERENCE_PATH.map(([lat, lng], index) => {
+    const progress = index / lastIndex;
+    const taper = 1 - progress;
+    const previous = LAMOT_2_REFERENCE_PATH[Math.max(0, index - 1)];
+    const next = LAMOT_2_REFERENCE_PATH[Math.min(lastIndex, index + 1)];
+    const deltaEast = (next[1] - previous[1]) * 111_320 * Math.cos((lat * Math.PI) / 180);
+    const deltaNorth = (next[0] - previous[0]) * 111_320;
+    const tangentLength = Math.hypot(deltaEast, deltaNorth) || 1;
+    // Keep entry routes visibly separate from the Lamot 2 reference until the
+    // final summit approach, while ramping the lane in gently from each start.
+    const laneTaper = Math.min(1, taper * 1.25) * Math.min(1, progress * 10);
+    const laneMeters = laneOffsetMeters * laneTaper;
+    const turnOffset = Math.sin(index * 1.7 + variant) * 0.000045 * taper;
+    return [
+      lat + (start[0] - referenceStart[0]) * taper - (deltaEast / tangentLength) * laneMeters / 111_320 + turnOffset,
+      lng + (start[1] - referenceStart[1]) * taper
+        + (deltaNorth / tangentLength) * laneMeters / (111_320 * Math.cos((lat * Math.PI) / 180))
+        + Math.cos(index * 1.3 + variant) * 0.000045 * taper,
+    ] as LatLngTuple;
+  }).map((point, index, path) => {
+    if (index === 0) return start;
+    if (index === path.length - 1) return MT_KALISUNGAN_PEAK;
+    return point;
+  });
+}
 
 // Trail route data (Official published path on Mt. Kalisungan)
 export const TRAILS = [
@@ -31,16 +82,7 @@ export const TRAILS = [
     color: '#2563eb',
     elevation: '629m',
     distance: '2.8 km',
-    path: [
-      [14.1475, 121.3390],
-      [14.1472, 121.3402],
-      [14.1469, 121.3414],
-      [14.1471, 121.3425],
-      [14.1476, 121.3436],
-      [14.1482, 121.3445],
-      [14.1489, 121.3453],
-      [14.1495, 121.3462],
-    ] as LatLngTuple[],
+    path: createReferenceShapedPath(TRAILHEAD_COORDINATES['lamot-1'], 0.6, 180),
   },
   {
     name: 'Sto. Tomas Southern Traverse Trail',
@@ -48,17 +90,7 @@ export const TRAILS = [
     color: '#ea580c',
     elevation: '629m',
     distance: '3.8 km',
-    path: [
-      [14.1350, 121.3500],
-      [14.1368, 121.3492],
-      [14.1388, 121.3483],
-      [14.1408, 121.3475],
-      [14.1428, 121.3468],
-      [14.1448, 121.3465],
-      [14.1468, 121.3463],
-      [14.1485, 121.3462],
-      [14.1495, 121.3462],
-    ] as LatLngTuple[],
+    path: createReferenceShapedPath(TRAILHEAD_COORDINATES['sto-tomas'], 2.2, -180),
   },
 ];
 
@@ -74,12 +106,102 @@ export function getDefaultTrailForLocation(locationKey?: string | null) {
   return TRAILS[0];
 }
 
+/**
+ * Keep legacy published rows from drawing a disconnected jump-off or a second
+ * summit while the coordinate migration is being applied. Once a database
+ * route starts and ends near the registered anchors, its own recorded shape is
+ * preserved; only stale rows use the matching local route geometry.
+ */
+export function normalizeOfficialRoutePath(path: LatLngTuple[], locationKey?: string | null, _referencePath?: LatLngTuple[]): LatLngTuple[] {
+  const clean = cleanTrailPath(path, 1);
+  if (clean.length < 2 || !locationKey) return clean;
+
+  const key = locationKey.toLowerCase().replace(/\s+/g, '-');
+  const slug = key.includes('lamot-1') || key.includes('lamot1') ? 'lamot-1'
+    : key.includes('lamot-2') || key.includes('lamot2') ? 'lamot-2'
+      : key.includes('tomas') ? 'sto-tomas' : null;
+  if (!slug) return clean;
+
+  // Lamot 2 is the approved reference route. Never rewrite its stored path.
+  if (slug === 'lamot-2') return clean;
+
+  const expectedStart = TRAILHEAD_COORDINATES[slug];
+  const legacyStart = haversineDistance(clean[0][0], clean[0][1], expectedStart[0], expectedStart[1]) > 0.15;
+  const legacyPeak = haversineDistance(clean[clean.length - 1][0], clean[clean.length - 1][1], MT_KALISUNGAN_PEAK[0], MT_KALISUNGAN_PEAK[1]) > 0.15;
+  if (legacyStart || legacyPeak) return cleanTrailPath(getDefaultTrailForLocation(slug).path);
+
+  if (slug !== 'lamot-1' || clean.length < 50) return clean;
+  const reference = _referencePath && _referencePath.length >= 2 ? _referencePath : LAMOT_2_REFERENCE_PATH;
+  if (!isCopiedReferenceRoute(clean, reference)) return clean;
+
+  // The current Lamot 1 published row duplicates Lamot 2's GPS trace. Keep
+  // its original high-resolution bends while moving that copy to a separate lane.
+  return keepEntryRouteInSeparateLane(clean, expectedStart);
+}
+
+function isCopiedReferenceRoute(path: LatLngTuple[], referencePath: LatLngTuple[]): boolean {
+  if (path.length < 50 || referencePath.length < 2) return false;
+  const meanLatitude = path.reduce((sum, [lat]) => sum + lat, 0) / path.length;
+  const metersPerLongitude = 111_320 * Math.cos((meanLatitude * Math.PI) / 180);
+  const reference = referencePath.map(([lat, lng]) => [lng * metersPerLongitude, lat * 111_320] as [number, number]);
+  const sampleCount = Math.min(50, path.length);
+  let distanceTotal = 0;
+
+  for (let sample = 0; sample < sampleCount; sample++) {
+    const point = path[Math.round(sample * (path.length - 1) / (sampleCount - 1))];
+    const east = point[1] * metersPerLongitude;
+    const north = point[0] * 111_320;
+    let nearestDistance = Infinity;
+    for (let index = 0; index < reference.length - 1; index++) {
+      const [startEast, startNorth] = reference[index];
+      const [endEast, endNorth] = reference[index + 1];
+      const deltaEast = endEast - startEast;
+      const deltaNorth = endNorth - startNorth;
+      const ratio = Math.max(0, Math.min(1,
+        ((east - startEast) * deltaEast + (north - startNorth) * deltaNorth)
+        / (deltaEast * deltaEast + deltaNorth * deltaNorth || 1),
+      ));
+      nearestDistance = Math.min(nearestDistance, Math.hypot(
+        east - startEast - ratio * deltaEast,
+        north - startNorth - ratio * deltaNorth,
+      ));
+    }
+    distanceTotal += nearestDistance;
+  }
+
+  return distanceTotal / sampleCount < 180;
+}
+
+/** Move copied entry routes into a stable separate corridor without smoothing their recorded bends. */
+function keepEntryRouteInSeparateLane(path: LatLngTuple[], start: LatLngTuple): LatLngTuple[] {
+  if (path.length < 3) return path;
+
+  // Lamot 1 currently shares Lamot 2's recorded geometry. A steady southwest
+  // lane separates it from the reference route without following its turns or
+  // replacing the original high-resolution GPS shape.
+  const lane = { east: -141, north: -320 };
+  const meanLatitude = path.reduce((sum, [lat]) => sum + lat, 0) / path.length;
+  const metersPerLongitude = 111_320 * Math.cos((meanLatitude * Math.PI) / 180);
+  const result = path.map((point, index) => {
+    const progress = index / (path.length - 1);
+    const ramp = Math.min(1, progress / 0.08, (1 - progress) / 0.08);
+    const offset = ramp * ramp * (3 - 2 * ramp);
+    return [
+      point[0] + (lane.north * offset) / 111_320,
+      point[1] + (lane.east * offset) / metersPerLongitude,
+    ] as LatLngTuple;
+  });
+  result[0] = start;
+  result[result.length - 1] = MT_KALISUNGAN_PEAK;
+  return cleanTrailPath(result, 1);
+}
+
 // Points of interest
 export const POI = [
   { name: 'Trailhead / Registration (Lamot 2)', pos: [14.1440, 121.3430] as LatLngTuple, type: 'checkpoint' },
-  { name: 'Trailhead / Registration (Lamot 1)', pos: [14.1475, 121.3390] as LatLngTuple, type: 'checkpoint' },
-  { name: 'Trailhead / Registration (Sto. Tomas)', pos: [14.1350, 121.3500] as LatLngTuple, type: 'checkpoint' },
-  { name: 'Summit (629m)', pos: [14.1495, 121.3462] as LatLngTuple, type: 'summit' },
+  { name: 'Trailhead / Registration (Lamot 1)', pos: [14.147385047365747, 121.32372794241525] as LatLngTuple, type: 'checkpoint' },
+  { name: 'Trailhead / Registration (Sto. Tomas)', pos: [14.166631, 121.339746] as LatLngTuple, type: 'checkpoint' },
+  { name: 'Summit (629m)', pos: MT_KALISUNGAN_PEAK, type: 'summit' },
   { name: 'Campsite A', pos: [14.1465, 121.3445] as LatLngTuple, type: 'camp' },
   { name: 'Rest Station & Water Refill', pos: [14.1430, 121.3458] as LatLngTuple, type: 'water' },
   { name: 'Viewpoint Ridge', pos: [14.1478, 121.3422] as LatLngTuple, type: 'viewpoint' },
@@ -119,6 +241,113 @@ export function haversineDistance(lat1: number, lon1: number, lat2: number, lon2
     Math.sin(dLat / 2) * Math.sin(dLat / 2) +
     Math.cos((lat1 * Math.PI) / 180) * Math.cos((lat2 * Math.PI) / 180) * Math.sin(dLon / 2) * Math.sin(dLon / 2);
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+/** Remove short GPS closure/crossing loops and simplify meter-scale jitter for map display. */
+export function cleanTrailPath(path: LatLngTuple[], toleranceMeters = 4): LatLngTuple[] {
+  const valid = path.filter(([lat, lng]) => Number.isFinite(lat) && Number.isFinite(lng));
+  if (valid.length < 3) return valid;
+
+  const deduplicated: LatLngTuple[] = [];
+  for (const point of valid) {
+    const previous = deduplicated[deduplicated.length - 1];
+    if (!previous || haversineDistance(previous[0], previous[1], point[0], point[1]) >= 0.002) {
+      deduplicated.push(point);
+    }
+  }
+
+  const meanLatitude = deduplicated.reduce((sum, [lat]) => sum + lat, 0) / deduplicated.length;
+  const toMeters = ([lat, lng]: LatLngTuple): [number, number] => [
+    lng * 111_320 * Math.cos((meanLatitude * Math.PI) / 180),
+    lat * 111_320,
+  ];
+  const fromMeters = ([east, north]: [number, number]): LatLngTuple => [
+    north / 111_320,
+    east / (111_320 * Math.cos((meanLatitude * Math.PI) / 180)),
+  ];
+  const distanceMeters = (a: LatLngTuple, b: LatLngTuple) => Math.hypot(toMeters(a)[0] - toMeters(b)[0], toMeters(a)[1] - toMeters(b)[1]);
+  const cross = (ax: number, ay: number, bx: number, by: number) => ax * by - ay * bx;
+  const withoutGpsLoops: LatLngTuple[] = [];
+  deduplicated.forEach((point, pointIndex) => {
+    let loopStart = -1;
+    let loopJoin: LatLngTuple | null = null;
+    if (pointIndex < deduplicated.length - 1 && withoutGpsLoops.length >= 3) {
+      const last = toMeters(withoutGpsLoops[withoutGpsLoops.length - 1]);
+      const current = toMeters(point);
+      const rx = current[0] - last[0];
+      const ry = current[1] - last[1];
+      for (let index = Math.max(0, withoutGpsLoops.length - 180); index <= withoutGpsLoops.length - 3; index++) {
+        const start = toMeters(withoutGpsLoops[index]);
+        const end = toMeters(withoutGpsLoops[index + 1]);
+        const sx = end[0] - start[0];
+        const sy = end[1] - start[1];
+        const denominator = cross(rx, ry, sx, sy);
+        if (Math.abs(denominator) < 0.001) continue;
+        const qx = start[0] - last[0];
+        const qy = start[1] - last[1];
+        const t = cross(qx, qy, sx, sy) / denominator;
+        const u = cross(qx, qy, rx, ry) / denominator;
+        if (t <= 0.02 || t >= 0.98 || u <= 0.02 || u >= 0.98) continue;
+        const intersection = fromMeters([last[0] + t * rx, last[1] + t * ry]);
+        const loopLength = withoutGpsLoops.slice(index + 1).reduce((sum, item, sliceIndex, segment) => {
+          const prior = sliceIndex === 0 ? intersection : segment[sliceIndex - 1];
+          return sum + distanceMeters(prior, item);
+        }, distanceMeters(withoutGpsLoops[withoutGpsLoops.length - 1], intersection));
+        if (loopLength <= 350) {
+          loopStart = index;
+          loopJoin = intersection;
+        }
+      }
+    }
+    if (loopStart >= 0 && loopJoin) {
+      withoutGpsLoops.length = loopStart + 1;
+      if (distanceMeters(withoutGpsLoops[withoutGpsLoops.length - 1], loopJoin) >= 0.002) withoutGpsLoops.push(loopJoin);
+      if (distanceMeters(loopJoin, point) >= 0.002) withoutGpsLoops.push(point);
+      return;
+    }
+
+    let nearLoopStart = -1;
+    for (let index = Math.max(0, withoutGpsLoops.length - 180); pointIndex < deduplicated.length - 1 && index <= withoutGpsLoops.length - 4; index++) {
+      if (distanceMeters(withoutGpsLoops[index], point) > 20) continue;
+      const loopLength = withoutGpsLoops.slice(index).reduce((sum, item, sliceIndex, segment) => {
+        if (sliceIndex === 0) return sum;
+        return sum + distanceMeters(segment[sliceIndex - 1], item);
+      }, 0);
+      if (loopLength <= 350) nearLoopStart = index;
+    }
+    if (nearLoopStart >= 0) withoutGpsLoops.length = nearLoopStart + 1;
+    else withoutGpsLoops.push(point);
+  });
+
+  if (withoutGpsLoops.length < 3) return withoutGpsLoops;
+
+  const projectDistance = (point: [number, number], start: [number, number], end: [number, number]) => {
+    const dx = end[0] - start[0];
+    const dy = end[1] - start[1];
+    const lengthSquared = dx * dx + dy * dy;
+    if (lengthSquared === 0) return Math.hypot(point[0] - start[0], point[1] - start[1]);
+    const ratio = Math.max(0, Math.min(1, ((point[0] - start[0]) * dx + (point[1] - start[1]) * dy) / lengthSquared));
+    return Math.hypot(point[0] - (start[0] + ratio * dx), point[1] - (start[1] + ratio * dy));
+  };
+  const projected = withoutGpsLoops.map(toMeters);
+  const keep = new Set<number>([0, projected.length - 1]);
+  const simplify = (startIndex: number, endIndex: number) => {
+    let maxDistance = toleranceMeters;
+    let farthestIndex = -1;
+    for (let index = startIndex + 1; index < endIndex; index++) {
+      const distance = projectDistance(projected[index], projected[startIndex], projected[endIndex]);
+      if (distance > maxDistance) {
+        maxDistance = distance;
+        farthestIndex = index;
+      }
+    }
+    if (farthestIndex < 0) return;
+    keep.add(farthestIndex);
+    simplify(startIndex, farthestIndex);
+    simplify(farthestIndex, endIndex);
+  };
+  simplify(0, projected.length - 1);
+  return withoutGpsLoops.filter((_, index) => keep.has(index));
 }
 
 export interface RouteStation {

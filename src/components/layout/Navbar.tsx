@@ -3,7 +3,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { useTheme } from '@/hooks/useTheme';
 import { Button } from '@/components/ui/button';
 import { Mountain, Map, CalendarCheck, LayoutDashboard, LogOut, Menu, X, Moon, Sun, Bell, User } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import logo from '@/assets/logo.png';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
@@ -13,6 +13,7 @@ import { isFirebaseConfigured } from '@/lib/firebase';
 import { subscribeUserNotifications, type FsNotification } from '@/lib/firestoreNotifications';
 import { supabase } from '@/integrations/supabase/client';
 import { getRoleHomePath } from '@/lib/authRoles';
+import ProfileAvatar from '@/components/common/ProfileAvatar';
 
 export default function Navbar() {
   const { user, role, signOut } = useAuth();
@@ -35,16 +36,6 @@ export default function Navbar() {
         { to: '/map', label: 'Map', icon: Map },
         { to: '/booking', label: 'Book Hike', icon: CalendarCheck },
       ];
-
-  const initials = useMemo(() => {
-    const fullName = (user?.user_metadata?.full_name as string | undefined)?.trim();
-    if (!fullName) return (user?.email?.[0] || 'U').toUpperCase();
-    return fullName
-      .split(/\s+/)
-      .slice(0, 2)
-      .map((p) => p[0]?.toUpperCase() || '')
-      .join('');
-  }, [user]);
 
   const [fsNotifs, setFsNotifs] = useState<FsNotification[]>([]);
   const userId = user?.id;
@@ -205,13 +196,13 @@ export default function Navbar() {
               </DropdownMenu>
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <button className="h-9 w-9 rounded-full bg-primary/20 text-primary font-bold text-sm">
-                    {initials}
+                  <button aria-label="Profile menu" className="h-9 w-9 rounded-full bg-primary/20 text-primary font-bold text-sm">
+                    <ProfileAvatar />
                   </button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end" sideOffset={8} className="w-44 z-[3100]">
                   <DropdownMenuItem onClick={() => navigate('/profile')}>
-                    <User className="h-4 w-4 mr-2" /> Profile
+                    <ProfileAvatar className="h-5 w-5 mr-2 text-[10px]" /> Profile
                   </DropdownMenuItem>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem onClick={handleLogout}>
@@ -274,7 +265,7 @@ export default function Navbar() {
               {user ? (
                 <>
                   <Button variant="ghost" size="sm" className="min-h-11 justify-start" onClick={() => { navigate('/profile'); setMobileOpen(false); }}>
-                    <User className="h-4 w-4 mr-2" /> Profile
+                    <ProfileAvatar className="h-5 w-5 mr-2 text-[10px]" /> Profile
                   </Button>
                   <Button variant="ghost" size="sm" className="min-h-11 justify-start" onClick={() => { navigate('/notifications'); setMobileOpen(false); }}>
                     <Bell className="h-4 w-4 mr-2" /> Notifications {notifCount > 0 ? `(${notifCount})` : ''}

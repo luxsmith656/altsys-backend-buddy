@@ -7,6 +7,7 @@ export interface AdminAnnouncement {
   id: string;
   title: string;
   body: string;
+  source?: string;
   type: AnnouncementType;
   target?: AnnouncementTarget;
   created_at: string;
@@ -72,6 +73,7 @@ export async function fetchAnnouncementsFromDb(): Promise<AdminAnnouncement[]> {
         id: String(d.id),
         title: String(d.title || ''),
         body: String(d.body || ''),
+        source: d.source ? String(d.source) : undefined,
         type: (d.type as AnnouncementType) || 'info',
         target: (d.target as AnnouncementTarget) || 'all',
         isImportant: Boolean(d.is_important),
@@ -107,6 +109,7 @@ export function addAnnouncement(item: AdminAnnouncement): AdminAnnouncement[] {
         id: item.id,
         title: item.title,
         body: item.body,
+        source: item.source || null,
         type: item.type,
         target: item.target || 'all',
         is_important: item.isImportant,

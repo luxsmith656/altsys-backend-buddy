@@ -80,6 +80,7 @@ export default function CentralDashboard() {
   // Booking ledger search & status filter
   const [ledgerSearch, setLedgerSearch] = useState('');
   const [ledgerStatusFilter, setLedgerStatusFilter] = useState<'all' | 'confirmed' | 'active' | 'completed' | 'cancelled'>('all');
+  const [visibleBookingCount, setVisibleBookingCount] = useState(100);
 
   const loadStats = useCallback(async () => {
     setLoading(true);
@@ -187,10 +188,10 @@ export default function CentralDashboard() {
     return loc ? loc.name : 'Selected Trailhead';
   }, [jumpOffStations, activeLocationId]);
 
-  const getLocationName = (locId: string) => {
+  const getLocationName = useCallback((locId: string) => {
     const loc = jumpOffStations.find((l) => l.id === locId);
     return loc ? loc.name : 'Station';
-  };
+  }, [jumpOffStations]);
 
   // Filtered bookings for the audit table
   const filteredBookings = useMemo(() => {
@@ -210,8 +211,17 @@ export default function CentralDashboard() {
     });
   }, [recentBookings, activeLocationId, ledgerStatusFilter, ledgerSearch]);
 
+  useEffect(() => {
+    setVisibleBookingCount(100);
+  }, [activeLocationId, ledgerSearch, ledgerStatusFilter]);
+
+  const visibleBookings = useMemo(
+    () => filteredBookings.slice(0, visibleBookingCount),
+    [filteredBookings, visibleBookingCount],
+  );
+
   return (
-    <div className="min-h-screen px-4 pb-16 pt-20 lg:px-8 bg-gradient-to-b from-background via-background/95 to-secondary/10">
+    <div className="central-dashboard min-h-screen px-4 pb-16 pt-20 lg:px-8 bg-gradient-to-b from-background via-background/95 to-secondary/10">
       <div className="max-w-7xl mx-auto space-y-6">
         {/* Executive Command Header */}
         <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} className="space-y-4">
@@ -297,7 +307,7 @@ export default function CentralDashboard() {
               transition={{ delay: idx * 0.05 }}
             >
               <Card className="glass-card relative overflow-hidden border-border/30 hover:border-primary/40 transition-all">
-                <div className={`absolute top-0 right-0 w-32 h-32 bg-gradient-to-bl ${kpi.bgGlow} pointer-events-none rounded-full blur-2xl -mr-10 -mt-10`} />
+                <div className={`absolute top-0 right-0 h-full w-20 bg-gradient-to-l ${kpi.bgGlow} pointer-events-none`} />
                 <CardContent className="p-4 flex items-center gap-3.5 relative">
                   <div className={`h-11 w-11 rounded-2xl bg-secondary/40 border border-border/30 grid place-items-center shrink-0 ${kpi.color}`}>
                     <kpi.icon className="h-5 w-5" />
@@ -323,65 +333,45 @@ export default function CentralDashboard() {
         >
           {/* Sidebar Nav */}
           <div className="w-full md:w-64 shrink-0 md:sticky md:top-24 h-max">
-            <TabsList className="glass-card flex flex-row md:flex-col p-2 gap-1.5 h-auto w-full items-stretch justify-start overflow-x-auto md:overflow-visible border border-border/30">
+            <TabsList className="glass-card flex flex-row md:flex-col p-2 gap-1 h-auto w-full items-stretch justify-start overflow-x-auto md:overflow-visible border border-border/30">
               <TabsTrigger
                 value="overview"
-                className="justify-start gap-2.5 px-3 py-2.5 data-[state=active]:bg-primary/20 data-[state=active]:text-primary whitespace-nowrap rounded-xl text-xs font-semibold text-left transition-all"
+                className="justify-start gap-2.5 px-3 py-2.5 data-[state=active]:bg-primary/20 data-[state=active]:text-primary whitespace-nowrap text-xs font-semibold text-left transition-all"
               >
                 <Building2 className="h-4 w-4 shrink-0" />
-                <div className="text-left hidden sm:block">
-                  <div className="font-bold">Station Overview</div>
-                  <div className="text-[10px] text-muted-foreground font-normal">Ledger &amp; trailheads</div>
-                </div>
-                <span className="sm:hidden">Overview</span>
+                <span>Overview</span>
               </TabsTrigger>
 
               <TabsTrigger
                 value="analytics"
-                className="justify-start gap-2.5 px-3 py-2.5 data-[state=active]:bg-primary/20 data-[state=active]:text-primary whitespace-nowrap rounded-xl text-xs font-semibold text-left transition-all"
+                className="justify-start gap-2.5 px-3 py-2.5 data-[state=active]:bg-primary/20 data-[state=active]:text-primary whitespace-nowrap text-xs font-semibold text-left transition-all"
               >
                 <BarChart3 className="h-4 w-4 shrink-0" />
-                <div className="text-left hidden sm:block">
-                  <div className="font-bold">Analytics &amp; Reporting</div>
-                  <div className="text-[10px] text-muted-foreground font-normal">KPIs, metrics &amp; export</div>
-                </div>
-                <span className="sm:hidden">Analytics</span>
+                <span>Analytics</span>
               </TabsTrigger>
 
               <TabsTrigger
                 value="accounts"
-                className="justify-start gap-2.5 px-3 py-2.5 data-[state=active]:bg-primary/20 data-[state=active]:text-primary whitespace-nowrap rounded-xl text-xs font-semibold text-left transition-all"
+                className="justify-start gap-2.5 px-3 py-2.5 data-[state=active]:bg-primary/20 data-[state=active]:text-primary whitespace-nowrap text-xs font-semibold text-left transition-all"
               >
                 <Users className="h-4 w-4 shrink-0" />
-                <div className="text-left hidden sm:block">
-                  <div className="font-bold">Account Management</div>
-                  <div className="text-[10px] text-muted-foreground font-normal">Admins, mountain guides &amp; hikers</div>
-                </div>
-                <span className="sm:hidden">Accounts</span>
+                <span>Accounts</span>
               </TabsTrigger>
 
               <TabsTrigger
                 value="pricing"
-                className="justify-start gap-2.5 px-3 py-2.5 data-[state=active]:bg-primary/20 data-[state=active]:text-primary whitespace-nowrap rounded-xl text-xs font-semibold text-left transition-all"
+                className="justify-start gap-2.5 px-3 py-2.5 data-[state=active]:bg-primary/20 data-[state=active]:text-primary whitespace-nowrap text-xs font-semibold text-left transition-all"
               >
                 <DollarSign className="h-4 w-4 shrink-0" />
-                <div className="text-left hidden sm:block">
-                  <div className="font-bold">Fare &amp; Capacity</div>
-                  <div className="text-[10px] text-muted-foreground font-normal">Fees &amp; daily quotas</div>
-                </div>
-                <span className="sm:hidden">Fare &amp; Capacity</span>
+                <span>Fare &amp; Capacity</span>
               </TabsTrigger>
 
               <TabsTrigger
                 value="announcements"
-                className="justify-start gap-2.5 px-3 py-2.5 data-[state=active]:bg-primary/20 data-[state=active]:text-primary whitespace-nowrap rounded-xl text-xs font-semibold text-left transition-all"
+                className="justify-start gap-2.5 px-3 py-2.5 data-[state=active]:bg-primary/20 data-[state=active]:text-primary whitespace-nowrap text-xs font-semibold text-left transition-all"
               >
                 <Megaphone className="h-4 w-4 shrink-0" />
-                <div className="text-left hidden sm:block">
-                  <div className="font-bold">Announcements</div>
-                  <div className="text-[10px] text-muted-foreground font-normal">Broadcast advisories</div>
-                </div>
-                <span className="sm:hidden">Broadcasts</span>
+                <span>Announcements</span>
               </TabsTrigger>
             </TabsList>
           </div>
@@ -399,7 +389,7 @@ export default function CentralDashboard() {
                   <span className="text-xs text-muted-foreground">3 Official Active Stations</span>
                 </div>
 
-                <div className="grid md:grid-cols-3 gap-4">
+                <div className={activeLocationId ? 'grid grid-cols-1 gap-4' : 'grid md:grid-cols-3 gap-4'}>
                   {stats
                     .filter((s) => !activeLocationId || s.id === activeLocationId)
                     .map((s) => {
@@ -407,7 +397,7 @@ export default function CentralDashboard() {
                       return (
                         <Card
                           key={s.id}
-                          className={`glass-card transition-all flex flex-col justify-between ${
+                          className={`glass-card transition-all flex flex-col justify-between ${activeLocationId ? 'md:col-span-full' : ''} ${
                             isSelected ? 'ring-2 ring-primary border-primary/50' : 'hover:border-border/60'
                           }`}
                         >
@@ -433,7 +423,7 @@ export default function CentralDashboard() {
                             </div>
                           </CardHeader>
 
-                          <CardContent className="py-3 text-xs space-y-2">
+                          <CardContent className={activeLocationId ? 'grid grid-cols-2 gap-x-8 gap-y-1 py-3 text-xs md:grid-cols-4' : 'py-3 text-xs space-y-2'}>
                             <Row label="Total Bookings (All Time)" value={s.bookingsTotal} />
                             <Row label="Current Month Ascents" value={s.bookingsMonth} />
                             <Row label="Scheduled Today" value={s.bookingsToday} />
@@ -526,14 +516,14 @@ export default function CentralDashboard() {
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-border/10">
-                        {filteredBookings.map((b) => {
+                        {visibleBookings.map((b) => {
                           const meta = parseMeta(b.notes);
                           const fee = getRecordedRevenue(meta);
                           const isCompleted = b.status === 'completed';
                           const isConfirmed = b.status === 'confirmed';
 
                           return (
-                            <tr key={b.id} className="hover:bg-muted/30 transition-colors">
+                            <tr key={b.id} className="hover:bg-muted/30">
                               <td className="px-4 py-3 font-semibold flex items-center gap-1.5">
                                 <MapPin className="h-3 w-3 text-primary shrink-0" />
                                 <span className="truncate max-w-[130px]">{getLocationName(b.location_id)}</span>
@@ -586,6 +576,14 @@ export default function CentralDashboard() {
                     </table>
                   </div>
                 </CardContent>
+                {visibleBookings.length < filteredBookings.length && (
+                  <div className="flex items-center justify-between gap-3 border-t border-border/20 px-4 py-3">
+                    <span className="text-xs text-muted-foreground">Showing {visibleBookings.length} of {filteredBookings.length}</span>
+                    <Button variant="outline" size="sm" onClick={() => setVisibleBookingCount((count) => count + 100)}>
+                      Show 100 more
+                    </Button>
+                  </div>
+                )}
               </Card>
             </TabsContent>
 

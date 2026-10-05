@@ -25,6 +25,17 @@ for (const account of ROLE_CASES) {
     await expect(page).toHaveURL(new RegExp(`${account.path.replace('/', '\\/')}(?:\\?.*)?$`), { timeout: 15_000 });
     await expectRenderedPage(page, account.pageKey, /Dashboard|Hike|Checkpoint|Duty|Central|Emergency/i);
     if (account.role === 'guide') await expect(page.getByRole('tab', { name: /Earnings/i })).toBeVisible();
+    if (account.role === 'super_admin') {
+      await expect(page.getByRole('heading', { name: 'Central Operations Console' })).toBeVisible();
+      await expect(page.getByRole('tab', { name: 'Overview', exact: true })).toBeVisible();
+      await expect(page.getByRole('tab', { name: 'Analytics', exact: true })).toBeVisible();
+    } else if (['admin', 'sto_tomas_admin'].includes(account.role)) {
+      await expect(page.getByRole('tab', { name: 'Overview', exact: true })).toBeVisible();
+      await expect(page.getByRole('tab', { name: /^Operations/ })).toBeVisible();
+      await expect(page.getByRole('heading', { name: 'Visitor & Hike Analytics' })).toBeVisible();
+      await expect(page.getByText('Loading hike analytics...', { exact: true })).toHaveCount(0, { timeout: 15000 });
+      await expect(page.getByText(/Could not load analytics\./)).toHaveCount(0);
+    }
     await monitor.waitForRequests();
 
     await page.reload({ waitUntil: 'domcontentloaded' });

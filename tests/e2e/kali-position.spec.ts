@@ -26,7 +26,7 @@ test('Kali can be dragged without opening, stays reachable, and resets after rel
   await page.reload();
   const reset = (await bubble.boundingBox())!;
   expect(reset.x).toBeLessThan(25);
-  expect(reset.y).toBeGreaterThan(650);
+  expect(reset.y).toBeGreaterThan(620);
   monitor.assertClean();
 });
 

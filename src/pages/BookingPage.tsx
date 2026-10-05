@@ -341,7 +341,7 @@ export default function BookingPage() {
       });
   }, [allLocations]);
 
-  const [dbGuides, setDbGuides] = useState<Array<{ id: string; full_name: string; location_id: string; per_trip_fee: number }>>([]);
+  const [dbGuides, setDbGuides] = useState<Array<{ id: string; full_name: string; location_id: string; per_trip_fee: number; photo_url?: string | null }>>([]);
   const [preferredGuideId, setPreferredGuideId] = useState<string>('');
   const referralGuideId = searchParams.get('guide') || searchParams.get('referral') || String(user?.user_metadata?.referral_guide_id || '');
   const appliedReferralId = useRef<string | null>(null);
@@ -453,7 +453,7 @@ export default function BookingPage() {
     const fetchGuides = async () => {
       const { data: gs } = await supabase
         .from('guides' as any)
-        .select('id,full_name,location_id,per_trip_fee,is_active')
+        .select('id,full_name,location_id,per_trip_fee,is_active,photo_url')
         .eq('is_active', true);
       const list = ((gs as any[]) ?? []) as Array<{ id: string; full_name: string; location_id: string; per_trip_fee: number }>;
       setDbGuides(list);
@@ -466,9 +466,13 @@ export default function BookingPage() {
   /* â”€â”€ Auto-pick first active location if none chosen â”€â”€ */
   useEffect(() => {
     const pool = jumpOffLocations.length > 0 ? jumpOffLocations : allLocations;
-    if (!startLocationId && pool.length > 0) {
-      const preferredEntry = pool.find((location) => /lamot[- _]?2/i.test(`${location.slug} ${location.name}`));
-      setStartLocationId((preferredEntry ?? pool[0]).id);
+    const livePool = pool.some((location) => !location.id.startsWith('loc-'))
+      ? pool.filter((location) => !location.id.startsWith('loc-'))
+      : pool;
+    if ((!startLocationId || startLocationId.startsWith('loc-')) && livePool.length > 0) {
+      const preferredEntry = livePool.find((location) => startLocationId && location.slug === startLocationId.replace(/^loc-/, ''))
+        ?? livePool.find((location) => /lamot[- _]?2/i.test(`${location.slug} ${location.name}`));
+      setStartLocationId((preferredEntry ?? livePool[0]).id);
     }
   }, [allLocations, jumpOffLocations, startLocationId]);
 
@@ -480,7 +484,7 @@ export default function BookingPage() {
   /* Load only the active entry point's published route for booking guidance. */
   useEffect(() => {
     let active = true;
-    if (!startLocationId) {
+    if (!startLocationId || startLocationId.startsWith('loc-')) {
       setPublishedRoute(null);
       return () => { active = false; };
     }
@@ -1795,7 +1799,7 @@ export default function BookingPage() {
                               </div>
                             ))}
                             <p className="text-[11px] text-amber-700/80 dark:text-amber-300/80 pt-1 border-t border-amber-400/20 mt-2">
-                              âš ï¸ If a parent or guardian is NOT present onsite, the minor MUST carry a notarized parental consent letter and a photocopy of the parent's valid ID. Entry will be denied without these documents.
+                              If a parent or guardian is NOT present onsite, the minor MUST carry a notarized parental consent letter and a photocopy of the parent's valid ID. Entry will be denied without these documents.
                             </p>
                             <div className="flex items-start space-x-3 p-3 rounded-lg border border-amber-400/30 bg-amber-500/10">
                               <Checkbox
@@ -1888,8 +1892,8 @@ export default function BookingPage() {
                           <div className="flex items-center justify-between p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/30">
                             <div className="flex items-center gap-3">
                               <div className="h-9 w-9 rounded-full bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 flex items-center justify-center font-bold text-sm">
-                                {guidePhotoForName(preferredGuide) ? (
-                                  <img src={guidePhotoForName(preferredGuide) ?? undefined} alt="" className="h-9 w-9 rounded-full object-cover" />
+                                {guidePhotoForName(preferredGuide, dbGuides.find((guide) => guide.id === preferredGuideId)?.photo_url) ? (
+                                  <img src={guidePhotoForName(preferredGuide, dbGuides.find((guide) => guide.id === preferredGuideId)?.photo_url) ?? undefined} alt="" decoding="async" className="h-9 w-9 rounded-full object-cover" />
                                 ) : (
                                   preferredGuide.charAt(0)
                                 )}
@@ -2357,6 +2361,9 @@ export default function BookingPage() {
         </div>
       </div>
 
+      <Button type="button" className="fixed left-3 bottom-24 z-40 h-12 rounded-full shadow-lg sm:bottom-6" onClick={() => window.dispatchEvent(new Event('open-global-ai-assistant'))} aria-label="Ask Kali about your booking">
+        Ask Kali
+      </Button>
       <KaliContextPanel role={role ?? 'guest'} insights={kaliInsights} />
 
       {/* Floating AI Chat â€” left side */}

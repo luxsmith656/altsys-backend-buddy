@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { MemoryRouter, Routes, Route, Link } from 'react-router-dom';
 import ScrollToTop from '@/components/common/ScrollToTop';
 
@@ -34,10 +34,12 @@ describe('ScrollToTop', () => {
       </MemoryRouter>,
     );
 
-    expect(window.scrollTo).toHaveBeenCalledWith(0, 0);
+    expect(window.scrollTo).toHaveBeenCalledWith({ top: 0, left: 0, behavior: 'instant' });
+    vi.mocked(window.scrollTo).mockClear();
 
-    getByText('Go to Second').click();
+    fireEvent.click(getByText('Go to Second'));
+    expect(await screen.findByText('Second Page')).toBeVisible();
 
-    expect(window.scrollTo).toHaveBeenCalledWith(0, 0);
+    expect(window.scrollTo).toHaveBeenCalledWith({ top: 0, left: 0, behavior: 'instant' });
   });
 });

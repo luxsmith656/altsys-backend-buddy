@@ -17,6 +17,15 @@ export function usePullToRefresh({
   const [isRefreshing, setIsRefreshing] = useState(false);
   const startY = useRef(0);
   const isPulling = useRef(false);
+  const pendingPull = useRef(0);
+  const frame = useRef<number | null>(null);
+  const refreshCallback = useRef(onRefresh);
+  refreshCallback.current = onRefresh;
+  const cancelFrame = () => {
+    if (frame.current !== null) cancelAnimationFrame(frame.current);
+    frame.current = null;
+  };
+  useEffect(() => () => cancelFrame(), []);
 
   const handleTouchStart = useCallback(
     (e: TouchEvent) => {
@@ -24,6 +33,7 @@ export function usePullToRefresh({
       if (window.scrollY <= 2) {
         startY.current = e.touches[0].clientY;
         isPulling.current = true;
+        pendingPull.current = 0;
       }
     },
     [disabled, isRefreshing]
@@ -38,8 +48,14 @@ export function usePullToRefresh({
       if (distance > 0 && window.scrollY <= 2) {
         // Apply resistance curve
         const pull = Math.min(maxPull, distance * 0.45);
-        setPullDistance(pull);
+        pendingPull.current = pull;
+        if (frame.current === null) frame.current = requestAnimationFrame(() => {
+          frame.current = null;
+          setPullDistance(pendingPull.current);
+        });
       } else {
+        cancelFrame();
+        pendingPull.current = 0;
         setPullDistance(0);
         isPulling.current = false;
       }
@@ -50,22 +66,21 @@ export function usePullToRefresh({
   const handleTouchEnd = useCallback(async () => {
     if (!isPulling.current || disabled) return;
     isPulling.current = false;
+    cancelFrame();
 
-    if (pullDistance >= pullThreshold && !isRefreshing) {
+    if (pendingPull.current >= pullThreshold && !isRefreshing) {
       setIsRefreshing(true);
       setPullDistance(50); // Keep indicator visible while refreshing
       try {
-        await onRefresh();
+        await refreshCallback.current();
       } finally {
-        setTimeout(() => {
-          setIsRefreshing(false);
-          setPullDistance(0);
-        }, 400);
+        setIsRefreshing(false);
+        setPullDistance(0);
       }
     } else {
       setPullDistance(0);
     }
-  }, [disabled, isRefreshing, onRefresh, pullDistance, pullThreshold]);
+  }, [disabled, isRefreshing, pullThreshold]);
 
   useEffect(() => {
     window.addEventListener('touchstart', handleTouchStart, { passive: true });

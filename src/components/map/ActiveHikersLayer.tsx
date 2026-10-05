@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useState, useMemo, useCallback } from 'react';
 import { Marker, Popup } from 'react-leaflet';
 import L from 'leaflet';
 import { createPortal } from 'react-dom';
@@ -70,6 +70,7 @@ interface SimulatedHiker {
   totalDistanceKm: number;
   direction: 1 | -1;
   hasWarnedAboutTimer?: boolean;
+  routeId?: string;
 }
 
 const INITIAL_SIMULATION: SimulatedHiker[] = [
@@ -181,11 +182,21 @@ function getProgressDescription(progress: number, stations: SimulationStation[])
 
 export type MapHikerFilterMode = 'group' | 'individual' | 'guides';
 
+export interface SimulationRouteConfig {
+  id: string;
+  name: string;
+  locationName: string;
+  path: [number, number][];
+  stations: RouteStation[];
+  distanceKm: number;
+}
+
 interface ActiveHikersLayerProps {
   showStations?: boolean;
   routePath?: [number, number][];
   routeStations?: RouteStation[];
   routeDistanceKm?: number;
+  simulationRoutes?: SimulationRouteConfig[];
   simulationControlsOpen?: boolean;
   onSimulationControlsOpenChange?: (open: boolean) => void;
   filterMode?: MapHikerFilterMode;
@@ -199,6 +210,7 @@ export default function ActiveHikersLayer({
   routePath,
   routeStations,
   routeDistanceKm = 6,
+  simulationRoutes,
   simulationControlsOpen,
   onSimulationControlsOpenChange,
   filterMode = 'group',
@@ -228,6 +240,34 @@ export default function ActiveHikersLayer({
     }
     return INITIAL_SIMULATION;
   });
+  const routes = useMemo<SimulationRouteConfig[]>(() => simulationRoutes?.length
+    ? simulationRoutes
+    : [{ id: 'default', name: 'Selected route', locationName: '', path: simulationPath,
+        stations: (routeStations ?? []).length >= 2 ? routeStations! : [], distanceKm: routeDistanceKm }],
+  [routeDistanceKm, routeStations, simulationPath, simulationRoutes]);
+  const routeForHiker = useCallback((hiker: SimulatedHiker) => routes.find((route) => route.id === hiker.routeId) ?? routes[0], [routes]);
+  const stationsForHiker = useCallback((hiker: SimulatedHiker) => {
+    const route = routeForHiker(hiker);
+    return route?.stations.length >= 2
+      ? route.stations.map((station) => ({ id: station.id, index: station.index, name: station.name,
+          pos: [station.lat, station.lng] as [number, number], description: station.description }))
+      : simulationStations;
+  }, [routeForHiker, simulationStations]);
+
+  useEffect(() => {
+    if (!routes.length) return;
+    setHikers((previous) => {
+      let changed = false;
+      const next = previous.map((hiker, index) => {
+        const validRoute = routes.some((route) => route.id === hiker.routeId);
+        const routeId = validRoute ? hiker.routeId : routes[index % routes.length].id;
+        if (routeId === hiker.routeId) return hiker;
+        changed = true;
+        return { ...hiker, routeId };
+      });
+      return changed ? next : previous;
+    });
+  }, [routes]);
 
   const [isSimPlaying, setIsSimPlaying] = useState(true);
   const [simSpeed, setSimSpeed] = useState<1 | 5 | 10 | 30>(5);
@@ -266,7 +306,7 @@ export default function ActiveHikersLayer({
         if (h.phase === 'ascent') {
           nextDirection = 1;
           nextProgress = h.progress + progressIncrement;
-          nextDistance = Number((nextDistance + progressIncrement * (routeDistanceKm / 9)).toFixed(3));
+          nextDistance = Number((nextDistance + progressIncrement * ((routeForHiker(h)?.distanceKm ?? routeDistanceKm) / 9)).toFixed(3));
           
           if (nextProgress >= 9.0) {
             nextProgress = 9.0;
@@ -303,7 +343,7 @@ export default function ActiveHikersLayer({
         } else if (h.phase === 'descent') {
           nextDirection = -1;
           nextProgress = h.progress - progressIncrement;
-          nextDistance = Number((nextDistance + progressIncrement * (routeDistanceKm / 9)).toFixed(3));
+          nextDistance = Number((nextDistance + progressIncrement * ((routeForHiker(h)?.distanceKm ?? routeDistanceKm) / 9)).toFixed(3));
 
           if (nextProgress <= 0.0) {
             nextProgress = 0.0;
@@ -329,7 +369,7 @@ export default function ActiveHikersLayer({
     }, 1000);
 
     return () => clearInterval(timer);
-  }, [isSimPlaying, routeDistanceKm, simSpeed]);
+  }, [isSimPlaying, routeDistanceKm, routeForHiker, routes, simSpeed]);
 
   // Initiate descent early
   const handleInitiateEarlyDescent = (hikerId: string) => {
@@ -359,7 +399,7 @@ export default function ActiveHikersLayer({
     setHikers((prev) => prev.map((h) => {
       if (h.id === hikerId) {
         toast.error(`🚨 EMERGENCY SOS! Guide ${h.guideName} of ${h.name} Pinged!`, {
-          description: `ALERT: Medical distress reported. Position: ${getProgressDescription(h.progress, simulationStations)}. Dispatching emergency responders immediately!`,
+          description: `ALERT: Medical distress reported. Position: ${getProgressDescription(h.progress, stationsForHiker(h))}. Dispatching emergency responders immediately!`,
           duration: 10000,
         });
         return {
@@ -534,10 +574,15 @@ export default function ActiveHikersLayer({
   return (
     <>
       {/* 1. Official Stations Layer */}
-      {showStations && simulationStations.map((st) => (
-        <Marker 
-          key={st.id} 
-          position={st.pos} 
+      {showStations && (simulationRoutes?.length
+        ? routes.flatMap((route) => route.stations.map((station) => ({
+            id: `${route.id}:${station.id}`, index: station.index, name: station.name,
+            pos: [station.lat, station.lng] as [number, number], description: `${route.locationName}: ${station.description}`,
+          })))
+        : simulationStations).map((st) => (
+        <Marker
+          key={st.id}
+          position={st.pos}
           icon={stationIcon(st.index, st.index === 7)}
           zIndexOffset={100}
         >
@@ -557,7 +602,9 @@ export default function ActiveHikersLayer({
 
       {/* 2. Simulated Moving Hikers Layer - Group Clustered View */}
       {filterMode === 'group' && displayedHikers.map((h) => {
-        const latLng = interpolatePosition(h.progress, simulationPath);
+        const hikerRoute = routeForHiker(h);
+        const hikerStations = stationsForHiker(h);
+        const latLng = interpolatePosition(h.progress, hikerRoute?.path ?? simulationPath);
         const etaText = calculateETA(h);
         
         return (
@@ -591,7 +638,7 @@ export default function ActiveHikersLayer({
                 <div className="grid grid-cols-1 gap-2">
                   <div className="flex items-center justify-between text-muted-foreground">
                     <span className="flex items-center gap-1"><Compass className="h-3.5 w-3.5" /> Position:</span>
-                    <span className="font-medium text-foreground text-right">{getProgressDescription(h.progress, simulationStations)}</span>
+                    <span className="font-medium text-foreground text-right">{getProgressDescription(h.progress, hikerStations)}</span>
                   </div>
 
                   <div className="flex items-center justify-between text-muted-foreground">
@@ -665,7 +712,8 @@ export default function ActiveHikersLayer({
 
       {/* 2B. Simulated Moving Hikers Layer - Per Person / Individual View */}
       {filterMode === 'individual' && displayedHikers.flatMap((h) => {
-        const baseLatLng = interpolatePosition(h.progress, simulationPath);
+        const hikerRoute = routeForHiker(h);
+        const baseLatLng = interpolatePosition(h.progress, hikerRoute?.path ?? simulationPath);
         const guideLatLng: [number, number] = [baseLatLng[0] - 0.0001, baseLatLng[1] + 0.0001];
         const hikerLatLng: [number, number] = [baseLatLng[0], baseLatLng[1]];
 
@@ -734,7 +782,8 @@ export default function ActiveHikersLayer({
 
       {/* 2C. Simulated Moving Hikers Layer - Guides Only View */}
       {filterMode === 'guides' && displayedHikers.map((h) => {
-        const latLng = interpolatePosition(h.progress, simulationPath);
+        const hikerRoute = routeForHiker(h);
+        const latLng = interpolatePosition(h.progress, hikerRoute?.path ?? simulationPath);
         return (
           <Marker
             key={`guide-only-${h.id}`}

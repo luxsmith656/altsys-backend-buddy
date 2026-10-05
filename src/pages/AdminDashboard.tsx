@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
+import { useState, useEffect, useMemo, useRef, useCallback, lazy, Suspense } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import {
@@ -126,6 +126,11 @@ import TrailRecorder from '@/components/map/TrailRecorder';
 import QRCameraScanner from '@/components/admin/QRCameraScanner';
 import DemographicsTab from '@/components/admin/DemographicsTab';
 import OverviewDashboard from '@/components/admin/OverviewDashboard';
+import HikeAnalytics from '@/components/admin/HikeAnalytics';
+const CentralAccountManagement = lazy(() => import('@/components/admin/CentralAccountManagement'));
+const CentralAnalyticsReporting = lazy(() => import('@/components/admin/CentralAnalyticsReporting'));
+const CentralPricingManagement = lazy(() => import('@/components/admin/CentralPricingManagement'));
+import { coalescedRefresh } from '@/lib/coalescedRefresh';
 import MDRRMOAccessAudit from '@/components/admin/MDRRMOAccessAudit';
 import PaymentSummaryTab from '@/components/admin/PaymentSummaryTab';
 // ForecastingTab removed per user request
@@ -173,8 +178,8 @@ const ANNOUNCEMENT_TYPE_STYLES: Record<string, string> = {
 
 const getMappedTab = (tab: string) => {
   if (['overview', 'demographics'].includes(tab)) return 'overview';
-  if (['operations', 'requests', 'scan', 'live-map'].includes(tab)) return 'operations';
-  if (['management', 'users', 'guides', 'announcements'].includes(tab)) return 'management';
+  if (['operations', 'requests', 'scan', 'live-map', 'sessions'].includes(tab)) return 'operations';
+  if (['management', 'users', 'guides', 'announcements', 'accounts', 'pricing', 'reports'].includes(tab)) return 'management';
   if (['finance', 'payment-summary'].includes(tab)) return 'finance';
   return 'overview';
 };
@@ -189,7 +194,7 @@ export default function AdminDashboard() {
   });
   const [managementTab, setManagementTab] = useState<string>(() => {
     const initialTab = searchParams.get('tab');
-    return ['users', 'guides', 'announcements'].includes(initialTab || '')
+    return ['users', 'guides', 'announcements', 'accounts', 'pricing', 'reports'].includes(initialTab || '')
       ? initialTab!
       : 'guides';
   });
@@ -215,7 +220,9 @@ export default function AdminDashboard() {
   const navigate = useNavigate();
   const { theme, toggleTheme } = useTheme();
   const [mobileProfileOpen, setMobileProfileOpen] = useState(false);
-  type UIGuide = { id: string; name: string; phone: string; status: string; trail: string; totalHikes: number; user_id: string | null; per_trip_fee: number; location_id: string | null };
+  type UIGuide = { id: string; name: string; phone: string; status: string; trail: string; totalHikes: number; user_id: string | null; per_trip_fee: number; location_id: string | null; photo_url?: string | null };
+  const trailheadLocations = locations.filter((loc) => ['lamot-1', 'lamot-2', 'sto-tomas'].includes(loc.slug));
+  const analyticsLocationIds = locationsLoading ? [] : activeLocationId ? [activeLocationId] : isSuperAdmin ? trailheadLocations.map((loc) => loc.id) : [];
   const [guides, setGuides] = useState<UIGuide[]>([]);
   const [chatBooking, setChatBooking] = useState<{ id: string; date: string } | null>(null);
   const [reassignFor, setReassignFor] = useState<{ bookingId: string; guideName: string | null; guideId: string | null; locationId: string | null } | null>(null);
@@ -342,7 +349,7 @@ export default function AdminDashboard() {
     if (tab === 'requests' || tab === 'scan' || tab === 'live-map' || tab === 'sessions') {
       if (tab !== operationsTab) setOperationsTab(tab);
     }
-    if (['users', 'guides', 'announcements'].includes(tab || '')) {
+    if (['users', 'guides', 'announcements', 'accounts', 'pricing', 'reports'].includes(tab || '')) {
       if (tab !== managementTab) setManagementTab(tab!);
     }
   }, [activeTab, operationsTab, managementTab, searchParams]);
@@ -557,12 +564,13 @@ export default function AdminDashboard() {
     setAnnouncements(loadAnnouncements(role));
 
     // Listen for realtime booking changes & assignments with immediate optimistic state update
+    const refresh = coalescedRefresh(async () => { await Promise.all([loadAllTabBookings(), loadPendingBookings(), loadData(), loadSiteSessions()]); });
     const ch = supabase
       .channel(`admin-bookings-live-${activeLocationId ?? 'all'}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'bookings' }, (payload) => {
         if (payload.eventType === 'INSERT' && payload.new) {
           const newBooking = payload.new as any;
-          if (!isSuperAdmin && (!activeLocationId || newBooking.location_id !== activeLocationId)) return;
+          if (activeLocationId ? newBooking.location_id !== activeLocationId : !isSuperAdmin || !trailheadLocations.some((loc) => loc.id === newBooking.location_id)) return;
           const meta = parseMeta(newBooking.notes);
           toast.info(`🔔 New Booking: ${meta.fullName || newBooking.emergency_contact_name || 'Hiker'} (${newBooking.booking_date})`);
           setAllTabBookings((prev) => {
@@ -589,20 +597,18 @@ export default function AdminDashboard() {
           setAllTabBookings((prev) => prev.filter((b) => b.id !== oldId));
           setPendingBookings((prev) => prev.filter((b) => b.id !== oldId));
         }
-        void loadAllTabBookings();
-        void loadPendingBookings();
-        void loadData();
+        refresh.schedule();
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'booking_assignments' }, () => {
-        void loadAllTabBookings();
-        void loadPendingBookings();
+        refresh.schedule();
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'hiker_sessions' }, () => {
-        void loadSiteSessions();
+        refresh.schedule();
       })
       .subscribe();
 
     return () => {
+      refresh.dispose();
       supabase.removeChannel(ch);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -663,7 +669,8 @@ export default function AdminDashboard() {
       .select('*')
       .order('created_at', { ascending: false })
       .limit(500);
-    if (!isSuperAdmin) q = q.eq('location_id', activeLocationId);
+    if (activeLocationId) q = q.eq('location_id', activeLocationId);
+    else if (isSuperAdmin) q = q.in('location_id', trailheadLocations.map((loc) => loc.id));
     const { data } = await q;
     if (data) {
       setAllTabBookings((prev) => {
@@ -1212,23 +1219,21 @@ export default function AdminDashboard() {
       .select('*')
       .in('status', ['pending', 'adjustment_pending'])
       .order('created_at', { ascending: true });
-    if (!isSuperAdmin) query = query.eq('location_id', activeLocationId);
-    const { data } = await query;
+    if (activeLocationId) query = query.eq('location_id', activeLocationId);
+    else if (isSuperAdmin) query = query.in('location_id', trailheadLocations.map((loc) => loc.id));
+    const { data, error } = await query;
+    if (error) toast.error('Could not load pending bookings: ' + error.message);
     if (data) {
-      setPendingBookings((prev) => {
-        const existingIds = new Set(data.map((d: any) => d.id));
-        const missingRealtime = prev.filter((p) => !existingIds.has(p.id) && (p.status === 'pending' || p.status === 'adjustment_pending'));
-        return [...missingRealtime, ...data];
-      });
+      setPendingBookings(data);
     }
     setPendingLoading(false);
   };
 
   /* ── Accept booking + assign guide ── */
   const handleAcceptBooking = async () => {
-    if (!acceptDialogId || !selectedGuide) return;
+    if (!acceptDialogId || !selectedGuide || acceptSaving) return;
     setAcceptSaving(true);
-    const booking = allTabBookings.find((b) => b.id === acceptDialogId);
+    const booking = allTabBookings.find((b) => b.id === acceptDialogId) || pendingBookings.find((b) => b.id === acceptDialogId);
     // selectedGuide now stores guide.id; resolve display name
     const guideRow = guides.find((g) => g.id === selectedGuide);
     const guideName = guideRow?.name ?? selectedGuide;
@@ -1238,7 +1243,7 @@ export default function AdminDashboard() {
       setAcceptSaving(false);
       return;
     }
-    if (!guideRow) {
+    if (!booking || !guideRow || !guideRow.user_id || guideRow.location_id !== booking.location_id) {
       toast.error('Selected mountain guide was not found. Refresh the guide list and try again.');
       setAcceptSaving(false);
       return;
@@ -1260,7 +1265,6 @@ export default function AdminDashboard() {
     } else {
       result.warnings?.forEach((w) => toast.warning(w));
       toast.success(`📋 Assignment offer sent to Guide "${guideName}". Awaiting guide acceptance to confirm booking.`);
-      if (booking) await updateDailySlots(booking.booking_date, booking.group_size, 1);
       void writeActivityLog({
         action: 'guide_assigned',
         entity_type: 'booking',
@@ -1404,7 +1408,7 @@ export default function AdminDashboard() {
   const loadData = async () => {
     // Scope to current location when the admin has one selected (super_admin sees all).
     const scopeBookings = (q: any) => {
-      if (isSuperAdmin) return q;
+      if (isSuperAdmin && !activeLocationId) return q.in('location_id', trailheadLocations.map((loc) => loc.id));
       return q.eq('location_id', activeLocationId || '00000000-0000-0000-0000-000000000000');
     };
     const [
@@ -1414,7 +1418,7 @@ export default function AdminDashboard() {
       scopeBookings(supabase.from('bookings').select('*').order('created_at', { ascending: false }).limit(20)),
       (() => {
         let q: any = supabase.from('trail_zones').select(DISPATCH_ROUTE_FIELDS);
-        if (activeLocationId && !isSuperAdmin) {
+        if (activeLocationId) {
           q = q.eq('location_id', activeLocationId);
         }
         return q;
@@ -1427,12 +1431,12 @@ export default function AdminDashboard() {
 
   /* ── Load real guides from DB (scoped to active location for admins) ── */
   const loadGuides = async () => {
-    let q: any = supabase.from('guides').select('id, user_id, full_name, phone, specialty, status, per_trip_fee, location_id, is_active');
+    let q: any = supabase.from('guides').select('id, user_id, full_name, phone, specialty, status, per_trip_fee, location_id, is_active, photo_url');
     if (activeLocationId) q = q.eq('location_id', activeLocationId);
     const { data } = await q.order('full_name');
     const activeLocName = locations.find((l) => l.id === activeLocationId)?.name || '';
     const mapped: UIGuide[] = (data ?? [])
-      .filter((g: any) => g.is_active !== false && (g.full_name === 'Test Guide' || Boolean(g.user_id)))
+      .filter((g: any) => g.is_active !== false && Boolean(g.user_id))
       .map((g: any) => ({
         id: g.id,
         user_id: g.user_id,
@@ -1443,6 +1447,7 @@ export default function AdminDashboard() {
         totalHikes: 0,
         per_trip_fee: Number(g.per_trip_fee || 0),
         location_id: g.location_id,
+        photo_url: g.photo_url,
       }));
 
     setGuides(mapped);
@@ -1660,8 +1665,8 @@ export default function AdminDashboard() {
   }, [activeLocationId, officialRoutesForLocation]);
 
   const acceptBooking = useMemo(
-    () => pendingBookings.find((b: any) => b.id === acceptDialogId) ?? null,
-    [acceptDialogId, pendingBookings],
+    () => pendingBookings.find((b: any) => b.id === acceptDialogId) ?? allTabBookings.find((b) => b.id === acceptDialogId) ?? null,
+    [acceptDialogId, pendingBookings, allTabBookings],
   );
   const acceptRouteOptions = useMemo(
     () => acceptBooking ? officialRoutesForLocation(acceptBooking.location_id ?? activeLocationId) : [],
@@ -1778,7 +1783,7 @@ export default function AdminDashboard() {
         >
           <div>
             <h1 className="mb-2 text-2xl font-bold sm:text-3xl">
-              Admin <span className="text-gradient">Dashboard</span>
+              {isSuperAdmin ? 'Central Admin' : 'Admin'} <span className="text-gradient">Dashboard</span>
             </h1>
             <p className="text-muted-foreground">
               Monitor real-time hiker activity, manage zones, announcements, and guides.
@@ -1798,7 +1803,7 @@ export default function AdminDashboard() {
                 </SelectTrigger>
                 <SelectContent>
                   {isSuperAdmin && <SelectItem value="all">🌐 All Locations & Trails (Full Mountain)</SelectItem>}
-                  {(isSuperAdmin ? locations : locations.filter((loc) => loc.id === activeLocationId)).map((loc) => (
+                  {(isSuperAdmin ? trailheadLocations : locations.filter((loc) => loc.id === activeLocationId)).map((loc) => (
                     <SelectItem key={loc.id} value={loc.id}>
                       📍 {loc.name}
                     </SelectItem>
@@ -1852,7 +1857,8 @@ export default function AdminDashboard() {
           {/* ─────────────────────────────── BOOKINGS TAB ── */}
           
           <TabsContent value="overview" className="space-y-6 mt-0">
-            <OverviewDashboard locationId={activeLocationId} />
+            <OverviewDashboard locationId={activeLocationId} locationIds={analyticsLocationIds} />
+            <HikeAnalytics locationIds={analyticsLocationIds} />
             <MDRRMOAccessAudit locationId={activeLocationId} />
           </TabsContent>
 
@@ -2245,7 +2251,7 @@ export default function AdminDashboard() {
                       <Select value={selectedGuide} onValueChange={setSelectedGuide}>
                         <SelectTrigger><SelectValue placeholder="Select a guide…" /></SelectTrigger>
                         <SelectContent>
-                          {guides.filter((g) => g.status !== 'off-duty' && g.status !== 'off_duty').map((g) => (
+                          {guides.filter((g) => g.status !== 'off-duty' && g.status !== 'off_duty' && g.user_id && g.location_id === acceptBooking?.location_id).map((g) => (
                             <SelectItem key={g.id} value={g.id}>
                               {g.name} — <span className="capitalize">{g.status}</span> ({g.trail})
                             </SelectItem>
@@ -3055,9 +3061,15 @@ export default function AdminDashboard() {
                   <TabsTrigger value="users">Manage Users</TabsTrigger>
                   <TabsTrigger value="guides">Guide Roster</TabsTrigger>
                   <TabsTrigger value="announcements">Announcements</TabsTrigger>
+                  {isSuperAdmin && <TabsTrigger value="accounts">Accounts</TabsTrigger>}
+                  {isSuperAdmin && <TabsTrigger value="pricing">Pricing & Capacity</TabsTrigger>}
+                  {isSuperAdmin && <TabsTrigger value="reports">Central Reports</TabsTrigger>}
                   
                 </TabsList>
               </div>
+              {isSuperAdmin && <TabsContent value="accounts"><Suspense fallback={<p role="status">Loading accounts...</p>}><CentralAccountManagement /></Suspense></TabsContent>}
+              {isSuperAdmin && <TabsContent value="pricing"><Suspense fallback={<p role="status">Loading pricing...</p>}><CentralPricingManagement /></Suspense></TabsContent>}
+              {isSuperAdmin && <TabsContent value="reports"><Suspense fallback={<p role="status">Loading reports...</p>}><CentralAnalyticsReporting /></Suspense></TabsContent>}
               <TabsContent value="users" className="space-y-6 mt-0">
                 <AdminUserManagement
                   locationId={activeLocationId}
@@ -3123,7 +3135,7 @@ export default function AdminDashboard() {
                   <CardContent className="p-4 sm:p-5">
                     <div className="flex min-w-0 flex-wrap items-start justify-between gap-3">
                       <div className="flex min-w-0 items-center gap-3">
-                        {guidePhotoForName(guide.name) ? <img src={guidePhotoForName(guide.name) ?? undefined} alt={guide.name} className="w-11 h-11 rounded-full object-cover flex-shrink-0 border border-primary/20" /> : <div className="w-11 h-11 rounded-full bg-primary/20 flex items-center justify-center flex-shrink-0 text-primary font-bold text-lg">{guide.name.charAt(0)}</div>}
+                        {guide.photo_url || guidePhotoForName(guide.name) ? <img src={guide.photo_url || guidePhotoForName(guide.name) || undefined} alt={guide.name} loading="lazy" decoding="async" className="w-11 h-11 rounded-full object-cover flex-shrink-0 border border-primary/20" /> : <div className="w-11 h-11 rounded-full bg-primary/20 flex items-center justify-center flex-shrink-0 text-primary font-bold text-lg">{guide.name.charAt(0)}</div>}
                         <div className="min-w-0">
                           <p className="break-words font-semibold">{guide.name}</p>
                           <p className="break-all text-xs text-muted-foreground">{guide.phone}</p>
@@ -3516,7 +3528,7 @@ export default function AdminDashboard() {
         <DialogContent className="sm:max-w-md rounded-3xl p-6 text-center">
           <DialogHeader className="space-y-2">
             <DialogTitle className="text-lg font-bold flex items-center justify-center gap-2">
-              <Users className="h-5 w-5 text-primary" /> Group Companion QR Permit
+              <Users className="h-5 w-5 text-primary" /> Group Companion QR
             </DialogTitle>
             <p className="text-xs text-muted-foreground">
               Let companions (up to {scannedBooking?.group_size || 8} pax) scan this code on their phones to join the live GPS session without creating an account.

@@ -16,6 +16,7 @@ type Operation = {
 
 const mockState = vi.hoisted(() => ({
   from: vi.fn(),
+  rpc: vi.fn(),
   notifyUser: vi.fn(),
   confirmReservation: vi.fn(),
   operations: [] as Operation[],
@@ -24,7 +25,7 @@ const mockState = vi.hoisted(() => ({
 }));
 
 vi.mock('@/integrations/supabase/client', () => ({
-  supabase: { from: mockState.from },
+  supabase: { from: mockState.from, rpc: mockState.rpc },
 }));
 
 vi.mock('@/lib/firestoreNotifications', () => ({
@@ -61,6 +62,8 @@ describe('Guide Assignment & Confirmation Service', () => {
     mockState.bookingFetchError = null;
     mockState.failInsertTable = null;
     mockState.from.mockReset();
+    mockState.rpc.mockReset();
+    mockState.rpc.mockResolvedValue({ data: { guideUserId: 'user-guide-2', guideName: 'Maria Santos', bookingDate: '2026-08-25', unchanged: false }, error: null });
     mockState.notifyUser.mockReset();
     mockState.notifyUser.mockResolvedValue('notif-id-123');
     mockState.confirmReservation.mockReset();
@@ -189,35 +192,39 @@ describe('Guide Assignment & Confirmation Service', () => {
     expect(mockState.notifyUser).toHaveBeenCalledWith('user-hiker-1', expect.objectContaining({ category: 'booking' }));
   });
 
-  it('admin assignment creates a pending guide row, then records the guide on the booking and notifies the guide', async () => {
+  it('assigns atomically using server-owned guide details, then notifies the guide', async () => {
     const result = await assignGuideToBooking({
-      bookingId: 'booking-123', guideId: 'guide-2', guideName: 'Maria Santos', guideUserId: 'user-guide-2', locationId: 'loc-1',
-      extraMeta: { assignedTrailName: 'Lamot 2 Trail' },
+      bookingId: 'booking-123', guideId: 'guide-2', guideName: 'Client name',
+      extraMeta: { assignedTrailZoneId: 'route-1' },
     });
-
     expect(result).toEqual({ success: true });
-    const insertIdx = mockState.operations.findIndex((o) => o.table === 'booking_assignments' && o.method === 'insert');
-    const bookingIdx = mockState.operations.findIndex((o) => o.table === 'bookings' && o.method === 'update');
-    expect(mockState.operations[insertIdx].payload).toEqual(expect.objectContaining({ guide_id: 'guide-2', location_id: 'loc-1', status: 'pending' }));
-    expect(insertIdx).toBeLessThan(bookingIdx);
-    const notes = parseMeta((mockState.operations[bookingIdx].payload as { notes: string }).notes);
-    expect(notes).toMatchObject({ assignedGuideId: 'guide-2', guideStatus: 'pending', assignedTrailName: 'Lamot 2 Trail' });
+    expect(mockState.rpc).toHaveBeenCalledWith('admin_assign_hike_guide', {
+      p_booking_id: 'booking-123', p_guide_id: 'guide-2', p_trail_id: 'route-1',
+    });
+    expect(mockState.operations.every((operation) => operation.table === 'booking_messages')).toBe(true);
     expect(mockState.notifyUser).toHaveBeenCalledWith('user-guide-2', expect.objectContaining({ category: 'booking' }));
   });
 
-  it('admin assignment reports failure and leaves the booking untouched when the guide row cannot be written', async () => {
-    mockState.failInsertTable = 'booking_assignments';
-
-    const result = await assignGuideToBooking({ bookingId: 'booking-123', guideId: 'guide-2', guideName: 'Maria Santos', guideUserId: 'user-guide-2' });
-
-    expect(result).toEqual({ success: false, error: 'booking_assignments insert denied' });
-    expect(mockState.operations).not.toContainEqual(expect.objectContaining({ table: 'bookings', method: 'update' }));
+  it('does not perform partial client writes when the transaction fails', async () => {
+    mockState.rpc.mockResolvedValue({ data: null, error: { message: 'Guide belongs to another trailhead' } });
+    const result = await assignGuideToBooking({ bookingId: 'booking-123', guideId: 'guide-2', guideName: 'Maria' });
+    expect(result).toEqual({ success: false, error: 'Guide belongs to another trailhead' });
+    expect(mockState.operations).toEqual([]);
     expect(mockState.notifyUser).not.toHaveBeenCalled();
   });
 
-  it('warns when the assigned guide has no linked login account', async () => {
-    const result = await assignGuideToBooking({ bookingId: 'booking-123', guideId: 'guide-3', guideName: 'Offline Guide', guideUserId: null });
-    expect(result.success).toBe(true);
-    expect(result.warnings).toEqual(expect.arrayContaining([expect.stringContaining('no linked login account')]));
+  it('reports an unapplied migration instead of falling back to partial writes', async () => {
+    mockState.rpc.mockResolvedValue({ data: null, error: { code: 'PGRST202', message: 'Missing RPC' } });
+    const result = await assignGuideToBooking({ bookingId: 'booking-123', guideId: 'guide-2', guideName: 'Maria' });
+    expect(result.success).toBe(false);
+    expect(result.error).toContain('20261004120000');
+    expect(mockState.operations).toEqual([]);
+  });
+
+  it('does not resend notifications on a repeated assignment', async () => {
+    mockState.rpc.mockResolvedValue({ data: { guideUserId: 'user-guide-2', guideName: 'Maria', bookingDate: '2026-08-25', unchanged: true }, error: null });
+    expect(await assignGuideToBooking({ bookingId: 'booking-123', guideId: 'guide-2', guideName: 'Maria' })).toEqual({ success: true });
+    expect(mockState.operations).toEqual([]);
+    expect(mockState.notifyUser).not.toHaveBeenCalled();
   });
 });

@@ -35,6 +35,7 @@ export default function CentralAnnouncements() {
   // Form state
   const [title, setTitle] = useState('');
   const [body, setBody] = useState('');
+  const [source, setSource] = useState('Calauan Municipal Tourism Office');
   const [target, setTarget] = useState<AnnouncementTarget>('all');
   const [type, setType] = useState<AnnouncementType>('info');
   const [isImportant, setIsImportant] = useState(false);
@@ -76,6 +77,7 @@ export default function CentralAnnouncements() {
         id: Date.now().toString(),
         title: title.trim(),
         body: body.trim(),
+        source: source.trim() || 'Calauan Municipal Tourism Office',
         type,
         target,
         created_at: new Date().toISOString(),
@@ -152,6 +154,17 @@ export default function CentralAnnouncements() {
 
             <CardContent className="p-4">
               <form onSubmit={handlePublish} className="space-y-3.5">
+                <div className="space-y-1">
+                  <Label htmlFor="announcement-source" className="text-xs font-semibold">Source / Issuer</Label>
+                  <Input
+                    id="announcement-source"
+                    value={source}
+                    onChange={(e) => setSource(e.target.value)}
+                    placeholder="e.g. Calauan Municipal Tourism Office"
+                    className="text-xs h-8 bg-background/80"
+                  />
+                </div>
+
                 <div className="space-y-1">
                   <Label className="text-xs font-semibold">Title</Label>
                   <Input
@@ -332,6 +345,10 @@ export default function CentralAnnouncements() {
                       <p className="text-xs text-foreground/90 whitespace-pre-wrap leading-relaxed mt-1">
                         {ann.body}
                       </p>
+
+                      {ann.source && (
+                        <p className="text-[10px] font-semibold text-primary pt-1">Source: {ann.source}</p>
+                      )}
 
                       <div className="flex items-center gap-2 text-[10px] text-muted-foreground pt-1">
                         <Clock className="h-3 w-3" />

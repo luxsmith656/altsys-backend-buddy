@@ -63,7 +63,7 @@ export function resolveKnownAccountRole(identity?: RoleIdentity | null): AppRole
           if (match?.role && isAppRole(match.role)) return match.role;
         }
       }
-    } catch {}
+    } catch { /* A missing optional cache provides no role hint. */ }
   }
 
   return null;

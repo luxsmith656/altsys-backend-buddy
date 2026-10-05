@@ -27,6 +27,8 @@ export interface KaliWeatherInput {
 export interface KaliBookingInput {
   status: string;
   date: string;
+  qrCode?: string;
+  jumpOff?: string;
 }
 
 export interface KaliParticipantInput {
@@ -301,9 +303,9 @@ function bookingInsight(input: KaliContextInput): KaliInsight | null {
     expression: 'happy',
     title: daysUntil === 0 ? 'Your hike is today' : 'Upcoming confirmed hike',
     message: daysUntil === 0
-      ? 'Your confirmed booking is today. Review your check-in details and arrive at your selected jump-off.'
+      ? `Hey, today is your hike${booking.jumpOff ? ` at ${booking.jumpOff}` : ''}. Keep the QR below ready to present to the jump-off staff, then meet your guide there.`
       : `Your confirmed booking is on ${bookingDateLabel(booking.date)}. Keep your QR permit ready and review the latest weather before leaving.`,
-    meta: { daysUntil, bookingDate: booking.date },
+    meta: { daysUntil, bookingDate: booking.date, ...(booking.qrCode ? { qrCode: booking.qrCode } : {}), ...(booking.jumpOff ? { jumpOff: booking.jumpOff } : {}) },
   };
 }
 

@@ -6,6 +6,7 @@ import L from 'leaflet';
 import {
   routeStationsFromMetadata,
   buildRouteStations,
+  normalizeOfficialRoutePath,
   getDefaultTrailForLocation,
   MT_KALISUNGAN_CENTER,
   DEFAULT_ZOOM,
@@ -27,19 +28,17 @@ import {
   ChevronRight,
   Search,
   User,
-  Box,
   Plus,
   Minus
 } from 'lucide-react';
 import { toast } from 'sonner';
-import ActiveHikersLayer, { type MapHikerFilterMode } from '@/components/map/ActiveHikersLayer';
+import ActiveHikersLayer, { type MapHikerFilterMode, type SimulationRouteConfig } from '@/components/map/ActiveHikersLayer';
 import LiveSessionsLayer from '@/components/map/LiveSessionsLayer';
 import RealtimeMonitorMap from '@/components/admin/RealtimeMonitorMap';
 import MapWorkspace from '@/components/map/MapWorkspace';
 import LiveGroupDetails from '@/components/map/LiveGroupDetails';
 import type { LiveMapGroup } from '@/lib/liveMapPresentation';
 import TrailRecorder from '@/components/map/TrailRecorder';
-import Terrain3DDialog from '@/components/map/Terrain3DDialog';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/hooks/useAuth';
 import { useLocations } from '@/hooks/useLocations';
@@ -88,6 +87,7 @@ interface SimulatedHiker {
   totalDistanceKm: number;
   direction: 1 | -1;
   hasWarnedAboutTimer?: boolean;
+  routeId?: string;
 }
 
 interface OfficialStation {
@@ -100,6 +100,8 @@ interface OfficialStation {
 type MapTrail = (typeof TRAILS)[number] & {
   id?: string;
   stations?: RouteStation[];
+  locationId?: string | null;
+  locationName?: string;
 };
 
 // Fix default marker icons
@@ -152,8 +154,13 @@ function routeStationIcon(station: RouteStation) {
 
 export default function MapPage() {
   const { role, user } = useAuth();
-  const { activeLocationId, loading: locationsLoading, isSuperAdmin } = useLocations();
+  const { activeLocationId, loading: locationsLoading, isSuperAdmin, locations } = useLocations();
   const navigate = useNavigate();
+
+  useEffect(() => {
+    document.body.classList.add('map-workspace-open');
+    return () => document.body.classList.remove('map-workspace-open');
+  }, []);
   
   const isTrailRecorder = role === 'ranger' || role === 'guide' || role === 'admin' || role === 'super_admin';
   const canMonitorAll = role === 'ranger' || role === 'admin' || role === 'super_admin';
@@ -162,13 +169,14 @@ export default function MapPage() {
   
   const [dbTrails, setDbTrails] = useState<MapTrail[]>([]);
   const [rawTrailZones, setRawTrailZones] = useState<DBTrailZone[]>([]);
-  const [selectedTrail] = useState<number>(0);
+  const [scopeMode, setScopeMode] = useState<'all' | 'one' | 'two'>('all');
+  const [scopeLocationIds, setScopeLocationIds] = useState<string[]>([]);
+  const [routeFilterId, setRouteFilterId] = useState('all');
   const [mapInstance, setMapInstance] = useState<L.Map | null>(null);
   
   const [simulationHikers, setSimulationHikers] = useState<SimulatedHiker[]>([]);
   const [assignedTrailZoneId, setAssignedTrailZoneId] = useState<string | null>(null);
   const [officialRoutesRevision, setOfficialRoutesRevision] = useState(0);
-  const [terrain3dOpen, setTerrain3dOpen] = useState(false);
 
   // Redesign state: Collapsible sidebar, card expansions, search
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(
@@ -176,6 +184,7 @@ export default function MapPage() {
   );
   const [simulationControlsOpen, setSimulationControlsOpen] = useState(false);
   const [simulationMode, setSimulationMode] = useState(false);
+  const [workspacePanelOpen, setWorkspacePanelOpen] = useState(false);
   const [selfLocation, setSelfLocation] = useState<{ lat: number; lng: number; timestamp?: string } | null>(null);
   const [selfGroup, setSelfGroup] = useState<LiveMapGroup | null>(null);
   const [simControlsElement, setSimControlsElement] = useState<HTMLDivElement | null>(null);
@@ -200,15 +209,45 @@ export default function MapPage() {
     });
     return () => { active = false; };
   }, [activeSelfSession?.booking_id, activeSelfSession?.id, isSelfTrackingRole]);
-  const availableTrails: MapTrail[] = dbTrails;
+  const barangayLocations = useMemo(() => locations.filter((location) => {
+    const key = `${location.slug} ${location.name}`.toLowerCase();
+    return key.includes('lamot-1') || key.includes('lamot 1') || key.includes('lamot-2') || key.includes('lamot 2') || key.includes('sto-tomas') || key.includes('sto. tomas') || key.includes('sto tomas');
+  }), [locations]);
+  const mayChooseMultipleLocations = role === 'super_admin' || role === 'mdrrmo';
+  const scopeCount = scopeMode === 'one' ? 1 : scopeMode === 'two' ? 2 : barangayLocations.length;
+  const effectiveScopeIds = useMemo(() => {
+    if (!mayChooseMultipleLocations) return activeLocationId ? [activeLocationId] : [];
+    const valid = scopeLocationIds.filter((id) => barangayLocations.some((location) => location.id === id));
+    return valid.length >= scopeCount ? valid.slice(0, scopeCount) : barangayLocations.slice(0, scopeCount).map((location) => location.id);
+  }, [activeLocationId, barangayLocations, mayChooseMultipleLocations, scopeCount, scopeLocationIds]);
+  const scopeTrails = useMemo(() => dbTrails.filter((trail) => !trail.locationId || !effectiveScopeIds.length || effectiveScopeIds.includes(trail.locationId)), [dbTrails, effectiveScopeIds]);
+  const displayTrails = useMemo(() => routeFilterId === 'all' ? scopeTrails : scopeTrails.filter((trail) => (trail.id ?? trail.name) === routeFilterId), [routeFilterId, scopeTrails]);
+  const availableTrails: MapTrail[] = displayTrails;
   // A local fallback is used only for the staff simulation canvas; it is never rendered as an official route.
   const fallbackDefaultTrail = getDefaultTrailForLocation(activeLocationId);
-  const currentTrail: MapTrail = availableTrails[selectedTrail] || ({ ...fallbackDefaultTrail, stations: buildRouteStations(fallbackDefaultTrail.path) } as MapTrail);
+  const currentTrail: MapTrail = availableTrails[0] || ({ ...fallbackDefaultTrail, stations: buildRouteStations(fallbackDefaultTrail.path) } as MapTrail);
   const currentRouteDistanceKm = currentTrail.path.reduce((total, point, index) => {
     if (index === 0) return total;
     const previous = currentTrail.path[index - 1];
     return total + haversineDistance(previous[0], previous[1], point[0], point[1]);
   }, 0);
+  const simulationRoutes = useMemo<SimulationRouteConfig[]>(() => availableTrails.map((trail) => ({
+    id: trail.id ?? trail.name,
+    name: trail.name,
+    locationName: trail.locationName ?? 'Trailhead',
+    path: trail.path as [number, number][],
+    stations: trail.stations ?? buildRouteStations(trail.path),
+    distanceKm: trail.path.slice(1).reduce((sum, point, index) => sum + haversineDistance(
+      trail.path[index][0], trail.path[index][1], point[0], point[1]), 0),
+  })), [availableTrails]);
+
+  const toggleScopeLocation = (locationId: string) => {
+    setScopeLocationIds((current) => {
+      const selection = current.length ? current : effectiveScopeIds;
+      if (selection.includes(locationId)) return selection.filter((id) => id !== locationId);
+      return selection.length < scopeCount ? [...selection, locationId] : [...selection.slice(1), locationId];
+    });
+  };
 
   // Tracker routes and editor routes intentionally use different visibility rules.
   const fetchTrails = useCallback(async () => {
@@ -222,18 +261,41 @@ export default function MapPage() {
       .order('created_at', { ascending: true });
     if (restrictToAssignedTrail) {
       trackerQuery = trackerQuery.eq('id', assignedTrailZoneId) as typeof trackerQuery;
-    } else if (activeLocationId) {
+    } else if (activeLocationId && role !== 'super_admin' && role !== 'mdrrmo') {
       trackerQuery = trackerQuery.eq('location_id', activeLocationId) as typeof trackerQuery;
     }
     
     const { data: trackerData, error } = await trackerQuery;
     if (error) toast.error('Published routes could not be loaded. Please reconnect and retry.');
-    const loaded = officialRoutesForLocation((trackerData as DBTrailZone[]) ?? [], restrictToAssignedTrail ? undefined : activeLocationId)
+    const trackerRows = (trackerData as DBTrailZone[]) ?? [];
+    const referenceRow = trackerRows
+      .filter((row) => {
+        const location = locations.find((item) => item.id === row.location_id);
+        const routeLabel = `${row.name} ${location?.slug ?? ''} ${location?.name ?? ''}`.toLowerCase();
+        return routeLabel.includes('lamot-2') || routeLabel.includes('lamot 2') || routeLabel.includes('lamot2');
+      })
+      .sort((a, b) => (Array.isArray(b.coordinates_json) ? b.coordinates_json.length : 0) - (Array.isArray(a.coordinates_json) ? a.coordinates_json.length : 0))[0];
+    const referencePath = Array.isArray(referenceRow?.coordinates_json)
+      ? (referenceRow.coordinates_json as { lat: number; lng: number }[])
+          .map((point) => [Number(point.lat), Number(point.lng)] as [number, number])
+          .filter(([lat, lng]) => Number.isFinite(lat) && Number.isFinite(lng))
+      : undefined;
+    const loaded = officialRoutesForLocation(trackerRows, restrictToAssignedTrail || role === 'super_admin' || role === 'mdrrmo' ? undefined : activeLocationId)
       .map((trail, index) => {
         const coords = Array.isArray(trail.coordinates_json) ? (trail.coordinates_json as { lat: number; lng: number }[]) : [];
-        const path = coords
+        const rawPath = coords
           .map((p) => [Number(p.lat), Number(p.lng)] as [number, number])
           .filter(([lat, lng]) => Number.isFinite(lat) && Number.isFinite(lng));
+        const assignedLocation = locations.find((location) => location.id === trail.location_id);
+        const routeText = `${trail.name} ${assignedLocation?.slug ?? ''} ${assignedLocation?.name ?? ''}`.toLowerCase();
+        const namedTrailhead = routeText.includes('lamot 1') || routeText.includes('lamot-1') || routeText.includes('lamot1')
+          ? barangayLocations.find((location) => location.slug.includes('lamot-1'))
+          : routeText.includes('sto. tomas') || routeText.includes('sto tomas') || routeText.includes('sto-tomas')
+            ? barangayLocations.find((location) => location.slug.includes('sto-tomas'))
+            : routeText.includes('lamot 2') || routeText.includes('lamot-2') || routeText.includes('lamot2')
+              ? barangayLocations.find((location) => location.slug.includes('lamot-2')) : undefined;
+        const trailhead = namedTrailhead ?? assignedLocation;
+        const path = normalizeOfficialRoutePath(rawPath, `${trailhead?.slug ?? ''} ${trailhead?.name ?? ''} ${trail.name} ${activeLocationId ?? ''}`, referencePath);
         if (path.length < 2) return null;
         let distanceKm = 0;
         for (let i = 1; i < path.length; i++) {
@@ -242,13 +304,24 @@ export default function MapPage() {
         const colors = ['#16a34a', '#2563eb', '#dc2626', '#9333ea', '#ea580c'];
         return {
           id: trail.id,
+          locationId: namedTrailhead?.id ?? trail.location_id,
+          locationName: trailhead?.name ?? 'Unassigned trailhead',
           name: trail.name || `Official Trail ${index + 1}`,
           difficulty: (trail.difficulty || 'moderate') as 'easy' | 'moderate' | 'hard',
           color: colors[index % colors.length],
           elevation: `${Number(trail.elevation_meters || 0)}m`,
           distance: `${distanceKm.toFixed(1)} km`,
           path,
-          stations: routeStationsFromMetadata(trail.recording_metadata, path),
+          stations: (() => {
+            const stations = routeStationsFromMetadata(trail.recording_metadata, rawPath);
+            return stations.length >= 2
+              && stations[0].lat === path[0][0]
+              && stations[0].lng === path[0][1]
+              && stations[stations.length - 1].lat === path[path.length - 1][0]
+              && stations[stations.length - 1].lng === path[path.length - 1][1]
+              ? stations
+              : buildRouteStations(path);
+          })(),
         };
       })
       .filter(Boolean) as MapTrail[];
@@ -261,7 +334,7 @@ export default function MapPage() {
         .select('id,location_id,name,difficulty,elevation_meters,coordinates_json,status,is_official,review_status,source,raw_recording_json,cleaned_recording_json,recording_metadata,recording_count,recorded_by')
         .neq('status', 'deleted')
         .order('created_at', { ascending: false });
-      if (activeLocationId) {
+      if (activeLocationId && role !== 'super_admin') {
         editorQuery = editorQuery.eq('location_id', activeLocationId) as typeof editorQuery;
       }
 
@@ -274,7 +347,7 @@ export default function MapPage() {
           .select('id,location_id,name,difficulty,elevation_meters,coordinates_json,status')
           .neq('status', 'deleted')
           .order('created_at', { ascending: false });
-        if (activeLocationId) {
+        if (activeLocationId && role !== 'super_admin') {
           editorFallback = editorFallback.eq('location_id', activeLocationId) as typeof editorFallback;
         }
         const fallbackResult = await editorFallback;
@@ -285,7 +358,7 @@ export default function MapPage() {
     } else {
       setRawTrailZones([]);
     }
-  }, [role, assignedTrailZoneId, activeLocationId, isTrailRecorder]);
+  }, [role, assignedTrailZoneId, activeLocationId, isTrailRecorder, locations, barangayLocations]);
 
   useEffect(() => {
     let active = true;
@@ -441,7 +514,7 @@ export default function MapPage() {
   const handleLocateHiker = (hiker: SimulatedHiker) => {
     if (!mapInstance) return;
     
-    const routePath = currentTrail.path;
+    const routePath = (simulationRoutes.find((route) => route.id === hiker.routeId) ?? simulationRoutes[0])?.path ?? currentTrail.path;
     const scaledProgress = Math.max(0, Math.min(1, hiker.progress / 9)) * (routePath.length - 1);
     const index = Math.floor(scaledProgress);
     const nextIndex = Math.min(index + 1, routePath.length - 1);
@@ -533,12 +606,15 @@ export default function MapPage() {
     <ul className="live-map-group-list" aria-label="Simulated groups">
       {filteredHikers.map((hiker) => <li key={hiker.id}><button type="button" className="live-map-group-row"
         aria-pressed={hiker.id === expandedHikerId} onClick={() => setExpandedHikerId(hiker.id)}>
-        <strong>{hiker.name} · {hiker.groupSize} pax</strong><small>{hiker.phase} · {Math.round(hiker.progress / 9 * 100)}% of ascent</small>
+        <strong>{hiker.name} · {hiker.groupSize} pax</strong>
+        <small>{simulationRoutes.find((route) => route.id === hiker.routeId)?.locationName ?? currentTrail.locationName} · {simulationRoutes.find((route) => route.id === hiker.routeId)?.name ?? currentTrail.name}</small>
+        <small>{hiker.phase} · {Math.round(hiker.progress / 9 * 100)}% of ascent</small>
       </button></li>)}
     </ul>
     {simulated && <LiveGroupDetails group={{ id: simulated.id, lead: simulated.name, guide: simulated.guideName, pax: simulated.groupSize,
       phase: simulated.phase, phone: simulated.guidePhone, companions: simulated.companions ?? [], distanceKm: simulated.totalDistanceKm,
-      route: currentTrail.name, emergencyContact: simulated.emergencyContact, medicalNotes: simulated.medicalNotes ?? undefined,
+      route: simulationRoutes.find((route) => route.id === simulated.routeId)?.name ?? currentTrail.name,
+      emergencyContact: simulated.emergencyContact, medicalNotes: simulated.medicalNotes ?? undefined,
       simulated: true }} now={mapClock} onLocate={() => handleLocateHiker(simulated)} />}
   </>;
 
@@ -550,19 +626,55 @@ export default function MapPage() {
   const mapTools = <div className="live-map-menu">
     {canMonitorAll && activeMapTab === 'tracker' && <Button variant="ghost"
       aria-pressed={simulationMode} aria-label={simulationMode ? 'Disable simulation mode' : 'Enable simulation mode'}
-      onClick={() => { setSimulationMode(!simulationMode); setSimulationControlsOpen(false); }}>
+      onClick={() => { setSimulationMode(!simulationMode); setSimulationControlsOpen(false); setWorkspacePanelOpen(!simulationMode); }}>
       <Activity size={18} />{simulationMode ? 'Exit simulation' : 'Simulation'}
     </Button>}
-    <Button variant="ghost" aria-label="Open 3D terrain" onClick={() => setTerrain3dOpen(true)}><Box size={18} />3D terrain</Button>
   </div>;
   const routePanel = <>
+    {mayChooseMultipleLocations && <section className="space-y-3 border-b border-border p-3" aria-label="Barangay simulation scope">
+      <p className="text-xs font-semibold text-muted-foreground">Show trailheads</p>
+      <div className="grid grid-cols-3 gap-1" role="group" aria-label="Choose barangay scope">
+        {(['one', 'two', 'all'] as const).map((mode) => <Button key={mode} type="button" size="sm"
+          variant={scopeMode === mode ? 'default' : 'outline'} aria-pressed={scopeMode === mode}
+          onClick={() => {
+            setScopeMode(mode);
+            setRouteFilterId('all');
+            if (mode !== 'all') setScopeLocationIds(barangayLocations.slice(0, mode === 'one' ? 1 : 2).map((location) => location.id));
+          }}>{mode === 'all' ? 'All' : mode === 'one' ? '1 barangay' : '2 barangays'}</Button>)}
+      </div>
+      {scopeMode === 'one' && <label className="block space-y-1 text-sm"><span className="text-muted-foreground">Barangay</span>
+        <select className="h-10 w-full rounded border border-input bg-background px-3" value={effectiveScopeIds[0] ?? ''}
+          onChange={(event) => setScopeLocationIds([event.target.value])}>
+          {barangayLocations.map((location) => <option key={location.id} value={location.id}>{location.name}</option>)}
+        </select>
+      </label>}
+      {scopeMode === 'two' && <div className="space-y-2">{barangayLocations.map((location) => <label key={location.id} className="flex min-h-9 items-center gap-2 text-sm">
+        <input type="checkbox" checked={effectiveScopeIds.includes(location.id)} onChange={() => toggleScopeLocation(location.id)} />{location.name}
+      </label>)}</div>}
+    </section>}
+    <section className="space-y-2 p-3">
+      <label className="block space-y-1 text-sm"><span className="text-muted-foreground">Trail</span>
+        <select className="h-10 w-full rounded border border-input bg-background px-3" value={routeFilterId}
+          onChange={(event) => setRouteFilterId(event.target.value)}>
+          <option value="all">All trails in scope</option>
+          {scopeTrails.map((trail) => <option key={trail.id ?? trail.name} value={trail.id ?? trail.name}>{trail.name} · {trail.locationName}</option>)}
+        </select>
+      </label>
+      {canMonitorAll && <Button type="button" className="w-full" onClick={() => {
+        setActiveMapTab('tracker');
+        setSimulationMode(true);
+        setSimulationControlsOpen(true);
+        setWorkspacePanelOpen(true);
+      }}><Activity size={16} /> Start simulation · {scopeMode === 'all' ? 'all trailheads' : scopeMode === 'one' ? '1 barangay' : '2 barangays'}</Button>}
+    </section>
     <ul className="live-map-route-list">
       {availableTrails.map((trail) => <li key={trail.id ?? trail.name}>
         <button type="button" aria-label={`Show ${trail.name} on map`} onClick={() => {
+          setRouteFilterId(trail.id ?? trail.name);
           if (mapInstance && trail.path.length) mapInstance.fitBounds(trail.path, {
             paddingTopLeft: [30, 30], paddingBottomRight: [60, Math.min(mapInstance.getSize().y * .4, 260)], maxZoom: 17, animate: false,
           });
-        }}><strong>{trail.name}</strong><small>Published route</small></button>
+        }}><strong>{trail.name}</strong><small>{trail.locationName} · Published route</small></button>
       </li>)}
     </ul>
     {!availableTrails.length && <p className="live-map-empty">No published route is available for your hike.</p>}
@@ -578,23 +690,25 @@ export default function MapPage() {
           : <RealtimeMonitorMap locationId={activeLocationId} canAddCheckpoints={role === 'admin' || role === 'super_admin'} tools={mapTools} routeActions={routeActions} />
       ) : (
         <div className="live-map-page-body">
-          <MapWorkspace title={simulationMode ? 'Simulation groups' : 'My hike'}
+          <MapWorkspace title={simulationMode ? 'Simulation groups' : 'My hike'} open={workspacePanelOpen} onOpenChange={setWorkspacePanelOpen}
             routes={routePanel} tools={mapTools}
             panel={activeMapTab === 'editor' ? null : simulationMode ? simulationPanel : selfPanel}>
-            <MapContainer center={MT_KALISUNGAN_CENTER} zoom={DEFAULT_ZOOM} maxZoom={20} zoomAnimation={false}
+            <MapContainer center={MT_KALISUNGAN_CENTER} zoom={DEFAULT_ZOOM} minZoom={3} maxZoom={20}
+              zoomAnimation={false} zoomSnap={0.5} zoomDelta={0.5} wheelPxPerZoomLevel={80}
+              scrollWheelZoom touchZoom doubleClickZoom dragging keyboard
               className="h-full w-full" zoomControl={false} attributionControl={true}>
               <MapInstanceBridge onReady={setMapInstance} />
               <TileLayer url="https://tile.openstreetmap.org/{z}/{x}/{y}.png" maxZoom={20} attribution="© OpenStreetMap" />
               {activeMapTab === 'tracker' ? <>
                 {user && isSelfTrackingRole && <LiveSessionsLayer mode="self" userId={user.id} userRole={role} onSelfLocationChange={handleSelfLocationChange} />}
                 {canMonitorAll && simulationMode && <ActiveHikersLayer showStations={false} routePath={currentTrail.path as [number, number][]}
-                  routeStations={currentTrail.stations} routeDistanceKm={currentRouteDistanceKm} simulationControlsOpen={simulationControlsOpen}
+                  routeStations={currentTrail.stations} routeDistanceKm={currentRouteDistanceKm} simulationRoutes={simulationRoutes} simulationControlsOpen={simulationControlsOpen}
                   filterMode={mapFilterMode} onlyActive={onlyActiveSessions} onSimulationControlsOpenChange={setSimulationControlsOpen}
                   controlsEmbedded controlsContainer={simControlsElement} />}
                 {availableTrails.map((trail) => <Polyline key={trail.id ?? trail.name} positions={trail.path} pathOptions={{ color: trail.color, weight: 5 }} />)}
-                {dbTrails.flatMap((trail) => (trail.stations ?? []).map((station) => <Marker key={station.id}
+                {availableTrails.flatMap((trail) => (trail.stations ?? []).map((station) => <Marker key={`${trail.id ?? trail.name}:${station.id}`}
                   position={[station.lat, station.lng]} icon={routeStationIcon(station)} zIndexOffset={100}>
-                  <Popup><strong>{station.name}</strong><p>{station.description}</p></Popup>
+                  <Popup><strong>{station.name}</strong><p>{trail.name}</p><p>{station.description}</p></Popup>
                 </Marker>))}
               </> : <TrailRecorder existingTrails={rawTrailZones} locationId={activeLocationId} onSaved={fetchTrails} />}
             </MapContainer>
@@ -607,8 +721,6 @@ export default function MapPage() {
           </MapWorkspace>
         </div>
       )}
-      <Terrain3DDialog open={terrain3dOpen} onOpenChange={setTerrain3dOpen} routeName={currentTrail.name}
-        routePath={currentTrail.path as [number, number][]} stations={currentTrail.stations ?? []} />
     </div>
   );
 }

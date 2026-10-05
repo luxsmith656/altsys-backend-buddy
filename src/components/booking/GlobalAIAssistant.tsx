@@ -11,6 +11,7 @@ import { getKaliRoleLabel } from '@/lib/kaliContext';
 
 /** Human label + short description for each route so the assistant can answer page questions. */
 const PAGE_INFO: Record<string, { label: string; blurb: string }> = {
+  '/about': { label: 'About Mount Kalisungan', blurb: 'mountain information and travel directions to the selected jump-off in Calauan, Laguna' },
   '/': { label: 'Home', blurb: 'the Mount Kalisungan landing page with the trail overview, gallery, guides and reviews' },
   '/map': { label: 'Trail Map', blurb: 'the live trail map with GPS tracking, offline tiles, weather and trail recording' },
   '/chat': { label: 'Trail Chat', blurb: 'the trail assistant chat page' },
@@ -70,7 +71,8 @@ export default function GlobalAIAssistant() {
       <DraggableKaliDock aboveNavigation={location.pathname === '/guide'}>
         {actionsOpen && (
           <div className="kali-dock-actions">
-            {/* Quick Check-In / QR Permit */}
+            {/* Quick check-in is a local-station action, not a central overview action. */}
+            {role !== 'super_admin' && (
             <button
               type="button"
               onClick={() => {
@@ -88,8 +90,9 @@ export default function GlobalAIAssistant() {
               </div>
               <span className="whitespace-nowrap">{isAdmin ? 'Check-in scanner' : role === 'guide' ? 'My assignments' : 'My QR Permit'}</span>
             </button>
+            )}
 
-            {/* Book a Hike / Walk-in */}
+            {/* Booking and walk-in actions are kept out of the central console. */}
             {role !== 'super_admin' && (
             <button
               type="button"

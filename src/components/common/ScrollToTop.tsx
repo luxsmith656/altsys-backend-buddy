@@ -25,15 +25,13 @@ export default function ScrollToTop() {
       const id = hash.replace('#', '');
       const element = document.getElementById(id);
       if (element) {
-        element.scrollIntoView({ behavior: 'smooth' });
+        element.scrollIntoView({ behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth' });
         return;
       }
     }
 
     // Immediately reset scroll position to top
-    window.scrollTo(0, 0);
-    document.documentElement.scrollTop = 0;
-    document.body.scrollTop = 0;
+    window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
   }, [pathname, search, hash]);
 
   return null;

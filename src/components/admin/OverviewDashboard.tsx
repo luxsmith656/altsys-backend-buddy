@@ -12,13 +12,14 @@ import DemographicsTab from '@/components/admin/DemographicsTab';
 
 const empty = summarizeAdminOverview([], [], '');
 
-export default function OverviewDashboard({ locationId }: { locationId: string | null }) {
+export default function OverviewDashboard({ locationId, locationIds }: { locationId: string | null; locationIds?: string[] }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [revision, setRevision] = useState(0);
   const [stats, setStats] = useState(empty);
   const [capacity, setCapacity] = useState<number | null>(null);
   const [demoTab, setDemoTab] = useState<'age' | 'origin'>('age');
+  const scopeKey = locationIds?.join(',');
 
   useEffect(() => {
     let current = true;
@@ -35,12 +36,15 @@ export default function OverviewDashboard({ locationId }: { locationId: string |
           bookingsQuery = bookingsQuery.eq('location_id', locationId);
           sessionsQuery = sessionsQuery.eq('location_id', locationId);
           capacityQuery = capacityQuery.eq('location_id', locationId);
+        } else if (scopeKey !== undefined) {
+          const ids = scopeKey ? scopeKey.split(',') : [];
+          bookingsQuery = bookingsQuery.in('location_id', ids);
+          sessionsQuery = sessionsQuery.in('location_id', ids);
+          capacityQuery = capacityQuery.in('location_id', ids);
         }
-        const bookings = await bookingsQuery;
+        const [bookings, sessions, limits] = await Promise.all([bookingsQuery, sessionsQuery, capacityQuery]);
         if (bookings.error) throw bookings.error;
-        const sessions = await sessionsQuery;
         if (sessions.error) throw sessions.error;
-        const limits = await capacityQuery;
         if (limits.error) throw limits.error;
         if (!current) return;
         setStats(summarizeAdminOverview(bookings.data || [], sessions.data || [], today));
@@ -53,15 +57,20 @@ export default function OverviewDashboard({ locationId }: { locationId: string |
     };
     void load();
     return () => { current = false; };
-  }, [locationId, revision]);
+  }, [locationId, scopeKey, revision]);
 
   useEffect(() => {
     const filter = locationId ? `location_id=eq.${locationId}` : undefined;
+    let refreshTimer: ReturnType<typeof setTimeout> | undefined;
+    const scheduleRefresh = () => {
+      if (refreshTimer) return;
+      refreshTimer = setTimeout(() => { refreshTimer = undefined; setRevision((n) => n + 1); }, 1000);
+    };
     const channel = supabase.channel(`overview-${locationId || 'all'}`)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'bookings', filter }, () => setRevision((n) => n + 1))
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'hiker_sessions', filter }, () => setRevision((n) => n + 1))
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'bookings', filter }, scheduleRefresh)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'hiker_sessions', filter }, scheduleRefresh)
       .subscribe();
-    return () => { void supabase.removeChannel(channel); };
+    return () => { clearTimeout(refreshTimer); void supabase.removeChannel(channel); };
   }, [locationId]);
 
   const chart = demoTab === 'age' ? stats.ageData : stats.originData;

@@ -1335,6 +1335,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      admin_assign_hike_guide: {
+        Args: { p_booking_id: string; p_guide_id: string; p_trail_id?: string | null }
+        Returns: Json
+      }
       admin_can_access_location: {
         Args: { _location_id: string }
         Returns: boolean

@@ -55,6 +55,7 @@ import {
 } from '@/components/ui/select';
 import { GuideOffDutyForm } from '@/components/booking/OffDutyManager';
 import { isFirebaseConfigured, uploadGuideProfilePhoto } from '@/lib/firebase-storage';
+import ProfileAvatar, { profileChanged } from '@/components/common/ProfileAvatar';
 import GuideDeclineModal from '@/components/booking/GuideDeclineModal';
 import BookingChat from '@/components/booking/BookingChat';
 import { acceptGuideAssignment } from '@/lib/guideAssignmentService';
@@ -475,6 +476,7 @@ export default function GuideDashboard() {
         .eq('id', guideRow.id);
       if (error) throw error;
       setGuideRow((current: any) => ({ ...current, photo_url: upload.url }));
+      if (user) profileChanged(user.id);
       toast.success('Guide photo updated.');
     } catch (error: any) {
       toast.error(error?.message || 'Could not upload guide photo.');
@@ -554,11 +556,7 @@ export default function GuideDashboard() {
 
         <header className="guide-header">
           <div className="guide-identity">
-            {guideRow.photo_url ? (
-              <img src={guideRow.photo_url} alt={guideRow.full_name} className="guide-avatar" />
-            ) : (
-              <div className="guide-avatar guide-initial">{guideRow.full_name?.slice(0, 1)?.toUpperCase() || 'G'}</div>
-            )}
+            <ProfileAvatar className="guide-avatar" />
             <div className="min-w-0">
               <p className="guide-eyebrow">MT. KALISUNGAN / LOCAL GUIDE</p>
               <h1>{guideRow.full_name}</h1>

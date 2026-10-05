@@ -36,6 +36,7 @@ import { motion } from 'framer-motion';
 import { format } from 'date-fns';
 import { optimizeAvatar } from '@/lib/avatarImage';
 import { Camera } from 'lucide-react';
+import { profileChanged } from '@/components/common/ProfileAvatar';
 
 interface Profile {
   full_name: string;
@@ -133,6 +134,7 @@ export default function ProfilePage() {
       toast.error(`Failed to save profile: ${error.message}`);
     } else {
       void supabase.auth.updateUser({ data: { full_name: profile.full_name.trim() } });
+      profileChanged(user.id);
       toast.success('Profile updated successfully!');
     }
     setSaving(false);
@@ -147,7 +149,12 @@ export default function ProfilePage() {
         .from('profiles')
         .upsert({ user_id: user.id, avatar_url, updated_at: new Date().toISOString() }, { onConflict: 'user_id' });
       if (error) throw error;
+      if (role === 'guide') {
+        const { error: guideError } = await supabase.from('guides').update({ photo_url: avatar_url }).eq('user_id', user.id);
+        if (guideError) throw guideError;
+      }
       setProfile((p) => ({ ...p, avatar_url }));
+      profileChanged(user.id);
       toast.success('Profile photo updated');
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Could not upload photo');

@@ -14,8 +14,9 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { useLocations } from '@/hooks/useLocations';
+import { coalescedRefresh } from '@/lib/coalescedRefresh';
 import { parseMeta } from '@/lib/bookingMeta';
-import { routeStationsFromMetadata } from '@/lib/map-data';
+import { buildRouteStations, cleanTrailPath, normalizeOfficialRoutePath, routeStationsFromMetadata } from '@/lib/map-data';
 import type { CompanionDetail } from '@/types';
 
 interface Props {
@@ -142,8 +143,18 @@ function ScopedMonitorMap({ locationId, canAddCheckpoints = false, tools, routeA
     mapRef.current = L.map(containerRef.current, {
       center,
       zoom: 14,
+      minZoom: 3,
+      maxZoom: 20,
+      zoomSnap: 0.5,
+      zoomDelta: 0.5,
+      wheelPxPerZoomLevel: 80,
+      scrollWheelZoom: true,
+      touchZoom: true,
+      doubleClickZoom: true,
+      dragging: true,
+      keyboard: true,
       zoomControl: false,
-      // Leaflet's delayed CSS zoom completion can outlive a tracker/simulation switch.
+      // Avoid Leaflet transition callbacks racing tracker-layer updates.
       zoomAnimation: false,
     });
     L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
@@ -391,25 +402,26 @@ function ScopedMonitorMap({ locationId, canAddCheckpoints = false, tools, routeA
 
   /* ── realtime subscriptions ── */
   useEffect(() => {
+    const refresh = coalescedRefresh(loadData);
     const ch = supabase
       .channel(`realtime-monitor-${locationId ?? 'all'}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'hiker_locations' }, () => {
-        void loadData();
+        refresh.schedule();
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'hiker_sessions' }, () => {
-        void loadData();
+        refresh.schedule();
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'checkpoint_surveys' }, () => {
-        void loadData();
+        refresh.schedule();
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'checkpoints' }, () => {
-        void loadData();
+        refresh.schedule();
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'trail_zones' }, () => {
-        void loadData();
+        refresh.schedule();
       })
       .subscribe();
-    return () => { supabase.removeChannel(ch); };
+    return () => { refresh.dispose(); supabase.removeChannel(ch); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [locationId]);
 
@@ -420,12 +432,28 @@ function ScopedMonitorMap({ locationId, canAddCheckpoints = false, tools, routeA
     checkpointLayer.current.clearLayers();
     routeLayer.current.clearLayers();
 
+    const referenceRoute = officialRoutes
+      .filter((route) => {
+        const location = locations.find((item) => item.id === route.location_id);
+        const label = `${route.name} ${location?.slug ?? ''} ${location?.name ?? ''}`.toLowerCase();
+        return label.includes('lamot-2') || label.includes('lamot 2') || label.includes('lamot2');
+      })
+      .sort((a, b) => (Array.isArray(b.coordinates_json) ? b.coordinates_json.length : 0) - (Array.isArray(a.coordinates_json) ? a.coordinates_json.length : 0))[0];
+    const referencePath = Array.isArray(referenceRoute?.coordinates_json)
+      ? cleanTrailPath((referenceRoute.coordinates_json as { lat: number; lng: number }[])
+          .map((point) => [Number(point.lat), Number(point.lng)] as [number, number])
+          .filter(([lat, lng]) => Number.isFinite(lat) && Number.isFinite(lng)), 1)
+      : undefined;
+
+    let sharedPeakMarkerAdded = false;
     officialRoutes.forEach((route, routeIndex) => {
-      const path = Array.isArray(route.coordinates_json)
+      const rawPath = Array.isArray(route.coordinates_json)
         ? route.coordinates_json
             .map((point: any) => [Number(point.lat), Number(point.lng)] as [number, number])
             .filter(([lat, lng]) => Number.isFinite(lat) && Number.isFinite(lng))
         : [];
+      const trailhead = locations.find((location) => location.id === route.location_id);
+      const path = normalizeOfficialRoutePath(rawPath, `${trailhead?.slug ?? ''} ${trailhead?.name ?? ''} ${route.name}`, referencePath);
       if (path.length < 2) return;
 
       const routeColor = ['#059669', '#2563eb', '#dc2626', '#9333ea'][routeIndex % 4];
@@ -437,8 +465,18 @@ function ScopedMonitorMap({ locationId, canAddCheckpoints = false, tools, routeA
         .bindPopup(`<strong>${esc(route.name)}</strong><br/><small>Official published route</small>`)
         .addTo(routeLayer.current!);
 
-      routeStationsFromMetadata(route.recording_metadata, path).forEach((station) => {
-        const label = station.kind === 'jump_off' ? 'J' : station.kind === 'peak' ? 'P' : `S${station.index - 1}`;
+      const rawStations = routeStationsFromMetadata(route.recording_metadata, rawPath);
+      const stations = rawStations.length >= 2
+        && rawStations[0].lat === path[0][0] && rawStations[0].lng === path[0][1]
+        && rawStations[rawStations.length - 1].lat === path[path.length - 1][0]
+        && rawStations[rawStations.length - 1].lng === path[path.length - 1][1]
+        ? rawStations
+        : buildRouteStations(path);
+      stations.forEach((station) => {
+        if (station.kind === 'peak' && sharedPeakMarkerAdded) return;
+        if (station.kind === 'peak') sharedPeakMarkerAdded = true;
+        const shortName = ({ 'lamot-1': 'L1', 'lamot-2': 'L2', 'sto-tomas': 'ST' } as Record<string, string>)[trailhead?.slug ?? ''] ?? 'J';
+        const label = station.kind === 'jump_off' ? shortName : station.kind === 'peak' ? 'P' : `S${station.index - 1}`;
         const color = station.kind === 'peak' ? '#dc2626' : station.kind === 'jump_off' ? '#059669' : '#2563eb';
         L.marker([station.lat, station.lng], {
           zIndexOffset: 100,
@@ -449,7 +487,7 @@ function ScopedMonitorMap({ locationId, canAddCheckpoints = false, tools, routeA
             iconAnchor: [14, 14],
           }),
         })
-          .bindPopup(`<strong>${esc(station.name)}</strong><br/><small>${esc(station.description)}</small>`)
+          .bindPopup(`<strong>${esc(station.kind === 'jump_off' && trailhead ? trailhead.name : station.name)}</strong><br/>${esc(route.name)}<br/><small>${esc(station.description)}</small>`)
           .addTo(routeLayer.current!);
       });
     });
@@ -522,7 +560,7 @@ function ScopedMonitorMap({ locationId, canAddCheckpoints = false, tools, routeA
       }).on('click', () => { setSelectedId(s.id); setPanelOpen(true); });
       hikerLayer.current!.addLayer(m);
     });
-  }, [sessions, checkpoints, progress, officialRoutes, viewMode, clock]);
+  }, [sessions, checkpoints, progress, officialRoutes, viewMode, clock, locations]);
 
   /* ── Inactivity alert: warn admin when a hiker hasn't pinged in 20+ min ── */
   const alertedRef = useRef<Set<string>>(new Set());
@@ -597,9 +635,21 @@ function ScopedMonitorMap({ locationId, canAddCheckpoints = false, tools, routeA
         routes={<>
           <ul className="live-map-route-list">
             {officialRoutes.map(route => <li key={route.id}><button type="button" aria-label={`Show ${route.name} on map`} onClick={() => {
-              const path = route.coordinates_json as { lat: number; lng: number }[];
+              const rawPath = (route.coordinates_json as { lat: number; lng: number }[]).map(point => [Number(point.lat), Number(point.lng)] as [number, number]);
+              const trailhead = locations.find((location) => location.id === route.location_id);
+              const referenceRoute = officialRoutes.find((candidate) => {
+                const candidateLocation = locations.find((item) => item.id === candidate.location_id);
+                const label = `${candidate.name} ${candidateLocation?.slug ?? ''} ${candidateLocation?.name ?? ''}`.toLowerCase();
+                return label.includes('lamot-2') || label.includes('lamot 2') || label.includes('lamot2');
+              });
+              const referencePath = Array.isArray(referenceRoute?.coordinates_json)
+                ? cleanTrailPath((referenceRoute.coordinates_json as { lat: number; lng: number }[])
+                    .map((point) => [Number(point.lat), Number(point.lng)] as [number, number])
+                    .filter(([lat, lng]) => Number.isFinite(lat) && Number.isFinite(lng)), 1)
+                : undefined;
+              const path = normalizeOfficialRoutePath(rawPath, `${trailhead?.slug ?? ''} ${trailhead?.name ?? ''} ${route.name}`, referencePath);
               const map = mapRef.current;
-              map?.fitBounds(path.map(point => [point.lat, point.lng] as [number, number]), { paddingTopLeft: [30, 30], paddingBottomRight: [60, Math.min(map.getSize().y * .4, 260)], maxZoom: 17, animate: false });
+              map?.fitBounds(path, { paddingTopLeft: [30, 30], paddingBottomRight: [60, Math.min(map.getSize().y * .4, 260)], maxZoom: 17, animate: false });
             }}><strong>{route.name}</strong><small>Official published route</small></button></li>)}
           </ul>
           {!officialRoutes.length && <p className="live-map-empty">No published routes available.</p>}

@@ -3,6 +3,7 @@ import { AlertTriangle, BellRing, Check, ExternalLink, Info, MessageCircle, Send
 import { cn } from '@/lib/utils';
 import { getKaliRoleLabel, type KaliInsight, type KaliRole } from '@/lib/kaliContext';
 import KaliAvatar from './KaliAvatar';
+import { QRCodeSVG } from 'qrcode.react';
 
 interface KaliContextPanelProps {
   role: KaliRole;
@@ -142,6 +143,17 @@ export default function KaliContextPanel({ role, insights }: KaliContextPanelPro
                 <div className="min-w-0 flex-1">
                   <p className="text-[11px] font-bold leading-tight">{item.title}</p>
                   <p className="mt-0.5 text-xs leading-normal text-foreground">{item.message}</p>
+
+                  {item.kind === 'booking-reminder' && Number(item.meta.daysUntil) === 0 && typeof item.meta.qrCode === 'string' && (
+                    <div className="mt-2 flex items-center gap-2 rounded-lg border border-primary/20 bg-background/80 p-2">
+                      <div className="rounded bg-white p-1">
+                        <QRCodeSVG value={item.meta.qrCode} size={64} level="M" />
+                      </div>
+                      <p className="text-[10px] font-semibold leading-snug text-foreground">
+                        Present this QR at the jump-off staff desk.
+                      </p>
+                    </div>
+                  )}
 
                   {item.kind === 'weather' && (
                     <div className="mt-1.5 space-y-1 pt-1.5 border-t border-border/30">

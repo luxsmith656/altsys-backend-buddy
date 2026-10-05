@@ -439,12 +439,11 @@ export default function CentralAnalyticsReporting() {
     filteredBookings
       .filter((b) => b.status !== 'cancelled')
       .forEach((b) => {
-        try {
-          const d = parseISO(b.bookingDate);
-          const dayIndex = getDay(d);
-          counts[dayIndex] += b.groupSize;
-          revenueByDay[dayIndex] += b.amountPaid;
-        } catch {}
+        const d = parseISO(b.bookingDate);
+        if (Number.isNaN(d.getTime())) return;
+        const dayIndex = getDay(d);
+        counts[dayIndex] += b.groupSize;
+        revenueByDay[dayIndex] += b.amountPaid;
       });
 
     return days.map((day, idx) => ({

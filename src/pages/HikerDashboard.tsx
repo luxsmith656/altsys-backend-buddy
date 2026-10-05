@@ -1,5 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '@/hooks/useAuth';
+import { useLocations } from '@/hooks/useLocations';
+import ProfileAvatar from '@/components/common/ProfileAvatar';
 import { supabase } from '@/integrations/supabase/client';
 import {
   ADMIN_CHECKIN_TOKEN_PREFIX,
@@ -84,6 +86,7 @@ const STATUS_LABELS: Record<string, string> = {
 
 export default function HikerDashboard() {
   const { user } = useAuth();
+  const { locations } = useLocations();
   const navigate = useNavigate();
   const [bookings, setBookings] = useState<any[]>([]);
   const [sessions, setSessions] = useState<any[]>([]);
@@ -192,10 +195,19 @@ export default function HikerDashboard() {
       .sort((a, b) => a.booking_date.localeCompare(b.booking_date))[0],
     [bookings],
   );
+  const upcomingBookingLocation = useMemo(
+    () => upcomingConfirmedBooking ? locations.find((location) => location.id === upcomingConfirmedBooking.location_id)?.name : undefined,
+    [locations, upcomingConfirmedBooking],
+  );
   const { insights: kaliInsights } = useKaliContext({
     role: 'hiker',
     booking: upcomingConfirmedBooking
-      ? { status: upcomingConfirmedBooking.status, date: upcomingConfirmedBooking.booking_date }
+      ? {
+          status: upcomingConfirmedBooking.status,
+          date: upcomingConfirmedBooking.booking_date,
+          qrCode: upcomingConfirmedBooking.qr_code_data || upcomingConfirmedBooking.id,
+          jumpOff: upcomingBookingLocation,
+        }
       : null,
   });
 
@@ -645,7 +657,7 @@ export default function HikerDashboard() {
           ].map((a) => (
             <Button key={a.to} asChild variant="outline" className="h-auto py-4 flex-col gap-2 glass-card">
               <Link to={a.to}>
-                <a.icon className="h-5 w-5 text-primary" />
+                {a.to === '/profile' ? <ProfileAvatar className="h-7 w-7 text-xs" /> : <a.icon className="h-5 w-5 text-primary" />}
                 <span className="text-xs">{a.label}</span>
               </Link>
             </Button>
@@ -1030,7 +1042,7 @@ export default function HikerDashboard() {
           <DialogContent className="sm:max-w-md rounded-3xl p-6 text-center">
             <DialogHeader className="space-y-2">
               <DialogTitle className="text-lg font-bold flex items-center justify-center gap-2">
-                <Users className="h-5 w-5 text-primary" /> Group Companion QR Permit
+                <Users className="h-5 w-5 text-primary" /> Group Companion QR
               </DialogTitle>
               <p className="text-xs text-muted-foreground">
                 Let your {companionQrBooking?.group_size || 8} companions scan this QR on their phones. They only need to type their name to get live GPS tracking!

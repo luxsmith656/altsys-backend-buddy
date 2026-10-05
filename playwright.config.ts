@@ -1,5 +1,8 @@
 import { defineConfig, devices } from '@playwright/test';
 
+const previewPort = process.env.E2E_PREVIEW_PORT ?? '4173';
+const previewUrl = `http://127.0.0.1:${previewPort}`;
+
 export default defineConfig({
   testDir: './tests',
   // PostgreSQL .test.mjs files run through the required test:db command, not Playwright discovery.
@@ -15,7 +18,7 @@ export default defineConfig({
   timeout: 30_000,
   expect: { timeout: 8_000 },
   use: {
-    baseURL: 'http://127.0.0.1:4173',
+    baseURL: previewUrl,
     trace: 'retain-on-failure',
     screenshot: 'only-on-failure',
     video: 'retain-on-failure',
@@ -27,8 +30,8 @@ export default defineConfig({
     },
   ],
   webServer: {
-    command: 'npm run preview -- --host 127.0.0.1 --port 4173',
-    url: 'http://127.0.0.1:4173',
+    command: `npm run preview -- --host 127.0.0.1 --port ${previewPort}`,
+    url: previewUrl,
     reuseExistingServer: !process.env.CI,
     timeout: 120_000,
   },

@@ -38,7 +38,7 @@ export function getDeactivatedAccounts(): string[] {
   try {
     const raw = localStorage.getItem(DEACTIVATED_ACCOUNTS_KEY);
     if (raw) return JSON.parse(raw);
-  } catch {}
+  } catch { /* An unavailable or malformed local cache has no entries. */ }
   return [];
 }
 
@@ -48,7 +48,7 @@ export function isAccountDeactivated(userId: string, email?: string): boolean {
     const list = getDeactivatedAccounts();
     if (userId && list.includes(userId)) return true;
     if (email && list.includes(email.toLowerCase().trim())) return true;
-  } catch {}
+  } catch { /* Ignore malformed optional cached account records. */ }
   return false;
 }
 
@@ -65,7 +65,7 @@ export function setAccountDeactivated(userId: string, email: string | undefined,
       list = list.filter((t) => !targets.includes(t));
     }
     localStorage.setItem(DEACTIVATED_ACCOUNTS_KEY, JSON.stringify(list));
-  } catch {}
+  } catch (error) { console.warn('Could not cache account status.', error); }
 }
 
 // Fallback seed admin accounts matching standard deployment
@@ -134,7 +134,7 @@ function getStoredAdmins(): AdminAccount[] {
         status: isAccountDeactivated(a.userId, a.email) ? 'deactivated' : (a.status || 'active'),
       }));
     }
-  } catch {}
+  } catch { /* Use the existing fallback list when local cache cannot be read. */ }
   return [...SEED_ADMINS].map((a) => ({
     ...a,
     status: isAccountDeactivated(a.userId, a.email) ? 'deactivated' : (a.status || 'active'),
@@ -144,7 +144,7 @@ function getStoredAdmins(): AdminAccount[] {
 function saveStoredAdmins(admins: AdminAccount[]) {
   try {
     localStorage.setItem(LOCAL_STORAGE_ADMIN_KEY, JSON.stringify(admins));
-  } catch {}
+  } catch (error) { console.warn('Could not cache admin accounts.', error); }
 }
 
 /** Calls the server-side account manager and throws a readable error on any failure (no fake success). */
@@ -158,7 +158,7 @@ async function invokeManageUsers(body: Record<string, unknown>): Promise<any> {
         const j = await ctx.json();
         if (j?.error) msg = j.error;
       }
-    } catch {}
+    } catch { /* Preserve the original server error when its response is not JSON. */ }
     throw new Error(msg || 'Server request failed');
   }
   if (data?.error) throw new Error(data.error);
@@ -355,7 +355,7 @@ export async function fetchUsersList(locationId?: string | null): Promise<UserAc
         if (latestBooking?.notes) {
           try {
             latestMeta = typeof latestBooking.notes === 'string' ? JSON.parse(latestBooking.notes) : latestBooking.notes;
-          } catch {}
+          } catch { /* Legacy free-text notes contain no structured contact fields. */ }
         }
 
         const email = latestMeta?.emailAddress || latestMeta?.email || latestBooking?.contact_email || `${(p.full_name || 'hiker').toLowerCase().replace(/[^a-z0-9]/g, '')}@example.com`;
@@ -393,7 +393,7 @@ export async function fetchUsersList(locationId?: string | null): Promise<UserAc
       if (latestBooking?.notes) {
         try {
           latestMeta = typeof latestBooking.notes === 'string' ? JSON.parse(latestBooking.notes) : latestBooking.notes;
-        } catch {}
+        } catch { /* Legacy free-text notes contain no structured contact fields. */ }
       }
 
       const email = latestMeta?.emailAddress || latestMeta?.email || latestBooking?.contact_email || 'hiker@example.com';
@@ -482,7 +482,7 @@ export async function fetchUsersList(locationId?: string | null): Promise<UserAc
             };
       });
     }
-  } catch {}
+  } catch { /* Optional local overrides must not prevent displaying server records. */ }
 
   return users;
 }
