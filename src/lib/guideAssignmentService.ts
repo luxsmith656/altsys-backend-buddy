@@ -142,170 +142,41 @@ export async function acceptGuideAssignment({
 export async function declineAndReassignGuide({
   assignmentId,
   bookingId,
-  currentGuideId,
-  currentGuideName,
-  currentGuideUserId,
   reason,
   replacementGuideId,
-  replacementGuideName,
-  replacementGuideUserId,
-  replacementGuidePhone,
-  hikerUserId,
-  bookingDate,
-  locationId,
 }: DeclineAndReassignParams): Promise<{ success: boolean; error?: string }> {
   try {
-    const decidedAt = new Date().toISOString();
     const cleanReason = reason.trim() || 'Not available';
-
-    const declineCurrentAssignment = async () => {
-      const { error } = await supabase
-        .from('booking_assignments' as any)
-        .update({
-          status: 'declined',
-          decided_at: decidedAt,
-          reassignment_reason: cleanReason,
-        } as any)
-        .eq('id', assignmentId);
-      if (error) throw error;
+    const { data, error } = await supabase.rpc('guide_reassign_hike_assignment', {
+      p_assignment_id: assignmentId,
+      p_replacement_guide_id: replacementGuideId || null,
+      p_reason: cleanReason,
+    });
+    if (error) {
+      if (error.code === 'PGRST202') throw new Error('Guide reassignment is not installed. Apply migration 20261006120000_guide_message_audience_and_reassignment.sql.');
+      throw error;
+    }
+    const result = data as unknown as {
+      replacementGuideUserId: string | null; replacementGuideName: string | null;
+      oldGuideName: string; hikerUserId: string | null; bookingDate: string;
     };
-
-    // Keep the current assignment active until all handover writes succeed.
-    const { data: booking, error: bookingFetchError } = await supabase
-      .from('bookings')
-      .select('notes, user_id, booking_date, location_id')
-      .eq('id', bookingId)
-      .single();
-    if (bookingFetchError) throw bookingFetchError;
-    if (!booking) throw new Error('Assigned booking was not found.');
-
-    const effectiveHikerId = hikerUserId || booking?.user_id;
-    const effectiveLocId = locationId || booking?.location_id;
-    const effectiveDate = bookingDate || booking?.booking_date || 'your scheduled date';
-    const meta = parseMeta(booking?.notes);
-
-    if (replacementGuideId && replacementGuideName) {
-      // 3A. Reassign to replacement peer guide
-      const { data: existingAss, error: existingError } = await supabase
-        .from('booking_assignments' as any)
-        .select('id')
-        .eq('booking_id', bookingId)
-        .eq('guide_id', replacementGuideId)
-        .maybeSingle();
-      if (existingError) throw existingError;
-
-      if ((existingAss as any)?.id) {
-        const { error: replacementUpdateError } = await supabase
-          .from('booking_assignments' as any)
-          .update({ status: 'pending', decided_at: null, reassignment_reason: null } as any)
-          .eq('id', (existingAss as any).id);
-        if (replacementUpdateError) throw replacementUpdateError;
-      } else {
-        const { error: replacementInsertError } = await supabase
-          .from('booking_assignments' as any)
-          .insert({
-            booking_id: bookingId,
-            guide_id: replacementGuideId,
-            location_id: effectiveLocId,
-            status: 'pending',
-          } as any);
-        if (replacementInsertError) throw replacementInsertError;
-      }
-
-      // Update booking metadata
-      const updatedMeta = encodeMeta({
-        ...meta,
-        assignedGuide: replacementGuideName,
-        assignedGuideId: replacementGuideId,
-        guideStatus: 'reassigned_pending',
-        previousGuide: currentGuideName,
-        previousGuideId: currentGuideId,
-        guideChangeReason: cleanReason,
-        guideChangedAt: decidedAt,
-      });
-
-      const { error: bookingUpdateError } = await supabase
-        .from('bookings')
-        .update({ notes: updatedMeta } as any)
-        .eq('id', bookingId);
-      if (bookingUpdateError) throw bookingUpdateError;
-
-      // System chat messages
-      const { error: messageError } = await supabase.from('booking_messages' as any).insert([
-        {
-          booking_id: bookingId,
-          sender_id: currentGuideUserId || null,
-          sender_role: 'system',
-          kind: 'system',
-          content: `🔄 Guide ${currentGuideName} was unable to lead this hike (Reason: ${cleanReason}) and reassigned it to ${replacementGuideName}.`,
-        },
-        {
-          booking_id: bookingId,
-          sender_id: null,
-          sender_role: 'system',
-          kind: 'system',
-          content: `📩 Assignment sent to new guide ${replacementGuideName}. Awaiting confirmation.`,
-        },
-      ] as any);
-      if (messageError) throw messageError;
-
-      await declineCurrentAssignment();
-
-      // Notify replacement guide
-      if (replacementGuideUserId) {
-        await notifyUser(replacementGuideUserId, {
-          title: '📋 New Hike Assignment Handover',
-          body: `You were reassigned to lead Booking #${bookingId.slice(0, 8)} on ${effectiveDate} by ${currentGuideName}. Please review and accept.`,
-          category: 'booking',
-        });
-      }
-
-      // Notify hiker of guide replacement
-      if (effectiveHikerId) {
-        await notifyUser(effectiveHikerId, {
-          title: '🔄 Mountain Guide Update',
-          body: `Your mountain guide for ${effectiveDate} has been updated to ${replacementGuideName}${replacementGuidePhone ? ` (${replacementGuidePhone})` : ''} due to: ${cleanReason}.`,
-          category: 'booking',
-        });
-      }
-    } else {
-      // 3B. Returned to Admin / Dispatch pool
-      const updatedMeta = encodeMeta({
-        ...meta,
-        assignedGuide: null,
-        assignedGuideId: null,
-        guideStatus: 'declined',
-        previousGuide: currentGuideName,
-        previousGuideId: currentGuideId,
-        guideDeclineReason: cleanReason,
-        guideChangedAt: decidedAt,
-      });
-
-      const { error: bookingUpdateError } = await supabase
-        .from('bookings')
-        .update({ notes: updatedMeta } as any)
-        .eq('id', bookingId);
-      if (bookingUpdateError) throw bookingUpdateError;
-
-      const { error: messageError } = await supabase.from('booking_messages' as any).insert({
-        booking_id: bookingId,
-        sender_id: currentGuideUserId || null,
-        sender_role: 'system',
-        kind: 'system',
-        content: `⚠️ Guide ${currentGuideName} declined this assignment (Reason: ${cleanReason}). Returned to Admin Dispatch pool.`,
-      } as any);
-      if (messageError) throw messageError;
-
-      await declineCurrentAssignment();
-
-      // Notify hiker that admin is assigning a replacement
-      if (effectiveHikerId) {
-        await notifyUser(effectiveHikerId, {
-          title: '⏳ Mountain Guide Reassignment in Progress',
-          body: `Your assigned guide was unable to take your hike on ${effectiveDate} (${cleanReason}). The LGU dispatch is assigning a replacement guide for you.`,
-          category: 'booking',
-        });
-      }
+    if (!result || typeof result !== 'object' || Array.isArray(result)) throw new Error('Guide reassignment returned an invalid response. Refresh before retrying.');
+    const date = result.bookingDate || 'your scheduled date';
+    if (result.replacementGuideUserId && result.replacementGuideName) {
+      await notifyUser(result.replacementGuideUserId, {
+        title: 'New Hike Assignment Handover',
+        body: `You were reassigned to Booking #${bookingId.slice(0, 8)} on ${date} by ${result.oldGuideName}. Please review and accept.`,
+        category: 'booking',
+      }).catch((error) => console.warn('Guide handoff committed, but replacement notification failed:', error));
+    }
+    if (result.hikerUserId) {
+      await notifyUser(result.hikerUserId, {
+        title: result.replacementGuideName ? 'Mountain Guide Update' : 'Mountain Guide Reassignment in Progress',
+        body: result.replacementGuideName
+          ? `Your mountain guide for ${date} has been updated to ${result.replacementGuideName} due to: ${cleanReason}.`
+          : `Your assigned guide was unable to take your hike on ${date} (${cleanReason}). The LGU dispatch is assigning a replacement.`,
+        category: 'booking',
+      }).catch((error) => console.warn('Guide handoff committed, but hiker notification failed:', error));
     }
 
     return { success: true };
@@ -319,142 +190,68 @@ export async function declineAndReassignGuide({
  * Admin reassigns a mountain guide on any booking
  */
 export async function reassignGuideByAdmin({
-  bookingId,
-  currentGuideId,
-  currentGuideName,
-  currentGuideUserId,
-  newGuideId,
-  newGuideName,
-  newGuideUserId,
   newGuidePhone,
+  bookingId,
+  newGuideId,
   reason,
   hikerUserId,
   bookingDate,
-  locationId,
 }: AdminReassignParams): Promise<{ success: boolean; error?: string }> {
   try {
-    const changedAt = new Date().toISOString();
     const cleanReason = reason.trim() || 'Admin reassignment';
-
-    // 1. Mark current guide assignment as declined/reassigned
-    if (currentGuideId) {
-      const { error: declineError } = await supabase
-        .from('booking_assignments' as any)
-        .update({
-          status: 'declined',
-          decided_at: changedAt,
-          reassignment_reason: `Reassigned by admin: ${cleanReason}`,
-        } as any)
-        .eq('booking_id', bookingId)
-        .eq('guide_id', currentGuideId);
-      if (declineError) throw declineError;
-
-      // Free previous guide status if not on duty
-      await supabase
-        .from('guides')
-        .update({ status: 'available' } as any)
-        .eq('id', currentGuideId)
-        .neq('status', 'on_duty');
-    }
-
-    // 2. Insert or update replacement guide assignment
-    const { data: existingRows, error: existingError } = await supabase
-      .from('booking_assignments' as any)
-      .select('id')
-      .eq('booking_id', bookingId)
-      .eq('guide_id', newGuideId)
-      .limit(1);
-    if (existingError) throw existingError;
-    const existingId = (existingRows as unknown as { id: string }[] | null)?.[0]?.id;
-
-    if (existingId) {
-      const { error } = await supabase
-        .from('booking_assignments' as any)
-        .update({ status: 'pending', decided_at: null, reassignment_reason: null } as any)
-        .eq('id', existingId);
-      if (error) throw error;
-    } else {
-      const { error } = await supabase
-        .from('booking_assignments' as any)
-        .insert({
-          booking_id: bookingId,
-          guide_id: newGuideId,
-          location_id: locationId,
-          status: 'pending',
-        } as any);
-      if (error) throw error;
-    }
-
-    // 3. Update booking metadata
-    const { data: booking, error: fetchError } = await supabase
-      .from('bookings')
-      .select('notes, user_id, booking_date')
-      .eq('id', bookingId)
-      .single();
-    if (fetchError) throw fetchError;
-
-    const effectiveHikerId = hikerUserId || booking?.user_id;
-    const effectiveDate = bookingDate || booking?.booking_date || 'your scheduled date';
-    const meta = parseMeta(booking?.notes);
-
-    const updatedMeta = encodeMeta({
-      ...meta,
-      assignedGuide: newGuideName,
-      assignedGuideId: newGuideId,
-      guideStatus: 'reassigned_pending',
-      previousGuide: currentGuideName || null,
-      previousGuideId: currentGuideId || null,
-      guideChangeReason: cleanReason,
-      guideChangedAt: changedAt,
+    const { data, error } = await supabase.rpc('admin_reassign_hike_guide', {
+      p_booking_id: bookingId,
+      p_guide_id: newGuideId,
+      p_reason: cleanReason,
     });
+    if (error) {
+      if (error.code === 'PGRST202') throw new Error('Atomic guide reassignment is not installed. Apply migration 20261006120000_guide_message_audience_and_reassignment.sql.');
+      throw error;
+    }
+    const result = data as unknown as {
+      guideUserId: string; guideName: string; guidePhone: string | null;
+      oldGuideUserId: string | null; oldGuideName: string | null;
+      hikerUserId: string | null; bookingDate: string;
+    };
+    if (!result || typeof result !== 'object' || Array.isArray(result) || typeof result.guideUserId !== 'string') {
+      throw new Error('Guide reassignment returned an invalid response. Refresh the booking before retrying.');
+    }
+    const effectiveHikerId = result.hikerUserId || hikerUserId;
+    const effectiveDate = result.bookingDate || bookingDate || 'your scheduled date';
 
-    const { error: bookingError } = await supabase
-      .from('bookings')
-      .update({ notes: updatedMeta } as any)
-      .eq('id', bookingId);
-    if (bookingError) throw bookingError;
-
-    // 4. System chat messages
-    await supabase.from('booking_messages' as any).insert([
-      {
-        booking_id: bookingId,
-        sender_role: 'system',
-        kind: 'system',
-        content: `🔄 Admin reassigned mountain guide: ${currentGuideName ? `${currentGuideName} replaced by ${newGuideName}` : `Assigned ${newGuideName}`}. Reason: ${cleanReason}`,
-      },
-      {
-        booking_id: bookingId,
-        sender_role: 'system',
-        kind: 'system',
-        content: `📩 Assignment sent to ${newGuideName}. Awaiting guide confirmation.`,
-      },
-    ] as any);
+    const { error: messageError } = await supabase.from('booking_messages').insert({
+      booking_id: bookingId,
+      sender_role: 'system',
+      kind: 'system',
+      content: `Admin reassigned mountain guide: ${result.oldGuideName ? `${result.oldGuideName} replaced by ${result.guideName}` : `Assigned ${result.guideName}`}. Reason: ${cleanReason}`,
+    });
+    if (messageError) console.warn('Guide reassigned, but booking notice could not be added:', messageError.message);
 
     // 5. Notify previous guide
-    if (currentGuideUserId) {
-      await notifyUser(currentGuideUserId, {
+    if (result.oldGuideUserId) {
+      await notifyUser(result.oldGuideUserId, {
         title: 'ℹ️ Booking Reassignment Notice',
-        body: `Your assignment for Booking #${bookingId.slice(0, 8)} on ${effectiveDate} was reassigned to ${newGuideName} by the admin (Reason: ${cleanReason}).`,
+        body: `Your assignment for Booking #${bookingId.slice(0, 8)} on ${effectiveDate} was reassigned to ${result.guideName} by the admin (Reason: ${cleanReason}).`,
         category: 'booking',
-      });
+      }).catch((error) => console.warn('Guide reassigned, but previous-guide notification failed:', error));
     }
 
     // 6. Notify replacement guide
-    if (newGuideUserId) {
-      await notifyUser(newGuideUserId, {
+    if (result.guideUserId) {
+      await notifyUser(result.guideUserId, {
         title: '📋 New Hike Booking Assignment',
         body: `You have been assigned to lead Booking #${bookingId.slice(0, 8)} on ${effectiveDate}. Please review and accept.`,
         category: 'booking',
-      });
+      }).catch((error) => console.warn('Guide reassigned, but replacement notification failed:', error));
     }
 
     // 7. Notify hiker
     if (effectiveHikerId) {
       await notifyUser(effectiveHikerId, {
         title: '🔄 Mountain Guide Changed',
-        body: `Your mountain guide for ${effectiveDate} is now ${newGuideName}${newGuidePhone ? ` (${newGuidePhone})` : ''}. Reason: ${cleanReason}.`,
+        body: `Your mountain guide for ${effectiveDate} is now ${result.guideName}${result.guidePhone ? ` (${result.guidePhone})` : newGuidePhone ? ` (${newGuidePhone})` : ''}. Reason: ${cleanReason}.`,
         category: 'booking',
-      });
+      }).catch((error) => console.warn('Guide reassigned, but hiker notification failed:', error));
     }
 
     return { success: true };

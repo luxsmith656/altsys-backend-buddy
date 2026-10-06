@@ -725,7 +725,7 @@ export default function MapPage() {
       {canMonitorAll && activeMapTab === 'tracker' && !simulationMode ? (
         locationsLoading || (!isSuperAdmin && !activeLocationId)
           ? <p className="live-map-empty" role="status">Loading your assigned location...</p>
-          : <RealtimeMonitorMap locationId={activeLocationId} canAddCheckpoints={role === 'admin' || role === 'super_admin'} tools={mapTools} routeActions={routeActions} />
+          : <RealtimeMonitorMap locationId={isSuperAdmin ? null : activeLocationId} canAddCheckpoints={role === 'admin' || role === 'super_admin'} tools={mapTools} routeActions={routeActions} />
       ) : (
         <div className="live-map-page-body">
           <MapWorkspace title={simulationMode ? 'Simulation groups' : 'My hike'} open={workspacePanelOpen} onOpenChange={setWorkspacePanelOpen}
