@@ -1,5 +1,15 @@
 #!/usr/bin/env sh
 set -eu
 
-echo "Running release verification before push..."
-npm run verify
+if [ -n "${E2E_SUPER_ADMIN_EMAIL:-}" ] && [ -n "${E2E_SUPER_ADMIN_PASSWORD:-}" ] \
+  && [ -n "${E2E_MDRRMO_EMAIL:-}" ] && [ -n "${E2E_MDRRMO_PASSWORD:-}" ] \
+  && [ -n "${E2E_ADMIN_EMAIL:-}" ] && [ -n "${E2E_ADMIN_PASSWORD:-}" ] \
+  && [ -n "${E2E_STOTOMAS_ADMIN_EMAIL:-}" ] && [ -n "${E2E_STOTOMAS_ADMIN_PASSWORD:-}" ] \
+  && [ -n "${E2E_GUIDE_EMAIL:-}" ] && [ -n "${E2E_GUIDE_PASSWORD:-}" ] \
+  && [ -n "${E2E_HIKER_EMAIL:-}" ] && [ -n "${E2E_HIKER_PASSWORD:-}" ]; then
+  echo "Running full release verification, including all authenticated roles..."
+  npm run verify
+else
+  echo "Local role-test credentials are not configured. Running all local-safe checks; authenticated-role E2E remains mandatory in GitHub PR CI."
+  npm run verify:prepush
+fi

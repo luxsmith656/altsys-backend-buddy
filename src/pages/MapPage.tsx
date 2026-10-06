@@ -6,7 +6,9 @@ import L from 'leaflet';
 import {
   routeStationsFromMetadata,
   buildRouteStations,
+  LAMOT_2_REFERENCE_PATH,
   normalizeOfficialRoutePath,
+  routeStationPosition,
   getDefaultTrailForLocation,
   MT_KALISUNGAN_CENTER,
   DEFAULT_ZOOM,
@@ -15,13 +17,13 @@ import {
   type RouteStation,
 } from '@/lib/map-data';
 import { Button } from '@/components/ui/button';
-import { 
-  MapPinned, 
-  Layers, 
-  Activity, 
-  Compass, 
-  Users, 
-  RefreshCw, 
+import {
+  MapPinned,
+  Layers,
+  Activity,
+  Compass,
+  Users,
+  RefreshCw,
   Navigation,
   Clock,
   ChevronLeft,
@@ -161,19 +163,19 @@ export default function MapPage() {
     document.body.classList.add('map-workspace-open');
     return () => document.body.classList.remove('map-workspace-open');
   }, []);
-  
+
   const isTrailRecorder = role === 'ranger' || role === 'guide' || role === 'admin' || role === 'super_admin';
   const canMonitorAll = role === 'ranger' || role === 'admin' || role === 'super_admin';
   const isSelfTrackingRole = role === 'hiker' || role === 'guide';
   const [activeMapTab, setActiveMapTab] = useState<'tracker' | 'editor'>('tracker');
-  
+
   const [dbTrails, setDbTrails] = useState<MapTrail[]>([]);
   const [rawTrailZones, setRawTrailZones] = useState<DBTrailZone[]>([]);
   const [scopeMode, setScopeMode] = useState<'all' | 'one' | 'two'>('all');
   const [scopeLocationIds, setScopeLocationIds] = useState<string[]>([]);
   const [routeFilterId, setRouteFilterId] = useState('all');
   const [mapInstance, setMapInstance] = useState<L.Map | null>(null);
-  
+
   const [simulationHikers, setSimulationHikers] = useState<SimulatedHiker[]>([]);
   const [assignedTrailZoneId, setAssignedTrailZoneId] = useState<string | null>(null);
   const [officialRoutesRevision, setOfficialRoutesRevision] = useState(0);
@@ -264,11 +266,31 @@ export default function MapPage() {
     } else if (activeLocationId && role !== 'super_admin' && role !== 'mdrrmo') {
       trackerQuery = trackerQuery.eq('location_id', activeLocationId) as typeof trackerQuery;
     }
-    
+
     const { data: trackerData, error } = await trackerQuery;
     if (error) toast.error('Published routes could not be loaded. Please reconnect and retry.');
     const trackerRows = (trackerData as DBTrailZone[]) ?? [];
-    const referenceRow = trackerRows
+    let referenceRows = trackerRows;
+    const hasReference = referenceRows.some((row) => {
+      const location = locations.find((item) => item.id === row.location_id);
+      const label = `${row.name} ${location?.slug ?? ''} ${location?.name ?? ''}`.toLowerCase();
+      return label.includes('lamot-2') || label.includes('lamot 2') || label.includes('lamot2');
+    });
+    if (!hasReference && activeLocationId && role !== 'super_admin' && role !== 'mdrrmo') {
+      const lamot2 = barangayLocations.find((location) => location.slug.includes('lamot-2') || location.slug.includes('lamot2'));
+      if (lamot2) {
+        const { data: referenceData } = await supabase
+          .from('trail_zones')
+          .select('id,location_id,name,difficulty,elevation_meters,coordinates_json,status,is_official,review_status,recording_metadata')
+          .eq('location_id', lamot2.id)
+          .eq('status', 'active')
+          .eq('is_official', true)
+          .eq('review_status', 'approved')
+          .order('created_at', { ascending: true });
+        referenceRows = (referenceData as DBTrailZone[] | null) ?? [];
+      }
+    }
+    const referenceRow = referenceRows
       .filter((row) => {
         const location = locations.find((item) => item.id === row.location_id);
         const routeLabel = `${row.name} ${location?.slug ?? ''} ${location?.name ?? ''}`.toLowerCase();
@@ -295,7 +317,13 @@ export default function MapPage() {
             : routeText.includes('lamot 2') || routeText.includes('lamot-2') || routeText.includes('lamot2')
               ? barangayLocations.find((location) => location.slug.includes('lamot-2')) : undefined;
         const trailhead = namedTrailhead ?? assignedLocation;
-        const path = normalizeOfficialRoutePath(rawPath, `${trailhead?.slug ?? ''} ${trailhead?.name ?? ''} ${trail.name} ${activeLocationId ?? ''}`, referencePath);
+        const routeMetadata = trail.recording_metadata as { sharedRouteSuffix?: unknown } | null | undefined;
+        const path = normalizeOfficialRoutePath(
+          rawPath,
+          `${trailhead?.slug ?? ''} ${trailhead?.name ?? ''} ${trail.name} ${activeLocationId ?? ''}`,
+          referencePath,
+          Boolean(routeMetadata?.sharedRouteSuffix),
+        );
         if (path.length < 2) return null;
         let distanceKm = 0;
         for (let i = 1; i < path.length; i++) {
@@ -313,14 +341,23 @@ export default function MapPage() {
           distance: `${distanceKm.toFixed(1)} km`,
           path,
           stations: (() => {
-            const stations = routeStationsFromMetadata(trail.recording_metadata, rawPath);
+            const pathUnchanged = path.length === rawPath.length
+              && path.every(([lat, lng], pointIndex) => rawPath[pointIndex]?.[0] === lat && rawPath[pointIndex]?.[1] === lng);
+            const stations = pathUnchanged ? routeStationsFromMetadata(trail.recording_metadata, rawPath) : [];
+            const mergeStationNumber = trailhead?.slug.includes('lamot-1')
+              ? 1 as const
+              : trailhead?.slug.includes('sto-tomas') ? 5 as const : null;
+            const mergeMarker = mergeStationNumber ? {
+              stationNumber: mergeStationNumber,
+              position: routeStationPosition(referencePath ?? LAMOT_2_REFERENCE_PATH, mergeStationNumber),
+            } : undefined;
             return stations.length >= 2
               && stations[0].lat === path[0][0]
               && stations[0].lng === path[0][1]
               && stations[stations.length - 1].lat === path[path.length - 1][0]
               && stations[stations.length - 1].lng === path[path.length - 1][1]
               ? stations
-              : buildRouteStations(path);
+              : buildRouteStations(path, mergeMarker);
           })(),
         };
       })
@@ -513,7 +550,7 @@ export default function MapPage() {
   // Center/zoom map onto a selected simulated hiker's interpolated position
   const handleLocateHiker = (hiker: SimulatedHiker) => {
     if (!mapInstance) return;
-    
+
     const routePath = (simulationRoutes.find((route) => route.id === hiker.routeId) ?? simulationRoutes[0])?.path ?? currentTrail.path;
     const scaledProgress = Math.max(0, Math.min(1, hiker.progress / 9)) * (routePath.length - 1);
     const index = Math.floor(scaledProgress);
@@ -523,7 +560,7 @@ export default function MapPage() {
     const [lat2, lng2] = routePath[nextIndex];
     const lat = lat1 + (lat2 - lat1) * ratio;
     const lng = lng1 + (lng2 - lng1) * ratio;
-    
+
     mapInstance.setView([lat, lng], 18);
     toast.info(`Locating Hiker Group`, {
       description: `Centered map on ${hiker.name}.`,
@@ -545,9 +582,9 @@ export default function MapPage() {
   const hikersAtStation = (stationIndex: number) => {
     return simulationHikers.filter((h) => {
       if (h.phase === 'completed') return false;
-      
+
       const currentStation = Math.round((Math.max(0, Math.min(9, h.progress)) / 9) * 6) + 1;
-      
+
       return currentStation === stationIndex;
     });
   };

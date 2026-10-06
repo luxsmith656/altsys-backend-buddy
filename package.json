@@ -26,6 +26,8 @@
     "test:e2e:install": "playwright install --with-deps chromium",
     "verify": "npm run validate:env && npm run email:check && npm run lint && npm run typecheck && npm run test:unit && npm run test:db && npm run build && npm run test:e2e",
     "prepush": "npm run verify",
+    "test:e2e:public": "playwright test --grep-invert \"authenticated .* can load its dashboard and survive reload\"",
+    "verify:prepush": "npm run validate:env && npm run email:check && npm run lint && npm run typecheck && npm run test:unit && npm run test:db && npm run build && npm run test:e2e:public",
     "prepare": "node scripts/setup-git-hooks.mjs"
   },
   "dependencies": {

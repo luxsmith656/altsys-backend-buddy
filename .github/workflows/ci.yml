@@ -22,19 +22,19 @@ jobs:
       VITE_SUPABASE_PROJECT_ID: ${{ secrets.VITE_SUPABASE_PROJECT_ID || 'evcqnlbumsfgbfddoonv' }}
       VITE_GUIDE_PROFILE_EXTENSIONS_ENABLED: ${{ secrets.VITE_GUIDE_PROFILE_EXTENSIONS_ENABLED }}
       E2E_REQUIRE_AUTH: 'true'
-      # Test identities are only fallbacks; repository secrets override them.
-      E2E_SUPER_ADMIN_EMAIL: ${{ secrets.E2E_SUPER_ADMIN_EMAIL || 'central@kalisungan.ph' }}
-      E2E_SUPER_ADMIN_PASSWORD: ${{ secrets.E2E_SUPER_ADMIN_PASSWORD || 'central123' }}
-      E2E_MDRRMO_EMAIL: ${{ secrets.E2E_MDRRMO_EMAIL || 'mdrrmo@kalisungan.ph' }}
-      E2E_MDRRMO_PASSWORD: ${{ secrets.E2E_MDRRMO_PASSWORD || 'mdrrmo123' }}
-      E2E_ADMIN_EMAIL: ${{ secrets.E2E_ADMIN_EMAIL || 'lamot1@kalisungan.ph' }}
-      E2E_ADMIN_PASSWORD: ${{ secrets.E2E_ADMIN_PASSWORD || 'lamot123' }}
-      E2E_STOTOMAS_ADMIN_EMAIL: ${{ secrets.E2E_STOTOMAS_ADMIN_EMAIL || 'stotomas@kalisungan.ph' }}
-      E2E_STOTOMAS_ADMIN_PASSWORD: ${{ secrets.E2E_STOTOMAS_ADMIN_PASSWORD || 'stotomas123' }}
-      E2E_GUIDE_EMAIL: ${{ secrets.E2E_GUIDE_EMAIL || 'guide@kalisungan.ph' }}
-      E2E_GUIDE_PASSWORD: ${{ secrets.E2E_GUIDE_PASSWORD || 'guide123' }}
-      E2E_HIKER_EMAIL: ${{ secrets.E2E_HIKER_EMAIL || 'hiker@kalisungan.ph' }}
-      E2E_HIKER_PASSWORD: ${{ secrets.E2E_HIKER_PASSWORD || 'hiker123' }}
+      # Use dedicated test identities from Actions secrets, never stale public fallbacks.
+      E2E_SUPER_ADMIN_EMAIL: ${{ secrets.E2E_SUPER_ADMIN_EMAIL }}
+      E2E_SUPER_ADMIN_PASSWORD: ${{ secrets.E2E_SUPER_ADMIN_PASSWORD }}
+      E2E_MDRRMO_EMAIL: ${{ secrets.E2E_MDRRMO_EMAIL }}
+      E2E_MDRRMO_PASSWORD: ${{ secrets.E2E_MDRRMO_PASSWORD }}
+      E2E_ADMIN_EMAIL: ${{ secrets.E2E_ADMIN_EMAIL }}
+      E2E_ADMIN_PASSWORD: ${{ secrets.E2E_ADMIN_PASSWORD }}
+      E2E_STOTOMAS_ADMIN_EMAIL: ${{ secrets.E2E_STOTOMAS_ADMIN_EMAIL }}
+      E2E_STOTOMAS_ADMIN_PASSWORD: ${{ secrets.E2E_STOTOMAS_ADMIN_PASSWORD }}
+      E2E_GUIDE_EMAIL: ${{ secrets.E2E_GUIDE_EMAIL }}
+      E2E_GUIDE_PASSWORD: ${{ secrets.E2E_GUIDE_PASSWORD }}
+      E2E_HIKER_EMAIL: ${{ secrets.E2E_HIKER_EMAIL }}
+      E2E_HIKER_PASSWORD: ${{ secrets.E2E_HIKER_PASSWORD }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4

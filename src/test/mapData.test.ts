@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildRouteStations, MT_KALISUNGAN_PEAK, normalizeOfficialRoutePath, TRAILHEAD_COORDINATES, TRAILS } from '@/lib/map-data';
+import { buildRouteStations, cleanTrailPath, haversineDistance, LAMOT_2_REFERENCE_PATH, MT_KALISUNGAN_PEAK, normalizeOfficialRoutePath, TRAILHEAD_COORDINATES, TRAILS } from '@/lib/map-data';
 
 describe('buildRouteStations', () => {
   it('creates jump-off, five progress stations, and peak', () => {
@@ -49,14 +49,18 @@ describe('buildRouteStations', () => {
     expect(legacy[legacy.length - 1]).toEqual(MT_KALISUNGAN_PEAK);
   });
 
-  it('preserves a published route shape when its anchors are already current', () => {
+  it('joins Sto. Tomas at Lamot 2 Station 5 even when the route anchors are current', () => {
     const current: [number, number][] = [
       TRAILHEAD_COORDINATES['sto-tomas'] as [number, number],
-      [14.1601, 121.3455],
+      [14.1531, 121.3437],
+      [14.1490, 121.3434],
       MT_KALISUNGAN_PEAK as [number, number],
     ];
 
-    expect(normalizeOfficialRoutePath(current, 'sto-tomas')).toEqual(current);
+    const normalized = normalizeOfficialRoutePath(current, 'sto-tomas', LAMOT_2_REFERENCE_PATH);
+    expect(normalized[0]).toEqual(TRAILHEAD_COORDINATES['sto-tomas']);
+    expect(normalized.slice(-1)).toEqual([MT_KALISUNGAN_PEAK]);
+    expect(normalized).not.toEqual(current);
   });
 
   it('leaves the Lamot 2 reference geometry untouched', () => {
@@ -74,5 +78,66 @@ describe('buildRouteStations', () => {
       expect(trail.path.at(-1)).toEqual(MT_KALISUNGAN_PEAK);
       expect(new Set(trail.path.map(([lat]) => lat)).size).toBeGreaterThan(5);
     }
+  });
+
+  it.each([
+    { index: 1, slug: 'lamot-1', stationNumber: 1 as const },
+    { index: 2, slug: 'sto-tomas', stationNumber: 5 as const },
+  ])('merges $slug at Lamot 2 Station $stationNumber and keeps the exact shared suffix', ({ index, slug, stationNumber }) => {
+    const reference = cleanTrailPath(LAMOT_2_REFERENCE_PATH, 0.75);
+    const path = TRAILS[index].path;
+    const referenceDistances = reference.reduce<number[]>((distances, point, pointIndex) => {
+      if (pointIndex === 0) return [0];
+      const previous = reference[pointIndex - 1];
+      distances.push(distances[pointIndex - 1] + haversineDistance(previous[0], previous[1], point[0], point[1]) * 1000);
+      return distances;
+    }, []);
+    const joinDistance = referenceDistances.at(-1)! * (stationNumber / 6);
+    const joinSegment = referenceDistances.findIndex((distance) => distance >= joinDistance);
+    const previousDistance = referenceDistances[joinSegment - 1];
+    const ratio = (joinDistance - previousDistance) / (referenceDistances[joinSegment] - previousDistance);
+    const joinPoint: [number, number] = [
+      reference[joinSegment - 1][0] + (reference[joinSegment][0] - reference[joinSegment - 1][0]) * ratio,
+      reference[joinSegment - 1][1] + (reference[joinSegment][1] - reference[joinSegment - 1][1]) * ratio,
+    ];
+    const joinIndex = path.findIndex(([lat, lng]) => lat === joinPoint[0] && lng === joinPoint[1]);
+    const expectedSuffix = [joinPoint, ...reference.filter((_, pointIndex) => referenceDistances[pointIndex] > joinDistance)];
+
+    expect(path[0]).toEqual(TRAILHEAD_COORDINATES[slug]);
+    expect(joinIndex).toBeGreaterThan(0);
+    expect(path.slice(joinIndex)).toEqual(expectedSuffix);
+    expect(path.at(-1)).toEqual(MT_KALISUNGAN_PEAK);
+    const markers = buildRouteStations(path, { stationNumber, position: joinPoint });
+    expect(markers[stationNumber].lat).toBe(joinPoint[0]);
+    expect(markers[stationNumber].lng).toBe(joinPoint[1]);
+  });
+
+  it('updates the Lamot 1 join when old metadata says it shared from Station 4', () => {
+    const path = Array.from({ length: 60 }, (_, index) => [
+      TRAILHEAD_COORDINATES['lamot-1'][0] + index * 0.00002,
+      TRAILHEAD_COORDINATES['lamot-1'][1] + index * 0.0003,
+    ] as [number, number]);
+    path[path.length - 1] = [MT_KALISUNGAN_PEAK[0], MT_KALISUNGAN_PEAK[1]];
+
+    const normalized = normalizeOfficialRoutePath(path, 'lamot-1', LAMOT_2_REFERENCE_PATH, true);
+
+    expect(normalized[0]).toEqual(TRAILHEAD_COORDINATES['lamot-1']);
+    expect(normalized[normalized.length - 1]).toEqual(MT_KALISUNGAN_PEAK);
+    expect(normalized).not.toEqual(path);
+    const reference = cleanTrailPath(LAMOT_2_REFERENCE_PATH, 0.75);
+    const distances = reference.reduce<number[]>((result, point, index) => {
+      if (index === 0) return [0];
+      const previous = reference[index - 1];
+      result.push(result[index - 1] + haversineDistance(previous[0], previous[1], point[0], point[1]) * 1000);
+      return result;
+    }, []);
+    const station1Distance = distances.at(-1)! / 6;
+    const segment = distances.findIndex((distance) => distance >= station1Distance);
+    const ratio = (station1Distance - distances[segment - 1]) / (distances[segment] - distances[segment - 1]);
+    const station1 = [
+      reference[segment - 1][0] + (reference[segment][0] - reference[segment - 1][0]) * ratio,
+      reference[segment - 1][1] + (reference[segment][1] - reference[segment - 1][1]) * ratio,
+    ];
+    expect(normalized).toContainEqual(station1);
   });
 });

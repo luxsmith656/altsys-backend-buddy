@@ -16,7 +16,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { useLocations } from '@/hooks/useLocations';
 import { coalescedRefresh } from '@/lib/coalescedRefresh';
 import { parseMeta } from '@/lib/bookingMeta';
-import { buildRouteStations, cleanTrailPath, normalizeOfficialRoutePath, routeStationsFromMetadata } from '@/lib/map-data';
+import { buildRouteStations, cleanTrailPath, LAMOT_2_REFERENCE_PATH, normalizeOfficialRoutePath, routeStationPosition, routeStationsFromMetadata } from '@/lib/map-data';
 import type { CompanionDetail } from '@/types';
 
 interface Props {
@@ -105,6 +105,7 @@ function ScopedMonitorMap({ locationId, canAddCheckpoints = false, tools, routeA
   const [sessions, setSessions] = useState<ActiveSession[]>([]);
   const [checkpoints, setCheckpoints] = useState<Checkpoint[]>([]);
   const [officialRoutes, setOfficialRoutes] = useState<TrailZoneRef[]>([]);
+  const [lamot2ReferencePath, setLamot2ReferencePath] = useState<L.LatLngTuple[]>([]);
   const [progress, setProgress] = useState<Record<string, { checkpoint_id: string; created_at: string }[]>>({});
   const [loading, setLoading] = useState(true);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -215,7 +216,44 @@ function ScopedMonitorMap({ locationId, canAddCheckpoints = false, tools, routeA
     // Published geometry must not depend on session/location telemetry succeeding.
     // Keep the last validated route on a failed refresh; a successful empty result
     // still clears it when a route is unpublished. Scope changes remount this map.
-    if (!routeError) setOfficialRoutes(officialRoutesForLocation((routeData as unknown as (TrailZoneRef & OfficialRouteCandidate)[]) ?? [], locationId));
+    if (!routeError) {
+      const routes = officialRoutesForLocation((routeData as unknown as (TrailZoneRef & OfficialRouteCandidate)[]) ?? [], locationId);
+      setOfficialRoutes(routes);
+      let referenceRows = routes;
+      const hasLamot2 = referenceRows.some((route) => {
+        const routeLocation = locations.find((item) => item.id === route.location_id);
+        const label = `${route.name} ${routeLocation?.slug ?? ''} ${routeLocation?.name ?? ''}`.toLowerCase();
+        return label.includes('lamot-2') || label.includes('lamot 2') || label.includes('lamot2');
+      });
+      if (!hasLamot2 && locationId) {
+        const lamot2 = locations.find((item) => item.slug.includes('lamot-2') || item.slug.includes('lamot2'));
+        if (lamot2) {
+          const { data: referenceData } = await supabase
+            .from('trail_zones' as any)
+            .select('id,location_id,name,coordinates_json,recording_metadata,status,is_official,review_status')
+            .eq('location_id', lamot2.id)
+            .eq('status', 'active')
+            .eq('is_official', true)
+            .eq('review_status', 'approved')
+            .order('created_at', { ascending: true });
+          if (version !== loadVersion.current) return;
+          referenceRows = officialRoutesForLocation((referenceData as unknown as (TrailZoneRef & OfficialRouteCandidate)[]) ?? [], lamot2.id);
+        }
+      }
+      const referenceRoute = referenceRows
+        .filter((route) => {
+          const routeLocation = locations.find((item) => item.id === route.location_id);
+          const label = `${route.name} ${routeLocation?.slug ?? ''} ${routeLocation?.name ?? ''}`.toLowerCase();
+          return label.includes('lamot-2') || label.includes('lamot 2') || label.includes('lamot2');
+        })
+        .sort((a, b) => (Array.isArray(b.coordinates_json) ? b.coordinates_json.length : 0) - (Array.isArray(a.coordinates_json) ? a.coordinates_json.length : 0))[0];
+      const path = Array.isArray(referenceRoute?.coordinates_json)
+        ? cleanTrailPath((referenceRoute.coordinates_json as { lat: number; lng: number }[])
+            .map((point) => [Number(point.lat), Number(point.lng)] as [number, number])
+            .filter(([lat, lng]) => Number.isFinite(lat) && Number.isFinite(lng)), 1)
+        : [];
+      setLamot2ReferencePath(path);
+    }
     if (!cpError) setCheckpoints((cpData as unknown as Checkpoint[]) ?? []);
 
     const sessQuery = supabase
@@ -439,11 +477,12 @@ function ScopedMonitorMap({ locationId, canAddCheckpoints = false, tools, routeA
         return label.includes('lamot-2') || label.includes('lamot 2') || label.includes('lamot2');
       })
       .sort((a, b) => (Array.isArray(b.coordinates_json) ? b.coordinates_json.length : 0) - (Array.isArray(a.coordinates_json) ? a.coordinates_json.length : 0))[0];
-    const referencePath = Array.isArray(referenceRoute?.coordinates_json)
+    const visibleReferencePath = Array.isArray(referenceRoute?.coordinates_json)
       ? cleanTrailPath((referenceRoute.coordinates_json as { lat: number; lng: number }[])
           .map((point) => [Number(point.lat), Number(point.lng)] as [number, number])
           .filter(([lat, lng]) => Number.isFinite(lat) && Number.isFinite(lng)), 1)
       : undefined;
+    const referencePath = lamot2ReferencePath.length >= 2 ? lamot2ReferencePath : visibleReferencePath;
 
     let sharedPeakMarkerAdded = false;
     officialRoutes.forEach((route, routeIndex) => {
@@ -453,7 +492,13 @@ function ScopedMonitorMap({ locationId, canAddCheckpoints = false, tools, routeA
             .filter(([lat, lng]) => Number.isFinite(lat) && Number.isFinite(lng))
         : [];
       const trailhead = locations.find((location) => location.id === route.location_id);
-      const path = normalizeOfficialRoutePath(rawPath, `${trailhead?.slug ?? ''} ${trailhead?.name ?? ''} ${route.name}`, referencePath);
+      const routeMetadata = route.recording_metadata as { sharedRouteSuffix?: unknown } | null | undefined;
+      const path = normalizeOfficialRoutePath(
+        rawPath,
+        `${trailhead?.slug ?? ''} ${trailhead?.name ?? ''} ${route.name}`,
+        referencePath,
+        Boolean(routeMetadata?.sharedRouteSuffix),
+      );
       if (path.length < 2) return;
 
       const routeColor = ['#059669', '#2563eb', '#dc2626', '#9333ea'][routeIndex % 4];
@@ -465,13 +510,23 @@ function ScopedMonitorMap({ locationId, canAddCheckpoints = false, tools, routeA
         .bindPopup(`<strong>${esc(route.name)}</strong><br/><small>Official published route</small>`)
         .addTo(routeLayer.current!);
 
-      const rawStations = routeStationsFromMetadata(route.recording_metadata, rawPath);
+      const pathUnchanged = path.length === rawPath.length
+        && path.every(([lat, lng], index) => rawPath[index]?.[0] === lat && rawPath[index]?.[1] === lng);
+      const rawStations = pathUnchanged ? routeStationsFromMetadata(route.recording_metadata, rawPath) : [];
+      const routeLabel = `${trailhead?.slug ?? ''} ${trailhead?.name ?? ''} ${route.name}`.toLowerCase();
+      const mergeStationNumber = routeLabel.includes('lamot-1') || routeLabel.includes('lamot 1') || routeLabel.includes('lamot1')
+        ? 1 as const
+        : routeLabel.includes('tomas') ? 5 as const : null;
+      const mergeMarker = mergeStationNumber ? {
+        stationNumber: mergeStationNumber,
+        position: routeStationPosition(referencePath ?? LAMOT_2_REFERENCE_PATH, mergeStationNumber),
+      } : undefined;
       const stations = rawStations.length >= 2
         && rawStations[0].lat === path[0][0] && rawStations[0].lng === path[0][1]
         && rawStations[rawStations.length - 1].lat === path[path.length - 1][0]
         && rawStations[rawStations.length - 1].lng === path[path.length - 1][1]
         ? rawStations
-        : buildRouteStations(path);
+        : buildRouteStations(path, mergeMarker);
       stations.forEach((station) => {
         if (station.kind === 'peak' && sharedPeakMarkerAdded) return;
         if (station.kind === 'peak') sharedPeakMarkerAdded = true;
@@ -560,7 +615,7 @@ function ScopedMonitorMap({ locationId, canAddCheckpoints = false, tools, routeA
       }).on('click', () => { setSelectedId(s.id); setPanelOpen(true); });
       hikerLayer.current!.addLayer(m);
     });
-  }, [sessions, checkpoints, progress, officialRoutes, viewMode, clock, locations]);
+  }, [sessions, checkpoints, progress, officialRoutes, lamot2ReferencePath, viewMode, clock, locations]);
 
   /* ── Inactivity alert: warn admin when a hiker hasn't pinged in 20+ min ── */
   const alertedRef = useRef<Set<string>>(new Set());
@@ -642,12 +697,19 @@ function ScopedMonitorMap({ locationId, canAddCheckpoints = false, tools, routeA
                 const label = `${candidate.name} ${candidateLocation?.slug ?? ''} ${candidateLocation?.name ?? ''}`.toLowerCase();
                 return label.includes('lamot-2') || label.includes('lamot 2') || label.includes('lamot2');
               });
-              const referencePath = Array.isArray(referenceRoute?.coordinates_json)
+              const visibleReferencePath = Array.isArray(referenceRoute?.coordinates_json)
                 ? cleanTrailPath((referenceRoute.coordinates_json as { lat: number; lng: number }[])
                     .map((point) => [Number(point.lat), Number(point.lng)] as [number, number])
                     .filter(([lat, lng]) => Number.isFinite(lat) && Number.isFinite(lng)), 1)
                 : undefined;
-              const path = normalizeOfficialRoutePath(rawPath, `${trailhead?.slug ?? ''} ${trailhead?.name ?? ''} ${route.name}`, referencePath);
+              const referencePath = lamot2ReferencePath.length >= 2 ? lamot2ReferencePath : visibleReferencePath;
+              const routeMetadata = route.recording_metadata as { sharedRouteSuffix?: unknown } | null | undefined;
+              const path = normalizeOfficialRoutePath(
+                rawPath,
+                `${trailhead?.slug ?? ''} ${trailhead?.name ?? ''} ${route.name}`,
+                referencePath,
+                Boolean(routeMetadata?.sharedRouteSuffix),
+              );
               const map = mapRef.current;
               map?.fitBounds(path, { paddingTopLeft: [30, 30], paddingBottomRight: [60, Math.min(map.getSize().y * .4, 260)], maxZoom: 17, animate: false });
             }}><strong>{route.name}</strong><small>Official published route</small></button></li>)}
