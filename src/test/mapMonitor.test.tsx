@@ -3,8 +3,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import L from 'leaflet';
 import RealtimeMonitorMap from '@/components/admin/RealtimeMonitorMap';
 
-const fixture = vi.hoisted(() => ({ rows: {} as Record<string, Record<string, unknown>[]>, calls: [] as string[], errors: {} as Record<string, boolean> }));
-vi.mock('@/hooks/useLocations', () => ({ useLocations: () => ({ locations: [], activeLocationId: 'north' }) }));
+const fixture = vi.hoisted(() => ({ rows: {} as Record<string, Record<string, unknown>[]>, calls: [] as string[], errors: {} as Record<string, boolean>, locations: [] as Record<string, unknown>[] }));
+vi.mock('@/hooks/useLocations', () => ({ useLocations: () => ({ locations: fixture.locations, activeLocationId: 'north' }) }));
 vi.mock('@/integrations/supabase/client', () => ({ supabase: {
   from: (table: string) => {
     let rows = fixture.rows[table] ?? [];
@@ -25,6 +25,7 @@ beforeEach(() => {
   Object.defineProperty(L.Browser, 'svg', { value: true, configurable: true });
   fixture.calls = [];
   fixture.errors = {};
+  fixture.locations = [];
   fixture.rows = {
     hiker_sessions: [
       { id: 'lead-session', user_id: 'lead', booking_id: 'booking', location_id: 'north', status: 'active', participant_role: 'hiker', tracking_phase: 'ascent', start_time: '2026-09-08T00:00:00Z' },
@@ -107,5 +108,36 @@ describe('live map group details', () => {
     const initial = toggle.getAttribute('aria-expanded');
     fireEvent.click(toggle);
     expect(toggle).toHaveAttribute('aria-expanded', initial === 'true' ? 'false' : 'true');
+  });
+
+  it('labels central station markers and filters the map to one trailhead', async () => {
+    fixture.locations = [
+      { id: 'l1', name: 'Sitio Lamot 1', slug: 'lamot-1', center_lat: 14.147, center_lng: 121.323 },
+      { id: 'l2', name: 'Sitio Lamot 2', slug: 'lamot-2', center_lat: 14.148, center_lng: 121.339 },
+      { id: 'st', name: 'Sto. Tomas', slug: 'sto-tomas', center_lat: 14.166, center_lng: 121.339 },
+    ];
+    fixture.rows.trail_zones = fixture.locations.map((location, index) => ({
+      id: `route-${index}`,
+      location_id: location.id,
+      name: `${location.name} official route`,
+      status: 'active',
+      is_official: true,
+      review_status: 'approved',
+      coordinates_json: [{ lat: 14.14 + index * 0.01, lng: 121.32 }, { lat: 14.15 + index * 0.01, lng: 121.33 }],
+    }));
+
+    render(<RealtimeMonitorMap locationId={null} />);
+    await waitFor(() => expect(document.querySelectorAll('.leaflet-overlay-pane path')).toHaveLength(3));
+    fireEvent.click(screen.getByRole('button', { name: 'Routes' }));
+    const stationFilter = screen.getByRole('combobox', { name: 'Filter central map by station' });
+    expect(within(stationFilter).getByRole('option', { name: 'Lamot 1' })).toBeInTheDocument();
+    expect(within(stationFilter).getByRole('option', { name: 'Lamot 2' })).toBeInTheDocument();
+    expect(within(stationFilter).getByRole('option', { name: 'Sto. Tomas' })).toBeInTheDocument();
+    expect(document.querySelector('.leaflet-marker-icon[title*="Lamot 1"]')).toBeInTheDocument();
+
+    fireEvent.change(stationFilter, { target: { value: 'l2' } });
+    await waitFor(() => expect(document.querySelectorAll('.leaflet-overlay-pane path')).toHaveLength(1));
+    expect(document.querySelector('.leaflet-marker-icon[title*="Lamot 2"]')).toBeInTheDocument();
+    expect(document.querySelector('.leaflet-marker-icon[title*="Lamot 1"]')).not.toBeInTheDocument();
   });
 });

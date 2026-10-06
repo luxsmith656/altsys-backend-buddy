@@ -16,6 +16,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { useLocations } from '@/hooks/useLocations';
 import { coalescedRefresh } from '@/lib/coalescedRefresh';
 import { parseMeta } from '@/lib/bookingMeta';
+import { filterByTrailhead, getTrailheadIdentity } from '@/lib/mapTrailheads';
 import { buildRouteStations, cleanTrailPath, LAMOT_2_REFERENCE_PATH, normalizeOfficialRoutePath, routeStationPosition, routeStationsFromMetadata } from '@/lib/map-data';
 import type { CompanionDetail } from '@/types';
 
@@ -116,7 +117,22 @@ function ScopedMonitorMap({ locationId, canAddCheckpoints = false, tools, routeA
   const loadVersion = useRef(0);
   const [loadError, setLoadError] = useState(false);
   const [viewMode, setViewMode] = useState<'cluster' | 'individual'>('cluster');
+  const [stationFilterId, setStationFilterId] = useState('all');
   const [clock, setClock] = useState(() => Date.now());
+
+  const trailheadOptions = useMemo(() => locations.flatMap((location) => {
+    const identity = getTrailheadIdentity(location.slug, location.name);
+    return identity ? [{ location, identity }] : [];
+  }), [locations]);
+  const visibleRoutes = useMemo(() => filterByTrailhead(officialRoutes, stationFilterId), [officialRoutes, stationFilterId]);
+  const visibleCheckpoints = useMemo(() => filterByTrailhead(checkpoints, stationFilterId), [checkpoints, stationFilterId]);
+  const visibleSessions = useMemo(() => filterByTrailhead(sessions, stationFilterId), [sessions, stationFilterId]);
+
+  useEffect(() => {
+    if (stationFilterId !== 'all' && !trailheadOptions.some(({ location }) => location.id === stationFilterId)) {
+      setStationFilterId('all');
+    }
+  }, [stationFilterId, trailheadOptions]);
 
   useEffect(() => {
     const timer = window.setInterval(() => setClock(Date.now()), 30_000);
@@ -282,6 +298,7 @@ function ScopedMonitorMap({ locationId, canAddCheckpoints = false, tools, routeA
       sessList.forEach((s) => {
         if (s.trail_zone_id && trailZoneMap[s.trail_zone_id]) {
           (s as any).trail_zone_name = trailZoneMap[s.trail_zone_id].name;
+          s.location_id = s.location_id ?? trailZoneMap[s.trail_zone_id].location_id;
         }
       });
     }
@@ -485,7 +502,7 @@ function ScopedMonitorMap({ locationId, canAddCheckpoints = false, tools, routeA
     const referencePath = lamot2ReferencePath.length >= 2 ? lamot2ReferencePath : visibleReferencePath;
 
     let sharedPeakMarkerAdded = false;
-    officialRoutes.forEach((route, routeIndex) => {
+    visibleRoutes.forEach((route, routeIndex) => {
       const rawPath = Array.isArray(route.coordinates_json)
         ? route.coordinates_json
             .map((point: any) => [Number(point.lat), Number(point.lng)] as [number, number])
@@ -501,22 +518,24 @@ function ScopedMonitorMap({ locationId, canAddCheckpoints = false, tools, routeA
       );
       if (path.length < 2) return;
 
-      const routeColor = ['#059669', '#2563eb', '#dc2626', '#9333ea'][routeIndex % 4];
+      const stationIdentity = getTrailheadIdentity(trailhead?.slug ?? '', trailhead?.name ?? route.name);
+      const routeLabel = stationIdentity?.label ?? trailhead?.name ?? 'Unassigned trailhead';
+      const routeColor = ['#059669', '#2563eb', '#dc2626'][routeIndex % 3];
       L.polyline(path, {
         color: routeColor,
         weight: 5,
         opacity: 0.9,
       })
-        .bindPopup(`<strong>${esc(route.name)}</strong><br/><small>Official published route</small>`)
+        .bindPopup(`<strong>${esc(routeLabel)}</strong><br/>${esc(route.name)}<br/><small>Official published route</small>`)
         .addTo(routeLayer.current!);
 
       const pathUnchanged = path.length === rawPath.length
         && path.every(([lat, lng], index) => rawPath[index]?.[0] === lat && rawPath[index]?.[1] === lng);
       const rawStations = pathUnchanged ? routeStationsFromMetadata(route.recording_metadata, rawPath) : [];
-      const routeLabel = `${trailhead?.slug ?? ''} ${trailhead?.name ?? ''} ${route.name}`.toLowerCase();
-      const mergeStationNumber = routeLabel.includes('lamot-1') || routeLabel.includes('lamot 1') || routeLabel.includes('lamot1')
+      const routeSearchLabel = `${trailhead?.slug ?? ''} ${trailhead?.name ?? ''} ${route.name}`.toLowerCase();
+      const mergeStationNumber = routeSearchLabel.includes('lamot-1') || routeSearchLabel.includes('lamot 1') || routeSearchLabel.includes('lamot1')
         ? 1 as const
-        : routeLabel.includes('tomas') ? 5 as const : null;
+        : routeSearchLabel.includes('tomas') ? 5 as const : null;
       const mergeMarker = mergeStationNumber ? {
         stationNumber: mergeStationNumber,
         position: routeStationPosition(referencePath ?? LAMOT_2_REFERENCE_PATH, mergeStationNumber),
@@ -530,25 +549,31 @@ function ScopedMonitorMap({ locationId, canAddCheckpoints = false, tools, routeA
       stations.forEach((station) => {
         if (station.kind === 'peak' && sharedPeakMarkerAdded) return;
         if (station.kind === 'peak') sharedPeakMarkerAdded = true;
-        const shortName = ({ 'lamot-1': 'L1', 'lamot-2': 'L2', 'sto-tomas': 'ST' } as Record<string, string>)[trailhead?.slug ?? ''] ?? 'J';
+        const shortName = stationIdentity?.code ?? 'J';
         const label = station.kind === 'jump_off' ? shortName : station.kind === 'peak' ? 'P' : `S${station.index - 1}`;
         const color = station.kind === 'peak' ? '#dc2626' : station.kind === 'jump_off' ? '#059669' : '#2563eb';
+        const markerTitle = station.kind === 'peak'
+          ? 'Shared Mt. Kalisungan peak'
+          : `${stationIdentity?.label ?? 'Trailhead'} · ${station.kind === 'jump_off' ? 'Jump-off' : station.name}`;
+        const trailheadBadge = station.kind === 'peak' ? '' : `<span style="position:absolute;left:50%;top:-9px;transform:translateX(-50%);padding:1px 4px;border-radius:8px;background:#10251d;color:#fff;border:1px solid #fff;font-size:8px;line-height:12px;white-space:nowrap;box-shadow:0 1px 4px rgba(0,0,0,.45)">${esc(stationIdentity?.label ?? 'Trailhead')}</span>`;
         L.marker([station.lat, station.lng], {
+          title: markerTitle,
+          alt: markerTitle,
           zIndexOffset: 100,
           icon: L.divIcon({
             className: '',
-            html: `<div style="background:${color};color:white;width:28px;height:28px;border-radius:50%;border:3px solid white;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;box-shadow:0 2px 7px rgba(0,0,0,.4)">${label}</div>`,
+            html: `<div style="position:relative;background:${color};color:white;width:28px;height:28px;border-radius:50%;border:3px solid white;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;box-shadow:0 2px 7px rgba(0,0,0,.4)">${label}${trailheadBadge}</div>`,
             iconSize: [28, 28],
             iconAnchor: [14, 14],
           }),
         })
-          .bindPopup(`<strong>${esc(station.kind === 'jump_off' && trailhead ? trailhead.name : station.name)}</strong><br/>${esc(route.name)}<br/><small>${esc(station.description)}</small>`)
+          .bindPopup(`<strong>${esc(station.kind === 'peak' ? 'Shared Mt. Kalisungan peak' : station.kind === 'jump_off' && trailhead ? trailhead.name : `${routeLabel} · ${station.name}`)}</strong><br/>${esc(route.name)}<br/><small>${esc(station.description)}</small>`)
           .addTo(routeLayer.current!);
       });
     });
 
     // checkpoints
-    checkpoints.forEach((cp, idx) => {
+    visibleCheckpoints.forEach((cp, idx) => {
       const marker = L.marker([cp.latitude, cp.longitude], {
         zIndexOffset: 200,
         icon: L.divIcon({
@@ -568,7 +593,7 @@ function ScopedMonitorMap({ locationId, canAddCheckpoints = false, tools, routeA
     });
 
     // hikers / groups
-    sessions.forEach((s) => {
+    visibleSessions.forEach((s) => {
       if (s.lastLat == null || s.lastLng == null || !gpsPresentation({ lat: s.lastLat, lng: s.lastLng, timestamp: s.lastTs }, clock).hasFix) return;
       const ageMin = s.lastTs ? Math.round((clock - new Date(s.lastTs).getTime()) / 60000) : null;
       const isOffline = ageMin == null || ageMin >= 5; // five minutes without a ping is a stale mobile position
@@ -615,7 +640,7 @@ function ScopedMonitorMap({ locationId, canAddCheckpoints = false, tools, routeA
       }).on('click', () => { setSelectedId(s.id); setPanelOpen(true); });
       hikerLayer.current!.addLayer(m);
     });
-  }, [sessions, checkpoints, progress, officialRoutes, lamot2ReferencePath, viewMode, clock, locations]);
+  }, [visibleSessions, visibleCheckpoints, progress, visibleRoutes, lamot2ReferencePath, viewMode, clock, locations]);
 
   /* ── Inactivity alert: warn admin when a hiker hasn't pinged in 20+ min ── */
   const alertedRef = useRef<Set<string>>(new Set());
@@ -668,7 +693,7 @@ function ScopedMonitorMap({ locationId, canAddCheckpoints = false, tools, routeA
     void loadData();
   };
 
-  const groups: LiveMapGroup[] = sessions.map((session) => ({
+  const groups: LiveMapGroup[] = visibleSessions.map((session) => ({
     id: session.id, lead: session.hiker_name || 'Hiker Lead', guide: session.guideName,
     pax: session.groupSize, phase: session.tracking_phase,
     route: officialRoutes.find((route) => route.id === session.trail_zone_id)?.name,
@@ -688,8 +713,35 @@ function ScopedMonitorMap({ locationId, canAddCheckpoints = false, tools, routeA
     <section className="live-map-monitor" aria-label="Live hiking map">
       <MapWorkspace open={panelOpen} onOpenChange={setPanelOpen}
         routes={<>
+          {!locationId && trailheadOptions.length > 0 && <div className="space-y-1 border-b border-border p-3">
+            <Label htmlFor="central-map-station-filter" className="text-xs text-muted-foreground">Show station</Label>
+            <select id="central-map-station-filter" aria-label="Filter central map by station"
+              className="h-10 w-full rounded border border-input bg-background px-3 text-sm"
+              value={stationFilterId}
+              onChange={(event) => {
+                const nextId = event.target.value;
+                setStationFilterId(nextId);
+                setSelectedId(null);
+                if (nextId === 'all') {
+                  mapRef.current?.setView(DEFAULT_CENTER, 14);
+                  return;
+                }
+                const station = trailheadOptions.find(({ location }) => location.id === nextId)?.location;
+                const selectedRoute = officialRoutes.find((route) => route.location_id === nextId);
+                const rawPath = Array.isArray(selectedRoute?.coordinates_json)
+                  ? (selectedRoute.coordinates_json as { lat: number; lng: number }[])
+                    .map(({ lat, lng }) => [Number(lat), Number(lng)] as [number, number])
+                    .filter(([lat, lng]) => Number.isFinite(lat) && Number.isFinite(lng))
+                  : [];
+                if (rawPath.length > 1) mapRef.current?.fitBounds(rawPath, { padding: [32, 32], maxZoom: 16, animate: false });
+                else if (station) mapRef.current?.setView([Number(station.center_lat), Number(station.center_lng)], 15);
+              }}>
+              <option value="all">All stations</option>
+              {trailheadOptions.map(({ location, identity }) => <option key={location.id} value={location.id}>{identity.label}</option>)}
+            </select>
+          </div>}
           <ul className="live-map-route-list">
-            {officialRoutes.map(route => <li key={route.id}><button type="button" aria-label={`Show ${route.name} on map`} onClick={() => {
+            {visibleRoutes.map(route => <li key={route.id}><button type="button" aria-label={`Show ${route.name} on map`} onClick={() => {
               const rawPath = (route.coordinates_json as { lat: number; lng: number }[]).map(point => [Number(point.lat), Number(point.lng)] as [number, number]);
               const trailhead = locations.find((location) => location.id === route.location_id);
               const referenceRoute = officialRoutes.find((candidate) => {
@@ -712,9 +764,9 @@ function ScopedMonitorMap({ locationId, canAddCheckpoints = false, tools, routeA
               );
               const map = mapRef.current;
               map?.fitBounds(path, { paddingTopLeft: [30, 30], paddingBottomRight: [60, Math.min(map.getSize().y * .4, 260)], maxZoom: 17, animate: false });
-            }}><strong>{route.name}</strong><small>Official published route</small></button></li>)}
+            }}><strong>{route.name}</strong><small>{getTrailheadIdentity(locations.find((item) => item.id === route.location_id)?.slug ?? '', locations.find((item) => item.id === route.location_id)?.name ?? '')?.label ?? 'Trailhead'} · Official route</small></button></li>)}
           </ul>
-          {!officialRoutes.length && <p className="live-map-empty">No published routes available.</p>}
+          {!visibleRoutes.length && <p className="live-map-empty">No published routes available for this station.</p>}
           {routeActions}
         </>}
         tools={<>

@@ -74,6 +74,7 @@ import { guidePhotoForName } from '@/lib/guideDirectory';
 import { getBookingSlotStatuses, type ScheduledBooking } from '@/lib/bookingCapacity';
 import { haversineDistance } from '@/lib/map-data';
 import { validateAge, validateEmail, validatePhone } from '@/lib/inputValidation';
+import { withBookingRequestTimeout } from '@/lib/bookingRequest';
 import {
   fetchKalisungan16DayForecast,
   type KalisunganDayWeather,
@@ -328,6 +329,7 @@ export default function BookingPage() {
   // â”€â”€ Multi-location: hiker picks where to start (Lamot 1, Lamot 2, etc.) â”€â”€
   const { locations: allLocations } = useLocations();
   const [startLocationId, setStartLocationId] = useState<string>('');
+  const explicitStartLocation = useRef(false);
   // Scrape/filter jump-off locations to strictly Lamot 2, Lamot 1, and Sto. Tomas
   const jumpOffLocations = useMemo(() => {
     return allLocations
@@ -345,6 +347,8 @@ export default function BookingPage() {
 
   const [dbGuides, setDbGuides] = useState<Array<{ id: string; full_name: string; location_id: string; per_trip_fee: number; photo_url?: string | null }>>([]);
   const [preferredGuideId, setPreferredGuideId] = useState<string>('');
+  const bookingSubmitLock = useRef(false);
+  const bookingAttemptId = useRef<string | null>(null);
   const referralGuideId = searchParams.get('guide') || searchParams.get('referral') || String(user?.user_metadata?.referral_guide_id || '');
   const appliedReferralId = useRef<string | null>(null);
   const [referralCodeInput, setReferralCodeInput] = useState('');
@@ -456,7 +460,8 @@ export default function BookingPage() {
       const { data: gs } = await supabase
         .from('guides' as any)
         .select('id,full_name,location_id,per_trip_fee,is_active,photo_url')
-        .eq('is_active', true);
+        .eq('is_active', true)
+        .not('user_id', 'is', null);
       const list = ((gs as any[]) ?? []) as Array<{ id: string; full_name: string; location_id: string; per_trip_fee: number }>;
       setDbGuides(list);
       const names = list.map((g) => g.full_name).filter(Boolean);
@@ -554,10 +559,16 @@ export default function BookingPage() {
     );
     if (!referredGuide) return;
     appliedReferralId.current = referralGuideId;
-    if (referredGuide.location_id && referredGuide.location_id !== startLocationId) setStartLocationId(referredGuide.location_id);
+    if (referredGuide.location_id && referredGuide.location_id !== startLocationId) {
+      if (explicitStartLocation.current) {
+        toast.error(`This guide serves ${allLocations.find((location) => location.id === referredGuide.location_id)?.name ?? 'another trailhead'}. Choose a guide for your selected starting location.`);
+        return;
+      }
+      setStartLocationId(referredGuide.location_id);
+    }
     setPreferredGuideId(referredGuide.id);
     setPreferredGuide(referredGuide.full_name);
-  }, [dbGuides, preferredGuideId, referralGuideId, startLocationId]);
+  }, [allLocations, dbGuides, preferredGuideId, referralGuideId, startLocationId]);
 
   const handleApplyReferralCode = () => {
     const raw = referralCodeInput.trim().toLowerCase();
@@ -575,7 +586,8 @@ export default function BookingPage() {
 
     if (matched) {
       if (matched.location_id && matched.location_id !== startLocationId) {
-        setStartLocationId(matched.location_id);
+        toast.error(`This guide serves ${allLocations.find((location) => location.id === matched.location_id)?.name ?? 'another trailhead'}. Choose a guide for your selected starting location.`);
+        return;
       }
       setPreferredGuideId(matched.id);
       setPreferredGuide(matched.full_name);
@@ -1019,146 +1031,212 @@ export default function BookingPage() {
 
   /* â”€â”€ Submit â”€â”€ */
   const handleBook = async () => {
-    if (!user || !date) return;
+    if (bookingSubmitLock.current) return;
+    if (!user || !date) {
+      toast.error('Sign in and choose a hike date before submitting.');
+      return;
+    }
     if (!startLocationId) {
-      toast.error('Please choose a starting location (e.g. Lamot 1).');
+      toast.error('Please choose a starting location.');
+      return;
+    }
+    if (startLocationId.startsWith('loc-') || !selectedLocation) {
+      toast.error('Trailhead details are still loading. Please wait a moment and select your starting location again.');
       return;
     }
 
-    const dateStr = format(date, 'yyyy-MM-dd');
-    setLoading(true);
+    const selectedGuide = preferredGuideId ? dbGuides.find((guide) => guide.id === preferredGuideId) : undefined;
+    if (preferredGuideId && (!selectedGuide || selectedGuide.location_id !== startLocationId)) {
+      setPreferredGuideId('');
+      setPreferredGuide('');
+      toast.error('That guide is not assigned to the selected trailhead. Please choose a local guide or remove the referral.');
+      return;
+    }
 
-    // â”€â”€ Per-guide-per-day quota: 5 bookings max per guide for the same date.
-    if (preferredGuideId) {
-      const { data: existing, error: qErr } = await supabase
-        .from('booking_assignments' as any)
-        .select('id,status,booking:bookings!inner(booking_date)')
-        .eq('guide_id', preferredGuideId)
-        .in('status', ['pending', 'accepted']);
-      if (!qErr) {
-        const sameDay = ((existing as any[]) ?? []).filter((row: any) => row.booking?.booking_date === dateStr).length;
-        if (sameDay >= 5) {
-          setLoading(false);
-          toast.error('This guide is already at the 5-booking quota for that date. Please pick another guide or date.');
+    bookingSubmitLock.current = true;
+    setLoading(true);
+    let bookingSaved = false;
+
+    try {
+      const dateStr = format(date, 'yyyy-MM-dd');
+      // A retry after a network timeout checks the stable attempt id first so a
+      // committed booking is recovered instead of creating a duplicate.
+      const retrying = bookingAttemptId.current !== null;
+      const attemptId = bookingAttemptId.current ?? crypto.randomUUID();
+      bookingAttemptId.current = attemptId;
+      if (retrying) {
+        const { data: existingBooking, error: existingError } = await withBookingRequestTimeout(
+          (signal) => supabase.from('bookings').select('*').eq('id', attemptId).abortSignal(signal).maybeSingle(),
+          'Checking the previous booking attempt',
+        );
+        if (existingError) throw existingError;
+        if (existingBooking) {
+          setBooking({
+            ...existingBooking,
+            hikeTime, hikeType, fullName, age, emailAddress, phoneNumber, province, city,
+            companions: companions.map((name) => name.trim()).filter(Boolean), sex, hasMinors,
+            preferredGuide, paymentOption, totalFee: calculateFees(groupSize, { hikeType }).totalFee,
+          });
+          bookingAttemptId.current = null;
+          toast.success('Your booking was already received.');
           return;
         }
       }
-    }
 
-    const qrData = `KALISUNGAN-${user.id.slice(0, 8)}-${dateStr}-${Date.now()}`;
-    const companionNames = companions.map((name) => name.trim()).filter(Boolean);
-    const fees = calculateFees(groupSize, { hikeType });
-
-    // Upload screenshot to Firebase if present
-    let screenshotUrl: string | undefined;
-    let screenshotPath: string | undefined;
-    if (paymentScreenshot) {
-      setScreenshotUploading(true);
-      try {
-        const result = await uploadPaymentScreenshot(paymentScreenshot, `${user.id.slice(0, 8)}-${dateStr}`);
-        if (result) {
-          screenshotUrl = result.url;
-          screenshotPath = result.path;
-        } else {
-          toast.warning('Firebase not configured â€” screenshot not uploaded. Contact admin.');
+      // Per-guide quota is advisory; a temporary read failure must not freeze
+      // the booking flow. The database still enforces the trailhead boundary.
+      if (selectedGuide) {
+        try {
+          const { data: existing, error: quotaError } = await withBookingRequestTimeout(
+            (signal) => supabase
+              .from('booking_assignments' as any)
+              .select('id,status,booking:bookings!inner(booking_date)')
+              .eq('guide_id', selectedGuide.id)
+              .in('status', ['pending', 'accepted'])
+              .abortSignal(signal),
+            'Checking guide availability',
+            10000,
+          );
+          if (quotaError) throw quotaError;
+          const sameDay = ((existing as any[]) ?? []).filter((row: any) => row.booking?.booking_date === dateStr).length;
+          if (sameDay >= 5) {
+            toast.error('This guide is already at the 5-booking quota for that date. Choose another date or remove the referral.');
+            return;
+          }
+        } catch (error) {
+          console.warn('Could not verify the optional guide quota:', error);
+          toast.warning('Guide availability could not be refreshed. Your local trailhead admin will verify the assignment.');
         }
-      } catch {
-        toast.error('Failed to upload screenshot. Booking will continue without it.');
       }
-      setScreenshotUploading(false);
-    }
 
-    const enrichedCompanions = companionDetails.map((c, i) => ({
-      ...c,
-      name: c.name || companions[i] || '',
-    })).filter((c) => c.name.trim());
-
-    const metaNotes = encodeMeta({
-      userNotes: medicalNotes,
-      fullName,
-      age,
-      nationality,
-      emailAddress,
-      phoneNumber,
-      province,
-      city,
-      companions: companionNames,
-      companionDetails: enrichedCompanions.length ? enrichedCompanions : undefined,
-      medicalNotes,
-      sex: sex || undefined,
-      hasMinors,
-      minorCount: hasMinors ? minorCount : undefined,
-      preferredGuide: preferredGuide.trim() || undefined,
-      hikeType,
-      hikeTime,
-      paymentStatus: paymentOption === 'online' && (transactionRef || screenshotUrl) ? 'partial' : 'unpaid',
-      paymentMethod: paymentOption === 'online' ? onlinePayMethod : 'onsite',
-      transactionId: transactionRef.trim() || undefined,
-      amountPaid: amountPaid ? Number(amountPaid) : undefined,
-      paymentScreenshotUrl: screenshotUrl,
-      paymentScreenshotPath: screenshotPath,
-      entryFee: fees.entryFee,
-      envFee: fees.envFee,
-      guideFee: fees.guideFee,
-      totalFee: fees.totalFee,
-      baseFee: fees.totalFee,
-      originalQuote: { total: fees.totalFee, capturedAt: new Date().toISOString() },
-    });
-
-    // Upsert single persistent hiker profile to ensure booking attaches to existing profile
-    try {
-      await supabase.from('profiles').upsert(
-        {
-          user_id: user.id,
-          full_name: fullName.trim(),
-          phone: phoneNumber.trim(),
-          emergency_contact: companionNames[0] ? `${companionNames[0]} (companion)` : '',
-          is_active: true,
-        },
-        { onConflict: 'user_id' }
-      );
-      await supabase.from('user_roles').upsert(
-        {
-          user_id: user.id,
-          role: 'hiker',
-        } as any,
-        { onConflict: 'user_id,role' }
-      );
-    } catch (profErr) {
-      console.warn('Could not sync user profile:', profErr);
-    }
-
-    const { data, error } = await supabase
-      .from('bookings')
-      .insert({
-        user_id: user.id,
-        booking_date: dateStr,
-        group_size: groupSize,
-        qr_code_data: qrData,
-        emergency_contact_name: fullName,
-        emergency_contact_phone: phoneNumber,
-        notes: metaNotes,
-        status: 'pending',
-        location_id: startLocationId,
-      } as any)
-      .select()
-      .single();
-
-
-    // Auto-create assignment row if hiker requested a specific guide.
-    if (data && preferredGuideId) {
-      await supabase.from('booking_assignments' as any).insert({
-        booking_id: data.id,
-        guide_id: preferredGuideId,
-        location_id: startLocationId,
-        status: 'pending',
-      } as any);
-    }
-
-    if (error) {
-      toast.error(error.message);
-    } else {
+      const qrData = `KALISUNGAN-${attemptId}`;
+      const companionNames = companions.map((name) => name.trim()).filter(Boolean);
       const fees = calculateFees(groupSize, { hikeType });
+
+      let screenshotUrl: string | undefined;
+      let screenshotPath: string | undefined;
+      if (paymentScreenshot) {
+        setScreenshotUploading(true);
+        let uploadTimeout: ReturnType<typeof setTimeout> | undefined;
+        try {
+          const result = await Promise.race([
+            uploadPaymentScreenshot(paymentScreenshot, `${user.id.slice(0, 8)}-${dateStr}`),
+            new Promise<never>((_, reject) => {
+              uploadTimeout = setTimeout(() => reject(new Error('Screenshot upload timed out')), 15000);
+            }),
+          ]);
+          if (result) {
+            screenshotUrl = result.url;
+            screenshotPath = result.path;
+          } else {
+            toast.warning('Screenshot storage is unavailable. Your booking will be submitted without the image.');
+          }
+        } catch {
+          toast.warning('Screenshot upload did not finish. Your booking will be submitted without the image.');
+        } finally {
+          if (uploadTimeout !== undefined) clearTimeout(uploadTimeout);
+        }
+        setScreenshotUploading(false);
+      }
+
+      const enrichedCompanions = companionDetails.map((c, i) => ({
+        ...c,
+        name: c.name || companions[i] || '',
+      })).filter((c) => c.name.trim());
+
+      const metaNotes = encodeMeta({
+        userNotes: medicalNotes,
+        fullName,
+        age,
+        nationality,
+        emailAddress,
+        phoneNumber,
+        province,
+        city,
+        companions: companionNames,
+        companionDetails: enrichedCompanions.length ? enrichedCompanions : undefined,
+        medicalNotes,
+        sex: sex || undefined,
+        hasMinors,
+        minorCount: hasMinors ? minorCount : undefined,
+        preferredGuide: selectedGuide?.full_name,
+        hikeType,
+        hikeTime,
+        paymentStatus: paymentOption === 'online' && (transactionRef || screenshotUrl) ? 'partial' : 'unpaid',
+        paymentMethod: paymentOption === 'online' ? onlinePayMethod : 'onsite',
+        transactionId: transactionRef.trim() || undefined,
+        amountPaid: amountPaid ? Number(amountPaid) : undefined,
+        paymentScreenshotUrl: screenshotUrl,
+        paymentScreenshotPath: screenshotPath,
+        entryFee: fees.entryFee,
+        envFee: fees.envFee,
+        guideFee: fees.guideFee,
+        totalFee: fees.totalFee,
+        baseFee: fees.totalFee,
+        originalQuote: { total: fees.totalFee, capturedAt: new Date().toISOString() },
+      });
+
+      // Profile enrichment is best-effort and does not hold the reservation UI open.
+      void Promise.all([
+        supabase.from('profiles').upsert(
+          {
+            user_id: user.id,
+            full_name: fullName.trim(),
+            phone: phoneNumber.trim(),
+            emergency_contact: companionNames[0] ? `${companionNames[0]} (companion)` : '',
+            is_active: true,
+          },
+          { onConflict: 'user_id' },
+        ),
+        supabase.from('user_roles').upsert(
+          {
+            user_id: user.id,
+            role: 'hiker',
+          } as any,
+          { onConflict: 'user_id,role' },
+        ),
+      ]).then((results) => results.forEach(({ error }) => {
+        if (error) console.warn('Could not sync hiker profile details:', error.message);
+      })).catch((profileError) => console.warn('Could not sync hiker profile details:', profileError));
+
+      const { data, error } = await withBookingRequestTimeout(
+        (signal) => supabase.from('bookings').insert({
+          id: attemptId,
+          user_id: user.id,
+          booking_date: dateStr,
+          group_size: groupSize,
+          qr_code_data: qrData,
+          emergency_contact_name: fullName,
+          emergency_contact_phone: phoneNumber,
+          notes: metaNotes,
+          status: 'pending',
+          location_id: startLocationId,
+        } as any).select().abortSignal(signal).single(),
+        'Booking submission',
+      );
+      if (error) throw error;
+      if (!data) throw new Error('The booking was not saved. Please try again.');
+      bookingSaved = true;
+
+      if (selectedGuide) {
+        try {
+          const { error: assignmentError } = await withBookingRequestTimeout(
+            (signal) => supabase.from('booking_assignments' as any).insert({
+              booking_id: data.id,
+              guide_id: selectedGuide.id,
+              location_id: startLocationId,
+              status: 'pending',
+            } as any).abortSignal(signal),
+            'Saving the referred guide request',
+            10000,
+          );
+          if (assignmentError) throw assignmentError;
+        } catch (assignmentError) {
+          console.error('Booking saved but referred guide assignment failed:', assignmentError);
+          toast.warning('Your booking was saved, but the requested guide was not attached. Your local trailhead admin will assign a guide.');
+        }
+      }
+
       setBooking({
         ...data,
         hikeTime,
@@ -1172,10 +1250,11 @@ export default function BookingPage() {
         companions: companionNames,
         sex,
         hasMinors,
-        preferredGuide,
+        preferredGuide: selectedGuide?.full_name ?? '',
         paymentOption,
         totalFee: fees.totalFee,
       });
+      bookingAttemptId.current = null;
       // Clear saved draft on successful booking
       try { localStorage.removeItem(DRAFT_KEY); } catch { /* ignore */ }
       toast.success('Booking submitted! Awaiting admin approval.');
@@ -1196,8 +1275,17 @@ export default function BookingPage() {
           ].filter((participant) => participant.name.trim() && String(participant.age).trim())),
         );
       } catch { /* storage unavailable */ }
+    } catch (error) {
+      console.error('Booking submission failed:', error);
+      const message = error instanceof Error ? error.message : 'Unexpected error while submitting your booking.';
+      toast.error(bookingSaved
+        ? 'Your booking was saved, but some follow-up details failed. Check My Bookings before retrying.'
+        : `${message} Your form is still here; you can safely retry.`);
+    } finally {
+      setScreenshotUploading(false);
+      setLoading(false);
+      bookingSubmitLock.current = false;
     }
-    setLoading(false);
   };
 
   /* â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ SUCCESS SCREEN â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
@@ -1874,7 +1962,7 @@ export default function BookingPage() {
                         </Label>
                         <Select
                           value={startLocationId}
-                          onValueChange={(v) => { setStartLocationId(v); setPreferredGuideId(''); setPreferredGuide(''); }}
+                          onValueChange={(v) => { explicitStartLocation.current = true; appliedReferralId.current = null; setStartLocationId(v); setPreferredGuideId(''); setPreferredGuide(''); }}
                         >
                           <SelectTrigger id="startLocation">
                             <SelectValue placeholder="Choose where you'll start hiking" />

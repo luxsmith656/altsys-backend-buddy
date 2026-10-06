@@ -49,36 +49,49 @@ export default function ReassignGuideDialog({
 
   useEffect(() => {
     if (!open) return;
+    let active = true;
+    setGuides([]);
+    setNewGuideId('');
+    const load = async () => {
+      try {
+        const { data: booking } = await supabase
+          .from('bookings')
+          .select('id, user_id, booking_date, location_id, group_size')
+          .eq('id', bookingId)
+          .single();
+        if (!active) return;
+        setBookingInfo(booking);
 
-    // Load available guides
-    let q: any = supabase
-      .from('guides')
-      .select('id, full_name, status, location_id, user_id, phone, specialty')
-      .eq('is_active', true)
-      .neq('status', 'off_duty');
-    if (locationId) q = q.eq('location_id', locationId);
-    q.then(({ data }: any) => {
-      const list = (data || []).filter((g: any) => g.id !== currentGuideId);
-      setGuides(list);
-    });
+        // The booking is authoritative; never show a roster based only on a
+        // caller-provided scope when the booking's location is available.
+        const bookingLocationId = booking?.location_id || locationId;
+        if (!bookingLocationId) return;
+        const { data: availableGuides } = await supabase
+          .from('guides')
+          .select('id, full_name, status, location_id, user_id, phone, specialty')
+          .eq('is_active', true)
+          .eq('location_id', bookingLocationId)
+          .not('user_id', 'is', null)
+          .neq('status', 'off_duty');
+        if (!active) return;
+        setGuides((availableGuides || []).filter((guide) => guide.id !== currentGuideId));
 
-    // Load current booking info
-    supabase
-      .from('bookings')
-      .select('id, user_id, booking_date, location_id, group_size')
-      .eq('id', bookingId)
-      .single()
-      .then(({ data }) => setBookingInfo(data));
-
-    // Load current guide user_id
-    if (currentGuideId) {
-      supabase
-        .from('guides')
-        .select('id, full_name, user_id, phone')
-        .eq('id', currentGuideId)
-        .single()
-        .then(({ data }) => setCurrentGuideRow(data));
-    }
+        if (currentGuideId) {
+          const { data: currentGuide } = await supabase
+            .from('guides')
+            .select('id, full_name, user_id, phone')
+            .eq('id', currentGuideId)
+            .eq('location_id', bookingLocationId)
+            .maybeSingle();
+          if (active) setCurrentGuideRow(currentGuide);
+        }
+      } catch (error) {
+        console.error('Could not load same-trailhead replacement guides:', error);
+        if (active) setGuides([]);
+      }
+    };
+    void load();
+    return () => { active = false; };
   }, [open, locationId, currentGuideId, bookingId]);
 
   const handleSubmit = async () => {
@@ -93,6 +106,11 @@ export default function ReassignGuideDialog({
 
     setSaving(true);
     const newGuide = guides.find((g) => g.id === newGuideId);
+    if (!newGuide || newGuide.location_id !== (bookingInfo?.location_id || locationId)) {
+      toast.error('Choose an active guide assigned to this booking’s trailhead.');
+      setSaving(false);
+      return;
+    }
 
     try {
       const res = await reassignGuideByAdmin({
