@@ -284,6 +284,7 @@ export type Database = {
           created_at: string
           id: string
           kind: string
+          recipient_role: string | null
           sender_id: string | null
           sender_role: string
         }
@@ -293,6 +294,7 @@ export type Database = {
           created_at?: string
           id?: string
           kind?: string
+          recipient_role?: string | null
           sender_id?: string | null
           sender_role?: string
         }
@@ -302,6 +304,7 @@ export type Database = {
           created_at?: string
           id?: string
           kind?: string
+          recipient_role?: string | null
           sender_id?: string | null
           sender_role?: string
         }
@@ -1351,6 +1354,10 @@ export type Database = {
         Args: { p_booking_id: string; p_guide_id: string; p_trail_id?: string | null }
         Returns: Json
       }
+      admin_reassign_hike_guide: {
+        Args: { p_booking_id: string; p_guide_id: string; p_reason: string }
+        Returns: Json
+      }
       admin_can_access_location: {
         Args: { _location_id: string }
         Returns: boolean
@@ -1426,6 +1433,10 @@ export type Database = {
       guide_can_read_booking: {
         Args: { _booking_id: string }
         Returns: boolean
+      }
+      guide_reassign_hike_assignment: {
+        Args: { p_assignment_id: string; p_replacement_guide_id: string | null; p_reason: string }
+        Returns: Json
       }
       has_role: {
         Args: {
