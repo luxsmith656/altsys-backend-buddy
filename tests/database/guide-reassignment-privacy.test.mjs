@@ -55,6 +55,7 @@ before(async () => {
     GRANT SELECT, INSERT, UPDATE ON public.bookings, public.guides, public.booking_assignments, public.booking_messages TO authenticated;
   `);
   await db.exec(await readFile('supabase/migrations/20261006120000_guide_message_audience_and_reassignment.sql', 'utf8'));
+  await db.exec(await readFile('supabase/migrations/20261007120000_ensure_booking_message_recipient_role.sql', 'utf8'));
 });
 
 beforeEach(async () => {
@@ -103,6 +104,19 @@ test('assigned guide sees hiker-to-guide messages, not messages addressed only t
   await db.exec(`SET test.actor = '${id(2)}'`);
   const visible = await db.query('SELECT content FROM public.booking_messages ORDER BY content');
   assert.deepEqual(visible.rows.map((row) => row.content), ['Guide question']);
+});
+
+test('booking message recipient migration is safe to rerun and keeps supported audiences constrained', async () => {
+  await db.exec('RESET ROLE');
+  await db.exec(await readFile('supabase/migrations/20261007120000_ensure_booking_message_recipient_role.sql', 'utf8'));
+  await db.exec(`SET ROLE authenticated; SET test.actor = '${id(1)}'`);
+  await assert.rejects(
+    db.query(`INSERT INTO public.booking_messages (booking_id, sender_id, sender_role, recipient_role, content)
+      VALUES ($1, $2, 'hiker', 'someone-else', 'Invalid audience')`, [id(20), id(3)]),
+    /booking_messages_recipient_role_check/,
+  );
+  assert.equal((await db.query(`SELECT count(*)::int AS n FROM information_schema.columns
+    WHERE table_schema='public' AND table_name='booking_messages' AND column_name='recipient_role'`)).rows[0].n, 1);
 });
 
 test('former guide loses access after atomic reassignment', async () => {

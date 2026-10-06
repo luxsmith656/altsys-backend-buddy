@@ -33,6 +33,13 @@ interface Props {
   onAfterReschedule?: () => void;
 }
 
+function bookingMessageError(message: string) {
+  if (message.includes("'recipient_role'") && message.toLowerCase().includes('schema cache')) {
+    return 'Booking messages need a database update. Ask the project admin to apply the latest booking-message migration, then try again.';
+  }
+  return message;
+}
+
 export default function BookingChat({
   bookingId, bookingDate, open, onOpenChange,
   canRequestReschedule, isAdmin, onAfterReschedule,
@@ -77,9 +84,9 @@ export default function BookingChat({
     return () => { supabase.removeChannel(ch); };
   }, [open, bookingId]);
 
-  const send = async (kind: string = 'chat', content?: string) => {
+  const send = async (kind: string = 'chat', content?: string): Promise<boolean> => {
     const body = (content ?? text).trim();
-    if (!body) return;
+    if (!body) return false;
     setSending(true);
     const { error } = await supabase.from('booking_messages' as any).insert({
       booking_id: bookingId,
@@ -90,8 +97,9 @@ export default function BookingChat({
       content: body,
     });
     setSending(false);
-    if (error) { toast.error(error.message); return; }
+    if (error) { toast.error(bookingMessageError(error.message)); return false; }
     if (!content) setText('');
+    return true;
   };
 
   const requestReschedule = async () => {
@@ -124,7 +132,15 @@ export default function BookingChat({
     update = current.notes == null ? update.is('notes', null) : update.eq('notes', current.notes);
     const { data: changed, error } = await update.select('id').maybeSingle();
     if (error || !changed) { setSending(false); toast.error(error?.message || 'Booking changed. Reload before requesting a new date.'); return; }
-    await send('reschedule_request', `Hiker requested to reschedule from ${bookingDate} to ${newDate}. Reason: ${rescheduleReason.trim()}`);
+    const messageSent = await send('reschedule_request', `Hiker requested to reschedule from ${bookingDate} to ${newDate}. Reason: ${rescheduleReason.trim()}`);
+    if (!messageSent) {
+      toast.error('The reschedule was saved, but its message could not be delivered. Contact the administrator directly.');
+      setNewDate('');
+      setRescheduleReason('');
+      setSending(false);
+      onAfterReschedule?.();
+      return;
+    }
     toast.success('Reschedule request sent to admin');
     setNewDate('');
     setRescheduleReason('');
