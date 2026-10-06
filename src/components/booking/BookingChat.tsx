@@ -15,6 +15,7 @@ interface Msg {
   booking_id: string;
   sender_id: string | null;
   sender_role: string;
+  recipient_role?: string | null;
   kind: string;
   content: string;
   created_at: string;
@@ -63,7 +64,15 @@ export default function BookingChat({
     const ch = supabase
       .channel(`bm-${bookingId}`)
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'booking_messages', filter: `booking_id=eq.${bookingId}` },
-        (p) => { setMsgs((m) => [...m, p.new as Msg]); setTimeout(() => scroller.current?.scrollTo({ top: 99999 }), 50); })
+        (p) => {
+          const message = p.new as Msg;
+          const visibleToRole = role === 'admin' || role === 'super_admin' ||
+            (role === 'guide' && (message.sender_id === user?.id || message.recipient_role === 'guide')) ||
+            (role === 'hiker' && (message.sender_id === user?.id || message.recipient_role === 'hiker'));
+          if (!visibleToRole) return;
+          setMsgs((current) => current.some((item) => item.id === message.id) ? current : [...current, message]);
+          setTimeout(() => scroller.current?.scrollTo({ top: 99999 }), 50);
+        })
       .subscribe();
     return () => { supabase.removeChannel(ch); };
   }, [open, bookingId]);
@@ -76,6 +85,7 @@ export default function BookingChat({
       booking_id: bookingId,
       sender_id: user?.id,
       sender_role: role || 'user',
+      recipient_role: kind === 'reschedule_request' ? 'admin' : role === 'hiker' ? 'guide' : 'hiker',
       kind,
       content: body,
     });

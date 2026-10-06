@@ -134,6 +134,10 @@ describe('Guide Assignment & Confirmation Service', () => {
   });
 
   it('declines and reassigns using the schema-supported reassignment_reason field', async () => {
+    mockState.rpc.mockResolvedValue({ data: {
+      oldGuideName: 'Juan Dela Cruz', replacementGuideUserId: 'user-guide-2', replacementGuideName: 'Maria Santos',
+      hikerUserId: 'user-hiker-1', bookingDate: '2026-08-25', bookingId: 'booking-123',
+    }, error: null });
     const result = await declineAndReassignGuide({
       assignmentId: 'assign-1', bookingId: 'booking-123', currentGuideId: 'guide-1', currentGuideName: 'Juan Dela Cruz',
       currentGuideUserId: 'user-guide-1', reason: 'Feeling unwell / fever', replacementGuideId: 'guide-2',
@@ -142,30 +146,30 @@ describe('Guide Assignment & Confirmation Service', () => {
     });
 
     expect(result).toEqual({ success: true });
-    const assignmentUpdate = mockState.operations.find((operation) => operation.table === 'booking_assignments' && operation.method === 'update');
-    expect(assignmentUpdate?.payload).toEqual(expect.objectContaining({ status: 'declined', reassignment_reason: 'Feeling unwell / fever' }));
-    expect(assignmentUpdate?.payload).not.toHaveProperty('decline_reason');
-    expect(mockState.operations).toContainEqual(expect.objectContaining({
-      table: 'booking_assignments', method: 'insert', payload: expect.objectContaining({ guide_id: 'guide-2', location_id: 'loc-1', status: 'pending' }),
-    }));
+    expect(mockState.rpc).toHaveBeenCalledWith('guide_reassign_hike_assignment', {
+      p_assignment_id: 'assign-1', p_replacement_guide_id: 'guide-2', p_reason: 'Feeling unwell / fever',
+    });
+    expect(mockState.operations).toEqual([]);
     expect(mockState.notifyUser).toHaveBeenCalledWith('user-guide-2', expect.objectContaining({ category: 'booking' }));
   });
 
-  it('does not report reassignment success when the replacement assignment insert fails', async () => {
-    mockState.failInsertTable = 'booking_assignments';
+  it('does not report reassignment success when the transactional RPC fails', async () => {
+    mockState.rpc.mockResolvedValue({ data: null, error: { message: 'replacement guide assignment denied' } });
 
     const result = await declineAndReassignGuide({
       assignmentId: 'assign-1', bookingId: 'booking-123', currentGuideId: 'guide-1', currentGuideName: 'Juan Dela Cruz',
       reason: 'Emergency', replacementGuideId: 'guide-2', replacementGuideName: 'Maria Santos', locationId: 'loc-1',
     });
 
-    expect(result).toEqual({ success: false, error: 'booking_assignments insert denied' });
-    expect(mockState.operations).not.toContainEqual(expect.objectContaining({
-      table: 'booking_assignments', method: 'update', payload: expect.objectContaining({ status: 'declined' }),
-    }));
+    expect(result).toEqual({ success: false, error: 'replacement guide assignment denied' });
+    expect(mockState.notifyUser).not.toHaveBeenCalled();
   });
 
   it('returns a declined assignment to admin dispatch when no replacement guide is selected', async () => {
+    mockState.rpc.mockResolvedValue({ data: {
+      oldGuideName: 'Juan Dela Cruz', replacementGuideUserId: null, replacementGuideName: null,
+      hikerUserId: 'user-hiker-1', bookingDate: '2026-08-25', bookingId: 'booking-123',
+    }, error: null });
     const result = await declineAndReassignGuide({
       assignmentId: 'assign-1', bookingId: 'booking-123', currentGuideId: 'guide-1', currentGuideName: 'Juan Dela Cruz',
       currentGuideUserId: 'user-guide-1', reason: 'Schedule conflict', replacementGuideId: null, replacementGuideName: null,
@@ -173,11 +177,18 @@ describe('Guide Assignment & Confirmation Service', () => {
     });
 
     expect(result).toEqual({ success: true });
-    const bookingUpdate = mockState.operations.find((operation) => operation.table === 'bookings' && operation.method === 'update');
-    expect(parseMeta((bookingUpdate?.payload as { notes: string }).notes)).toMatchObject({ assignedGuideId: null, guideStatus: 'declined', guideDeclineReason: 'Schedule conflict' });
+    expect(mockState.rpc).toHaveBeenCalledWith('guide_reassign_hike_assignment', {
+      p_assignment_id: 'assign-1', p_replacement_guide_id: null, p_reason: 'Schedule conflict',
+    });
+    expect(mockState.operations).toEqual([]);
   });
 
   it('allows admin guide reassignment, records the reason, and notifies affected parties', async () => {
+    mockState.rpc.mockResolvedValue({ data: {
+      guideUserId: 'user-guide-2', guideName: 'Maria Santos', guidePhone: '09189998888',
+      oldGuideUserId: 'user-guide-1', oldGuideName: 'Juan Dela Cruz',
+      hikerUserId: 'user-hiker-1', bookingDate: '2026-08-25', locationId: 'loc-1',
+    }, error: null });
     const result = await reassignGuideByAdmin({
       bookingId: 'booking-123', currentGuideId: 'guide-1', currentGuideName: 'Juan Dela Cruz', currentGuideUserId: 'user-guide-1',
       newGuideId: 'guide-2', newGuideName: 'Maria Santos', newGuideUserId: 'user-guide-2', newGuidePhone: '09189998888',
@@ -185,11 +196,22 @@ describe('Guide Assignment & Confirmation Service', () => {
     });
 
     expect(result).toEqual({ success: true });
-    expect(mockState.operations).toContainEqual(expect.objectContaining({
-      table: 'booking_assignments', method: 'update', payload: expect.objectContaining({ reassignment_reason: 'Reassigned by admin: Guide roster balance' }),
-    }));
+    expect(mockState.rpc).toHaveBeenCalledWith('admin_reassign_hike_guide', {
+      p_booking_id: 'booking-123', p_guide_id: 'guide-2', p_reason: 'Guide roster balance',
+    });
+    expect(mockState.operations.some((operation) => operation.table === 'booking_assignments')).toBe(false);
     expect(mockState.notifyUser).toHaveBeenCalledTimes(3);
     expect(mockState.notifyUser).toHaveBeenCalledWith('user-hiker-1', expect.objectContaining({ category: 'booking' }));
+  });
+
+  it('does not notify anyone if the atomic reassignment fails', async () => {
+    mockState.rpc.mockResolvedValue({ data: null, error: { message: 'Booking belongs to another trailhead' } });
+    const result = await reassignGuideByAdmin({
+      bookingId: 'booking-123', currentGuideId: 'guide-1', newGuideId: 'guide-2',
+      newGuideName: 'Maria Santos', reason: 'Coverage change',
+    });
+    expect(result).toEqual({ success: false, error: 'Booking belongs to another trailhead' });
+    expect(mockState.notifyUser).not.toHaveBeenCalled();
   });
 
   it('assigns atomically using server-owned guide details, then notifies the guide', async () => {

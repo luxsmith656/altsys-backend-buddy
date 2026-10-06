@@ -7,11 +7,16 @@ import { createClient } from 'npm:@supabase/supabase-js@2';
 import { corsHeaders } from 'npm:@supabase/supabase-js@2/cors';
 import { createRemoteJWKSet, jwtVerify, type JWTPayload } from 'npm:jose@5';
 
-const FIREBASE_PROJECT_ID = cleanEnv('FIREBASE_PROJECT_ID');
+// Firebase project IDs are 6-30 chars: lowercase letters, digits, hyphens.
+// Ignore the secret if it holds anything else (e.g. a pasted API key).
+const RAW_FIREBASE_PROJECT_ID = cleanEnv('FIREBASE_PROJECT_ID');
+const FIREBASE_PROJECT_ID = /^[a-z][a-z0-9-]{4,28}[a-z0-9]$/.test(RAW_FIREBASE_PROJECT_ID)
+  ? RAW_FIREBASE_PROJECT_ID
+  : '';
 const SUPABASE_URL = cleanEnv('SUPABASE_URL');
 const SERVICE_ROLE = cleanEnv('SUPABASE_SERVICE_ROLE_KEY');
 const ALLOWED_FIREBASE_PROJECT_IDS = Array.from(
-  new Set([FIREBASE_PROJECT_ID, 'mt-kalisungan-system', 'altsys-backend-buddy'].filter(Boolean)),
+  new Set(['mt-kalisungan-system', 'altsys-backend-buddy', FIREBASE_PROJECT_ID].filter(Boolean)),
 );
 
 const JWKS = createRemoteJWKSet(
@@ -108,8 +113,22 @@ function json(body: unknown, status = 200) {
 }
 
 async function verifyFirebaseToken(idToken: string): Promise<JWTPayload> {
+  const unverifiedClaims = readUnverifiedClaims(idToken);
+  const issuer = typeof unverifiedClaims.iss === 'string' ? unverifiedClaims.iss : '';
+  const issuerProjectId = issuer.startsWith('https://securetoken.google.com/')
+    ? issuer.slice('https://securetoken.google.com/'.length)
+    : '';
+  const tokenAudience = typeof unverifiedClaims.aud === 'string' ? unverifiedClaims.aud : '';
+  const matchesConfiguredProject = ALLOWED_FIREBASE_PROJECT_IDS.includes(issuerProjectId) &&
+    tokenAudience === issuerProjectId;
+
+  // Select by the token's public issuer claims first, but never trust them until
+  // jwtVerify validates the signature, issuer and audience below.
+  const candidateProjects = matchesConfiguredProject
+    ? [issuerProjectId]
+    : ALLOWED_FIREBASE_PROJECT_IDS;
   let lastError: unknown;
-  for (const projectId of ALLOWED_FIREBASE_PROJECT_IDS) {
+  for (const projectId of candidateProjects) {
     try {
       const { payload } = await jwtVerify(idToken, JWKS, {
         issuer: `https://securetoken.google.com/${projectId}`,
@@ -121,10 +140,30 @@ async function verifyFirebaseToken(idToken: string): Promise<JWTPayload> {
     }
   }
   console.error('[firebase-auth-bridge] jwtVerify failed', {
-    allowedAudiences: ALLOWED_FIREBASE_PROJECT_IDS,
-    configuredProjectIdLen: FIREBASE_PROJECT_ID.length,
+    tokenIssuerProjectId: issuerProjectId || 'unrecognized',
+    tokenAudienceMatchesIssuer: tokenAudience === issuerProjectId,
+    allowedProjectCount: ALLOWED_FIREBASE_PROJECT_IDS.length,
+    secretProjectIdValid: FIREBASE_PROJECT_ID.length > 0,
   });
+  if (issuerProjectId && !matchesConfiguredProject) {
+    throw new Error(`Google sign-in project mismatch: token issuer/audience is ${issuerProjectId}, but the token claims do not match an allowed Firebase project.`);
+  }
   throw lastError instanceof Error ? lastError : new Error('Invalid Firebase token');
+}
+
+function readUnverifiedClaims(token: string): Record<string, unknown> {
+  try {
+    const segment = token.split('.')[1];
+    if (!segment) return {};
+    const normalized = segment.replace(/-/g, '+').replace(/_/g, '/');
+    const decoded = atob(normalized.padEnd(Math.ceil(normalized.length / 4) * 4, '='));
+    const claims: unknown = JSON.parse(decoded);
+    return claims && typeof claims === 'object' && !Array.isArray(claims)
+      ? claims as Record<string, unknown>
+      : {};
+  } catch {
+    return {};
+  }
 }
 
 function cleanEnv(name: string): string {

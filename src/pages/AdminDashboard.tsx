@@ -2889,7 +2889,7 @@ export default function AdminDashboard() {
             </Card>
           </TabsContent>
               <TabsContent value="live-map" className="relative mt-0 h-[calc(100dvh-9rem)] min-h-[28rem] overflow-hidden rounded-lg border border-border/30 sm:min-h-[600px]">
-            <RealtimeMonitorMap locationId={activeLocationId} canAddCheckpoints={false} />
+            <RealtimeMonitorMap locationId={isSuperAdmin ? null : activeLocationId} canAddCheckpoints={false} />
           </TabsContent>
 
               <TabsContent value="sessions" className="space-y-4 mt-0">

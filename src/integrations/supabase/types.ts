@@ -135,6 +135,7 @@ export type Database = {
           expires_at: string | null
           id: string
           is_important: boolean
+          source: string | null
           starts_at: string | null
           target: string
           title: string
@@ -147,6 +148,7 @@ export type Database = {
           expires_at?: string | null
           id: string
           is_important?: boolean
+          source?: string | null
           starts_at?: string | null
           target?: string
           title: string
@@ -159,6 +161,7 @@ export type Database = {
           expires_at?: string | null
           id?: string
           is_important?: boolean
+          source?: string | null
           starts_at?: string | null
           target?: string
           title?: string
@@ -284,6 +287,7 @@ export type Database = {
           created_at: string
           id: string
           kind: string
+          recipient_role: string | null
           sender_id: string | null
           sender_role: string
         }
@@ -293,6 +297,7 @@ export type Database = {
           created_at?: string
           id?: string
           kind?: string
+          recipient_role?: string | null
           sender_id?: string | null
           sender_role?: string
         }
@@ -302,6 +307,7 @@ export type Database = {
           created_at?: string
           id?: string
           kind?: string
+          recipient_role?: string | null
           sender_id?: string | null
           sender_role?: string
         }
@@ -462,9 +468,9 @@ export type Database = {
       daily_capacity: {
         Row: {
           current_count: number
+          date: string
           day_current_count: number
           day_max_capacity: number | null
-          date: string
           id: string
           location_id: string | null
           max_capacity: number
@@ -473,9 +479,9 @@ export type Database = {
         }
         Insert: {
           current_count?: number
+          date: string
           day_current_count?: number
           day_max_capacity?: number | null
-          date: string
           id?: string
           location_id?: string | null
           max_capacity?: number
@@ -484,9 +490,9 @@ export type Database = {
         }
         Update: {
           current_count?: number
+          date?: string
           day_current_count?: number
           day_max_capacity?: number | null
-          date?: string
           id?: string
           location_id?: string | null
           max_capacity?: number
@@ -1347,8 +1353,22 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      adjust_daily_capacity_for_booking: {
+        Args: {
+          p_booking_date: string
+          p_delta: number
+          p_group_size: number
+          p_hike_type: string
+          p_location_id: string
+        }
+        Returns: undefined
+      }
       admin_assign_hike_guide: {
-        Args: { p_booking_id: string; p_guide_id: string; p_trail_id?: string | null }
+        Args: { p_booking_id: string; p_guide_id: string; p_trail_id?: string }
+        Returns: Json
+      }
+      admin_reassign_hike_guide: {
+        Args: { p_booking_id: string; p_guide_id: string; p_reason: string }
         Returns: Json
       }
       admin_can_access_location: {
@@ -1426,6 +1446,10 @@ export type Database = {
       guide_can_read_booking: {
         Args: { _booking_id: string }
         Returns: boolean
+      }
+      guide_reassign_hike_assignment: {
+        Args: { p_assignment_id: string; p_replacement_guide_id: string | null; p_reason: string }
+        Returns: Json
       }
       has_role: {
         Args: {
