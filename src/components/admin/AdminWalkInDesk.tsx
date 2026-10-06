@@ -118,18 +118,22 @@ export default function AdminWalkInDesk({
 
   // Load active guides for location
   useEffect(() => {
-    let q = supabase
+    if (!locationId) {
+      setGuides([]);
+      setAssignedGuideId('');
+      return;
+    }
+    const q = supabase
       .from('guides')
       .select('id, full_name, status, location_id, phone, specialty')
-      .eq('is_active', true);
-    if (locationId) q = q.eq('location_id', locationId);
+      .eq('is_active', true)
+      .eq('location_id', locationId)
+      .not('user_id', 'is', null);
 
     q.then(({ data }) => {
-      const list = data || [];
+      const list = (data || []).filter((guide) => !['off-duty', 'off_duty'].includes(guide.status || ''));
       setGuides(list);
-      if (list.length > 0 && !assignedGuideId) {
-        setAssignedGuideId(list[0].id);
-      }
+      setAssignedGuideId((current) => list.some((guide) => guide.id === current) ? current : list[0]?.id || '');
     });
   }, [locationId]);
 
@@ -163,6 +167,9 @@ export default function AdminWalkInDesk({
     setSubmitting(true);
     try {
       const selectedGuide = guides.find((g) => g.id === assignedGuideId);
+      if (!locationId || !selectedGuide || selectedGuide.location_id !== locationId) {
+        throw new Error('Select a guide assigned to this trailhead before registering a walk-in hike.');
+      }
       const bookingId = crypto.randomUUID();
       const qrData = JSON.stringify({
         bookingId,
