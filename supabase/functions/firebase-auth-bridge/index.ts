@@ -7,11 +7,16 @@ import { createClient } from 'npm:@supabase/supabase-js@2';
 import { corsHeaders } from 'npm:@supabase/supabase-js@2/cors';
 import { createRemoteJWKSet, jwtVerify, type JWTPayload } from 'npm:jose@5';
 
-const FIREBASE_PROJECT_ID = cleanEnv('FIREBASE_PROJECT_ID');
+// Firebase project IDs are 6-30 chars: lowercase letters, digits, hyphens.
+// Ignore the secret if it holds anything else (e.g. a pasted API key).
+const RAW_FIREBASE_PROJECT_ID = cleanEnv('FIREBASE_PROJECT_ID');
+const FIREBASE_PROJECT_ID = /^[a-z][a-z0-9-]{4,28}[a-z0-9]$/.test(RAW_FIREBASE_PROJECT_ID)
+  ? RAW_FIREBASE_PROJECT_ID
+  : '';
 const SUPABASE_URL = cleanEnv('SUPABASE_URL');
 const SERVICE_ROLE = cleanEnv('SUPABASE_SERVICE_ROLE_KEY');
 const ALLOWED_FIREBASE_PROJECT_IDS = Array.from(
-  new Set([FIREBASE_PROJECT_ID, 'mt-kalisungan-system', 'altsys-backend-buddy'].filter(Boolean)),
+  new Set(['mt-kalisungan-system', 'altsys-backend-buddy', FIREBASE_PROJECT_ID].filter(Boolean)),
 );
 
 const JWKS = createRemoteJWKSet(
@@ -121,8 +126,8 @@ async function verifyFirebaseToken(idToken: string): Promise<JWTPayload> {
     }
   }
   console.error('[firebase-auth-bridge] jwtVerify failed', {
-    allowedAudiences: ALLOWED_FIREBASE_PROJECT_IDS,
-    configuredProjectIdLen: FIREBASE_PROJECT_ID.length,
+    allowedProjectCount: ALLOWED_FIREBASE_PROJECT_IDS.length,
+    secretProjectIdValid: FIREBASE_PROJECT_ID.length > 0,
   });
   throw lastError instanceof Error ? lastError : new Error('Invalid Firebase token');
 }
