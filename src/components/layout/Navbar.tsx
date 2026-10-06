@@ -7,7 +7,7 @@ import { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import logo from '@/assets/logo.png';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
-import { loadAnnouncements } from '@/lib/announcements';
+import { fetchAnnouncementsFromDb, visibleAnnouncements } from '@/lib/announcements';
 import { loadRemovedNotificationIds, loadSeenNotificationIds } from '@/lib/notifications';
 import { isFirebaseConfigured } from '@/lib/firebase';
 import { subscribeUserNotifications, type FsNotification } from '@/lib/firestoreNotifications';
@@ -57,26 +57,17 @@ export default function Navbar() {
       return;
     }
 
-    if (isFirebaseConfigured()) {
-      const removed = new Set(loadRemovedNotificationIds(user.id));
-      const seen = new Set(loadSeenNotificationIds(user.id));
-      const items = fsNotifs.map((item) => ({ ...item, id: `fs:${item.id}` }))
-        .filter((item) => !removed.has(item.id));
-      setNotifCount(items.filter((item) => !item.read && !seen.has(item.id)).length);
-      setNotifPreview(items.slice(0, 4));
-      return;
-    }
-
     const loadNotifData = async () => {
       const seen = new Set(loadSeenNotificationIds(user.id));
       const removed = new Set(loadRemovedNotificationIds(user.id));
-      const anns = loadAnnouncements().map((a) => ({
+      const announcements = await fetchAnnouncementsFromDb();
+      const anns = visibleAnnouncements(announcements, role).map((a) => ({
         id: `ann:${a.id}`,
         title: a.title,
         createdAt: a.created_at,
         href: '/notifications',
       }));
-      const { data } = await supabase
+      const { data } = isFirebaseConfigured() ? { data: [] } : await supabase
         .from('bookings')
         .select('id,status,created_at')
         .eq('user_id', user.id)
@@ -106,7 +97,7 @@ export default function Navbar() {
       );
     };
     void loadNotifData();
-  }, [user, location.pathname, fsNotifs]);
+  }, [user, role, location.pathname, fsNotifs]);
 
   const isActive = (path: string) => location.pathname === path;
 

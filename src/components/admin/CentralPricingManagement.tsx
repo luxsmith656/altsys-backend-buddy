@@ -28,6 +28,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
 import { calculateFees, formatPeso } from '@/lib/payments';
 import type { PricingConfig } from '@/types/pricing';
+import { validateCapacitySplit } from '@/lib/dailyCapacity';
 
 export default function CentralPricingManagement() {
   const { user } = useAuth();
@@ -137,10 +138,8 @@ export default function CentralPricingManagement() {
       toast.error('Please select a date.');
       return;
     }
-    if (capMax < 1) {
-      toast.error('Max capacity must be at least 1.');
-      return;
-    }
+    const capacityError = validateCapacitySplit(capMax, capDayMax, capNightMax);
+    if (capacityError) { toast.error(capacityError); return; }
     setCapSaving(true);
     try {
       const locId = selectedCapLocationId === 'all' ? null : selectedCapLocationId;
@@ -170,10 +169,8 @@ export default function CentralPricingManagement() {
       toast.error('Please select both start and end dates.');
       return;
     }
-    if (capMax < 1) {
-      toast.error('Max capacity must be at least 1.');
-      return;
-    }
+    const capacityError = validateCapacitySplit(capMax, capDayMax, capNightMax);
+    if (capacityError) { toast.error(capacityError); return; }
     const start = new Date(`${capRangeStart}T00:00:00`);
     const end = new Date(`${capRangeEnd}T00:00:00`);
     if (end < start) {

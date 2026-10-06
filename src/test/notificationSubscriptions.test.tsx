@@ -16,6 +16,10 @@ const state = vi.hoisted(() => ({
 vi.mock('@/hooks/useAuth', () => ({ useAuth: () => ({ user: state.user, role: 'hiker', signOut: vi.fn() }) }));
 vi.mock('@/hooks/useTheme', () => ({ useTheme: () => ({ theme: 'light', toggleTheme: vi.fn() }) }));
 vi.mock('@/lib/firebase', () => ({ isFirebaseConfigured: () => true }));
+vi.mock('@/lib/announcements', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/lib/announcements')>();
+  return { ...actual, fetchAnnouncementsFromDb: vi.fn().mockResolvedValue([]) };
+});
 vi.mock('@/integrations/supabase/client', () => ({ supabase: {
   from: () => ({ select: () => ({ eq: () => ({ maybeSingle: async () => ({ data: { full_name: 'Test Hiker', avatar_url: null }, error: null }) }) }) }),
 } }));
@@ -56,11 +60,11 @@ describe('notification listener lifecycle', () => {
     },
   );
 
-  it('marks and removes the actual Firestore notification, not only local placeholders', () => {
+  it('marks and removes the actual Firestore notification, not only local placeholders', async () => {
     render(<MemoryRouter><NotificationsPage /></MemoryRouter>);
     const onSnapshot = state.subscribe.mock.calls[0][1] as (items: FsNotification[]) => void;
     act(() => onSnapshot([notice]));
-    expect(screen.getByText(notice.title)).toBeVisible();
+    expect(await screen.findByText(notice.title)).toBeVisible();
     fireEvent.click(screen.getByRole('button', { name: 'Mark as seen' }));
     expect(state.markRead).toHaveBeenCalledWith(notice.id);
     fireEvent.click(screen.getByRole('button', { name: 'Remove' }));
@@ -68,14 +72,14 @@ describe('notification listener lifecycle', () => {
     expect(screen.queryByText(notice.title)).not.toBeInTheDocument();
   });
 
-  it('preserves read and dismissed history saved by the previous notification UI', () => {
+  it('preserves read and dismissed history saved by the previous notification UI', async () => {
     localStorage.setItem('mtk_seen_notifications_hiker-a', JSON.stringify([notice.id]));
     localStorage.setItem('mtk_removed_notifications_hiker-a', JSON.stringify(['dismissed']));
     render(<MemoryRouter><NotificationsPage /></MemoryRouter>);
     const onSnapshot = state.subscribe.mock.calls[0][1] as (items: FsNotification[]) => void;
     act(() => onSnapshot([notice, { ...notice, id: 'dismissed', title: 'Already dismissed' }]));
     expect(screen.queryByText('Already dismissed')).not.toBeInTheDocument();
-    expect(screen.getByText('Notifications (0 unread)')).toBeVisible();
+    expect(await screen.findByText('Notifications (0 unread)')).toBeVisible();
     expect(screen.queryByRole('button', { name: 'Mark as seen' })).not.toBeInTheDocument();
   });
 });

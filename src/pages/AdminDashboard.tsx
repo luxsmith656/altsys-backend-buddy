@@ -98,10 +98,12 @@ import { assignGuideToBooking } from '@/lib/guideAssignmentService';
 import EditBookingDialog from '@/components/booking/EditBookingDialog';
 import { AdminOffDutyApprovals } from '@/components/booking/OffDutyManager';
 import AdminUserManagement from '@/components/admin/AdminUserManagement';
+import ImportantAnnouncements from '@/components/common/ImportantAnnouncements';
 import { useAuth } from '@/hooks/useAuth';
 import { parseMeta, encodeMeta } from '@/lib/bookingMeta';
 import { calculateFees, calculatePeakExtensionFee, formatPeso, PAYMENT_METHOD_LABELS, type PaymentMethod } from '@/lib/payments';
-import { addAnnouncement, loadAnnouncements, removeAnnouncement, type AdminAnnouncement, type AnnouncementTarget } from '@/lib/announcements';
+import { addAnnouncement, fetchAnnouncementsFromDb, loadAnnouncements, removeAnnouncement, visibleAnnouncements, type AdminAnnouncement, type AnnouncementTarget } from '@/lib/announcements';
+import { validateCapacitySplit } from '@/lib/dailyCapacity';
 import { writeActivityLog } from '@/lib/activity-log';
 import { confirmReservation } from '@/lib/notification-service';
 import { motion } from 'framer-motion';
@@ -562,6 +564,7 @@ export default function AdminDashboard() {
     void loadPendingBookings();
     void loadUpcomingCapacities();
     setAnnouncements(loadAnnouncements(role));
+    void fetchAnnouncementsFromDb().then((items) => setAnnouncements(visibleAnnouncements(items, role)));
 
     // Listen for realtime booking changes & assignments with immediate optimistic state update
     const refresh = coalescedRefresh(async () => { await Promise.all([loadAllTabBookings(), loadPendingBookings(), loadData(), loadSiteSessions()]); });
@@ -680,29 +683,6 @@ export default function AdminDashboard() {
       });
     }
     setAllTabLoading(false);
-  };
-
-  /* ── Update daily_capacity.current_count on confirm/cancel ── */
-  const updateDailySlots = async (bookingDate: string, groupSize: number, delta: number) => {
-    if (!isSuperAdmin && !activeLocationId) return;
-    try {
-      let capacityQuery: any = supabase
-        .from('daily_capacity')
-        .select('*')
-        .eq('date', bookingDate);
-      if (!isSuperAdmin || activeLocationId) capacityQuery = capacityQuery.eq('location_id', activeLocationId);
-      const { data: cap } = await capacityQuery.maybeSingle();
-      if (cap) {
-        const newCount = Math.max(0, (cap.current_count ?? 0) + delta * groupSize);
-        await supabase.from('daily_capacity').update({ current_count: newCount }).eq('id', cap.id);
-      } else if (delta > 0) {
-        await supabase
-          .from('daily_capacity')
-          .insert({ date: bookingDate, location_id: activeLocationId, max_capacity: 100, current_count: groupSize });
-      }
-    } catch (err) {
-      console.warn('[Slots] Update error:', err);
-    }
   };
 
   /* ── QR Scan: lookup booking ── */
@@ -1145,7 +1125,8 @@ export default function AdminDashboard() {
 
   const saveCapacity = async () => {
     if (!capDate) { toast.error('Please select a date.'); return; }
-    if (capMax < 1) { toast.error('Max capacity must be at least 1.'); return; }
+    const capacityError = validateCapacitySplit(capMax, capDayMax, capNightMax);
+    if (capacityError) { toast.error(capacityError); return; }
     setCapSaving(true);
     const { error } = await supabase
       .from('daily_capacity')
@@ -1168,7 +1149,8 @@ export default function AdminDashboard() {
 
   const saveCapacityRange = async () => {
     if (!capRangeStart || !capRangeEnd) { toast.error('Please select both start and end dates.'); return; }
-    if (capMax < 1) { toast.error('Max capacity must be at least 1.'); return; }
+    const capacityError = validateCapacitySplit(capMax, capDayMax, capNightMax);
+    if (capacityError) { toast.error(capacityError); return; }
     const start = new Date(`${capRangeStart}T00:00:00`);
     const end = new Date(`${capRangeEnd}T00:00:00`);
     if (end < start) { toast.error('End date must be after start date.'); return; }
@@ -1338,7 +1320,6 @@ export default function AdminDashboard() {
       toast.error('Failed to cancel booking');
     } else {
       toast.success('Booking cancelled. Slots have been restored.');
-      if (booking) await updateDailySlots(booking.booking_date, booking.group_size, -1);
       void writeActivityLog({
         action: 'booking_rejected',
         entity_type: 'booking',
@@ -1363,10 +1344,6 @@ export default function AdminDashboard() {
 
       const { error } = await supabase.from('bookings').delete().eq('id', bookingId);
       if (error) throw error;
-
-      if (booking && booking.status === 'confirmed') {
-        await updateDailySlots(booking.booking_date, booking.group_size, -1);
-      }
 
       toast.success('Booking deleted and removed from database.');
       void loadAllTabBookings();
@@ -1502,7 +1479,6 @@ export default function AdminDashboard() {
   const postAnnouncement = async () => {
     if (!annTitle.trim() || !annBody.trim()) { toast.error('Please fill in title and message.'); return; }
     setAnnSending(true);
-    await new Promise((r) => setTimeout(r, 800));
     const startsAt = annStartDate ? new Date(`${annStartDate}T00:00:00`).toISOString() : undefined;
     const expiresAt = annEndDate ? new Date(`${annEndDate}T23:59:59`).toISOString() : undefined;
     const newAnn: AdminAnnouncement = {
@@ -1516,7 +1492,14 @@ export default function AdminDashboard() {
       starts_at: startsAt,
       expires_at: expiresAt,
     };
-    setAnnouncements(addAnnouncement(newAnn));
+    try {
+      const saved = await addAnnouncement(newAnn);
+      setAnnouncements(visibleAnnouncements(saved, role));
+    } catch (error) {
+      toast.error(`Announcement could not be saved: ${error instanceof Error ? error.message : 'Database request failed.'}`);
+      setAnnSending(false);
+      return;
+    }
     setAnnTitle('');
     setAnnBody('');
     setAnnType('info');
@@ -1528,9 +1511,14 @@ export default function AdminDashboard() {
     toast.success('Announcement posted!');
   };
 
-  const deleteAnnouncement = (id: string) => {
-    setAnnouncements(removeAnnouncement(id));
-    toast.success('Announcement removed.');
+  const deleteAnnouncement = async (id: string) => {
+    try {
+      const updated = await removeAnnouncement(id);
+      setAnnouncements(visibleAnnouncements(updated, role));
+      toast.success('Announcement removed.');
+    } catch (error) {
+      toast.error(`Announcement could not be removed: ${error instanceof Error ? error.message : 'Database request failed.'}`);
+    }
   };
 
   /* ── Toggle guide status (persisted) ── */
@@ -1814,6 +1802,8 @@ export default function AdminDashboard() {
           </div>
           
         </motion.div>
+
+        <ImportantAnnouncements />
 
         <Tabs
           value={activeTab}

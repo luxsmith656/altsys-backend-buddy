@@ -12,6 +12,9 @@ Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
 
   try {
+    if (!SUPABASE_URL || !SERVICE_ROLE || !ANON) {
+      return json({ error: 'Guide account service is not configured. Contact the system administrator.' }, 503);
+    }
     const authHeader = req.headers.get('Authorization') ?? '';
     if (!authHeader.startsWith('Bearer ')) {
       return json({ error: 'Missing bearer token' }, 401);
@@ -31,9 +34,11 @@ Deno.serve(async (req) => {
     });
 
     // Verify caller is admin/super_admin
-    const { data: roles } = await admin.from('user_roles').select('role').eq('user_id', callerId);
+    const { data: roles, error: rolesError } = await admin.from('user_roles').select('role').eq('user_id', callerId);
+    if (rolesError) return json({ error: 'Could not verify administrator permissions' }, 500);
     const ok = (roles ?? []).some((r: any) => r.role === 'admin' || r.role === 'super_admin');
     if (!ok) return json({ error: 'Forbidden: admin role required' }, 403);
+    const isSuperAdmin = (roles ?? []).some((r: any) => r.role === 'super_admin');
 
     const body = await req.json().catch(() => ({}));
     const { email, password, full_name, phone, specialty, per_trip_fee, location_id } = body ?? {};
@@ -48,36 +53,42 @@ Deno.serve(async (req) => {
     // Verify location exists
     const { data: loc } = await admin.from('locations').select('id').eq('id', location_id).maybeSingle();
     if (!loc) return json({ error: 'Unknown location_id' }, 400);
+    if (!isSuperAdmin) {
+      const { data: mapping, error: mappingError } = await admin
+        .from('user_locations')
+        .select('location_id')
+        .eq('user_id', callerId)
+        .eq('location_id', location_id)
+        .maybeSingle();
+      if (mappingError) return json({ error: 'Could not verify your assigned trailhead' }, 500);
+      if (!mapping) return json({ error: 'You can only create guides for your assigned trailhead' }, 403);
+    }
 
     // Create or update auth user
     const list = await admin.auth.admin.listUsers({ page: 1, perPage: 200 });
+    if (list.error) return json({ error: 'Could not check whether this email is already registered' }, 500);
     const existing = list.data?.users?.find((u) => u.email?.toLowerCase() === String(email).toLowerCase());
-    let userId: string;
-    if (existing) {
-      userId = existing.id;
-      await admin.auth.admin.updateUserById(existing.id, {
-        password, email_confirm: true, user_metadata: { full_name, account_type: 'guide' },
-      });
-    } else {
-      const created = await admin.auth.admin.createUser({
-        email, password, email_confirm: true, user_metadata: { full_name, account_type: 'guide' },
-      });
-      if (created.error) return json({ error: created.error.message }, 500);
-      userId = created.data.user!.id;
-    }
+    if (existing) return json({ error: 'This email already has an account. Use a new email to create a guide login.' }, 409);
+    const created = await admin.auth.admin.createUser({
+      email, password, email_confirm: true, user_metadata: { full_name, account_type: 'guide' },
+    });
+    if (created.error || !created.data.user) return json({ error: created.error?.message || 'Guide login was not created' }, 500);
+    const userId = created.data.user.id;
 
     // Profile
-    await admin.from('profiles').upsert(
+    const { error: profileError } = await admin.from('profiles').upsert(
       { user_id: userId, full_name },
       { onConflict: 'user_id' },
     );
+    if (profileError) return json({ error: `Guide account created but profile details failed: ${profileError.message}` }, 500);
 
     // Replace any auto-assigned 'hiker' role with 'guide'
     await admin.from('user_roles').delete().eq('user_id', userId).eq('role', 'hiker');
-    await admin.from('user_roles').upsert(
+    const { error: roleError } = await admin.from('user_roles').upsert(
       { user_id: userId, role: 'guide' },
       { onConflict: 'user_id,role', ignoreDuplicates: true },
     );
+    if (roleError) return json({ error: `Guide account created but role setup failed: ${roleError.message}` }, 500);
 
     // Guides row (one per user)
     const { data: existingG } = await admin.from('guides').select('id').eq('user_id', userId).maybeSingle();

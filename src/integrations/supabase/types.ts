@@ -462,24 +462,36 @@ export type Database = {
       daily_capacity: {
         Row: {
           current_count: number
+          day_current_count: number
+          day_max_capacity: number | null
           date: string
           id: string
           location_id: string | null
           max_capacity: number
+          night_current_count: number
+          night_max_capacity: number | null
         }
         Insert: {
           current_count?: number
+          day_current_count?: number
+          day_max_capacity?: number | null
           date: string
           id?: string
           location_id?: string | null
           max_capacity?: number
+          night_current_count?: number
+          night_max_capacity?: number | null
         }
         Update: {
           current_count?: number
+          day_current_count?: number
+          day_max_capacity?: number | null
           date?: string
           id?: string
           location_id?: string | null
           max_capacity?: number
+          night_current_count?: number
+          night_max_capacity?: number | null
         }
         Relationships: [
           {

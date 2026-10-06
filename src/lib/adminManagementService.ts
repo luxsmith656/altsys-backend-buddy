@@ -25,6 +25,7 @@ export interface UserAccount {
   locationId?: string | null;
   locationName?: string;
   specialty?: string;
+  photoUrl?: string | null;
   status?: string;
   accountStatus?: 'active' | 'deactivated';
   createdAt: string;
@@ -260,7 +261,7 @@ export async function fetchUsersList(locationId?: string | null): Promise<UserAc
   try {
     let guideQuery = supabase
       .from('guides')
-      .select('id, user_id, full_name, phone, specialty, status, location_id, is_active, created_at');
+      .select('id, user_id, full_name, phone, specialty, status, location_id, is_active, created_at, photo_url');
 
     if (locationId) {
       guideQuery = guideQuery.eq('location_id', locationId);
@@ -280,7 +281,7 @@ export async function fetchUsersList(locationId?: string | null): Promise<UserAc
     const { data: bookingsData } = await bookingQuery;
 
     const [{ data: profiles }, { data: userRoles }, { data: locations }] = await Promise.all([
-      supabase.from('profiles').select('user_id, full_name, phone, emergency_contact, created_at, is_active'),
+      supabase.from('profiles').select('user_id, full_name, phone, emergency_contact, created_at, is_active, avatar_url'),
       supabase.from('user_roles').select('user_id, role'),
       supabase.from('locations').select('id, name'),
     ]);
@@ -321,6 +322,7 @@ export async function fetchUsersList(locationId?: string | null): Promise<UserAc
           locationId: g.location_id,
           locationName: locMap.get(g.location_id) || 'Trailhead Guide',
           specialty: g.specialty || 'General Guiding',
+          photoUrl: g.photo_url || null,
           status: isDeact ? 'deactivated' : (g.status || 'available'),
           accountStatus: isDeact ? 'deactivated' : 'active',
           createdAt: g.created_at || new Date().toISOString(),
@@ -369,6 +371,7 @@ export async function fetchUsersList(locationId?: string | null): Promise<UserAc
           userId: p.user_id,
           email,
           fullName: p.full_name || latestMeta?.fullName || 'Registered Hiker',
+          photoUrl: p.avatar_url || null,
           phone,
           emergencyContact: emergency,
           role: 'hiker',

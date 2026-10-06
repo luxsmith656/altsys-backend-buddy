@@ -4,7 +4,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Bell, Megaphone, CalendarCheck, AlertTriangle, CheckCheck, Trash2 } from 'lucide-react';
-import { loadAnnouncements } from '@/lib/announcements';
+import { fetchAnnouncementsFromDb, visibleAnnouncements } from '@/lib/announcements';
 import { loadRemovedNotificationIds, loadSeenNotificationIds, markNotificationRemoved, saveSeenNotificationIds } from '@/lib/notifications';
 import { isFirebaseConfigured } from '@/lib/firebase';
 import { subscribeUserNotifications, markFsNotificationRead, deleteFsNotification, type FsNotification } from '@/lib/firestoreNotifications';
@@ -18,7 +18,7 @@ type AppNotification = {
 };
 
 export default function NotificationsPage() {
-  const { user } = useAuth();
+  const { user, role } = useAuth();
   const [items, setItems] = useState<AppNotification[]>([]);
   const [seen, setSeen] = useState<string[]>([]);
   const [removed, setRemoved] = useState<string[]>([]);
@@ -41,20 +41,10 @@ export default function NotificationsPage() {
     setSeen(loadSeenNotificationIds(user.id));
     setRemoved(loadRemovedNotificationIds(user.id));
 
-    if (isFirebaseConfigured()) {
-      const removedIds = new Set(loadRemovedNotificationIds(user.id));
-      const notifications = fsNotifs.map((item) => ({ ...item, id: `fs:${item.id}` }));
-      setItems(notifications.filter((item) => !removedIds.has(item.id)));
-      setSeen([...new Set([
-        ...loadSeenNotificationIds(user.id),
-        ...notifications.filter((item) => item.read).map((item) => item.id),
-      ])]);
-      return;
-    }
-
     const loadAll = async () => {
       const removedIds = new Set(loadRemovedNotificationIds(user.id));
-      const anns = loadAnnouncements().map((a) => ({
+      const announcements = await fetchAnnouncementsFromDb();
+      const anns = visibleAnnouncements(announcements, role).map((a) => ({
         id: `ann:${a.id}`,
         title: a.title,
         body: a.body,
@@ -62,7 +52,7 @@ export default function NotificationsPage() {
         category: 'announcement' as const,
       }));
 
-      const { data } = await supabase
+      const { data } = isFirebaseConfigured() ? { data: [] } : await supabase
         .from('bookings')
         .select('id,status,booking_date,created_at')
         .eq('user_id', user.id)
@@ -87,13 +77,18 @@ export default function NotificationsPage() {
 
       setItems(
         [...anns, ...bookingNotifs, ...fsItems]
+          .filter((item, index, all) => all.findIndex((other) => other.id === item.id) === index)
           .filter((item) => !removedIds.has(item.id))
           .sort((a, b) => +new Date(b.createdAt) - +new Date(a.createdAt)),
       );
+      setSeen([...new Set([
+        ...loadSeenNotificationIds(user.id),
+        ...fsNotifs.filter((item) => item.read).map((item) => `fs:${item.id}`),
+      ])]);
     };
 
     void loadAll();
-  }, [user, fsNotifs]);
+  }, [user, role, fsNotifs]);
 
   const unread = useMemo(
     () => items.filter((i) => !seen.includes(i.id) && !removed.includes(i.id)).length,

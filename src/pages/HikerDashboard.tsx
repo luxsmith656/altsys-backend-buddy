@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { useLocations } from '@/hooks/useLocations';
 import ProfileAvatar from '@/components/common/ProfileAvatar';
+import ImportantAnnouncements from '@/components/common/ImportantAnnouncements';
 import { supabase } from '@/integrations/supabase/client';
 import {
   ADMIN_CHECKIN_TOKEN_PREFIX,
@@ -61,7 +62,6 @@ import { toast } from 'sonner';
 import { motion, AnimatePresence } from 'framer-motion';
 import SOSPanel from '@/components/core/SOSPanel';
 import { encodeMeta, parseMeta } from '@/lib/bookingMeta';
-import { loadAnnouncements, type AdminAnnouncement } from '@/lib/announcements';
 import { addGuideRating } from '@/lib/guideRatings';
 import { formatPeso } from '@/lib/payments';
 import { Textarea } from '@/components/ui/textarea';
@@ -96,7 +96,6 @@ export default function HikerDashboard() {
   const [cancelConfirmation, setCancelConfirmation] = useState('');
   const [acceptingId, setAcceptingId] = useState<string | null>(null);
   const [decliningId, setDecliningId] = useState<string | null>(null);
-  const [importantAnnouncements, setImportantAnnouncements] = useState<AdminAnnouncement[]>([]);
   // Review state
   const [reviewSessionId, setReviewSessionId] = useState<string | null>(null);
   const [hikeRating, setHikeRating] = useState(5);
@@ -177,7 +176,6 @@ export default function HikerDashboard() {
       ]);
       setBookings(b || []);
       setSessions(s || []);
-      setImportantAnnouncements(loadAnnouncements('hiker').filter((a) => a.isImportant));
       const active = (s || []).find(
         (session) => session.status === 'active' &&
           String(session.client_session_id ?? '').startsWith(ADMIN_CHECKIN_TOKEN_PREFIX)
@@ -578,29 +576,7 @@ export default function HikerDashboard() {
           )}
         </AnimatePresence>
 
-        {importantAnnouncements.length > 0 && (
-          <Card className="glass-card border-destructive/30 mb-6">
-            <CardHeader>
-              <CardTitle className="text-lg flex items-center gap-2">
-                <Bell className="h-5 w-5 text-destructive" />
-                Important Announcements
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              {importantAnnouncements.slice(0, 3).map((a) => (
-                <div key={a.id} className="rounded-xl border border-destructive/20 bg-destructive/5 p-3">
-                  <div className="flex items-center gap-2 mb-1">
-                    <p className="font-semibold text-sm">{a.title}</p>
-                    <Badge className="text-[10px] bg-destructive/15 text-destructive border-destructive/30">
-                      Important
-                    </Badge>
-                  </div>
-                  <p className="text-sm text-muted-foreground">{a.body}</p>
-                </div>
-              ))}
-            </CardContent>
-          </Card>
-        )}
+        <ImportantAnnouncements />
 
         {/* ── HERO: Book a Hike CTA ── */}
         <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.05 }} className="mb-6">

@@ -79,6 +79,7 @@ export interface UnifiedAccount {
   status?: string;
   accountStatus?: 'active' | 'deactivated';
   specialty?: string;
+  photoUrl?: string | null;
   emergencyContact?: string;
   createdAt: string;
   bookingsCount?: number;
@@ -187,6 +188,7 @@ export default function CentralAccountManagement() {
         status: u.status,
         accountStatus: u.accountStatus || (u.status === 'deactivated' ? 'deactivated' : 'active'),
         specialty: u.specialty,
+        photoUrl: u.photoUrl,
         emergencyContact: u.emergencyContact,
         createdAt: u.createdAt,
         bookingsCount: u.bookingsCount,
@@ -518,11 +520,15 @@ export default function CentralAccountManagement() {
                       {/* User & Contact */}
                       <td className="px-4 py-3">
                         <div className="font-bold text-foreground text-xs flex items-center gap-2">
-                          <div className={`h-7 w-7 rounded-full flex items-center justify-center font-bold text-[10px] shrink-0 ${
-                            isAdmin ? 'bg-purple-500/20 text-purple-600' : isGuide ? 'bg-emerald-500/20 text-emerald-600' : 'bg-sky-500/20 text-sky-600'
-                          }`}>
-                            {acc.fullName.slice(0, 2).toUpperCase()}
-                          </div>
+                          {acc.photoUrl ? (
+                            <img src={acc.photoUrl} alt={`${acc.fullName} profile`} loading="lazy" decoding="async" className="h-7 w-7 rounded-full object-cover shrink-0 border border-border/50" />
+                          ) : (
+                            <div className={`h-7 w-7 rounded-full flex items-center justify-center font-bold text-[10px] shrink-0 ${
+                              isAdmin ? 'bg-purple-500/20 text-purple-600' : isGuide ? 'bg-emerald-500/20 text-emerald-600' : 'bg-sky-500/20 text-sky-600'
+                            }`}>
+                              {acc.fullName.slice(0, 2).toUpperCase()}
+                            </div>
+                          )}
                           <div>
                             <div className="font-semibold text-foreground truncate max-w-[180px]">{acc.fullName}</div>
                             <div className="text-[10px] text-muted-foreground truncate max-w-[180px]">{acc.email}</div>
@@ -901,10 +907,17 @@ export default function CentralAccountManagement() {
           {viewTarget && (
             <div className="space-y-4 py-1 text-xs">
               {/* Header profile chip */}
-              <div className="p-3 rounded-xl border border-border/30 bg-secondary/15 flex items-center justify-between">
-                <div>
+              <div className="p-3 rounded-xl border border-border/30 bg-secondary/15 flex items-center justify-between gap-3">
+                <div className="flex min-w-0 items-center gap-3">
+                  {viewTarget.photoUrl ? (
+                    <img src={viewTarget.photoUrl} alt={`${viewTarget.fullName} profile`} className="h-12 w-12 rounded-full object-cover shrink-0 border border-border/50" />
+                  ) : (
+                    <div className="h-12 w-12 rounded-full bg-secondary flex items-center justify-center font-semibold shrink-0">{viewTarget.fullName.slice(0, 2).toUpperCase()}</div>
+                  )}
+                  <div className="min-w-0">
                   <h4 className="font-bold text-sm text-foreground">{viewTarget.fullName}</h4>
                   <p className="text-[11px] text-muted-foreground font-mono">{viewTarget.email}</p>
+                  </div>
                 </div>
                 <div>
                   {viewTarget.role === 'guide' ? (

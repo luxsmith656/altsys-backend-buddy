@@ -267,6 +267,7 @@ export default function BookingPage() {
   const [monthCapacity, setMonthCapacity] = useState<DayCapacityMap>({});
   const [scheduledBookings, setScheduledBookings] = useState<ScheduledBooking[]>([]);
   const [slotCapacityRequested, setSlotCapacityRequested] = useState(false);
+  const [slotCapacityLoading, setSlotCapacityLoading] = useState(false);
   const slotCapacityRequestedRef = useRef(false);
   slotCapacityRequestedRef.current = slotCapacityRequested;
   const [slotCapacityError, setSlotCapacityError] = useState<string | null>(null);
@@ -590,41 +591,61 @@ export default function BookingPage() {
     const start = format(new Date(year, month, 1), 'yyyy-MM-dd');
     const end = format(new Date(year, month + 1, 0), 'yyyy-MM-dd');
     // The RPC returns aggregate slot counts only, so RLS never exposes another hiker's booking details.
-    const { data: slotRows, error } = await supabase.rpc('get_booking_slot_capacity' as any, { p_start_date: start, p_end_date: end });
-    if (error) {
-      console.warn('Live start-time availability check fell back to standard slots:', error);
-      setScheduledBookings([]);
+    setSlotCapacityLoading(true);
+    try {
+      const { data: slotRows, error } = await supabase.rpc('get_booking_slot_capacity' as any, { p_start_date: start, p_end_date: end });
+      if (error) throw error;
       setSlotCapacityError(null);
-      return;
+      const reservations = ((slotRows as Array<{ booking_date: string; hike_time: string; hike_type: string; group_count: number }> | null) ?? [])
+        .flatMap((row) => Array.from({ length: Math.max(1, Number(row.group_count) || 1) }, (_, index) => ({
+          id: `${row.booking_date}-${row.hike_time}-${index}`,
+          booking_date: row.booking_date,
+          status: 'confirmed',
+          notes: JSON.stringify({ hikeTime: row.hike_time, hikeType: row.hike_type }),
+        })));
+      setScheduledBookings(reservations as ScheduledBooking[]);
+    } catch (error) {
+      console.warn('Live start-time availability check failed:', error);
+      setScheduledBookings([]);
+      setSlotCapacityError('Live capacity could not be verified. Refresh the page or contact the selected trailhead before booking.');
+    } finally {
+      setSlotCapacityLoading(false);
     }
-    setSlotCapacityError(null);
-    const reservations = ((slotRows as Array<{ booking_date: string; hike_time: string; hike_type: string; group_count: number }> | null) ?? [])
-      .flatMap((row) => Array.from({ length: Math.max(1, Number(row.group_count) || 1) }, (_, index) => ({
-        id: `${row.booking_date}-${row.hike_time}-${index}`,
-        booking_date: row.booking_date,
-        status: 'confirmed',
-        notes: JSON.stringify({ hikeTime: row.hike_time, hikeType: row.hike_type }),
-      })));
-    setScheduledBookings(reservations as ScheduledBooking[]);
   }, []);
 
   const fetchMonthCapacity = useCallback(async (year: number, month: number) => {
     const start = format(new Date(year, month, 1), 'yyyy-MM-dd');
     const end = format(new Date(year, month + 1, 0), 'yyyy-MM-dd');
-    const { data } = await supabase.from('daily_capacity').select('*').gte('date', start).lte('date', end);
+    // The initial fallback location IDs are display-only slugs; wait for the
+    // locations query to resolve before using a value in this UUID column.
+    if (!startLocationId || startLocationId.startsWith('loc-')) return;
+    const { data, error } = await supabase
+      .from('daily_capacity')
+      .select('date,location_id,max_capacity,current_count,day_max_capacity,night_max_capacity,day_current_count,night_current_count')
+      .gte('date', start)
+      .lte('date', end)
+      .or(`location_id.eq.${startLocationId},location_id.is.null`);
+    if (error) {
+      console.warn('Could not load daily trail capacity:', error);
+      return;
+    }
     if (data) {
       setMonthCapacity((prev) => {
         const map = { ...prev };
-        data.forEach((row) => {
+        [...data].sort((a, b) => Number(a.location_id === startLocationId) - Number(b.location_id === startLocationId)).forEach((row) => {
           map[row.date] = {
             max_capacity: row.max_capacity,
             current_count: row.current_count,
+            day_max_capacity: row.day_max_capacity ?? undefined,
+            night_max_capacity: row.night_max_capacity ?? undefined,
+            day_current_count: row.day_current_count,
+            night_current_count: row.night_current_count,
           };
         });
         return map;
       });
     }
-  }, []);
+  }, [startLocationId]);
 
   useEffect(() => {
     const now = new Date();
@@ -637,13 +658,17 @@ export default function BookingPage() {
         'postgres_changes',
         { event: '*', schema: 'public', table: 'daily_capacity' },
         (payload) => {
-          const row = payload.new as { date?: string; max_capacity?: number; current_count?: number };
-          if (row?.date) {
+          const row = payload.new as { date?: string; location_id?: string | null; max_capacity?: number; current_count?: number; day_max_capacity?: number | null; night_max_capacity?: number | null; day_current_count?: number; night_current_count?: number };
+          if (row?.date && (row.location_id === startLocationId || row.location_id == null)) {
             setMonthCapacity((prev) => ({
               ...prev,
               [row.date]: {
                 max_capacity: row.max_capacity ?? DEFAULT_MAX_CAPACITY,
                 current_count: row.current_count ?? 0,
+                day_max_capacity: row.day_max_capacity ?? undefined,
+                night_max_capacity: row.night_max_capacity ?? undefined,
+                day_current_count: row.day_current_count ?? 0,
+                night_current_count: row.night_current_count ?? 0,
               },
             }));
           }
@@ -659,12 +684,20 @@ export default function BookingPage() {
     return () => {
       void supabase.removeChannel(channel);
     };
-  }, [fetchMonthCapacity, fetchSlotCapacity]);
+  }, [fetchMonthCapacity, fetchSlotCapacity, startLocationId]);
+
+  useEffect(() => {
+    if (!startLocationId) return;
+    setMonthCapacity({});
+    const now = new Date();
+    void fetchMonthCapacity(now.getFullYear(), now.getMonth());
+  }, [fetchMonthCapacity, startLocationId]);
 
   useEffect(() => {
     if (!date || !slotCapacityRequested) {
       setScheduledBookings([]);
       setSlotCapacityError(null);
+      setSlotCapacityLoading(false);
       return;
     }
     void fetchSlotCapacity(date.getFullYear(), date.getMonth());
@@ -725,11 +758,11 @@ export default function BookingPage() {
     const cap = monthCapacity[dateStr];
     const totalMax = cap?.max_capacity ?? DEFAULT_MAX_CAPACITY;
     if (hikeType === 'night' || hikeType === 'overnight') {
-      const max = cap?.night_max_capacity ?? Math.max(15, Math.round(totalMax * 0.35));
+      const max = cap?.night_max_capacity ?? Math.max(0, totalMax - Math.ceil(totalMax * 0.65));
       const current = cap?.night_current_count ?? 0;
       return Math.max(0, max - current);
     } else {
-      const max = cap?.day_max_capacity ?? Math.max(25, Math.round(totalMax * 0.65));
+      const max = cap?.day_max_capacity ?? Math.ceil(totalMax * 0.65);
       const current = cap?.day_current_count ?? 0;
       return Math.max(0, max - current);
     }
@@ -737,8 +770,16 @@ export default function BookingPage() {
 
   const timeSlotStatuses = useMemo(() => {
     if (!date) return [];
+    if (slotCapacityLoading || slotCapacityError) {
+      return HIKE_TIME_OPTIONS[hikeType].map((option) => ({
+        time: option.time,
+        summitSlot: '',
+        available: false,
+        reason: 'capacity_check_failed' as const,
+      }));
+    }
     return getBookingSlotStatuses(format(date, 'yyyy-MM-dd'), HIKE_TIME_OPTIONS[hikeType], hikeType, scheduledBookings);
-  }, [date, hikeType, scheduledBookings]);
+  }, [date, hikeType, scheduledBookings, slotCapacityError, slotCapacityLoading]);
 
   const selectedTimeSlot = useMemo(
     () => timeSlotStatuses.find((slot) => slot.time === hikeTime),
@@ -921,6 +962,7 @@ export default function BookingPage() {
   const validateStep = () => {
     if (step === 1) {
       if (!date) return 'Please select a date on the calendar.';
+      if (slotCapacityRequested && (slotCapacityLoading || slotCapacityError)) return 'Live capacity could not be verified. Please wait for the check to finish or refresh before continuing.';
       if (groupSize < 1 || groupSize > 30) return 'Group size must be between 1 and 30.';
       if (slotsForDate !== null && groupSize > slotsForDate) {
         return `Only ${slotsForDate} slot${slotsForDate !== 1 ? 's' : ''} available on this date. Reduce group size or choose another date.`;
@@ -1512,7 +1554,7 @@ export default function BookingPage() {
                       {slotCapacityRequested && slotCapacityError && (
                         <p className="text-xs text-destructive" role="alert">{slotCapacityError}</p>
                       )}
-                      <p className="text-[11px] text-muted-foreground">Starts are two hours apart (e.g. 02:00 AM, 04:00 AM, 06:00 AM, 08:00 AM, 10:00 AM for morning; 02:00 PM, 04:00 PM, 06:00 PM, 08:00 PM, 10:00 PM, 12:00 AM for night). A reserved time is blocked, and no more than 5 groups may share the same summit arrival window across all entry points.</p>
+                      <p className="text-[11px] text-muted-foreground">Start times use one-hour intervals. A reserved time is blocked, and no more than 5 groups may share the same summit arrival window across all entry points.</p>
                     </div>
 
                   </div>

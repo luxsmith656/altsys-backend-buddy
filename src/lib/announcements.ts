@@ -56,6 +56,23 @@ export function loadAnnouncements(roleFilter?: string | null): AdminAnnouncement
   }
 }
 
+export function visibleAnnouncements(items: AdminAnnouncement[], role?: string | null): AdminAnnouncement[] {
+  const normalizedRole = role === 'super_admin' ? 'admin' : role;
+  const now = Date.now();
+  return items.filter((item) => {
+    const startsAt = item.starts_at ? new Date(item.starts_at).getTime() : null;
+    const expiresAt = item.expires_at ? new Date(item.expires_at).getTime() : null;
+    if (startsAt !== null && now < startsAt) return false;
+    if (expiresAt !== null && now > expiresAt) return false;
+    const target = item.target || 'all';
+    if (target === 'all') return true;
+    if (target === 'admins') return normalizedRole === 'admin';
+    if (target === 'hikers') return role === 'hiker';
+    if (target === 'guides') return role === 'guide';
+    return false;
+  }).sort((a, b) => +new Date(b.created_at) - +new Date(a.created_at));
+}
+
 export function saveAnnouncements(items: AdminAnnouncement[]): void {
   if (typeof window === 'undefined') return;
   localStorage.setItem(KEY, JSON.stringify(items));
@@ -90,7 +107,7 @@ export async function fetchAnnouncementsFromDb(): Promise<AdminAnnouncement[]> {
   return loadAnnouncements();
 }
 
-export function addAnnouncement(item: AdminAnnouncement): AdminAnnouncement[] {
+export async function addAnnouncement(item: AdminAnnouncement): Promise<AdminAnnouncement[]> {
   const all = (() => {
     try {
       const raw = localStorage.getItem(KEY);
@@ -102,10 +119,7 @@ export function addAnnouncement(item: AdminAnnouncement): AdminAnnouncement[] {
   const next = [item, ...all.filter((a) => a.id !== item.id)];
   saveAnnouncements(next);
 
-  // Sync to database asynchronously
-  void (async () => {
-    try {
-      await (supabase.from('announcements' as any).upsert({
+  const { error } = await (supabase.from('announcements' as any).upsert({
         id: item.id,
         title: item.title,
         body: item.body,
@@ -117,15 +131,15 @@ export function addAnnouncement(item: AdminAnnouncement): AdminAnnouncement[] {
         starts_at: item.starts_at || null,
         expires_at: item.expires_at || null,
       }) as any);
-    } catch (err) {
-      console.warn('Could not persist announcement to database:', err);
-    }
-  })();
+  if (error) {
+    saveAnnouncements(all);
+    throw error;
+  }
 
   return next;
 }
 
-export function removeAnnouncement(id: string): AdminAnnouncement[] {
+export async function removeAnnouncement(id: string): Promise<AdminAnnouncement[]> {
   const all = (() => {
     try {
       const raw = localStorage.getItem(KEY);
@@ -137,14 +151,11 @@ export function removeAnnouncement(id: string): AdminAnnouncement[] {
   const next = all.filter((a) => a.id !== id);
   saveAnnouncements(next);
 
-  // Remove from database asynchronously
-  void (async () => {
-    try {
-      await (supabase.from('announcements' as any).delete().eq('id', id) as any);
-    } catch (err) {
-      console.warn('Could not delete announcement from database:', err);
-    }
-  })();
+  const { error } = await (supabase.from('announcements' as any).delete().eq('id', id) as any);
+  if (error) {
+    saveAnnouncements(all);
+    throw error;
+  }
 
   return next;
 }

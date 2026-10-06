@@ -84,10 +84,10 @@ export function CapacityCalendar({
     let current: number;
 
     if (hikeType === 'night' || hikeType === 'overnight') {
-      max = cap?.night_max_capacity ?? Math.max(15, Math.round(totalMax * 0.35));
+      max = cap?.night_max_capacity ?? Math.max(0, totalMax - Math.ceil(totalMax * 0.65));
       current = cap?.night_current_count ?? 0;
     } else {
-      max = cap?.day_max_capacity ?? Math.max(25, Math.round(totalMax * 0.65));
+      max = cap?.day_max_capacity ?? Math.ceil(totalMax * 0.65);
       current = cap?.day_current_count ?? 0;
     }
 

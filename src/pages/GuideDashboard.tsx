@@ -64,6 +64,7 @@ import { formatPeso } from '@/lib/payments';
 import BookingReceipt from '@/components/booking/BookingReceipt';
 import { addHorseHelpRequest, getHorseHelpOption, HORSE_HELP_OPTIONS, type HorseHelpStation } from '@/lib/hikeSupport';
 import { notifyUser } from '@/lib/firestoreNotifications';
+import ImportantAnnouncements from '@/components/common/ImportantAnnouncements';
 
 const QUOTA_PER_GUIDE_PER_DAY = 5;
 
@@ -522,6 +523,7 @@ export default function GuideDashboard() {
   return (
     <div className="guide-workspace">
       <div className="guide-container">
+        <ImportantAnnouncements />
         {/* Active Hike Session Notification Banner */}
         {activeSession && (
           <motion.div

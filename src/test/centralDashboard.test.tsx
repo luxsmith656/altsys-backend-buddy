@@ -77,6 +77,10 @@ vi.mock('@/components/layout/LocationSwitcher', () => ({
   default: () => <div data-testid="location-switcher">Location Switcher</div>,
 }));
 
+vi.mock('@/components/common/ImportantAnnouncements', () => ({
+  default: () => null,
+}));
+
 vi.mock('@/components/admin/RealtimeMonitorMap', () => ({
   default: ({ locationId }: { locationId: string | null }) => (
     <div data-testid="realtime-monitor-map">Map: {locationId || 'all'}</div>

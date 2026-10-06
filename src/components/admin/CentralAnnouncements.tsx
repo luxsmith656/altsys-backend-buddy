@@ -18,7 +18,7 @@ import {
 } from 'lucide-react';
 import {
   addAnnouncement,
-  loadAnnouncements,
+  fetchAnnouncementsFromDb,
   removeAnnouncement,
   type AdminAnnouncement,
   type AnnouncementTarget,
@@ -41,8 +41,8 @@ export default function CentralAnnouncements() {
   const [isImportant, setIsImportant] = useState(false);
   const [broadcasting, setBroadcasting] = useState(false);
 
-  const refreshAnnouncements = useCallback(() => {
-    setAnnouncements(loadAnnouncements());
+  const refreshAnnouncements = useCallback(async () => {
+    setAnnouncements(await fetchAnnouncementsFromDb());
   }, []);
 
   useEffect(() => {
@@ -60,7 +60,7 @@ export default function CentralAnnouncements() {
     toast.success('Clean fare notice template generated!');
   };
 
-  const handlePublish = (e: React.FormEvent) => {
+  const handlePublish = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!title.trim()) {
       toast.error('Please enter an announcement title.');
@@ -83,12 +83,12 @@ export default function CentralAnnouncements() {
         created_at: new Date().toISOString(),
         isImportant,
       };
-      addAnnouncement(newAnn);
+      await addAnnouncement(newAnn);
       toast.success('Announcement broadcasted successfully!');
       setTitle('');
       setBody('');
       setIsImportant(false);
-      refreshAnnouncements();
+      await refreshAnnouncements();
     } catch (err: any) {
       toast.error('Failed to broadcast: ' + err.message);
     } finally {
@@ -96,10 +96,14 @@ export default function CentralAnnouncements() {
     }
   };
 
-  const handleDelete = (id: string) => {
-    removeAnnouncement(id);
-    toast.success('Announcement removed.');
-    refreshAnnouncements();
+  const handleDelete = async (id: string) => {
+    try {
+      await removeAnnouncement(id);
+      toast.success('Announcement removed.');
+      await refreshAnnouncements();
+    } catch (err: any) {
+      toast.error(`Could not remove announcement: ${err.message}`);
+    }
   };
 
   const filteredAnnouncements = announcements.filter((a) => {
