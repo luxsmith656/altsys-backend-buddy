@@ -31,21 +31,21 @@ export default function ImportantAnnouncements() {
   if (!items.length) return null;
 
   return (
-    <Card className="glass-card mb-6 border-destructive/30">
-      <CardHeader className="pb-3">
-        <CardTitle className="flex items-center gap-2 text-lg">
-          <Bell className="h-5 w-5 text-destructive" /> Important Announcements
+    <Card className="glass-card mb-4 border-destructive/30">
+      <CardHeader className="px-4 pb-2 pt-3">
+        <CardTitle className="flex items-center gap-2 text-base">
+          <Bell className="h-4 w-4 text-destructive" /> Important Announcements
         </CardTitle>
       </CardHeader>
-      <CardContent className="space-y-3">
-        {items.map((item) => (
-          <article key={item.id} className="rounded-xl border border-destructive/20 bg-destructive/5 p-3">
-            <div className="flex items-start justify-between gap-3">
+      <CardContent className="space-y-2 px-4 pb-3">
+        {items.slice(0, 2).map((item) => (
+          <article key={item.id} className="rounded-lg border border-destructive/20 bg-destructive/5 px-2.5 py-2">
+            <div className="flex items-start justify-between gap-2">
               <div className="min-w-0">
-                <h3 className="font-semibold text-sm">{item.title}</h3>
-                <p className="mt-1 whitespace-pre-wrap text-sm text-muted-foreground">{item.body}</p>
-                {item.source && <p className="mt-2 text-xs font-medium text-primary">Source: {item.source}</p>}
-                <p className="mt-1 text-xs text-muted-foreground">
+                <h3 className="font-semibold text-sm leading-5">{item.title}</h3>
+                <p className="mt-0.5 whitespace-pre-wrap text-xs leading-5 text-muted-foreground">{item.body}</p>
+                {item.source && <p className="mt-1 text-[11px] font-medium text-primary">Source: {item.source}</p>}
+                <p className="mt-1 text-[11px] text-muted-foreground">
                   {format(new Date(item.created_at), 'MMM d, yyyy · h:mm a')}
                 </p>
               </div>
@@ -53,7 +53,7 @@ export default function ImportantAnnouncements() {
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="h-9 w-9 shrink-0"
+                  className="h-8 w-8 shrink-0"
                   aria-label={`Dismiss announcement: ${item.title}`}
                   title="Dismiss for this account"
                   onClick={() => {

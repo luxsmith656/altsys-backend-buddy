@@ -1,5 +1,13 @@
 project_id = "evcqnlbumsfgbfddoonv"
 
+[auth.email.template.confirmation]
+subject = "Confirm your Mt. Kalisungan account"
+content_path = "./supabase/templates/confirmation.html"
+
+[auth.email.template.recovery]
+subject = "Reset your Mt. Kalisungan password"
+content_path = "./supabase/templates/recovery.html"
+
 [functions.send-booking-confirmation]
 # The handler validates user JWTs with Auth.getUser, or the dedicated cron secret.
 # The cron request is not an end-user JWT and must reach that handler.

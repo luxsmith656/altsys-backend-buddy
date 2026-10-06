@@ -11,7 +11,7 @@ const FIREBASE_PROJECT_ID = cleanEnv('FIREBASE_PROJECT_ID');
 const SUPABASE_URL = cleanEnv('SUPABASE_URL');
 const SERVICE_ROLE = cleanEnv('SUPABASE_SERVICE_ROLE_KEY');
 const ALLOWED_FIREBASE_PROJECT_IDS = Array.from(
-  new Set([FIREBASE_PROJECT_ID, 'altsys-backend-buddy'].filter(Boolean)),
+  new Set([FIREBASE_PROJECT_ID, 'mt-kalisungan-system', 'altsys-backend-buddy'].filter(Boolean)),
 );
 
 const JWKS = createRemoteJWKSet(

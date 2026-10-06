@@ -20,6 +20,7 @@ it('does not reopen a completed booking from an already-open reschedule dialog',
   } }), update: mocks.update }));
   await act(async () => { render(<BookingChat bookingId="booking" bookingDate="2027-01-01" open onOpenChange={vi.fn()} canRequestReschedule />); });
   fireEvent.change(screen.getByLabelText('Requested hike date'), { target: { value: '2027-01-02' } });
+  fireEvent.change(screen.getByLabelText('Reason for reschedule'), { target: { value: 'Schedule conflict' } });
   fireEvent.click(screen.getByRole('button', { name: 'Send request' }));
   await waitFor(() => expect(mocks.error).toHaveBeenCalledWith('This hike has started or ended and cannot be rescheduled.'));
   expect(mocks.update).not.toHaveBeenCalled();

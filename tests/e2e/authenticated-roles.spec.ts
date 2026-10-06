@@ -14,7 +14,8 @@ for (const account of ROLE_CASES) {
   test(`authenticated ${account.role} can load its dashboard and survive reload`, async ({ page }) => {
     const missing = [account.email ? '' : 'email', account.password ? '' : 'password'].filter(Boolean);
     if (missing.length > 0) {
-      throw new Error(`Missing E2E_${account.role.toUpperCase()}_${missing.join(' and ').toUpperCase()} for authenticated role coverage. Supply test credentials; authentication must not silently pass without running.`);
+      const secretRole = account.role === 'sto_tomas_admin' ? 'STOTOMAS_ADMIN' : account.role.toUpperCase();
+      throw new Error(`Missing E2E_${secretRole}_${missing.join(' and ').toUpperCase()} for authenticated role coverage. Supply test credentials; authentication must not silently pass without running.`);
     }
 
     const monitor = attachRuntimeMonitor(page);

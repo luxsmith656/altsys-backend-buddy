@@ -42,6 +42,9 @@ export interface BookingMeta {
   guideStatus?: 'pending' | 'accepted' | 'declined' | 'reassigned_pending' | 'completed' | string;
   adjustedDate?: string;        // Proposed new date (yyyy-MM-dd) from admin
   adjustedTime?: string;        // e.g. "07:00 AM"
+  adjustedReason?: string;
+  adjustedBy?: string;
+  requestedRescheduleReason?: string;
   guidePhone?: string;
   fullName?: string;
   age?: string;

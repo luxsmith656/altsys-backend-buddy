@@ -11,13 +11,14 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { isFirebaseConfigured, uploadGuideProfilePhoto } from '@/lib/firebase-storage';
 import logo from '@/assets/logo.png';
+import { validatePhone } from '@/lib/inputValidation';
 
 const schema = z.object({
   name: z.string().trim().min(2, 'Enter the name provided by the admin.'),
   password: z.string().min(8, 'New password must be at least 8 characters.'),
   sex: z.enum(['male', 'female'], { errorMap: () => ({ message: 'Choose male or female.' }) }),
   age: z.coerce.number().int().min(18, 'Guide accounts must be 18 or older.').max(120),
-  phone: z.string().trim().min(7, 'Enter a contact number.'),
+  phone: z.string().trim().refine((value) => !validatePhone(value), 'Enter a complete phone number.'),
 });
 
 export default function GuideSetupPage() {

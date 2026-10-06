@@ -6,3 +6,12 @@ export function validateCapacitySplit(total: number, day: number, night: number)
   if (day + night > total) return 'Day and night limits cannot add up to more than the total carrying capacity.';
   return null;
 }
+
+export function validateCapacityAgainstReservations(total: number, day: number, night: number, currentTotal: number, currentDay: number, currentNight: number): string | null {
+  const splitError = validateCapacitySplit(total, day, night);
+  if (splitError) return splitError;
+  if (total < currentTotal) return `Total capacity cannot be below the ${currentTotal} hikers already booked.`;
+  if (day < currentDay) return `Day capacity cannot be below the ${currentDay} day hikers already booked.`;
+  if (night < currentNight) return `Night capacity cannot be below the ${currentNight} night hikers already booked.`;
+  return null;
+}

@@ -503,6 +503,11 @@ export default function HikerDashboard() {
                             <p className="font-semibold text-primary">{meta.adjustedTime}</p>
                           </div>
                         )}
+                        {meta.adjustedReason && (
+                          <div className="basis-full rounded-md border border-sky-500/30 bg-sky-500/5 p-3 text-sm">
+                            <span className="font-semibold">Why the admin proposed this change:</span> {meta.adjustedReason}
+                          </div>
+                        )}
                         {meta.assignedGuide && (
                           <div>
                             <p className="text-xs text-muted-foreground">Assigned Guide</p>

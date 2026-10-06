@@ -6,6 +6,7 @@ const PUBLIC_EXPECTATIONS: Record<string, string | RegExp> = {
   '/': 'Mt. Kalisungan',
   '/about': 'Geography & Access',
   '/login': 'Welcome Back',
+  '/reset-password': 'Set a new password',
   '/register': 'Create Account',
   '/map': 'Check in at your jump-off to start your hike.',
   '/chat': 'Trail Assistant',
