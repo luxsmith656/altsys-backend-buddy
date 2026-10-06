@@ -22,7 +22,7 @@ jobs:
       VITE_SUPABASE_PROJECT_ID: ${{ secrets.VITE_SUPABASE_PROJECT_ID || 'evcqnlbumsfgbfddoonv' }}
       VITE_GUIDE_PROFILE_EXTENSIONS_ENABLED: ${{ secrets.VITE_GUIDE_PROFILE_EXTENSIONS_ENABLED }}
       E2E_REQUIRE_AUTH: 'true'
-      # Use dedicated test identities from Actions secrets, never stale public fallbacks.
+      # All role-test accounts are encrypted Actions secrets; no stale defaults.
       E2E_SUPER_ADMIN_EMAIL: ${{ secrets.E2E_SUPER_ADMIN_EMAIL }}
       E2E_SUPER_ADMIN_PASSWORD: ${{ secrets.E2E_SUPER_ADMIN_PASSWORD }}
       E2E_MDRRMO_EMAIL: ${{ secrets.E2E_MDRRMO_EMAIL }}
