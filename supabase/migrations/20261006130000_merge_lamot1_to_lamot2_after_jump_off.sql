@@ -74,16 +74,17 @@ BEGIN
   END IF;
 
   IF v_lamot1_metadata #>> '{sharedRouteSuffix,referenceRouteId}' = v_lamot2_route_id::text
-     AND abs(COALESCE((v_lamot1_metadata #>> '{sharedRouteSuffix,joinProgress}')::double precision, 0) - (1.0 / 6.0)) < 0.01 THEN
+     AND abs(COALESCE((v_lamot1_metadata #>> '{sharedRouteSuffix,joinProgress}')::double precision, 0) - (1.0 / 6.0)) < 0.01
+     AND abs(COALESCE((v_lamot1_metadata #>> '{sharedRouteSuffix,transitionStartProgress}')::double precision, 0) - 0.05) < 0.01 THEN
     RAISE NOTICE 'Lamot 1 already shares the Lamot 2 suffix; no update needed.';
     RETURN;
   END IF;
 
   v_lamot1_count := jsonb_array_length(v_lamot1);
   v_lamot2_count := jsonb_array_length(v_lamot2);
-  v_start_index := round((v_lamot1_count - 1) * 0.52)::integer;
+  v_start_index := round((v_lamot1_count - 1) * 0.05)::integer;
   v_join_index := round((v_lamot1_count - 1) * (1.0 / 6.0))::integer;
-  v_ref_start_index := round((v_lamot2_count - 1) * 0.52)::integer;
+  v_ref_start_index := round((v_lamot2_count - 1) * 0.05)::integer;
   v_ref_join_index := round((v_lamot2_count - 1) * (1.0 / 6.0))::integer;
 
   IF v_join_index <= v_start_index OR v_ref_join_index <= v_ref_start_index THEN
@@ -138,7 +139,7 @@ BEGIN
         jsonb_build_object(
           'referenceRouteId', v_lamot2_route_id,
           'joinProgress', 1.0 / 6.0,
-          'transitionStartProgress', 0.52,
+          'transitionStartProgress', 0.05,
           'method', 'smooth-merge-then-shared-gps-suffix'
         ),
         true
