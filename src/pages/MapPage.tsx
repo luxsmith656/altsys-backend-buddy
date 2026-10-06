@@ -14,6 +14,7 @@ import {
   DEFAULT_ZOOM,
   TRAILS,
   haversineDistance,
+  routeJumpOffMarkerLabel,
   type RouteStation,
 } from '@/lib/map-data';
 import { Button } from '@/components/ui/button';
@@ -143,8 +144,8 @@ const OFFICIAL_STATIONS: OfficialStation[] = [
   { index: 7, name: 'Mt. Kalisungan Peak (Summit - 6 km)', pos: [14.1495, 121.3462], description: 'Summit (629m). Breathtaking 360-degree views of Southern Tagalog.' },
 ];
 
-function routeStationIcon(station: RouteStation) {
-  const label = station.kind === 'jump_off' ? 'J' : station.kind === 'peak' ? 'P' : `S${station.index - 1}`;
+function routeStationIcon(station: RouteStation, routeLabel: string) {
+  const label = station.kind === 'jump_off' ? routeJumpOffMarkerLabel(routeLabel) : station.kind === 'peak' ? 'P' : `S${station.index - 1}`;
   const color = station.kind === 'peak' ? '#dc2626' : station.kind === 'jump_off' ? '#059669' : '#2563eb';
   return L.divIcon({
     className: '',
@@ -744,7 +745,7 @@ export default function MapPage() {
                   controlsEmbedded controlsContainer={simControlsElement} />}
                 {availableTrails.map((trail) => <Polyline key={trail.id ?? trail.name} positions={trail.path} pathOptions={{ color: trail.color, weight: 5 }} />)}
                 {availableTrails.flatMap((trail) => (trail.stations ?? []).map((station) => <Marker key={`${trail.id ?? trail.name}:${station.id}`}
-                  position={[station.lat, station.lng]} icon={routeStationIcon(station)} zIndexOffset={100}>
+                  position={[station.lat, station.lng]} icon={routeStationIcon(station, `${trail.locationName} ${trail.name}`)} zIndexOffset={100}>
                   <Popup><strong>{station.name}</strong><p>{trail.name}</p><p>{station.description}</p></Popup>
                 </Marker>))}
               </> : <TrailRecorder existingTrails={rawTrailZones} locationId={activeLocationId} onSaved={fetchTrails} />}
