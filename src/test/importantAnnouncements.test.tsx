@@ -24,18 +24,25 @@ vi.mock('@/integrations/supabase/client', () => ({ supabase: {
 beforeEach(() => {
   vi.clearAllMocks();
   state.fetch.mockResolvedValue([
-    { id: 'admin-note', title: 'Trail update', body: 'Use caution.', type: 'warning', target: 'admins', isImportant: true, created_at: '2026-10-06T00:00:00Z' },
-    { id: 'guide-note', title: 'Guide update', body: 'Guide-only.', type: 'info', target: 'guides', isImportant: true, created_at: '2026-10-06T00:00:00Z' },
+    { id: 'old-note', title: 'Older update', body: 'Earlier notice.', type: 'warning', target: 'admins', isImportant: true, created_at: '2026-10-03T00:00:00Z' },
+    { id: 'next-note', title: 'Next newest update', body: 'Next notice.', type: 'warning', target: 'admins', isImportant: true, created_at: '2026-10-05T00:00:00Z' },
+    { id: 'new-note', title: 'Newest update', body: 'Latest notice.', type: 'warning', target: 'admins', isImportant: true, created_at: '2026-10-06T00:00:00Z' },
+    { id: 'middle-note', title: 'Middle update', body: 'Middle notice.', type: 'warning', target: 'admins', isImportant: true, created_at: '2026-10-04T00:00:00Z' },
+    { id: 'guide-note', title: 'Guide update', body: 'Guide-only.', type: 'info', target: 'guides', isImportant: true, created_at: '2026-10-07T00:00:00Z' },
   ]);
 });
 
 describe('important announcement dashboard feed', () => {
-  it('loads the role-targeted database notice and lets the user dismiss it', async () => {
+  it('shows only the two newest role-targeted notices and fills the next newest after dismissal', async () => {
     render(<ImportantAnnouncements />);
-    expect(await screen.findByText('Trail update')).toBeVisible();
+    expect(await screen.findByText('Newest update')).toBeVisible();
+    expect(screen.getByText('Next newest update')).toBeVisible();
+    expect(screen.queryByText('Older update')).not.toBeInTheDocument();
+    expect(screen.queryByText('Middle update')).not.toBeInTheDocument();
     expect(screen.queryByText('Guide update')).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'Dismiss announcement: Trail update' }));
-    expect(state.dismiss).toHaveBeenCalledWith('staff-1', 'ann:admin-note');
-    await waitFor(() => expect(screen.queryByText('Trail update')).not.toBeInTheDocument());
+    fireEvent.click(screen.getByRole('button', { name: 'Dismiss announcement: Newest update' }));
+    expect(state.dismiss).toHaveBeenCalledWith('staff-1', 'ann:new-note');
+    expect(screen.queryByText('Newest update')).not.toBeInTheDocument();
+    await waitFor(() => expect(screen.getByText('Middle update')).toBeVisible());
   });
 });
