@@ -77,6 +77,7 @@ import {
   FileText,
   DollarSign,
   UserPlus,
+  UserX,
   Copy,
   ChevronDown,
   ChevronUp,
@@ -112,6 +113,7 @@ import { officialRoutesForLocation as filterOfficialRoutes, selectAssignedOffici
 import { loadGuideRatings, renderStars, type GuideRating } from '@/lib/guideRatings';
 import { getHikeTypeLabel } from '@/lib/hikeSchedule';
 import { guidePhotoForName } from '@/lib/guideDirectory';
+import { setGuideAccountActiveAtLocation } from '@/lib/guideManagement';
 import {
   BarChart,
   Bar,
@@ -222,7 +224,7 @@ export default function AdminDashboard() {
   const navigate = useNavigate();
   const { theme, toggleTheme } = useTheme();
   const [mobileProfileOpen, setMobileProfileOpen] = useState(false);
-  type UIGuide = { id: string; name: string; phone: string; status: string; trail: string; totalHikes: number; user_id: string | null; per_trip_fee: number; location_id: string | null; photo_url?: string | null };
+  type UIGuide = { id: string; name: string; phone: string; status: string; trail: string; totalHikes: number; user_id: string | null; per_trip_fee: number; location_id: string | null; is_active: boolean; photo_url?: string | null };
   const trailheadLocations = locations.filter((loc) => ['lamot-1', 'lamot-2', 'sto-tomas'].includes(loc.slug));
   const analyticsLocationIds = locationsLoading ? [] : activeLocationId ? [activeLocationId] : isSuperAdmin ? trailheadLocations.map((loc) => loc.id) : [];
   const [guides, setGuides] = useState<UIGuide[]>([]);
@@ -464,6 +466,7 @@ export default function AdminDashboard() {
   const [newGuidePassword, setNewGuidePassword] = useState('');
   const [newGuideFee, setNewGuideFee] = useState('500');
   const [addGuideSaving, setAddGuideSaving] = useState(false);
+  const [guideActivationSavingId, setGuideActivationSavingId] = useState<string | null>(null);
   const [removeGuideId, setRemoveGuideId] = useState<string | null>(null);
   const [removeGuidePassword, setRemoveGuidePassword] = useState('');
   const [guideInvite, setGuideInvite] = useState<{ name: string; email: string; link: string; message: string } | null>(null);
@@ -791,10 +794,10 @@ export default function AdminDashboard() {
     if (!assignedGuide && assignedGuideId) {
       const { data: guideRows } = await supabase
         .from('guides' as any)
-        .select('id,user_id,full_name')
+        .select('id,user_id,full_name,is_active')
         .eq('id', assignedGuideId)
         .limit(1);
-      const guideRow = (guideRows as unknown as Array<{ id: string; user_id: string | null; full_name: string }> | null)?.[0];
+      const guideRow = (guideRows as unknown as Array<{ id: string; user_id: string | null; full_name: string; is_active: boolean | null }> | null)?.[0];
       if (guideRow) {
         assignedGuide = {
           id: guideRow.id,
@@ -806,11 +809,16 @@ export default function AdminDashboard() {
           user_id: guideRow.user_id,
           per_trip_fee: 0,
           location_id: scannedBooking.location_id ?? activeLocationId,
+          is_active: guideRow.is_active !== false,
         };
       }
     }
-    if (!assignedGuide?.user_id) {
+    if (!assignedGuide?.user_id || !assignedGuide.is_active) {
+      if (assignedGuide?.is_active === false) {
+        toast.error('The assigned guide is deactivated. Activate or assign an active guide before starting.');
+      } else {
       toast.error('The assigned guide needs a linked guide account before this group can start.');
+      }
       setStartingHike(false);
       return;
     }
@@ -1424,17 +1432,18 @@ export default function AdminDashboard() {
     const { data } = await q.order('full_name');
     const activeLocName = locations.find((l) => l.id === activeLocationId)?.name || '';
     const mapped: UIGuide[] = (data ?? [])
-      .filter((g: any) => g.is_active !== false && Boolean(g.user_id))
+      .filter((g: any) => Boolean(g.user_id))
       .map((g: any) => ({
         id: g.id,
         user_id: g.user_id,
         name: g.full_name,
         phone: g.phone || '—',
-        status: g.is_active ? (g.status || 'available') : 'off-duty',
+        status: g.status || 'available',
         trail: g.specialty || activeLocName || 'Local trail',
         totalHikes: 0,
         per_trip_fee: Number(g.per_trip_fee || 0),
         location_id: g.location_id,
+        is_active: g.is_active !== false,
         photo_url: g.photo_url,
       }));
 
@@ -1542,8 +1551,28 @@ export default function AdminDashboard() {
     const guide = guides.find((g) => g.id === id);
     if (!guide) return;
     const next = cycle[guide.status] || 'available';
+    const { error } = await supabase.from('guides').update({ status: next }).eq('id', id).eq('location_id', activeLocationId);
+    if (error) {
+      toast.error(`Could not update guide duty status: ${error.message}`);
+      return;
+    }
     setGuides((prev) => prev.map((g) => (g.id === id ? { ...g, status: next } : g)));
-    await supabase.from('guides').update({ status: next, is_active: next !== 'off-duty' }).eq('id', id);
+  };
+
+  const setGuideAccountActive = async (id: string) => {
+    const guide = guides.find((item) => item.id === id);
+    if (!guide || !activeLocationId || guideActivationSavingId) return;
+    const nextActive = !guide.is_active;
+    setGuideActivationSavingId(id);
+    try {
+      await setGuideAccountActiveAtLocation(id, activeLocationId, nextActive);
+      setGuides((prev) => prev.map((item) => item.id === id ? { ...item, is_active: nextActive } : item));
+      toast.success(`${guide.name} ${nextActive ? 'activated' : 'deactivated'} for this trailhead.`);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Guide status could not be changed.');
+    } finally {
+      setGuideActivationSavingId(null);
+    }
   };
 
   /* ── Add real guide (creates auth user + guides row via edge function) ── */
@@ -2268,7 +2297,7 @@ export default function AdminDashboard() {
                       <Select value={selectedGuide} onValueChange={setSelectedGuide}>
                         <SelectTrigger><SelectValue placeholder="Select a guide…" /></SelectTrigger>
                         <SelectContent>
-                          {guides.filter((g) => g.status !== 'off-duty' && g.status !== 'off_duty' && g.user_id && g.location_id === acceptBooking?.location_id).map((g) => (
+                          {guides.filter((g) => g.is_active && g.status !== 'off-duty' && g.status !== 'off_duty' && g.user_id && g.location_id === acceptBooking?.location_id).map((g) => (
                             <SelectItem key={g.id} value={g.id}>
                               {g.name} — <span className="capitalize">{g.status}</span> ({g.trail})
                             </SelectItem>
@@ -3105,7 +3134,7 @@ export default function AdminDashboard() {
               </div>
               <div className="flex items-center gap-2 flex-wrap">
                 <Badge variant="outline" className="text-primary border-primary/30">
-                  {guides.filter((g) => g.status === 'available').length} available
+                  {guides.filter((g) => g.is_active && g.status === 'available').length} available
                 </Badge>
                 <Button
                   size="sm"
@@ -3135,7 +3164,7 @@ export default function AdminDashboard() {
                 </div>
 
                 <p className="sm:col-span-2 text-[11px] text-muted-foreground self-center">
-                  Creates a real sign-in account for this guide at the currently active location. Share the temp password with them.
+                  Creates a real sign-in account for this guide at the currently active location. Existing guides stay active until you deactivate them here.
                 </p>
                 <Button onClick={handleAddGuide} disabled={addGuideSaving}>
                   {addGuideSaving ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : null}
@@ -3166,6 +3195,9 @@ export default function AdminDashboard() {
                         {guide.status}
                       </span>
                     </div>
+                    {!guide.is_active && (
+                      <Badge variant="destructive" className="mt-2">Deactivated by local admin</Badge>
+                    )}
 
                     <div className="mt-4 grid grid-cols-2 gap-3 text-sm">
                       <div className="rounded-lg bg-secondary/30 px-3 py-2">
@@ -3179,12 +3211,22 @@ export default function AdminDashboard() {
                     </div>
 
                     <div className="mt-3 grid grid-cols-2 gap-2">
-                      <Button variant="outline" size="sm" className="min-w-0 px-2 text-xs" onClick={() => cycleGuideStatus(guide.id)}>
+                      <Button variant="outline" size="sm" className="min-w-0 px-2 text-xs" onClick={() => cycleGuideStatus(guide.id)} disabled={!guide.is_active}>
                         <UserCog className="h-3.5 w-3.5 mr-1.5" /> Change Status
                       </Button>
                       <Button variant="outline" size="sm" className="min-w-0 px-2 text-xs" onClick={() => handleSelectGuide(guide)}>
                         <FileText className="h-3.5 w-3.5 mr-1.5" />
                         {selectedGuideId === guide.id ? 'Hide History' : 'View History'}
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className={`col-span-2 text-xs ${guide.is_active ? 'text-destructive border-destructive/30 hover:bg-destructive/10' : 'text-emerald-700 border-emerald-600/30 hover:bg-emerald-500/10'}`}
+                        onClick={() => void setGuideAccountActive(guide.id)}
+                        disabled={!activeLocationId || guideActivationSavingId === guide.id}
+                      >
+                        {guideActivationSavingId === guide.id ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : guide.is_active ? <UserX className="mr-1.5 h-3.5 w-3.5" /> : <UserCheck className="mr-1.5 h-3.5 w-3.5" />}
+                        {guide.is_active ? 'Deactivate Guide' : 'Activate Guide'}
                       </Button>
                       <Button
                         variant="outline"
@@ -3269,9 +3311,9 @@ export default function AdminDashboard() {
               <CardContent>
                 <div className="grid grid-cols-3 gap-4 text-center text-sm">
                   {[
-                    { label: 'Available', count: guides.filter((g) => g.status === 'available').length, color: 'text-primary' },
-                    { label: 'On Duty', count: guides.filter((g) => g.status === 'on-duty').length, color: 'text-sky-500' },
-                    { label: 'Off Duty', count: guides.filter((g) => g.status === 'off-duty').length, color: 'text-muted-foreground' },
+                    { label: 'Available', count: guides.filter((g) => g.is_active && g.status === 'available').length, color: 'text-primary' },
+                    { label: 'On Duty', count: guides.filter((g) => g.is_active && g.status === 'on-duty').length, color: 'text-sky-500' },
+                    { label: 'Off Duty', count: guides.filter((g) => g.is_active && g.status === 'off-duty').length, color: 'text-muted-foreground' },
                   ].map((s) => (
                     <div key={s.label} className="rounded-xl bg-secondary/30 border border-border/20 py-4">
                       <p className={`text-3xl font-bold ${s.color}`}>{s.count}</p>
