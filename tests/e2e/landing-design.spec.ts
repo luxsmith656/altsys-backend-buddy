@@ -123,17 +123,21 @@ for (const viewport of [{ width: 320, height: 640 }, { width: 844, height: 390 }
       }, lane);
       const samples: Awaited<ReturnType<typeof renderedFog>>[] = [];
       for (const phase of [0, .125, .25, .375, .5, .625, .75, .875, .99999, 1, 1.00001, 2]) {
-        const edges = await scene.evaluate((el, phase) => {
+        const edges = await scene.evaluate(async (el, phase) => {
           for (const animation of el.getAnimations({ subtree: true })) {
             animation.pause();
             const timing = animation.effect!.getTiming();
             animation.currentTime = Number(timing.duration) * phase + Number(timing.delay);
           }
           const origin = el.getBoundingClientRect().left;
-          return [...el.querySelectorAll(':scope > :not([data-fog-probe-hidden]) img')].flatMap((img) => {
+          const imageEdges = [...el.querySelectorAll(':scope > :not([data-fog-probe-hidden]) img')].flatMap((img) => {
             const rect = img.getBoundingClientRect();
             return [rect.left - origin, rect.right - origin];
           });
+          // Let updated animation times reach the rendered/composited frame
+          // before sampling the transparent screenshot.
+          await new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
+          return imageEdges;
         }, phase);
         const screenshot = await scene.screenshot({ omitBackground: true });
         const sample = await renderedFog(scene, screenshot, edges);

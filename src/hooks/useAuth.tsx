@@ -1,4 +1,4 @@
-import { useState, useEffect, createContext, useContext, ReactNode, useCallback } from 'react';
+import { useState, useEffect, createContext, useContext, ReactNode, useCallback, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { User, type Session } from '@supabase/supabase-js';
 import type { AppRole } from '@/types';
@@ -25,6 +25,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [role, setRole] = useState<AppRole | null>(null);
   const [loading, setLoading] = useState(true);
   const [roleError, setRoleError] = useState<string | null>(null);
+  const initialSessionResolved = useRef(false);
 
   const fetchRole = useCallback(async (u: User): Promise<AppRole> => {
     const roleQuery = supabase
@@ -94,7 +95,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (!session?.user) {
       setRole(null);
       setRoleError(null);
-      setLoading(false);
+      if (initialSessionResolved.current) setLoading(false);
       return;
     }
 
@@ -121,11 +122,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       try {
         const { data: { session } } = await supabase.auth.getSession();
         if (mounted) {
+          initialSessionResolved.current = true;
           await syncSession(session as { user: User } | null);
         }
       } catch (err) {
         console.warn('Initial session lookup error:', err);
-        if (mounted) setLoading(false);
+        if (mounted) {
+          initialSessionResolved.current = true;
+          setLoading(false);
+        }
       }
     };
     void initAuth();
@@ -137,16 +142,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     });
 
-    // Safety timeout: Never leave the app hung in loading state
-    const safetyTimer = setTimeout(() => {
-      if (mounted && loading) {
-        setLoading(false);
-      }
-    }, 2500);
-
     return () => {
       mounted = false;
-      clearTimeout(safetyTimer);
       subscription.unsubscribe();
     };
   }, [syncSession]);

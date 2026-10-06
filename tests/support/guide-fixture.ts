@@ -34,7 +34,7 @@ export function createGuideFixture() {
   return { user, rows };
 }
 
-export async function installGuideFixture(page: Page, options: { legacyProfileSchema?: boolean } = {}) {
+export async function installGuideFixture(page: Page, options: { legacyProfileSchema?: boolean; roleResponseGate?: Promise<void>; onRoleRequestStarted?: () => void } = {}) {
   // No production Firestore reads from a synthetic identity.
   await page.route('https://firestore.googleapis.com/**', (route) => route.abort('internetdisconnected'));
   const env = loadEnv('test', process.cwd(), 'VITE_');
@@ -53,6 +53,10 @@ export async function installGuideFixture(page: Page, options: { legacyProfileSc
     const table = url.pathname.split('/rest/v1/')[1];
     if (request.method() !== 'GET' || !Object.hasOwn(rows, table)) {
       throw new Error(`Unexpected fixture request: ${request.method()} ${url.pathname}`);
+    }
+    if (table === 'user_roles' && options.roleResponseGate) {
+      options.onRoleRequestStarted?.();
+      await options.roleResponseGate;
     }
     const single = request.headers().accept?.includes('object+json');
     await route.fulfill({ json: single ? rows[table][0] ?? null : rows[table] });

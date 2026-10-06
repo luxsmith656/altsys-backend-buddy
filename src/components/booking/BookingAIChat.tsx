@@ -586,7 +586,7 @@ export default function BookingAIChat({
   applyLabel,
   showLauncher = false,
 }: BookingAIChatProps) {
-  const { role, user } = useAuth();
+  const { role, user, loading: authLoading, roleError } = useAuth();
   const [isOpen, setIsOpen] = useState(false);
   const [messages, setMessages] = useState<ChatMsg[]>([]);
   const [input, setInput] = useState('');
@@ -620,18 +620,22 @@ export default function BookingAIChat({
   );
 
   useEffect(() => {
-    if (!isOpen || messages.length > 0) return;
-    addAIMessage(
-      greeting ??
-      (`Let's plan this booking together.\n\n` +
-      `I can guide your **date**, **start time**, and **group size**.\n` +
-      `Current setup: ${date ? format(date, 'MMM d, yyyy') : 'No date yet'} · ${getHikeTypeLabel(hikeType)} hike · ${groupSize} pax.\n\n` +
-      `What should we adjust first?`),
-      greeting
+    if (!isOpen || messages.length > 0 || authLoading || (user && !role && !roleError)) return;
+    const roleUnverified = Boolean(user && !role && roleError);
+    const initialGreeting = roleUnverified
+      ? 'I can help with general Mount Kalisungan questions, but I could not verify your account role. Please retry account access before using role-specific guidance.'
+      : greeting ??
+        (`Let's plan this booking together.\n\n` +
+        `I can guide your **date**, **start time**, and **group size**.\n` +
+        `Current setup: ${date ? format(date, 'MMM d, yyyy') : 'No date yet'} · ${getHikeTypeLabel(hikeType)} hike · ${groupSize} pax.\n\n` +
+        `What should we adjust first?`);
+    const initialReplies = roleUnverified
+      ? ['How can I get help with this page?', 'What safety information should I know?']
+      : greeting
         ? getKaliQuickReplies(role ?? 'guest')
-        : ['Pick best date', 'Recommend time', 'Set group size tips', 'Check weather for my date'],
-    );
-  }, [isOpen, messages.length, date, hikeType, groupSize, addAIMessage, greeting, role]);
+        : ['Pick best date', 'Recommend time', 'Set group size tips', 'Check weather for my date'];
+    addAIMessage(initialGreeting, initialReplies);
+  }, [isOpen, messages.length, date, hikeType, groupSize, addAIMessage, greeting, role, roleError, user, authLoading]);
 
   useEffect(() => {
     const nextDateKey = date ? format(date, 'yyyy-MM-dd') : null;

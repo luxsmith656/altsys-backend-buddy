@@ -4,7 +4,11 @@ import { installGuideFixture, monitorGuideFixture } from '../support/guide-fixtu
 test('Kali listens, thinks during the real request, and reacts to the reply safely', async ({ page }, testInfo) => {
   const monitor = monitorGuideFixture(page);
   await page.setViewportSize({ width: 390, height: 844 });
-  await installGuideFixture(page);
+  let releaseRole: () => void = () => {};
+  let roleRequestStarted: () => void = () => {};
+  const roleReady = new Promise<void>((resolve) => { releaseRole = resolve; });
+  const roleStarted = new Promise<void>((resolve) => { roleRequestStarted = resolve; });
+  await installGuideFixture(page, { roleResponseGate: roleReady, onRoleRequestStarted: () => roleRequestStarted() });
   let release: () => void = () => {};
   const ready = new Promise<void>((resolve) => { release = resolve; });
   let requestBody: { booking_context: { viewer_role: string; current_page: string } } | undefined;
@@ -17,9 +21,13 @@ test('Kali listens, thinks during the real request, and reacts to the reply safe
     await route.fulfill({ contentType: 'text/event-stream', body: 'data: ' + JSON.stringify({ choices: [{ delta: { content } }] }) + '\n\ndata: [DONE]\n\n' });
   });
   await page.goto('/guide');
+  await roleStarted;
   await page.getByRole('button', { name: 'Open quick actions' }).click();
   await page.getByRole('button', { name: 'Ask Kali AI', exact: true }).click();
   const chat = page.getByRole('dialog', { name: 'Chat with Kali' });
+  await expect(chat).toBeVisible();
+  await expect(chat.getByText('How do I accept an assignment?', { exact: true })).toHaveCount(0);
+  releaseRole();
   await expect(chat.getByText('How do I accept an assignment?', { exact: true })).toBeVisible();
   await chat.getByRole('textbox', { name: 'Ask Kali' }).fill('Can I still go hiking?');
   await expect(chat.locator('[data-activity="listening"]').first()).toBeVisible();
