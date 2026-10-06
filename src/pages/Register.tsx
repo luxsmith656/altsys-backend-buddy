@@ -12,6 +12,7 @@ import { isFirebaseConfigured } from '@/lib/firebase';
 import { supabase } from '@/integrations/supabase/client';
 import { resolvePostLoginPath } from '@/lib/post-login';
 import { validatePasswordConfirmation } from '@/lib/authValidation';
+import { validateEmail, validatePhone } from '@/lib/inputValidation';
 
 export default function Register() {
   const [fullName, setFullName] = useState('');
@@ -47,10 +48,11 @@ export default function Register() {
     event.preventDefault();
     if (submitting.current || googleLoading) return;
     if (!fullName.trim() || !email.trim() || !phone.trim()) { toast.error('Please fill in all fields'); return; }
+    if (validateEmail(email)) { toast.error(validateEmail(email)!); return; }
     if (password.length < 6) { toast.error('Password must be at least 6 characters'); return; }
     const passwordError = validatePasswordConfirmation(password, confirmPassword);
     if (passwordError) { toast.error(passwordError); return; }
-    if (!/^(09|\+639)\d{9}$/.test(phone.trim())) { toast.error('Please enter a valid PH mobile number'); return; }
+    if (validatePhone(phone)) { toast.error(validatePhone(phone)!); return; }
     submitting.current = true;
     setLoading(true);
     setFormError('');

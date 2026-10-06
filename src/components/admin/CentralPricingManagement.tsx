@@ -29,6 +29,8 @@ import { supabase } from '@/integrations/supabase/client';
 import { calculateFees, formatPeso } from '@/lib/payments';
 import type { PricingConfig } from '@/types/pricing';
 import { validateCapacitySplit } from '@/lib/dailyCapacity';
+import { validateCapacityAgainstReservations } from '@/lib/dailyCapacity';
+import { Calendar } from '@/components/ui/calendar';
 
 export default function CentralPricingManagement() {
   const { user } = useAuth();
@@ -108,6 +110,34 @@ export default function CentralPricingManagement() {
   const [capRangeEnd, setCapRangeEnd] = useState('');
   const [capSaving, setCapSaving] = useState(false);
   const [upcomingCapacities, setUpcomingCapacities] = useState<any[]>([]);
+  const [selectedCapacityDates, setSelectedCapacityDates] = useState<Date[]>([]);
+
+  const bookedCountsFor = (date: string, locationId: string | null) => {
+    const rows = upcomingCapacities.filter((row) => row.date === date &&
+      (locationId ? row.location_id === locationId : true));
+    const globalRow = rows.find((row) => row.location_id == null);
+    const counts = globalRow ? [globalRow] : rows;
+    return counts.reduce((total, row) => ({
+      total: total.total + Number(row.current_count ?? 0),
+      day: total.day + Number(row.day_current_count ?? 0),
+      night: total.night + Number(row.night_current_count ?? 0),
+    }), { total: 0, day: 0, night: 0 });
+  };
+
+  const selectCapacityDates = (dates: Date[] | undefined) => {
+    const next = dates ?? [];
+    setSelectedCapacityDates(next);
+    if (next.length !== 1) return;
+    const date = format(next[0], 'yyyy-MM-dd');
+    setCapDate(date);
+    const locationId = selectedCapLocationId === 'all' ? null : selectedCapLocationId;
+    const row = upcomingCapacities.find((item) => item.date === date && item.location_id === locationId);
+    if (row) {
+      setCapMax(Number(row.max_capacity));
+      setCapDayMax(Number(row.day_max_capacity ?? 65));
+      setCapNightMax(Number(row.night_max_capacity ?? 35));
+    }
+  };
 
   const loadUpcomingCapacities = useCallback(async () => {
     try {
@@ -140,6 +170,9 @@ export default function CentralPricingManagement() {
     }
     const capacityError = validateCapacitySplit(capMax, capDayMax, capNightMax);
     if (capacityError) { toast.error(capacityError); return; }
+    const counts = bookedCountsFor(capDate, selectedCapLocationId === 'all' ? null : selectedCapLocationId);
+    const conflict = validateCapacityAgainstReservations(capMax, capDayMax, capNightMax, counts.total, counts.day, counts.night);
+    if (conflict) { toast.error(conflict); return; }
     setCapSaving(true);
     try {
       const locId = selectedCapLocationId === 'all' ? null : selectedCapLocationId;
@@ -182,9 +215,13 @@ export default function CentralPricingManagement() {
     const rows: Array<{ location_id: string | null; date: string; max_capacity: number; day_max_capacity: number; night_max_capacity: number }> = [];
     const cursor = new Date(start);
     while (cursor <= end) {
+      const date = format(cursor, 'yyyy-MM-dd');
+      const counts = bookedCountsFor(date, locId);
+      const conflict = validateCapacityAgainstReservations(capMax, capDayMax, capNightMax, counts.total, counts.day, counts.night);
+      if (conflict) { toast.error(`${date}: ${conflict}`); return; }
       rows.push({
         location_id: locId,
-        date: format(cursor, 'yyyy-MM-dd'),
+        date,
         max_capacity: capMax,
         day_max_capacity: capDayMax,
         night_max_capacity: capNightMax,
@@ -205,6 +242,34 @@ export default function CentralPricingManagement() {
     } finally {
       setCapSaving(false);
     }
+  };
+
+  const saveSelectedCapacityDates = async () => {
+    if (selectedCapacityDates.length < 2) return;
+    const capacityError = validateCapacitySplit(capMax, capDayMax, capNightMax);
+    if (capacityError) { toast.error(capacityError); return; }
+    const locationId = selectedCapLocationId === 'all' ? null : selectedCapLocationId;
+    const rows = selectedCapacityDates.map((day) => {
+      const date = format(day, 'yyyy-MM-dd');
+      const counts = bookedCountsFor(date, locationId);
+      return { date, counts, location_id: locationId, max_capacity: capMax, day_max_capacity: capDayMax, night_max_capacity: capNightMax };
+    });
+    const conflictRow = rows.find(({ max_capacity, day_max_capacity, night_max_capacity, counts }) =>
+      validateCapacityAgainstReservations(max_capacity, day_max_capacity, night_max_capacity, counts.total, counts.day, counts.night));
+    if (conflictRow) {
+      toast.error(`${conflictRow.date}: ${validateCapacityAgainstReservations(capMax, capDayMax, capNightMax, conflictRow.counts.total, conflictRow.counts.day, conflictRow.counts.night)}`);
+      return;
+    }
+    setCapSaving(true);
+    try {
+      const { error } = await supabase.from('daily_capacity').upsert(rows.map(({ counts: _counts, ...row }) => row) as any, { onConflict: 'location_id,date' });
+      if (error) throw error;
+      toast.success(`Capacity updated for ${rows.length} selected dates.`);
+      setSelectedCapacityDates([]);
+      await loadUpcomingCapacities();
+    } catch (error) {
+      toast.error(`Failed to update selected dates: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    } finally { setCapSaving(false); }
   };
 
   const deleteCapacityLimit = async (id: string) => {
@@ -577,6 +642,29 @@ export default function CentralPricingManagement() {
         </CardHeader>
 
         <CardContent className="p-5 space-y-6">
+          <section className="grid gap-4 rounded-lg border border-border/40 p-4 lg:grid-cols-[minmax(280px,360px)_1fr]" aria-label="Capacity calendar">
+            <div>
+              <h3 className="mb-2 text-sm font-semibold">Capacity calendar</h3>
+              <Calendar
+                mode="multiple"
+                selected={selectedCapacityDates}
+                onSelect={selectCapacityDates}
+                disabled={{ before: new Date(new Date().setHours(0, 0, 0, 0)) }}
+                modifiers={{ configured: (day) => upcomingCapacities.some((row) => row.date === format(day, 'yyyy-MM-dd') && (selectedCapLocationId === 'all' || row.location_id === selectedCapLocationId)) }}
+                modifiersClassNames={{ configured: 'font-bold underline decoration-primary decoration-2 underline-offset-2' }}
+                className="mx-auto"
+              />
+              <p className="text-xs text-muted-foreground">Select a date to load its current quota. Select multiple dates to apply one quota to those dates.</p>
+            </div>
+            <div className="flex flex-col justify-center gap-3 text-sm">
+              <p><strong>{selectedCapacityDates.length || 0}</strong> calendar date(s) selected</p>
+              {capDate && (() => {
+                const counts = bookedCountsFor(capDate, selectedCapLocationId === 'all' ? null : selectedCapLocationId);
+                return <p className="text-muted-foreground">{capDate}: {counts.total} booked ({counts.day} day / {counts.night} night). Limits cannot be reduced below these counts.</p>;
+              })()}
+              {selectedCapacityDates.length > 1 && <Button size="sm" onClick={() => void saveSelectedCapacityDates()} disabled={capSaving}>Apply quota to selected dates</Button>}
+            </div>
+          </section>
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             {/* Single Date Capacity */}
             <div className="p-4 rounded-xl bg-secondary/20 border border-border/30 space-y-4">

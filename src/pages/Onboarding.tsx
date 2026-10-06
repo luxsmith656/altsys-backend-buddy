@@ -152,7 +152,7 @@ export default function Onboarding() {
           </div>
           <div className="space-y-2">
             <Label htmlFor="age">Age</Label>
-            <Input id="age" type="number" inputMode="numeric" min={13} max={120} value={age} onChange={(e) => setAge(e.target.value)} placeholder="e.g. 24" required />
+            <Input id="age" type="number" inputMode="numeric" min={13} max={120} step={1} value={age} onChange={(e) => setAge(e.target.value)} placeholder="e.g. 24" required />
           </div>
 
           <div

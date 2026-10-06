@@ -73,6 +73,7 @@ import { officialRoutesForLocation } from '@/lib/officialRoutes';
 import { guidePhotoForName } from '@/lib/guideDirectory';
 import { getBookingSlotStatuses, type ScheduledBooking } from '@/lib/bookingCapacity';
 import { haversineDistance } from '@/lib/map-data';
+import { validateAge, validateEmail, validatePhone } from '@/lib/inputValidation';
 import {
   fetchKalisungan16DayForecast,
   type KalisunganDayWeather,
@@ -977,8 +978,9 @@ export default function BookingPage() {
     }
     if (step === 2) {
       if (!fullName.trim()) return 'Full name is required.';
-      if (!age.trim() || Number(age) < 1) return 'Please enter a valid age.';
-      if (!emailAddress.trim()) return 'Email address is required.';
+      if (validateAge(age)) return validateAge(age)!;
+      if (validateEmail(emailAddress)) return validateEmail(emailAddress)!;
+      if (validatePhone(phoneNumber)) return validatePhone(phoneNumber)!;
       if (groupSize > 1) {
         const missing = companions.findIndex((name) => !name.trim());
         if (missing >= 0) return `Please provide full name for Companion ${missing + 1}.`;
@@ -1583,6 +1585,9 @@ export default function BookingPage() {
                           id="age"
                           type="number"
                           min={1}
+                          max={120}
+                          step={1}
+                          inputMode="numeric"
                           value={age}
                           onChange={(e) => setAge(e.target.value)}
                           onBlur={() => setCommittedMainAge(age)}
@@ -1627,6 +1632,9 @@ export default function BookingPage() {
                         <Label htmlFor="phoneNumber">Phone Number</Label>
                         <Input
                           id="phoneNumber"
+                          type="tel"
+                          inputMode="tel"
+                          autoComplete="tel"
                           value={phoneNumber}
                           onChange={(e) => setPhoneNumber(e.target.value)}
                           placeholder="09XXXXXXXXX"

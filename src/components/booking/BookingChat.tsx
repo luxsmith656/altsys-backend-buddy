@@ -8,6 +8,7 @@ import { Loader2, Send, CalendarClock } from 'lucide-react';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 import { canChangeBooking } from '@/lib/bookingReceipt';
+import { Textarea } from '@/components/ui/textarea';
 
 interface Msg {
   id: string;
@@ -41,6 +42,7 @@ export default function BookingChat({
   const [loading, setLoading] = useState(false);
   const [sending, setSending] = useState(false);
   const [newDate, setNewDate] = useState('');
+  const [rescheduleReason, setRescheduleReason] = useState('');
   const scroller = useRef<HTMLDivElement | null>(null);
 
   const load = async () => {
@@ -85,6 +87,7 @@ export default function BookingChat({
   const requestReschedule = async () => {
     if (!canRequestReschedule || sending) return;
     if (!newDate) { toast.error('Pick a new date'); return; }
+    if (rescheduleReason.trim().length < 5) { toast.error('Please explain the reason (at least 5 characters).'); return; }
     setSending(true);
     const { data: current, error: readError } = await supabase.from('bookings').select('id,status,notes').eq('id', bookingId).single();
     const { data: sessions, error: sessionError } = await supabase.from('hiker_sessions').select('status,end_time').eq('booking_id', bookingId);
@@ -93,16 +96,28 @@ export default function BookingChat({
       toast.error(readError?.message || sessionError?.message || 'This hike has started or ended and cannot be rescheduled.');
       return;
     }
+    let parsedNotes: Record<string, unknown> = {};
+    try {
+      parsedNotes = current.notes ? JSON.parse(current.notes) as Record<string, unknown> : {};
+    } catch {
+      parsedNotes = current.notes ? { legacyNotes: current.notes } : {};
+    }
     let update = supabase
       .from('bookings')
-      .update({ status: 'adjustment_pending', requested_new_date: newDate, requested_at: new Date().toISOString() } as any)
+      .update({
+        status: 'adjustment_pending',
+        requested_new_date: newDate,
+        requested_at: new Date().toISOString(),
+        notes: JSON.stringify({ ...parsedNotes, requestedRescheduleReason: rescheduleReason.trim() }),
+      } as any)
       .eq('id', bookingId).eq('status', current.status);
     update = current.notes == null ? update.is('notes', null) : update.eq('notes', current.notes);
     const { data: changed, error } = await update.select('id').maybeSingle();
     if (error || !changed) { setSending(false); toast.error(error?.message || 'Booking changed. Reload before requesting a new date.'); return; }
-    await send('reschedule_request', `Hiker requested to reschedule from ${bookingDate} to ${newDate}.`);
+    await send('reschedule_request', `Hiker requested to reschedule from ${bookingDate} to ${newDate}. Reason: ${rescheduleReason.trim()}`);
     toast.success('Reschedule request sent to admin');
     setNewDate('');
+    setRescheduleReason('');
     onAfterReschedule?.();
   };
 
@@ -170,6 +185,7 @@ export default function BookingChat({
                 onChange={(e) => setNewDate(e.target.value)} />
               <Button size="sm" variant="outline" disabled={sending} onClick={() => void requestReschedule()}>Send request</Button>
             </div>
+            <Textarea aria-label="Reason for reschedule" value={rescheduleReason} onChange={(event) => setRescheduleReason(event.target.value)} maxLength={500} rows={2} placeholder="Why do you need to change the date?" />
             <p className="text-[11px] text-muted-foreground">Your booking will move to "adjustment pending" until admin approves.</p>
           </div>
         )}
@@ -184,15 +200,20 @@ export default function BookingChat({
 
 function AdminRescheduleControls({ bookingId, onApprove }: { bookingId: string; onApprove: (b: any) => void }) {
   const [b, setB] = useState<any>(null);
+  const [reason, setReason] = useState('');
   useEffect(() => {
-    supabase.from('bookings').select('id,booking_date,status,requested_new_date').eq('id', bookingId).maybeSingle()
-      .then(({ data }) => setB(data));
+    supabase.from('bookings').select('id,booking_date,status,requested_new_date,notes').eq('id', bookingId).maybeSingle()
+      .then(({ data }) => {
+        setB(data);
+        try { setReason(data?.notes ? JSON.parse(data.notes).requestedRescheduleReason || '' : ''); } catch { setReason(''); }
+      });
   }, [bookingId]);
   if (!b?.requested_new_date || b.status !== 'adjustment_pending') return null;
   return (
     <div className="border-t pt-3 space-y-2 bg-sky-50 dark:bg-sky-950/30 -mx-6 px-6 py-3">
       <p className="text-sm font-medium">Reschedule request pending</p>
       <p className="text-xs text-muted-foreground">From {b.booking_date} → <strong>{b.requested_new_date}</strong></p>
+      {reason && <p className="rounded-md bg-background/70 p-2 text-sm"><strong>Hiker's reason:</strong> {reason}</p>}
       <div className="flex gap-2">
         <Button size="sm" onClick={() => onApprove(b)}>Approve new date</Button>
       </div>

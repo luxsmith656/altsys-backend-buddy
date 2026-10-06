@@ -478,6 +478,7 @@ export default function AdminDashboard() {
   const [adjustDialogId, setAdjustDialogId] = useState<string | null>(null);
   const [adjustDate, setAdjustDate] = useState('');
   const [adjustTime, setAdjustTime] = useState('06:00 AM');
+  const [adjustReason, setAdjustReason] = useState('');
   const [adjustSaving, setAdjustSaving] = useState(false);
 
   /* ── Computed: Derived lists ── */
@@ -1266,10 +1267,11 @@ export default function AdminDashboard() {
   /* ── Adjust booking date/time ── */
   const handleAdjustBooking = async () => {
     if (!adjustDialogId || !adjustDate) return;
+    if (adjustReason.trim().length < 5) { toast.error('Please provide a reschedule reason (at least 5 characters).'); return; }
     setAdjustSaving(true);
     const booking = allTabBookings.find((b) => b.id === adjustDialogId);
     const meta = parseMeta(booking?.notes);
-    const updatedMeta = encodeMeta({ ...meta, adjustedDate: adjustDate, adjustedTime: adjustTime });
+    const updatedMeta = encodeMeta({ ...meta, adjustedDate: adjustDate, adjustedTime: adjustTime, adjustedReason: adjustReason.trim(), adjustedBy: 'Local Admin' });
     const { error } = await supabase
       .from('bookings')
       .update({ status: 'adjustment_pending', notes: updatedMeta })
@@ -1277,6 +1279,14 @@ export default function AdminDashboard() {
     if (error) {
       toast.error('Failed to adjust booking');
     } else {
+      const { data: { user: currentUser } } = await supabase.auth.getUser();
+      await supabase.from('booking_messages' as any).insert({
+        booking_id: adjustDialogId,
+        sender_id: currentUser?.id ?? null,
+        sender_role: 'admin',
+        kind: 'reschedule_proposal',
+        content: `Admin proposed ${adjustDate} at ${adjustTime}. Reason: ${adjustReason.trim()}`,
+      } as any);
       toast.success('📅 Booking adjustment proposed. Hiker will be notified to confirm.');
       void writeActivityLog({
         action: 'booking_adjusted',
@@ -1287,6 +1297,7 @@ export default function AdminDashboard() {
       setPendingBookings((prev) => prev.filter((b) => b.id !== adjustDialogId));
       setAdjustDialogId(null);
       setAdjustDate('');
+      setAdjustReason('');
       loadAllTabBookings();
     }
     setAdjustSaving(false);
@@ -2022,6 +2033,20 @@ export default function AdminDashboard() {
                                   <p className="font-semibold text-primary">{meta.adjustedDate}</p>
                                 </div>
                               )}
+                              {b.requested_new_date && (
+                                <div>
+                                  <p className="text-xs text-muted-foreground">Hiker requested date</p>
+                                  <p className="font-semibold text-sky-600">{b.requested_new_date}</p>
+                                </div>
+                              )}
+                              {(meta.requestedRescheduleReason || meta.adjustedReason) && (
+                                <div className="col-span-full rounded-md border border-sky-500/30 bg-sky-500/5 p-3">
+                                  <p className="text-xs font-semibold text-sky-700 dark:text-sky-300">
+                                    {meta.requestedRescheduleReason ? 'Hiker reschedule reason' : 'Admin reschedule reason'}
+                                  </p>
+                                  <p className="mt-1 text-sm">{meta.requestedRescheduleReason || meta.adjustedReason}</p>
+                                </div>
+                              )}
                               <div>
                                 <p className="text-xs text-muted-foreground">Total Fee</p>
                                 <p className="font-bold text-emerald-600 dark:text-emerald-400">
@@ -2078,10 +2103,6 @@ export default function AdminDashboard() {
                                   onClick={() => { setAcceptDialogId(b.id); setSelectedGuide(''); setSelectedTrailZoneId(''); }}>
                                   <UserCheck className="h-3.5 w-3.5" /> Accept & Assign Guide
                                 </Button>
-                                <Button size="sm" variant="outline" className="gap-1.5 border-sky-500/40 text-sky-600 dark:text-sky-400 hover:bg-sky-500/10"
-                                  onClick={() => { setAdjustDialogId(b.id); setAdjustDate(b.booking_date); }}>
-                                  <CalendarClock className="h-3.5 w-3.5" /> Adjust Date/Time
-                                </Button>
                                 <AlertDialog>
                                   <AlertDialogTrigger asChild>
                                     <Button size="sm" variant="outline" className="gap-1.5 text-destructive border-destructive/30 hover:bg-destructive/10">
@@ -2105,6 +2126,12 @@ export default function AdminDashboard() {
                                   </AlertDialogContent>
                                 </AlertDialog>
                               </>
+                            )}
+                            {((['pending', 'adjustment_pending', 'confirmed'].includes(displayStatus) && !meta.onsiteStartConfirmed && !isAdjusted) || Boolean(b.requested_new_date)) && (
+                              <Button size="sm" variant="outline" className="gap-1.5 border-sky-500/40 text-sky-600 dark:text-sky-400 hover:bg-sky-500/10"
+                                onClick={() => { setAdjustDialogId(b.id); setAdjustDate(b.requested_new_date || b.booking_date); setAdjustReason(''); }}>
+                                <CalendarClock className="h-3.5 w-3.5" /> {b.requested_new_date ? 'Review / Reschedule' : 'Adjust Date/Time'}
+                              </Button>
                             )}
                             {displayStatus === 'confirmed' && (
                               <>
@@ -2310,9 +2337,13 @@ export default function AdminDashboard() {
                         </SelectContent>
                       </Select>
                     </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="adjustReason">Reason for rescheduling</Label>
+                      <Textarea id="adjustReason" value={adjustReason} onChange={(event) => setAdjustReason(event.target.value)} maxLength={500} rows={3} placeholder="Explain why the schedule needs to change" />
+                    </div>
                     <div className="flex gap-2 pt-2">
                       <Button variant="outline" className="flex-1" onClick={() => setAdjustDialogId(null)} disabled={adjustSaving}>Cancel</Button>
-                      <Button className="flex-1 gap-2" onClick={handleAdjustBooking} disabled={!adjustDate || adjustSaving}>
+                      <Button className="flex-1 gap-2" onClick={handleAdjustBooking} disabled={!adjustDate || adjustReason.trim().length < 5 || adjustSaving}>
                         {adjustSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <CalendarClock className="h-4 w-4" />}
                         Send to Hiker for Confirmation
                       </Button>

@@ -12,6 +12,7 @@ import logo from '@/assets/logo.png';
 import { signInWithFirebaseGoogle } from '@/lib/firebase-auth';
 import { isFirebaseConfigured } from '@/lib/firebase';
 import { resolvePostLoginPath } from '@/lib/post-login';
+import { emailPasswordReset } from '@/lib/accountSecurity';
 
 export default function Login() {
   const [email, setEmail] = useState('');
@@ -34,10 +35,7 @@ export default function Login() {
     }
     setResetLoading(true);
     try {
-      const { error } = await supabase.auth.resetPasswordForEmail(targetEmail, {
-        redirectTo: window.location.origin + '/login',
-      });
-      if (error) throw error;
+      await emailPasswordReset(targetEmail, window.location.origin);
       toast.success('Password reset link sent! Check your inbox or spam folder.');
       setResetOpen(false);
     } catch (err: any) {
