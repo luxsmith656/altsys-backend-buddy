@@ -147,4 +147,4 @@ BEGIN
         true
       )
   WHERE id = v_lamot1_route_id;
-END $$;
+END; $$;
