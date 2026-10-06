@@ -11,6 +11,14 @@ export const TRAILHEAD_COORDINATES: Record<string, LatLngTuple> = {
 };
 export const DEFAULT_ZOOM = 15;
 
+export function routeJumpOffMarkerLabel(routeName: string): 'L1' | 'L2' | 'ST' | 'J' {
+  const route = routeName.toLowerCase().replace(/[._]/g, ' ');
+  if (route.includes('lamot-1') || route.includes('lamot 1') || route.includes('lamot1')) return 'L1';
+  if (route.includes('lamot-2') || route.includes('lamot 2') || route.includes('lamot2')) return 'L2';
+  if (route.includes('sto tomas') || route.includes('sto-tomas') || route.includes('tomas')) return 'ST';
+  return 'J';
+}
+
 // Representative samples of the active Lamot 2 recording, used to keep the
 // other jump-off previews visually tied to the same summit trail shape.
 export const LAMOT_2_REFERENCE_PATH: LatLngTuple[] = [

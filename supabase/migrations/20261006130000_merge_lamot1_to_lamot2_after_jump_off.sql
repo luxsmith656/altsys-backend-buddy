@@ -73,11 +73,13 @@ BEGIN
     RAISE EXCEPTION 'Cannot merge routes: approved active Lamot 1 and Lamot 2 routes are required.';
   END IF;
 
-  IF v_lamot1_metadata #>> '{sharedRouteSuffix,referenceRouteId}' = v_lamot2_route_id::text
-     AND abs(COALESCE((v_lamot1_metadata #>> '{sharedRouteSuffix,joinProgress}')::double precision, 0) - (1.0 / 6.0)) < 0.01
-     AND abs(COALESCE((v_lamot1_metadata #>> '{sharedRouteSuffix,transitionStartProgress}')::double precision, 0) - 0.05) < 0.01 THEN
-    RAISE NOTICE 'Lamot 1 already shares the Lamot 2 suffix; no update needed.';
-    RETURN;
+  IF v_lamot1_metadata #>> '{sharedRouteSuffix,referenceRouteId}' = v_lamot2_route_id::text THEN
+    IF abs(COALESCE((v_lamot1_metadata #>> '{sharedRouteSuffix,joinProgress}')::double precision, 0) - (1.0 / 6.0)) < 0.01 THEN
+      IF abs(COALESCE((v_lamot1_metadata #>> '{sharedRouteSuffix,transitionStartProgress}')::double precision, 0) - 0.05) < 0.01 THEN
+        RAISE NOTICE 'Lamot 1 already shares the Lamot 2 suffix; no update needed.';
+        RETURN;
+      END IF;
+    END IF;
   END IF;
 
   v_lamot1_count := jsonb_array_length(v_lamot1);

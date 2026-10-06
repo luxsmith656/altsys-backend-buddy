@@ -1,5 +1,15 @@
 import { describe, expect, it } from 'vitest';
-import { buildRouteStations, cleanTrailPath, haversineDistance, LAMOT_2_REFERENCE_PATH, MT_KALISUNGAN_PEAK, normalizeOfficialRoutePath, TRAILHEAD_COORDINATES, TRAILS } from '@/lib/map-data';
+import { buildRouteStations, cleanTrailPath, haversineDistance, LAMOT_2_REFERENCE_PATH, MT_KALISUNGAN_PEAK, normalizeOfficialRoutePath, routeJumpOffMarkerLabel, TRAILHEAD_COORDINATES, TRAILS } from '@/lib/map-data';
+
+describe('routeJumpOffMarkerLabel', () => {
+  it.each([
+    ['Lamot 1 Classic Summit Trail', 'L1'],
+    ['Lamot-2 Official Route', 'L2'],
+    ['Sto. Tomas Southern Traverse Trail', 'ST'],
+  ] as const)('labels %s distinctly', (name, label) => {
+    expect(routeJumpOffMarkerLabel(name)).toBe(label);
+  });
+});
 
 describe('buildRouteStations', () => {
   it('creates jump-off, five progress stations, and peak', () => {
