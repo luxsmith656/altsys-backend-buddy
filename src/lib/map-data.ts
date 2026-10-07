@@ -6,7 +6,9 @@ export const MT_KALISUNGAN_CENTER: LatLngTuple = [14.1475, 121.3454];
 export const MT_KALISUNGAN_PEAK: LatLngTuple = [14.14669032170505, 121.34512701965895];
 export const TRAILHEAD_COORDINATES: Record<string, LatLngTuple> = {
   'lamot-1': [14.147385047365747, 121.32372794241525],
-  'lamot-2': [14.1440, 121.3430],
+  // The Lamot 2 jump-off is the first point of the active published GPS track.
+  // Keep this in sync with the route shown on the map, not the old approximate pin.
+  'lamot-2': [14.1486888, 121.3291523],
   'sto-tomas': [14.166631, 121.339746],
 };
 export const DEFAULT_ZOOM = 15;
@@ -76,18 +78,7 @@ export const TRAILS = [
     color: '#16a34a',
     elevation: '622m',
     distance: '3.2 km',
-    path: [
-      [14.1440, 121.3430],
-      [14.1448, 121.3435],
-      [14.1455, 121.3440],
-      [14.1462, 121.3445],
-      [14.1468, 121.3448],
-      [14.1473, 121.3452],
-      [14.1478, 121.3455],
-      [14.1483, 121.3458],
-      [14.1488, 121.3460],
-      [14.1495, 121.3462],
-    ] as LatLngTuple[],
+    path: LAMOT_2_REFERENCE_PATH,
   },
   {
     name: 'Lamot 1 Classic Summit Trail',
@@ -226,7 +217,7 @@ export function mergeRouteAtStation(
 
 // Points of interest
 export const POI = [
-  { name: 'Trailhead / Registration (Lamot 2)', pos: [14.1440, 121.3430] as LatLngTuple, type: 'checkpoint' },
+  { name: 'Trailhead / Registration (Lamot 2)', pos: TRAILHEAD_COORDINATES['lamot-2'], type: 'checkpoint' },
   { name: 'Trailhead / Registration (Lamot 1)', pos: [14.147385047365747, 121.32372794241525] as LatLngTuple, type: 'checkpoint' },
   { name: 'Trailhead / Registration (Sto. Tomas)', pos: [14.166631, 121.339746] as LatLngTuple, type: 'checkpoint' },
   { name: 'Summit (629m)', pos: MT_KALISUNGAN_PEAK, type: 'summit' },

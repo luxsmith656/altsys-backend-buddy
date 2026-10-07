@@ -1074,6 +1074,7 @@ export type Database = {
       }
       reviews: {
         Row: {
+          booking_id: string | null
           created_at: string
           id: string
           is_approved: boolean
@@ -1084,6 +1085,7 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          booking_id?: string | null
           created_at?: string
           id?: string
           is_approved?: boolean
@@ -1094,6 +1096,7 @@ export type Database = {
           user_id: string
         }
         Update: {
+          booking_id?: string | null
           created_at?: string
           id?: string
           is_approved?: boolean

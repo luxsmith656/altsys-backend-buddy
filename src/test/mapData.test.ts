@@ -11,6 +11,13 @@ describe('routeJumpOffMarkerLabel', () => {
   });
 });
 
+describe('published Lamot 2 reference', () => {
+  it('uses the recorded GPS start as the Lamot 2 jump-off and default route start', () => {
+    expect(TRAILHEAD_COORDINATES['lamot-2']).toEqual(LAMOT_2_REFERENCE_PATH[0]);
+    expect(TRAILS[0].path[0]).toEqual(LAMOT_2_REFERENCE_PATH[0]);
+  });
+});
+
 describe('buildRouteStations', () => {
   it('creates jump-off, five progress stations, and peak', () => {
     const path: [number, number][] = [

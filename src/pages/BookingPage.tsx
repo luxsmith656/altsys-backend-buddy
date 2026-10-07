@@ -345,11 +345,12 @@ export default function BookingPage() {
       });
   }, [allLocations]);
 
-  const [dbGuides, setDbGuides] = useState<Array<{ id: string; full_name: string; location_id: string; per_trip_fee: number; photo_url?: string | null }>>([]);
+  const [dbGuides, setDbGuides] = useState<Array<{ id: string; full_name: string; location_id: string; per_trip_fee: number; referral_code?: string | null; photo_url?: string | null }>>([]);
   const [preferredGuideId, setPreferredGuideId] = useState<string>('');
   const bookingSubmitLock = useRef(false);
   const bookingAttemptId = useRef<string | null>(null);
-  const referralGuideId = searchParams.get('guide') || searchParams.get('referral') || String(user?.user_metadata?.referral_guide_id || '');
+  const referralParam = searchParams.get('referral') || searchParams.get('guide') || '';
+  const referralGuideId = referralParam || String(user?.user_metadata?.referral_guide_id || '');
   const appliedReferralId = useRef<string | null>(null);
   const [referralCodeInput, setReferralCodeInput] = useState('');
 
@@ -459,10 +460,10 @@ export default function BookingPage() {
     const fetchGuides = async () => {
       const { data: gs } = await supabase
         .from('guides' as any)
-        .select('id,full_name,location_id,per_trip_fee,is_active,photo_url')
+        .select('id,full_name,location_id,per_trip_fee,referral_code,is_active,photo_url')
         .eq('is_active', true)
         .not('user_id', 'is', null);
-      const list = ((gs as any[]) ?? []) as Array<{ id: string; full_name: string; location_id: string; per_trip_fee: number }>;
+      const list = ((gs as any[]) ?? []) as Array<{ id: string; full_name: string; location_id: string; per_trip_fee: number; referral_code?: string | null }>;
       setDbGuides(list);
       const names = list.map((g) => g.full_name).filter(Boolean);
       setGuideOptions(names.length ? names : ['Test Guide']);
@@ -550,12 +551,10 @@ export default function BookingPage() {
   useEffect(() => {
     if (!referralGuideId || appliedReferralId.current === referralGuideId || !dbGuides.length) return;
     const cleanRef = referralGuideId.toLowerCase().trim();
-    const cleanClean = cleanRef.replace(/[^a-z0-9]/g, '');
+    const isPublicReferral = Boolean(referralParam);
     const referredGuide = dbGuides.find((guide) =>
-      guide.id.toLowerCase() === cleanRef ||
-      guide.full_name.toLowerCase() === cleanRef ||
-      guide.full_name.toLowerCase().replace(/[^a-z0-9]/g, '') === cleanClean ||
-      guide.full_name.toLowerCase().includes(cleanRef)
+      (guide.referral_code || '').toLowerCase() === cleanRef ||
+      (!isPublicReferral && guide.id.toLowerCase() === cleanRef)
     );
     if (!referredGuide) return;
     appliedReferralId.current = referralGuideId;
@@ -573,16 +572,10 @@ export default function BookingPage() {
   const handleApplyReferralCode = () => {
     const raw = referralCodeInput.trim().toLowerCase();
     if (!raw) {
-      toast.error('Please enter a guide referral code or guide name');
+      toast.error('Please enter a guide referral code');
       return;
     }
-    const clean = raw.replace(/[^a-z0-9]/g, '');
-    const matched = dbGuides.find((g) =>
-      g.id.toLowerCase() === raw ||
-      g.full_name.toLowerCase() === raw ||
-      g.full_name.toLowerCase().replace(/[^a-z0-9]/g, '') === clean ||
-      g.full_name.toLowerCase().includes(raw)
-    );
+    const matched = dbGuides.find((g) => (g.referral_code || '').toLowerCase() === raw);
 
     if (matched) {
       if (matched.location_id && matched.location_id !== startLocationId) {
@@ -2069,7 +2062,7 @@ export default function BookingPage() {
                             <div className="flex gap-2">
                               <Input
                                 id="guideReferralCode"
-                                placeholder="Enter guide referral code or guide name"
+                              placeholder="Enter guide referral code"
                                 value={referralCodeInput}
                                 onChange={(e) => setReferralCodeInput(e.target.value)}
                                 className="text-xs h-9"

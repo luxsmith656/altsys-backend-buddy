@@ -114,7 +114,8 @@ export async function acceptGuideAssignment({
     const { error: messageError } = await supabase.from('booking_messages' as any).insert({
       booking_id: bookingId,
       sender_id: guideUserId || null,
-      sender_role: 'system',
+      sender_role: 'guide',
+      recipient_role: 'hiker',
       kind: 'system',
       content: `✅ Mountain Guide ${guideName} has ACCEPTED this booking for ${effectiveDate}. See you at the trailhead!`,
     } as any);
@@ -126,6 +127,7 @@ export async function acceptGuideAssignment({
         title: '🎉 Mountain Guide Confirmed!',
         body: `Your mountain guide ${guideName} has accepted your hike booking for ${effectiveDate}.`,
         category: 'booking',
+        link: `/hiker?booking=${encodeURIComponent(bookingId)}`,
       }).catch(() => warnings.push('In-app notification could not be delivered.'));
     }
 
@@ -170,12 +172,24 @@ export async function declineAndReassignGuide({
       }).catch((error) => console.warn('Guide handoff committed, but replacement notification failed:', error));
     }
     if (result.hikerUserId) {
+      const { error: hikerMessageError } = await supabase.from('booking_messages' as any).insert({
+        booking_id: bookingId,
+        sender_id: null,
+        sender_role: 'system',
+        recipient_role: 'hiker',
+        kind: 'system',
+        content: result.replacementGuideName
+          ? `Mountain guide changed to ${result.replacementGuideName} for ${date}. Reason: ${cleanReason}`
+          : `Your assigned guide could not take the hike on ${date}. Reason: ${cleanReason}. A replacement is being assigned.`,
+      } as any);
+      if (hikerMessageError) console.warn('Guide handoff committed, but the hiker message could not be added:', hikerMessageError.message);
       await notifyUser(result.hikerUserId, {
         title: result.replacementGuideName ? 'Mountain Guide Update' : 'Mountain Guide Reassignment in Progress',
         body: result.replacementGuideName
           ? `Your mountain guide for ${date} has been updated to ${result.replacementGuideName} due to: ${cleanReason}.`
           : `Your assigned guide was unable to take your hike on ${date} (${cleanReason}). The LGU dispatch is assigning a replacement.`,
         category: 'booking',
+        link: `/hiker?booking=${encodeURIComponent(bookingId)}`,
       }).catch((error) => console.warn('Guide handoff committed, but hiker notification failed:', error));
     }
 

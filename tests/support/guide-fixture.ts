@@ -16,7 +16,7 @@ export function monitorGuideFixture(page: Page) {
 // Synthetic records for layout and interaction tests. No live account or writes.
 export function createGuideFixture() {
   const user = { id: '00000000-0000-4000-8000-000000000001', aud: 'authenticated', role: 'authenticated', email: 'guide@example.test', user_metadata: { full_name: 'Alex Rivera' }, app_metadata: { provider: 'email' }, created_at: '2026-01-01T00:00:00Z' };
-  const guide = { id: 'guide-preview', user_id: user.id, full_name: 'Alex Rivera', specialty: 'Lamot 2 trailhead', location_id: 'lamot2', status: 'available', is_active: true, per_trip_fee: 800, photo_url: null };
+  const guide = { id: 'guide-preview', user_id: user.id, full_name: 'Alex Rivera', specialty: 'Lamot 2 trailhead', location_id: 'lamot2', status: 'available', is_active: true, per_trip_fee: 800, referral_code: 'KALI-ALEX01', photo_url: null };
   const statuses = ['pending', 'accepted', 'completed'] as const;
   const assignments = statuses.map((status, i) => ({ id: `assignment-${i}`, booking_id: `booking-${i}`, guide_id: guide.id, location_id: 'lamot2', status, created_at: '2026-09-05T00:00:00Z', decided_at: null }));
   const bookings = statuses.map((status, i) => ({ id: `booking-${i}`, user_id: `hiker-${i}`, booking_date: '2026-09-08', group_size: i + 3, status: status === 'accepted' ? 'confirmed' : status, notes: JSON.stringify({ fullName: ['Sam Mendoza', 'Jamie Santos', 'Robin Cruz'][i], phoneNumber: '09000000000', hikeTime: '04:00', assignedTrailName: 'Lamot 2 summit trail', hikeType: 'morning', medicalNotes: i === 0 ? 'Asthma - carries an inhaler' : null }) }));

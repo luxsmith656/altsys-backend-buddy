@@ -106,7 +106,7 @@ export default function GuideRatings() {
   useEffect(() => {
     const localRatings = getTop3Guides();
     const load = async () => {
-      const { data } = await supabase.from('guides' as any).select('id,full_name,specialty').eq('is_active', true).order('full_name').limit(60);
+      const { data } = await supabase.from('guides' as any).select('id,full_name,specialty,referral_code').eq('is_active', true).order('full_name').limit(60);
       const dbGuides = ((data as any[]) ?? []).map((guide) => ({
         guideId: guide.id,
         guideName: guide.full_name,
@@ -116,6 +116,7 @@ export default function GuideRatings() {
         avgRating: 0,
         recentReviews: [],
         photoUrl: guidePhotoForName(guide.full_name),
+        referralCode: guide.referral_code || null,
       } as GuideRating & { photoUrl?: string | null }));
       const source = dbGuides.length ? dbGuides : GUIDE_DIRECTORY.map((guide) => ({ guideId: guide.emailSlug, guideName: guide.name, trail: 'Mt. Kalisungan local guide', totalRating: 0, reviewCount: 0, avgRating: 0, recentReviews: [], photoUrl: guide.photoUrl }));
       setGuides(source.length ? source as GuideRating[] : localRatings);
@@ -252,7 +253,8 @@ export default function GuideRatings() {
                     variant="secondary"
                     onClick={() => {
                       setAllGuidesOpen(false);
-                      navigate(`/booking?guide=${encodeURIComponent(guide.guideId)}`);
+                      const referralCode = (guide as GuideRating & { referralCode?: string | null }).referralCode;
+                      if (referralCode) navigate(`/booking?referral=${encodeURIComponent(referralCode)}`);
                     }}
                     className="text-xs shrink-0 gap-1"
                   >

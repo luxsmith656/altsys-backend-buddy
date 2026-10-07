@@ -6,7 +6,6 @@ import { Button } from '@/components/ui/button';
 import { Bell, Megaphone, CalendarCheck, AlertTriangle, CheckCheck, Trash2 } from 'lucide-react';
 import { fetchAnnouncementsFromDb, visibleAnnouncements } from '@/lib/announcements';
 import { loadRemovedNotificationIds, loadSeenNotificationIds, markNotificationRemoved, saveSeenNotificationIds } from '@/lib/notifications';
-import { isFirebaseConfigured } from '@/lib/firebase';
 import { subscribeUserNotifications, markFsNotificationRead, deleteFsNotification, type FsNotification } from '@/lib/firestoreNotifications';
 
 type AppNotification = {
@@ -52,14 +51,20 @@ export default function NotificationsPage() {
         category: 'announcement' as const,
       }));
 
-      const { data } = isFirebaseConfigured() ? { data: [] } : await supabase
-        .from('bookings')
-        .select('id,status,booking_date,created_at')
-        .eq('user_id', user.id)
-        .order('created_at', { ascending: false })
-        .limit(50);
+      let bookingData: Array<{ id: string; status: string; booking_date: string; created_at: string }> = [];
+      try {
+        const { data } = await supabase
+          .from('bookings')
+          .select('id,status,booking_date,created_at')
+          .eq('user_id', user.id)
+          .order('created_at', { ascending: false })
+          .limit(50);
+        bookingData = (data || []) as Array<{ id: string; status: string; booking_date: string; created_at: string }>;
+      } catch {
+        // Firestore notifications still render when the optional Supabase status feed is unavailable.
+      }
 
-      const bookingNotifs = (data || []).map((b) => ({
+      const bookingNotifs = bookingData.map((b) => ({
         id: `booking:${b.id}:${b.status}`,
         title: `Booking ${b.status}`,
         body: `Your hike booking for ${b.booking_date} is now marked as ${b.status}.`,

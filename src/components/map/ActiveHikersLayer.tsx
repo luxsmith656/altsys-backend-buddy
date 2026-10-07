@@ -3,7 +3,7 @@ import { Marker, Popup } from 'react-leaflet';
 import L from 'leaflet';
 import { createPortal } from 'react-dom';
 import { toast } from 'sonner';
-import type { RouteStation } from '@/lib/map-data';
+import { LAMOT_2_REFERENCE_PATH, type RouteStation } from '@/lib/map-data';
 import { 
   Play, 
   Pause, 
@@ -24,28 +24,17 @@ import {
 } from 'lucide-react';
 
 // The official Summit Trail path points
-const SUMMIT_TRAIL_PATH: [number, number][] = [
-  [14.1440, 121.3430], // Station 1: Base Camp
-  [14.1448, 121.3435],
-  [14.1455, 121.3440], // Station 2: Bamboo Grove
-  [14.1462, 121.3445],
-  [14.1468, 121.3448], // Station 3: Forest Canopy
-  [14.1473, 121.3452],
-  [14.1478, 121.3455],
-  [14.1483, 121.3458], // Station 4: High Camp
-  [14.1488, 121.3460],
-  [14.1495, 121.3462], // Station 5: Summit Peak
-];
+const SUMMIT_TRAIL_PATH: [number, number][] = LAMOT_2_REFERENCE_PATH.map(([lat, lng]) => [lat, lng]);
 
 // 7 Official Stations along the Summit Trail
 export const OFFICIAL_STATIONS = [
-  { id: 'st1', index: 1, name: 'Jump off: Start of Trail (0 km)', pos: [14.1440, 121.3430] as [number, number], description: 'Main trailhead. Registration, safety briefing, and guide assignment.' },
-  { id: 'st2', index: 2, name: 'Station 1: Bamboo Grove (1 km)', pos: [14.1455, 121.3440] as [number, number], description: 'Cool rest point shaded by bamboo arches. Emergency kit available.' },
-  { id: 'st3', index: 3, name: 'Station 2: Forest Canopy Rest (2 km)', pos: [14.1468, 121.3448] as [number, number], description: 'Midway point rest stop. High-canopy forest shade.' },
-  { id: 'st4', index: 4, name: 'Station 3: Mountain Spring (3 km)', pos: [14.1478, 121.3455] as [number, number], description: 'Water source rest point under giant trees.' },
-  { id: 'st5', index: 5, name: 'Station 4: Wilderness Ridge (4 km)', pos: [14.1483, 121.3458] as [number, number], description: 'Steep ridge rest area. pre-summit scenic viewing spot.' },
-  { id: 'st6', index: 6, name: 'Station 5: Summit Camp (5 km)', pos: [14.1488, 121.3460] as [number, number], description: 'Final staging area camp before the summit assault.' },
-  { id: 'st7', index: 7, name: 'Mt. Kalisungan Peak (Summit - 6 km)', pos: [14.1495, 121.3462] as [number, number], description: 'Summit (629m). Breathtaking 360-degree views of Southern Tagalog.' },
+  { id: 'st1', index: 1, name: 'Jump off: Start of Trail (0 km)', pos: [14.1486888, 121.3291523] as [number, number], description: 'Main trailhead. Registration, safety briefing, and guide assignment.' },
+  { id: 'st2', index: 2, name: 'Station 1: Bamboo Grove (1 km)', pos: SUMMIT_TRAIL_PATH[5], description: 'Cool rest point shaded by bamboo arches. Emergency kit available.' },
+  { id: 'st3', index: 3, name: 'Station 2: Forest Canopy Rest (2 km)', pos: SUMMIT_TRAIL_PATH[10], description: 'Midway point rest stop. High-canopy forest shade.' },
+  { id: 'st4', index: 4, name: 'Station 3: Mountain Spring (3 km)', pos: SUMMIT_TRAIL_PATH[15], description: 'Water source rest point under giant trees.' },
+  { id: 'st5', index: 5, name: 'Station 4: Wilderness Ridge (4 km)', pos: SUMMIT_TRAIL_PATH[20], description: 'Steep ridge rest area. pre-summit scenic viewing spot.' },
+  { id: 'st6', index: 6, name: 'Station 5: Summit Camp (5 km)', pos: SUMMIT_TRAIL_PATH[25], description: 'Final staging area camp before the summit assault.' },
+  { id: 'st7', index: 7, name: 'Mt. Kalisungan Peak (Summit - 6 km)', pos: SUMMIT_TRAIL_PATH.at(-1)!, description: 'Summit (629m). Breathtaking 360-degree views of Southern Tagalog.' },
 ];
 
 interface SimulatedHiker {

@@ -149,7 +149,11 @@ describe('Guide Assignment & Confirmation Service', () => {
     expect(mockState.rpc).toHaveBeenCalledWith('guide_reassign_hike_assignment', {
       p_assignment_id: 'assign-1', p_replacement_guide_id: 'guide-2', p_reason: 'Feeling unwell / fever',
     });
-    expect(mockState.operations).toEqual([]);
+    expect(mockState.operations).toContainEqual(expect.objectContaining({
+      table: 'booking_messages',
+      method: 'insert',
+      payload: expect.objectContaining({ recipient_role: 'hiker', content: expect.stringContaining('Feeling unwell / fever') }),
+    }));
     expect(mockState.notifyUser).toHaveBeenCalledWith('user-guide-2', expect.objectContaining({ category: 'booking' }));
   });
 
@@ -180,7 +184,11 @@ describe('Guide Assignment & Confirmation Service', () => {
     expect(mockState.rpc).toHaveBeenCalledWith('guide_reassign_hike_assignment', {
       p_assignment_id: 'assign-1', p_replacement_guide_id: null, p_reason: 'Schedule conflict',
     });
-    expect(mockState.operations).toEqual([]);
+    expect(mockState.operations).toContainEqual(expect.objectContaining({
+      table: 'booking_messages',
+      method: 'insert',
+      payload: expect.objectContaining({ recipient_role: 'hiker', content: expect.stringContaining('Schedule conflict') }),
+    }));
   });
 
   it('allows admin guide reassignment, records the reason, and notifies affected parties', async () => {

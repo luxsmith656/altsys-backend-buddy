@@ -302,10 +302,17 @@ export default function HikerDashboard() {
     const assignedGuide = hikeItem.assignedGuide;
 
     // Submit hiking experience review to Supabase
+    if (!hikeItem.bookingId) {
+      toast.error('This completed hike has no booking reference, so it cannot be reviewed safely.');
+      setSubmittingReview(false);
+      return;
+    }
+
     const { error } = await supabase
       .from('reviews')
       .insert({
         user_id: user.id,
+        booking_id: hikeItem.bookingId,
         reviewer_name: hikeItem.fullName || user.email || 'Hiker',
         rating: hikeRating,
         review_text: hikeReviewText.trim(),
@@ -314,7 +321,7 @@ export default function HikerDashboard() {
       });
 
     if (error) {
-      toast.error('Failed to submit review: ' + error.message);
+      toast.error(error.code === '23505' ? 'You already reviewed this completed hike.' : 'Failed to submit review: ' + error.message);
     } else {
       // Save guide rating to localStorage and Supabase guide_reviews if guide was assigned
       if (assignedGuide && (guideReviewText.trim() || guideRating > 0)) {
@@ -349,6 +356,15 @@ export default function HikerDashboard() {
 
   /* ── Derived data ── */
   const adjustmentPending = bookings.filter((b) => b.status === 'adjustment_pending');
+  const visibleBookings = useMemo(
+    () => bookings.filter((booking) => {
+      const meta = parseMeta(booking.notes);
+      return booking.status !== 'completed'
+        && meta.groupPhase !== 'completed'
+        && !meta.hikeCompletedAt;
+    }),
+    [bookings],
+  );
   const hasNotifications = adjustmentPending.length > 0;
 
   const completedHikes = useMemo(() => {
@@ -684,6 +700,7 @@ export default function HikerDashboard() {
             <CardContent className="space-y-4">
               {completedHikes.map((hikeItem) => {
                 const alreadyReviewed = reviewedSessionIds.has(hikeItem.id) || (hikeItem.bookingId ? reviewedSessionIds.has(hikeItem.bookingId) : false);
+                const reviewBookingId = hikeItem.bookingId || hikeItem.id;
                 return (
                   <div key={hikeItem.id} className="rounded-xl border border-border/20 bg-secondary/20 p-4 space-y-3">
                     <div className="flex items-center justify-between flex-wrap gap-2">
@@ -696,15 +713,27 @@ export default function HikerDashboard() {
                           <p className="text-xs text-primary font-medium mt-0.5">Assigned Guide: {hikeItem.assignedGuide}</p>
                         )}
                       </div>
-                      {alreadyReviewed ? (
-                        <span className="px-3 py-1 rounded-full text-xs bg-primary/20 text-primary font-semibold">✓ Reviewed</span>
-                      ) : (
-                        <Button size="sm" variant="outline" className="gap-1.5 text-amber-600 border-amber-400/40 hover:bg-amber-500/10 font-bold"
-                          onClick={() => setReviewSessionId(reviewSessionId === hikeItem.id ? null : hikeItem.id)}>
-                          <Star className="h-3.5 w-3.5 fill-amber-500 text-amber-500" />
-                          {reviewSessionId === hikeItem.id ? 'Close' : 'Leave Review'}
-                        </Button>
-                      )}
+                      <div className="flex items-center gap-2">
+                        {reviewBookingId && (
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="gap-1.5 text-xs"
+                            onClick={() => setReceiptBookingId(reviewBookingId)}
+                          >
+                            <CalendarCheck className="h-3.5 w-3.5" /> Details / receipt
+                          </Button>
+                        )}
+                        {alreadyReviewed ? (
+                          <span className="px-3 py-1 rounded-full text-xs bg-primary/20 text-primary font-semibold">✓ Reviewed</span>
+                        ) : (
+                          <Button size="sm" variant="outline" className="gap-1.5 text-amber-600 border-amber-400/40 hover:bg-amber-500/10 font-bold"
+                            onClick={() => setReviewSessionId(reviewSessionId === hikeItem.id ? null : hikeItem.id)}>
+                            <Star className="h-3.5 w-3.5 fill-amber-500 text-amber-500" />
+                            {reviewSessionId === hikeItem.id ? 'Close' : 'Leave Review'}
+                          </Button>
+                        )}
+                      </div>
                     </div>
 
                     <AnimatePresence>
@@ -806,7 +835,7 @@ export default function HikerDashboard() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            {bookings.length === 0 ? (
+            {visibleBookings.length === 0 ? (
               <div className="text-center py-10">
                 <CalendarCheck className="h-12 w-12 text-muted-foreground/30 mx-auto mb-3" />
                 <p className="text-muted-foreground text-sm mb-4">No bookings yet. Book your first hike above!</p>
@@ -816,7 +845,7 @@ export default function HikerDashboard() {
               </div>
             ) : (
               <div className="grid grid-cols-2 gap-3 sm:grid-cols-2 lg:grid-cols-3 lg:gap-4">
-                {bookings.map((b) => {
+                {visibleBookings.map((b) => {
                   const meta = parseMeta(b.notes);
                   const receipt = bookingReceipt(b);
                   return (
@@ -829,9 +858,11 @@ export default function HikerDashboard() {
                       }`}
                     >
                       {/* QR Code */}
-                      <div className="flex justify-center bg-white rounded-lg p-2 sm:p-3">
-                        <QRCodeSVG value={b.qr_code_data || b.id} size={76} bgColor="#ffffff" fgColor="#1a2e1a" />
-                      </div>
+                      {b.status === 'confirmed' && (
+                        <div className="flex justify-center bg-white rounded-lg p-2 sm:p-3">
+                          <QRCodeSVG value={b.qr_code_data || b.id} size={76} bgColor="#ffffff" fgColor="#1a2e1a" />
+                        </div>
+                      )}
 
                       {/* Info */}
                       <div className="text-center space-y-1">
@@ -985,7 +1016,7 @@ export default function HikerDashboard() {
                         )}
 
                       {/* Share Companion Join QR (if group size > 1) */}
-                      {b.group_size > 1 && b.status !== 'cancelled' && (
+                      {b.group_size > 1 && b.status === 'confirmed' && (
                         <Button
                           size="sm"
                           variant="outline"

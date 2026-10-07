@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/hooks/useAuth';
-import { parseMeta } from '@/lib/bookingMeta';
 import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -8,22 +7,10 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
 import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogTrigger,
-} from '@/components/ui/alert-dialog';
-import {
   User,
   Phone,
   ShieldAlert,
   CalendarCheck,
-  QrCode,
   Loader2,
   Save,
   Trash2,
@@ -32,10 +19,10 @@ import {
   KeyRound,
   Mail,
 } from 'lucide-react';
-import { QRCodeSVG } from 'qrcode.react';
 import { toast } from 'sonner';
 import { motion } from 'framer-motion';
 import { format } from 'date-fns';
+import { QRCodeSVG } from 'qrcode.react';
 import { optimizeAvatar } from '@/lib/avatarImage';
 import { Camera } from 'lucide-react';
 import { profileChanged } from '@/components/common/ProfileAvatar';
@@ -58,12 +45,6 @@ interface Booking {
   notes: string;
 }
 
-const STATUS_STYLES: Record<string, string> = {
-  confirmed: 'bg-primary/20 text-primary',
-  pending: 'bg-warning/20 text-warning',
-  cancelled: 'bg-destructive/20 text-destructive',
-};
-
 export default function ProfilePage() {
   const { user, role } = useAuth();
 
@@ -79,9 +60,6 @@ export default function ProfilePage() {
   const [resetSending, setResetSending] = useState(false);
 
   /* ── Booking state ── */
-  const [bookings, setBookings] = useState<Booking[]>([]);
-  const [bookingsLoading, setBookingsLoading] = useState(true);
-  const [cancellingId, setCancellingId] = useState<string | null>(null);
 
   /* ── Hike stats ── */
   const [stats, setStats] = useState({ totalHikes: 0, completedHikes: 0, cancelledHikes: 0 });
@@ -90,7 +68,7 @@ export default function ProfilePage() {
   useEffect(() => {
     if (!user) return;
     loadProfile();
-    loadBookings();
+    void loadBookings();
   }, [user]);
 
   const loadProfile = async () => {
@@ -113,7 +91,6 @@ export default function ProfilePage() {
   };
 
   const loadBookings = async () => {
-    setBookingsLoading(true);
     const { data } = await supabase
       .from('bookings')
       .select('*')
@@ -121,13 +98,11 @@ export default function ProfilePage() {
       .order('booking_date', { ascending: false });
 
     const list = (data ?? []) as Booking[];
-    setBookings(list);
     setStats({
       totalHikes: list.length,
       completedHikes: list.filter((b) => b.status === 'confirmed').length,
       cancelledHikes: list.filter((b) => b.status === 'cancelled').length,
     });
-    setBookingsLoading(false);
   };
 
   /* ────────────────────────────── Save Profile ── */
@@ -207,26 +182,6 @@ export default function ProfilePage() {
     } finally {
       setUploading(false);
     }
-  };
-
-  /* ────────────────────────────── Cancel Booking ── */
-  const handleCancel = async (bookingId: string) => {
-    setCancellingId(bookingId);
-    const { error } = await supabase
-      .from('bookings')
-      .update({ status: 'cancelled' })
-      .eq('id', bookingId);
-
-    if (error) {
-      toast.error('Failed to cancel booking');
-    } else {
-      toast.success('Booking cancelled.');
-      setBookings((prev) =>
-        prev.map((b) => (b.id === bookingId ? { ...b, status: 'cancelled' } : b))
-      );
-      setStats((s) => ({ ...s, cancelledHikes: s.cancelledHikes + 1, completedHikes: s.completedHikes - 1 }));
-    }
-    setCancellingId(null);
   };
 
   /* ────────────────────────────── UI ── */
@@ -441,93 +396,6 @@ export default function ProfilePage() {
                   Email Reset Link
                 </Button>
               </div>
-            </CardContent>
-          </Card>
-        </motion.div>
-
-        {/* ── Booking History ── */}
-        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.25 }} className="mt-6">
-          <Card className="glass-card">
-            <CardHeader>
-              <CardTitle className="text-lg flex items-center gap-2">
-                <QrCode className="h-5 w-5 text-primary" /> Booking History
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              {bookingsLoading ? (
-                <div className="flex items-center justify-center py-12">
-                  <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-                </div>
-              ) : bookings.length === 0 ? (
-                <div className="text-center py-12">
-                  <CalendarCheck className="h-12 w-12 text-muted-foreground/30 mx-auto mb-3" />
-                  <p className="text-muted-foreground text-sm">No bookings yet.</p>
-                </div>
-              ) : (
-                <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {bookings.map((b) => (
-                    <div
-                      key={b.id}
-                      className="rounded-xl bg-secondary/20 border border-border/20 p-4 flex flex-col gap-3"
-                    >
-                      {/* QR Code */}
-                      <div className="flex justify-center bg-white rounded-lg p-3">
-                        <QRCodeSVG value={b.qr_code_data || b.id} size={90} bgColor="#ffffff" fgColor="#1a2e1a" />
-                      </div>
-
-                      {/* Info */}
-                      <div className="text-center space-y-1">
-                          <p className="font-semibold text-sm break-words">{b.booking_date}</p>
-                        <p className="text-xs text-muted-foreground">{b.group_size} pax</p>
-                        {parseMeta(b.notes).userNotes && (
-                          <p className="text-xs text-muted-foreground italic break-words">{parseMeta(b.notes).userNotes}</p>
-                        )}
-                        <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_STYLES[b.status] ?? 'bg-secondary text-secondary-foreground'}`}>
-                          {b.status}
-                        </span>
-                      </div>
-
-                      {/* Cancel button — only for non-cancelled, future bookings */}
-                      {b.status !== 'cancelled' && new Date(b.booking_date) >= new Date() && (
-                        <AlertDialog>
-                          <AlertDialogTrigger asChild>
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              className="w-full text-destructive border-destructive/30 hover:bg-destructive/10 gap-1"
-                              disabled={cancellingId === b.id}
-                            >
-                              {cancellingId === b.id ? (
-                                <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                              ) : (
-                                <Trash2 className="h-3.5 w-3.5" />
-                              )}
-                              Cancel Booking
-                            </Button>
-                          </AlertDialogTrigger>
-                          <AlertDialogContent>
-                            <AlertDialogHeader>
-                              <AlertDialogTitle>Cancel this booking?</AlertDialogTitle>
-                              <AlertDialogDescription>
-                                Your reservation for <strong>{b.booking_date}</strong> ({b.group_size} pax) will be cancelled. This action cannot be undone.
-                              </AlertDialogDescription>
-                            </AlertDialogHeader>
-                            <AlertDialogFooter>
-                              <AlertDialogCancel>Keep Booking</AlertDialogCancel>
-                              <AlertDialogAction
-                                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                                onClick={() => handleCancel(b.id)}
-                              >
-                                Yes, Cancel
-                              </AlertDialogAction>
-                            </AlertDialogFooter>
-                          </AlertDialogContent>
-                        </AlertDialog>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              )}
             </CardContent>
           </Card>
         </motion.div>

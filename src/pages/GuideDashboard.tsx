@@ -444,8 +444,12 @@ export default function GuideDashboard() {
 
   const copyGuideLink = async (kind: 'profile' | 'booking') => {
     if (!guideRow) return;
+    if (kind === 'booking' && !guideRow.referral_code) {
+      toast.error('This guide does not have a referral code yet. Ask an admin to refresh guide codes.');
+      return;
+    }
     const url = `${window.location.origin}/${
-      kind === 'profile' ? `guide/${guideRow.id}` : `booking?guide=${encodeURIComponent(guideRow.id)}`
+      kind === 'profile' ? `guide/${guideRow.id}` : `booking?referral=${encodeURIComponent(guideRow.referral_code)}`
     }`;
     try {
       await navigator.clipboard.writeText(url);

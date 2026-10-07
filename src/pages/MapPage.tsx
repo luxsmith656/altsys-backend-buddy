@@ -135,7 +135,7 @@ function MapInstanceBridge({ onReady }: { onReady: (map: L.Map) => void }) {
 
 // Official Summit Trail stations matching ActiveHikersLayer coordinates
 const OFFICIAL_STATIONS: OfficialStation[] = [
-  { index: 1, name: 'Jump off: Start of Trail (0 km)', pos: [14.1440, 121.3430], description: 'Main trailhead. Registration, safety briefing, and guide assignment.' },
+  { index: 1, name: 'Jump off: Start of Trail (0 km)', pos: LAMOT_2_REFERENCE_PATH[0] as [number, number], description: 'Main trailhead. Registration, safety briefing, and guide assignment.' },
   { index: 2, name: 'Station 1: Bamboo Grove (1 km)', pos: [14.1455, 121.3440], description: 'Cool rest point shaded by bamboo arches. Emergency kit available.' },
   { index: 3, name: 'Station 2: Forest Canopy Rest (2 km)', pos: [14.1468, 121.3448], description: 'Midway point rest stop. High-canopy forest shade.' },
   { index: 4, name: 'Station 3: Mountain Spring (3 km)', pos: [14.1478, 121.3455], description: 'Water source rest point under giant trees.' },
