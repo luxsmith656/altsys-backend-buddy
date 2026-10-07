@@ -170,6 +170,7 @@ export default function CentralAccountManagement() {
           role: 'admin',
           locationId: a.locationId,
           locationName: a.locationName || 'Trailhead Admin',
+          photoUrl: a.photoUrl,
           accountStatus: 'active',
           status: 'active',
           createdAt: a.createdAt,
