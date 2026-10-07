@@ -64,6 +64,15 @@ export interface KalisunganForecastResult {
   fetchedAt: number;
 }
 
+/** Keep persisted/remote forecast payloads safe for date lookups. */
+export function normalizeForecastDays(value: unknown): Record<string, KalisunganDayWeather> {
+  if (!value || typeof value !== 'object') return {};
+  const days = value as Record<string, unknown>;
+  return Object.fromEntries(Object.entries(days).filter(([, day]) => (
+    day && typeof day === 'object' && typeof (day as KalisunganDayWeather).date === 'string'
+  ))) as Record<string, KalisunganDayWeather>;
+}
+
 export interface AccuWeatherUsage {
   date: string;
   count: number;
@@ -489,7 +498,7 @@ export async function fetchKalisungan16DayForecast(): Promise<KalisunganForecast
 
         // If saved today and less than 6 hours old, return immediately (0 API calls)
         if (result && cacheDate === today && Date.now() - result.fetchedAt < 6 * 60 * 60 * 1000) {
-          return result;
+          return { ...result, days: normalizeForecastDays(result.days) };
         }
       }
     } catch {
@@ -511,7 +520,7 @@ export async function fetchKalisungan16DayForecast(): Promise<KalisunganForecast
         try {
           const parsed = JSON.parse(cached);
           const result = parsed.result || (parsed.days ? parsed : null);
-          if (result) return result;
+          if (result) return { ...result, days: normalizeForecastDays(result.days) };
         } catch {
           /* ignore */
         }

@@ -68,6 +68,8 @@ export interface BookingMeta {
   paymentScreenshotPath?: string; // Firebase storage path (for deletion)
   // Payment tracking
   paymentStatus?: 'unpaid' | 'partial' | 'paid';
+  additionalPaymentStatus?: 'pending' | 'paid';
+  additionalPaymentDue?: number;
   paymentMethod?: BookingPaymentMethod;
   paymentReference?: string;
   amountPaid?: number;

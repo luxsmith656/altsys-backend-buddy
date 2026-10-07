@@ -11,6 +11,9 @@ import {
 } from '@/components/ui/alert-dialog';
 import { toast } from 'sonner';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useAuth } from '@/hooks/useAuth';
+import { supabase } from '@/integrations/supabase/client';
+import { createEmergencyAlert } from '@/lib/emergencyAlerts';
 
 interface SOSPanelProps {
   /** Compact mode renders just a single red button (for map overlay) */
@@ -24,10 +27,12 @@ const EMERGENCY_CONTACTS = [
 ];
 
 export default function SOSPanel({ compact = false }: SOSPanelProps) {
+  const { user, role } = useAuth();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [sending, setSending] = useState(false);
   const [sent, setSent] = useState(false);
   const [coords, setCoords] = useState<{ lat: number; lng: number } | null>(null);
+  const [activeSession, setActiveSession] = useState<{ id: string; booking_id: string | null; location_id: string | null } | null>(null);
 
   /* Grab GPS coords when the dialog opens */
   useEffect(() => {
@@ -39,17 +44,46 @@ export default function SOSPanel({ compact = false }: SOSPanelProps) {
     );
   }, [dialogOpen]);
 
+  useEffect(() => {
+    if (!dialogOpen || !user?.id) return;
+    void supabase.from('hiker_sessions')
+      .select('id,booking_id,location_id')
+      .eq('user_id', user.id)
+      .eq('status', 'active')
+      .order('start_time', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+      .then(({ data }) => setActiveSession(data));
+  }, [dialogOpen, user?.id]);
+
   const handleSendSOS = async () => {
+    if (!user?.id) {
+      toast.error('Sign in before sending an SOS alert.');
+      return;
+    }
     setSending(true);
-    /* 
-      In a real implementation this would POST to a Supabase Edge Function
-      or Realtime channel that notifies admins/rangers.
-      For now we simulate a network call.
-    */
-    await new Promise((r) => setTimeout(r, 1800));
-    setSending(false);
-    setSent(true);
-    toast.error('🆘 SOS Alert Sent — Rangers have been notified!', { duration: 8000 });
+    try {
+      let locationId = activeSession?.location_id || null;
+      if (!locationId && activeSession?.booking_id) {
+        const { data } = await supabase.from('bookings').select('location_id').eq('id', activeSession.booking_id).maybeSingle();
+        locationId = data?.location_id || null;
+      }
+      await createEmergencyAlert({
+        userId: user.id,
+        reporterRole: role,
+        bookingId: activeSession?.booking_id,
+        sessionId: activeSession?.id,
+        locationId,
+        latitude: coords?.lat,
+        longitude: coords?.lng,
+      });
+      setSent(true);
+      toast.error('SOS alert sent. The assigned admin and emergency team were notified.', { duration: 8000 });
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Could not send SOS alert.');
+    } finally {
+      setSending(false);
+    }
   };
 
   const handleClose = () => {

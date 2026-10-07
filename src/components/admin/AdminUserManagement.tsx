@@ -279,9 +279,13 @@ export default function AdminUserManagement({
                   return (
                     <tr key={user.id} className="hover:bg-muted/30 transition-colors">
                       <td className="px-4 py-3">
-                        <div className="font-semibold text-foreground">{user.fullName}</div>
+                        <div className="flex items-center gap-2.5">
+                          {user.photoUrl ? <img src={user.photoUrl} alt={`${user.fullName} profile`} loading="lazy" decoding="async" className="h-9 w-9 rounded-full border border-border/50 object-cover" /> : <div className="flex h-9 w-9 items-center justify-center rounded-full bg-primary/10 font-semibold text-primary">{user.fullName?.charAt(0) || '?'}</div>}
+                          <div className="min-w-0"><div className="font-semibold text-foreground">{user.fullName}</div>
                         <div className="text-[10px] text-muted-foreground font-mono">{user.email}</div>
                         {user.phone && <div className="text-[10px] text-muted-foreground">{user.phone}</div>}
+                          </div>
+                        </div>
                       </td>
                       <td className="px-4 py-3">
                         <Badge

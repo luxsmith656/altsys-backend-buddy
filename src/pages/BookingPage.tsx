@@ -77,6 +77,7 @@ import { validateAge, validateEmail, validatePhone } from '@/lib/inputValidation
 import { withBookingRequestTimeout } from '@/lib/bookingRequest';
 import {
   fetchKalisungan16DayForecast,
+  normalizeForecastDays,
   type KalisunganDayWeather,
   interpretKalisunganWeather,
 } from '@/lib/kalisunganWeather';
@@ -292,7 +293,7 @@ export default function BookingPage() {
         setKalisunganForecastLoading(true);
         const res = await fetchKalisungan16DayForecast();
         if (active) {
-          setKalisunganForecast(res.days);
+          setKalisunganForecast(normalizeForecastDays(res?.days));
         }
       } catch (err) {
         console.warn('Could not load Mt. Kalisungan forecast:', err);
@@ -808,11 +809,15 @@ export default function BookingPage() {
       let dayWeather = kalisunganForecast[formattedDate];
       if (!dayWeather) {
         const res = await fetchKalisungan16DayForecast();
-        setKalisunganForecast(res.days);
-        dayWeather = res.days[formattedDate];
+        const days = normalizeForecastDays(res?.days);
+        setKalisunganForecast(days);
+        dayWeather = days[formattedDate];
       }
 
-      if (!dayWeather) throw new Error('No forecast available for the selected date');
+      if (!dayWeather) {
+        setWeatherError('Forecast unavailable for this date. You can still continue with your booking.');
+        return;
+      }
       if (requestId !== weatherRequestId.current) return;
       setWeatherInsight({
         maxTempC: dayWeather.maxTempC,
@@ -938,7 +943,7 @@ export default function BookingPage() {
           headline: selectedKalisunganWeather?.advisory?.headline,
           badgeLabel: selectedKalisunganWeather?.advisory?.badgeLabel,
           category: selectedKalisunganWeather?.category,
-          forecastDays: Object.values(kalisunganForecast).map((d) => ({
+          forecastDays: Object.values(normalizeForecastDays(kalisunganForecast)).map((d) => ({
             date: d.date,
             condition: d.condition,
             maxTempC: d.maxTempC,

@@ -62,8 +62,7 @@ import { acceptGuideAssignment } from '@/lib/guideAssignmentService';
 import { calculateGuideEarnings, GuideEarningsSummary } from '@/lib/guideEarnings';
 import { formatPeso } from '@/lib/payments';
 import BookingReceipt from '@/components/booking/BookingReceipt';
-import { addHorseHelpRequest, getHorseHelpOption, HORSE_HELP_OPTIONS, type HorseHelpStation } from '@/lib/hikeSupport';
-import { notifyUser } from '@/lib/firestoreNotifications';
+import { getHorseHelpOption, requestHorseHelpForBooking, HORSE_HELP_OPTIONS, type HorseHelpStation } from '@/lib/hikeSupport';
 import ImportantAnnouncements from '@/components/common/ImportantAnnouncements';
 
 const QUOTA_PER_GUIDE_PER_DAY = 5;
@@ -176,6 +175,12 @@ export default function GuideDashboard() {
       if (!me) {
         setLoading(false);
         return;
+      }
+
+      const { data: refreshedStatus, error: refreshError } = await supabase.rpc('refresh_guide_duty_status' as any, { p_guide_id: me.id });
+      if (!refreshError && typeof refreshedStatus === 'string' && refreshedStatus !== me.status) {
+        me.status = refreshedStatus;
+        setGuideRow({ ...me });
       }
 
       // 2. Check for active hike session without forceful redirect
@@ -318,6 +323,10 @@ export default function GuideDashboard() {
   /* ── Duty Status Toggle ── */
   const handleDutyStatusChange = async (newStatus: string) => {
     if (!guideRow) return;
+    if (newStatus === 'off_duty' || newStatus === 'off-duty') {
+      toast.info('Use the off-duty request form so the local admin can approve the dates and reason.');
+      return;
+    }
     setStatusUpdating(true);
     try {
       const { error } = await supabase
@@ -407,33 +416,20 @@ export default function GuideDashboard() {
     }
 
     setHorseHelpSaving(true);
-    const requestedAt = new Date().toISOString();
     try {
-      const updatedMeta = addHorseHelpRequest(currentMeta, option.id, guideRow.id, requestedAt);
-      const { error } = await supabase
-        .from('bookings')
-        .update({ notes: JSON.stringify(updatedMeta) } as any)
-        .eq('id', booking.id);
-      if (error) throw error;
+      const updatedMeta = await requestHorseHelpForBooking({
+        bookingId: booking.id,
+        station: option.id,
+        guideId: guideRow.id,
+        guideName: guideRow.full_name,
+        guideUserId: user?.id || '',
+        locationId: guideRow.location_id,
+      });
 
       const updatedBooking = { ...booking, notes: JSON.stringify(updatedMeta) };
       setAssignments((current) => current.map((item) => item.id === assignment.id ? { ...item, booking: updatedBooking } : item));
       setDetailOpen((current) => current?.id === assignment.id ? { ...current, booking: updatedBooking } : current);
 
-      await supabase.from('booking_messages' as any).insert({
-        booking_id: booking.id,
-        sender_id: user?.id || null,
-        sender_role: 'guide',
-        kind: 'system',
-        content: `🐴 Horse help requested from ${option.label} (${formatPeso(option.fee)}). Requested by ${guideRow.full_name}.`,
-      } as any);
-      if (booking.user_id) {
-        await notifyUser(booking.user_id, {
-          title: 'Horse help requested',
-          body: `${guideRow.full_name} requested horse help from ${option.label} for your hike. Fee: ${formatPeso(option.fee)}.`,
-          category: 'alert',
-        });
-      }
       toast.success(`Horse help requested from ${option.label}. Admin has the fee and station details.`);
     } catch (err: any) {
       toast.error(err?.message || 'Could not request horse help.');
@@ -573,12 +569,12 @@ export default function GuideDashboard() {
             </div>
           </div>
           <div className="guide-header-actions">
-            <Select value={guideRow.status || 'available'} onValueChange={(value) => void handleDutyStatusChange(value)} disabled={statusUpdating}>
+            <Select value={guideRow.status || 'available'} onValueChange={(value) => void handleDutyStatusChange(value)} disabled={statusUpdating || ['off_duty', 'off-duty'].includes(guideRow.status)}>
               <SelectTrigger aria-label="Duty status" className="guide-duty"><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="available">Available</SelectItem>
                 <SelectItem value="on_duty">On duty</SelectItem>
-                <SelectItem value="off_duty">Off duty</SelectItem>
+                {['off_duty', 'off-duty'].includes(guideRow.status) && <SelectItem value={guideRow.status}>Off duty approved</SelectItem>}
               </SelectContent>
             </Select>
             <Button variant="outline" size="icon" aria-label="Guide profile and sharing" title="Guide profile and sharing" onClick={() => setProfileOpen(true)}>

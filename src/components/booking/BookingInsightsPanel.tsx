@@ -210,8 +210,8 @@ export default function BookingInsightsPanel({
 
                 {/* Smart Guide ON — error */}
                 {smartGuideEnabled && date && weatherError && !weatherLoading && (
-                  <div className="flex items-start gap-2 text-xs text-destructive bg-destructive/5 border border-destructive/20 rounded-xl p-2.5">
-                    <TriangleAlert className="h-3.5 w-3.5 mt-0.5 shrink-0" />
+                  <div className="flex items-start gap-2 text-xs text-amber-700 bg-amber-500/10 border border-amber-500/20 rounded-xl p-2.5" role="status">
+                    <TriangleAlert className="h-3.5 w-3.5 mt-0.5 shrink-0 text-amber-600" />
                     <span>{weatherError}</span>
                   </div>
                 )}

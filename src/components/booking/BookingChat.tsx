@@ -9,6 +9,7 @@ import { toast } from 'sonner';
 import { format } from 'date-fns';
 import { canChangeBooking } from '@/lib/bookingReceipt';
 import { Textarea } from '@/components/ui/textarea';
+import { notifyUser } from '@/lib/firestoreNotifications';
 
 interface Msg {
   id: string;
@@ -51,6 +52,7 @@ export default function BookingChat({
   const [sending, setSending] = useState(false);
   const [newDate, setNewDate] = useState('');
   const [rescheduleReason, setRescheduleReason] = useState('');
+  const [decisionReason, setDecisionReason] = useState('');
   const scroller = useRef<HTMLDivElement | null>(null);
 
   const load = async () => {
@@ -147,16 +149,22 @@ export default function BookingChat({
     onAfterReschedule?.();
   };
 
-  const adminApproveReschedule = async (booking: any) => {
+  const adminDecideReschedule = async (booking: any, approved: boolean) => {
     const target = booking?.requested_new_date;
-    if (!target) { toast.error('No requested date on file'); return; }
-    const { error } = await supabase
-      .from('bookings')
-      .update({ booking_date: target, status: 'confirmed', requested_new_date: null } as any)
-      .eq('id', bookingId);
-    if (error) { toast.error(error.message); return; }
-    await send('system', `Reschedule approved — new date: ${target}.`);
-    toast.success('Reschedule approved');
+    if (!target && approved) { toast.error('No requested date on file'); return; }
+    if (!approved && decisionReason.trim().length < 5) { toast.error('Add a reason for declining the request.'); return; }
+    const { data, error } = await supabase.rpc('admin_approve_booking_reschedule' as any, {
+      p_booking_id: bookingId,
+      p_approved: approved,
+      p_reason: decisionReason.trim() || null,
+    });
+    if (error) { toast.error(error.code === 'PGRST202' ? 'Apply the latest reschedule migration first.' : error.message); return; }
+    const result = data as { hikerUserId?: string; guideUserIds?: string[] } | null;
+    const message = approved ? `Reschedule approved — new date: ${target}.` : `Reschedule declined. Reason: ${decisionReason.trim()}`;
+    if (result?.hikerUserId) await notifyUser(result.hikerUserId, { title: approved ? 'Reschedule approved' : 'Reschedule declined', body: message, category: 'booking' }).catch(() => null);
+    await Promise.all((result?.guideUserIds || []).map((id) => notifyUser(id, { title: 'Booking date updated', body: message, category: 'booking' }).catch(() => null)));
+    toast.success(approved ? 'Reschedule approved' : 'Reschedule declined');
+    setDecisionReason('');
     onAfterReschedule?.();
   };
 
@@ -217,21 +225,21 @@ export default function BookingChat({
         )}
 
         {isAdmin && (
-          <AdminRescheduleControls bookingId={bookingId} onApprove={adminApproveReschedule} />
+          <AdminRescheduleControls bookingId={bookingId} decisionReason={decisionReason} onReasonChange={setDecisionReason} onDecide={adminDecideReschedule} />
         )}
       </DialogContent>
     </Dialog>
   );
 }
 
-function AdminRescheduleControls({ bookingId, onApprove }: { bookingId: string; onApprove: (b: any) => void }) {
+function AdminRescheduleControls({ bookingId, decisionReason, onReasonChange, onDecide }: { bookingId: string; decisionReason: string; onReasonChange: (value: string) => void; onDecide: (booking: any, approved: boolean) => void }) {
   const [b, setB] = useState<any>(null);
-  const [reason, setReason] = useState('');
+  const [hikerReason, setHikerReason] = useState('');
   useEffect(() => {
     supabase.from('bookings').select('id,booking_date,status,requested_new_date,notes').eq('id', bookingId).maybeSingle()
       .then(({ data }) => {
         setB(data);
-        try { setReason(data?.notes ? JSON.parse(data.notes).requestedRescheduleReason || '' : ''); } catch { setReason(''); }
+        try { setHikerReason(data?.notes ? JSON.parse(data.notes).requestedRescheduleReason || '' : ''); } catch { setHikerReason(''); }
       });
   }, [bookingId]);
   if (!b?.requested_new_date || b.status !== 'adjustment_pending') return null;
@@ -239,9 +247,11 @@ function AdminRescheduleControls({ bookingId, onApprove }: { bookingId: string; 
     <div className="border-t pt-3 space-y-2 bg-sky-50 dark:bg-sky-950/30 -mx-6 px-6 py-3">
       <p className="text-sm font-medium">Reschedule request pending</p>
       <p className="text-xs text-muted-foreground">From {b.booking_date} → <strong>{b.requested_new_date}</strong></p>
-      {reason && <p className="rounded-md bg-background/70 p-2 text-sm"><strong>Hiker's reason:</strong> {reason}</p>}
+      {hikerReason && <p className="rounded-md bg-background/70 p-2 text-sm"><strong>Hiker's reason:</strong> {hikerReason}</p>}
+      <Textarea aria-label="Admin reschedule decision reason" value={decisionReason} onChange={(event) => onReasonChange(event.target.value)} rows={2} placeholder="Reason if declining or note for the hiker" />
       <div className="flex gap-2">
-        <Button size="sm" onClick={() => onApprove(b)}>Approve new date</Button>
+        <Button size="sm" onClick={() => onDecide(b, true)}>Approve new date</Button>
+        <Button size="sm" variant="destructive" onClick={() => onDecide(b, false)}>Decline</Button>
       </div>
     </div>
   );

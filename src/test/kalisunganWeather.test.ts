@@ -11,6 +11,7 @@ import {
   ACCUWEATHER_USAGE_KEY,
   ACCUWEATHER_DAILY_CACHE_KEY,
   getLocalTodayDateString,
+  normalizeForecastDays,
 } from '@/lib/kalisunganWeather';
 
 describe('Mt. Kalisungan Weather Service', () => {
@@ -238,5 +239,11 @@ describe('Mt. Kalisungan Weather Service', () => {
     const result = await fetchKalisungan16DayForecast();
     expect(result.days[today]).toBeDefined();
     expect(result.sourceName).toBe('Open-Meteo (Mt. Kalisungan coordinates)');
+  });
+
+  it('filters malformed forecast cache entries instead of crashing booking date lookup', () => {
+    const valid = { date: '2026-10-07', condition: 'Clear' };
+    expect(normalizeForecastDays({ today: valid, broken: null, wrong: 'not a day' })).toEqual({ today: valid });
+    expect(normalizeForecastDays(null)).toEqual({});
   });
 });
