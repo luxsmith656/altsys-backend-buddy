@@ -49,6 +49,8 @@ import { supabase } from '@/integrations/supabase/client';
 import { officialRoutesForLocation } from '@/lib/officialRoutes';
 import { ADMIN_CHECKIN_TOKEN_PREFIX } from '@/lib/tracking/sessionAuthorization';
 import { encodeMeta, parseMeta } from '@/lib/bookingMeta';
+import GuideActiveSupportActions from '@/components/map/GuideActiveSupportActions';
+import SOSPanel from '@/components/core/SOSPanel';
 
 import 'leaflet/dist/leaflet.css';
 
@@ -629,6 +631,7 @@ export default function MapPage() {
       actions={<>
         {activeSelfSession.tracking_phase === 'ascent' && <Button onClick={() => void setOwnGroupPhase('peak')} disabled={phaseSaving}>We are at the peak</Button>}
         {role === 'guide' && activeSelfSession.tracking_phase === 'peak' && <Button onClick={() => void setOwnGroupPhase('descent')} disabled={phaseSaving}>Start group descent</Button>}
+        {role === 'guide' && activeSelfSession.booking_id && <GuideActiveSupportActions bookingId={activeSelfSession.booking_id} />}
       </>} />
   ) : <p className="live-map-empty">Check in at your jump-off to start your hike.</p>;
   const simulationPanel = <>
@@ -662,6 +665,7 @@ export default function MapPage() {
     </Button>
   </div> : null;
   const mapTools = <div className="live-map-menu">
+    {isSelfTrackingRole && activeMapTab === 'tracker' && <SOSPanel compact />}
     {canMonitorAll && activeMapTab === 'tracker' && <Button variant="ghost"
       aria-pressed={simulationMode} aria-label={simulationMode ? 'Disable simulation mode' : 'Enable simulation mode'}
       onClick={() => { setSimulationMode(!simulationMode); setSimulationControlsOpen(false); setWorkspacePanelOpen(!simulationMode); }}>

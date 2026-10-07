@@ -7,6 +7,11 @@ export default function BookingReceipt({ booking, showDetails = true }: { bookin
   const receipt = bookingReceipt(booking);
   const completed = booking.status === 'completed' || Boolean(meta.hikeCompletedAt) || meta.groupPhase === 'completed';
   return <section aria-label="Booking receipt" className="min-w-0 space-y-4 text-sm">
+    {meta.additionalPaymentStatus === 'pending' && Number(meta.additionalPaymentDue) > 0 && (
+      <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-amber-800 dark:text-amber-200" role="status">
+        Additional support requested: {formatPeso(Number(meta.additionalPaymentDue))}. The admin will confirm collection and add it to your final receipt.
+      </div>
+    )}
     {showDetails && <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-2 [&_dd]:break-words">
       <dt>Lead hiker</dt><dd>{meta.fullName || 'Not recorded'}</dd>
       <dt>Date</dt><dd>{meta.adjustedDate || booking.booking_date || 'Not recorded'}</dd>

@@ -50,6 +50,9 @@ export async function installGuideFixture(page: Page, options: { legacyProfileSc
     const request = route.request();
     const url = new URL(request.url());
     if (url.pathname.startsWith('/auth/v1/')) return route.fulfill({ json: user });
+    if (url.pathname === '/rest/v1/rpc/refresh_guide_duty_status') {
+      return route.fulfill({ json: (rows.guides[0] as { status?: string })?.status || 'available' });
+    }
     const table = url.pathname.split('/rest/v1/')[1];
     if (request.method() !== 'GET' || !Object.hasOwn(rows, table)) {
       throw new Error(`Unexpected fixture request: ${request.method()} ${url.pathname}`);

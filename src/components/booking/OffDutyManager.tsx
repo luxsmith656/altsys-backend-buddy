@@ -14,6 +14,8 @@ export function GuideOffDutyForm({ guideId, onChange }: { guideId: string; onCha
   const [start, setStart] = useState('');
   const [end, setEnd] = useState('');
   const [reason, setReason] = useState('');
+  const [returnReason, setReturnReason] = useState('');
+  const [returnBusy, setReturnBusy] = useState(false);
   const [busy, setBusy] = useState(false);
   const [mine, setMine] = useState<any[]>([]);
 
@@ -29,11 +31,29 @@ export function GuideOffDutyForm({ guideId, onChange }: { guideId: string; onCha
     if (end < start) { toast.error('End must be after start'); return; }
     setBusy(true);
     const { error } = await supabase.from('guide_off_duty_requests' as any)
-      .insert({ guide_id: guideId, start_date: start, end_date: end, reason });
+      .insert({ guide_id: guideId, start_date: start, end_date: end, reason, request_type: 'off_duty' });
     setBusy(false);
     if (error) { toast.error(error.message); return; }
     toast.success('Off-duty request submitted');
     setStart(''); setEnd(''); setReason(''); void load(); onChange?.();
+  };
+
+  const requestReturnToDuty = async () => {
+    if (!returnReason.trim()) { toast.error('Add a reason for returning early.'); return; }
+    setReturnBusy(true);
+    const { error } = await supabase.from('guide_off_duty_requests' as any).insert({
+      guide_id: guideId,
+      start_date: new Date().toISOString().slice(0, 10),
+      end_date: new Date().toISOString().slice(0, 10),
+      reason: returnReason.trim(),
+      request_type: 'return_to_duty',
+    });
+    setReturnBusy(false);
+    if (error) { toast.error(error.message); return; }
+    toast.success('Return-to-duty request submitted for admin approval.');
+    setReturnReason('');
+    void load();
+    onChange?.();
   };
 
   return (
@@ -54,6 +74,13 @@ export function GuideOffDutyForm({ guideId, onChange }: { guideId: string; onCha
         <Button onClick={submit} disabled={busy} className="w-full">
           {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Submit request'}
         </Button>
+        <div className="rounded-md border border-border/50 p-3 space-y-2">
+          <p className="text-xs font-semibold">Back earlier than planned?</p>
+          <Textarea rows={2} placeholder="Reason for returning to duty early" value={returnReason} onChange={(e) => setReturnReason(e.target.value)} />
+          <Button variant="outline" onClick={() => void requestReturnToDuty()} disabled={returnBusy} className="w-full">
+            {returnBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Request return to duty'}
+          </Button>
+        </div>
 
         {mine.length > 0 && (
           <div className="space-y-2 pt-2">
@@ -62,7 +89,7 @@ export function GuideOffDutyForm({ guideId, onChange }: { guideId: string; onCha
               <div key={r.id} className="border rounded-md p-2 text-sm flex items-center justify-between">
                 <div>
                   <p>{format(new Date(r.start_date), 'MMM d')} – {format(new Date(r.end_date), 'MMM d, yyyy')}</p>
-                  <p className="text-xs text-muted-foreground">{r.reason || 'No reason given'}</p>
+                  <p className="text-xs text-muted-foreground">{r.request_type === 'return_to_duty' ? 'Return to duty: ' : ''}{r.reason || 'No reason given'}</p>
                 </div>
                 <Badge variant={r.status === 'approved' ? 'default' : r.status === 'rejected' ? 'destructive' : 'secondary'}>
                   {r.status}
@@ -76,7 +103,7 @@ export function GuideOffDutyForm({ guideId, onChange }: { guideId: string; onCha
   );
 }
 
-export function AdminOffDutyApprovals() {
+export function AdminOffDutyApprovals({ locationId }: { locationId?: string | null } = {}) {
   const { user } = useAuth();
   const [rows, setRows] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -85,18 +112,22 @@ export function AdminOffDutyApprovals() {
     setLoading(true);
     const { data } = await supabase.from('guide_off_duty_requests' as any)
       .select('*').order('created_at', { ascending: false }).limit(100);
-    const list = (data as any[]) ?? [];
+    let list = (data as any[]) ?? [];
     // hydrate guide names
     const gids = Array.from(new Set(list.map((r) => r.guide_id)));
     let nameMap: Record<string, string> = {};
     if (gids.length) {
-      const { data: gs } = await supabase.from('guides').select('id, full_name').in('id', gids);
+      let guideQuery = supabase.from('guides').select('id, full_name, location_id').in('id', gids);
+      if (locationId) guideQuery = guideQuery.eq('location_id', locationId);
+      const { data: gs } = await guideQuery;
+      const allowed = new Set(((gs as any[]) ?? []).map((g) => g.id));
+      list = list.filter((row) => allowed.has(row.guide_id));
       nameMap = Object.fromEntries(((gs as any[]) ?? []).map((g) => [g.id, g.full_name]));
     }
     setRows(list.map((r) => ({ ...r, guide_name: nameMap[r.guide_id] || r.guide_id })));
     setLoading(false);
   };
-  useEffect(() => { void load(); }, []);
+  useEffect(() => { void load(); }, [locationId]);
 
   const decide = async (id: string, status: 'approved' | 'rejected') => {
     const { error } = await supabase.from('guide_off_duty_requests' as any)

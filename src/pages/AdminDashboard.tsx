@@ -131,6 +131,7 @@ import QRCameraScanner from '@/components/admin/QRCameraScanner';
 import DemographicsTab from '@/components/admin/DemographicsTab';
 import OverviewDashboard from '@/components/admin/OverviewDashboard';
 import HikeAnalytics from '@/components/admin/HikeAnalytics';
+import ActiveSupportAlerts from '@/components/admin/ActiveSupportAlerts';
 const CentralAccountManagement = lazy(() => import('@/components/admin/CentralAccountManagement'));
 const CentralAnalyticsReporting = lazy(() => import('@/components/admin/CentralAnalyticsReporting'));
 const CentralPricingManagement = lazy(() => import('@/components/admin/CentralPricingManagement'));
@@ -1401,6 +1402,10 @@ export default function AdminDashboard() {
     if (activeLocationId) q = q.eq('location_id', activeLocationId);
     const { data } = await q.order('full_name');
     const activeLocName = locations.find((l) => l.id === activeLocationId)?.name || '';
+    const refreshedStatuses = Object.fromEntries(await Promise.all((data ?? []).map(async (guide: any) => {
+      const { data: refreshed } = await supabase.rpc('refresh_guide_duty_status' as any, { p_guide_id: guide.id });
+      return [guide.id, typeof refreshed === 'string' ? refreshed : guide.status];
+    })));
     const mapped: UIGuide[] = (data ?? [])
       .filter((g: any) => Boolean(g.user_id))
       .map((g: any) => ({
@@ -1408,7 +1413,7 @@ export default function AdminDashboard() {
         user_id: g.user_id,
         name: g.full_name,
         phone: g.phone || '—',
-        status: g.status || 'available',
+        status: refreshedStatuses[g.id] || g.status || 'available',
         trail: g.specialty || activeLocName || 'Local trail',
         totalHikes: 0,
         per_trip_fee: Number(g.per_trip_fee || 0),
@@ -1857,6 +1862,7 @@ export default function AdminDashboard() {
           {/* ─────────────────────────────── BOOKINGS TAB ── */}
           
           <TabsContent value="overview" className="space-y-6 mt-0">
+            <ActiveSupportAlerts locationId={isSuperAdmin ? null : activeLocationId} />
             <OverviewDashboard locationId={activeLocationId} locationIds={analyticsLocationIds} />
             <HikeAnalytics locationIds={analyticsLocationIds} />
             <MDRRMOAccessAudit locationId={activeLocationId} />
@@ -2835,6 +2841,7 @@ export default function AdminDashboard() {
           </TabsContent>
               <TabsContent value="live-map" className="relative mt-0 h-[calc(100dvh-9rem)] min-h-[28rem] overflow-hidden rounded-lg border border-border/30 sm:min-h-[600px]">
             <RealtimeMonitorMap locationId={isSuperAdmin ? null : activeLocationId} canAddCheckpoints={false} />
+            <div className="absolute left-3 right-3 top-3 z-20 max-w-2xl"><ActiveSupportAlerts locationId={isSuperAdmin ? null : activeLocationId} /></div>
           </TabsContent>
 
               <TabsContent value="sessions" className="space-y-4 mt-0">
@@ -3269,7 +3276,7 @@ export default function AdminDashboard() {
               </CardContent>
             </Card>
 
-            <AdminOffDutyApprovals />
+            <AdminOffDutyApprovals locationId={activeLocationId} />
           </TabsContent>
               <TabsContent value="announcements" className="space-y-6 mt-0">
             <div className="grid lg:grid-cols-2 gap-6">

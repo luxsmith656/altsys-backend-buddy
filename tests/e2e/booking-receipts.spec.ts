@@ -20,6 +20,7 @@ for (const role of ['hiker', 'guide'] as const) {
     await page.route(`${origin}/**`, async route => {
       const request = route.request(); const url = new URL(request.url());
       if (url.pathname.startsWith('/auth/v1/')) return route.fulfill({ json: user });
+      if (url.pathname === '/rest/v1/rpc/refresh_guide_duty_status') return route.fulfill({ json: 'available' });
       const table = url.pathname.split('/rest/v1/')[1];
       if (request.method() !== 'GET' || !(table in rows)) throw new Error(`Unexpected receipt fixture request: ${request.method()} ${url.pathname}`);
       return route.fulfill({ json: request.headers().accept?.includes('object+json') ? rows[table][0] ?? null : rows[table] });
