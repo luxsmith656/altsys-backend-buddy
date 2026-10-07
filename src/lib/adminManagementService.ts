@@ -12,6 +12,7 @@ export interface AdminAccount {
   createdAt: string;
   lastSignIn?: string | null;
   status?: 'active' | 'deactivated';
+  photoUrl?: string | null;
 }
 
 export interface UserAccount {

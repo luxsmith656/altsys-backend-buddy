@@ -53,6 +53,26 @@ Deno.serve(async (req) => {
       return json({ error: 'Forbidden: Admin access required' }, 403);
     }
 
+    const callerLocationRows = isSuperAdmin
+      ? []
+      : (await admin.from('user_locations').select('location_id').eq('user_id', callerId)).data ?? [];
+    const callerLocationIds = new Set((callerLocationRows as any[]).map((row) => row.location_id).filter(Boolean));
+
+    // Local administrators may manage guides only inside their own trailhead.
+    // Central administrators remain cross-trailhead by design.
+    async function getScopedGuide(targetUserId: string) {
+      const { data: guide, error } = await admin
+        .from('guides')
+        .select('id, location_id')
+        .eq('user_id', targetUserId)
+        .maybeSingle();
+      if (error) throw new Error(error.message);
+      if (guide && !isSuperAdmin && !callerLocationIds.has(guide.location_id)) {
+        throw new Error('This guide belongs to another trailhead and is outside your management scope.');
+      }
+      return guide;
+    }
+
     const body = await req.json().catch(() => ({}));
     const { action } = body;
 
@@ -84,6 +104,7 @@ Deno.serve(async (req) => {
           email: authUser?.email ?? 'Unknown',
           fullName: prof?.full_name ?? authUser?.user_metadata?.full_name ?? 'Trailhead Admin',
           phone: prof?.phone ?? '',
+          photoUrl: prof?.avatar_url ?? null,
           role: 'admin',
           locationId: ul?.location_id ?? null,
           locationName: loc?.name ?? 'Unassigned',
@@ -166,6 +187,8 @@ Deno.serve(async (req) => {
         return json({ error: 'Target user ID and valid new password (min 6 chars) are required' }, 400);
       }
 
+      await getScopedGuide(targetUserId);
+
       const { error: updErr } = await admin.auth.admin.updateUserById(targetUserId, {
         password: newPassword,
       });
@@ -182,6 +205,11 @@ Deno.serve(async (req) => {
       if (!targetUserId) return json({ error: 'Target user ID required' }, 400);
 
       const isDeactivated = status === 'deactivated';
+
+      const guide = await getScopedGuide(targetUserId);
+      if (guide && !isSuperAdmin && locationId !== undefined && locationId !== guide.location_id) {
+        return json({ error: 'A local administrator cannot move a guide to another trailhead.' }, 403);
+      }
 
       await admin.from('profiles').upsert(
         {
@@ -212,8 +240,7 @@ Deno.serve(async (req) => {
       }
 
       // If user is a guide, update guides table
-      const { data: g } = await admin.from('guides').select('id').eq('user_id', targetUserId).maybeSingle();
-      if (g) {
+      if (guide) {
         await admin.from('guides').update({
           full_name: fullName,
           phone: phone ?? '',
@@ -221,7 +248,7 @@ Deno.serve(async (req) => {
           status: isDeactivated ? 'off-duty' : (status ?? 'available'),
           is_active: !isDeactivated,
           ...(locationId !== undefined ? { location_id: locationId } : {}),
-        }).eq('id', g.id);
+        }).eq('id', guide.id);
       }
 
       return json({ success: true, message: 'User info updated' });
@@ -233,6 +260,8 @@ Deno.serve(async (req) => {
     if (action === 'delete_user_account' || action === 'delete_user') {
       const { targetUserId } = body;
       if (!targetUserId) return json({ error: 'Target user ID required' }, 400);
+
+      await getScopedGuide(targetUserId);
 
       // Clean up relations
       await admin.from('guides').delete().eq('user_id', targetUserId);

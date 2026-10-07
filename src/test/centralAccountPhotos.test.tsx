@@ -17,7 +17,11 @@ vi.mock('@/lib/adminManagementService', () => ({
 vi.mock('@/integrations/supabase/client', () => ({ supabase: { from: vi.fn() } }));
 
 beforeEach(() => {
-  accounts.admins.mockResolvedValue([]);
+  accounts.admins.mockResolvedValue([{
+    id: 'admin-row-1', userId: 'admin-user-1', email: 'lamot1@example.test', fullName: 'Lamot 1 Admin',
+    phone: '09170000001', role: 'admin', locationId: 'lamot1', locationName: 'Lamot 1',
+    photoUrl: 'https://images.example.test/admin.webp', createdAt: '2026-01-01T00:00:00Z',
+  }]);
   accounts.users.mockResolvedValue([{
     id: 'guide-row-1', userId: 'guide-user-1', email: 'guide@example.test', fullName: 'Maya Guide',
     phone: '09170000000', role: 'guide', locationId: null, locationName: 'Lamot 2',
@@ -33,5 +37,11 @@ describe('central account profile photos', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /View Details/i }));
     expect(await screen.findByRole('img', { name: 'Maya Guide profile' })).toHaveAttribute('src', 'https://images.example.test/maya.webp');
+  });
+
+  it('shows a local admin photo returned from the profile record', async () => {
+    render(<CentralAccountManagement />);
+    await waitFor(() => expect(screen.getByText('Lamot 1 Admin')).toBeInTheDocument());
+    expect(screen.getByRole('img', { name: 'Lamot 1 Admin profile' })).toHaveAttribute('src', 'https://images.example.test/admin.webp');
   });
 });
