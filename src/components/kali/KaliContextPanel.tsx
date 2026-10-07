@@ -175,12 +175,12 @@ export default function KaliContextPanel({ role, insights }: KaliContextPanelPro
                       <div className="flex items-center gap-1 text-[10px] text-muted-foreground">
                         <span>Forecast Source:</span>
                         <a
-                          href={String(item.meta?.sourceUrl || 'https://www.accuweather.com/en/ph/calauan/263792/weather-forecast/263792')}
+                          href={String(item.meta?.sourceUrl || 'https://open-meteo.com/')}
                           target="_blank"
                           rel="noopener noreferrer"
                           className="font-medium text-primary hover:underline inline-flex items-center gap-0.5"
                         >
-                          <span className="truncate max-w-[130px]">{String(item.meta?.sourceName || 'AccuWeather (Calauan, Laguna)')}</span>
+                          <span className="truncate max-w-[130px]">{String(item.meta?.sourceName || 'Open-Meteo (Mt. Kalisungan coordinates)')}</span>
                           <ExternalLink className="h-2 w-2" />
                         </a>
                       </div>

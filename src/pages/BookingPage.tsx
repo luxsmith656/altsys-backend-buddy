@@ -711,18 +711,23 @@ export default function BookingPage() {
 
   useEffect(() => {
     if (!user) return;
-    setFullName((prev) => prev || user.user_metadata?.full_name || '');
-    setEmailAddress((prev) => prev || user.email || '');
+    const metadata = user.user_metadata || {};
+    if (metadata.full_name) setFullName(String(metadata.full_name));
+    if (user.email) setEmailAddress(user.email);
+    if (metadata.phone || metadata.phone_number) setPhoneNumber(String(metadata.phone || metadata.phone_number));
+    if (metadata.age !== undefined && metadata.age !== null) setAge(String(metadata.age));
+    if (metadata.sex === 'male' || metadata.sex === 'female' || metadata.sex === 'prefer_not_to_say') setSex(metadata.sex);
 
     const fetchProfile = async () => {
       const { data } = await supabase
         .from('profiles')
-        .select('full_name, phone')
+        .select('full_name, phone, age')
         .eq('user_id', user.id)
         .single();
 
-      if (data?.full_name) setFullName((prev) => prev || data.full_name);
-      if (data?.phone) setPhoneNumber((prev) => prev || data.phone);
+      if (data?.full_name) setFullName(data.full_name);
+      if (data?.phone) setPhoneNumber(data.phone);
+      if (data?.age !== null && data?.age !== undefined) setAge(String(data.age));
     };
 
     void fetchProfile();
@@ -946,8 +951,8 @@ export default function BookingPage() {
             safetyAdvice: d.advisory?.safetyAdvice,
           })),
           fetchedAt: (weatherInsight || selectedKalisunganWeather)!.fetchedAt ?? Date.now(),
-          sourceName: 'AccuWeather (Calauan, Laguna)',
-          sourceUrl: 'https://www.accuweather.com/en/ph/calauan/263792/weather-forecast/263792',
+          sourceName: 'Open-Meteo (Mt. Kalisungan coordinates)',
+          sourceUrl: 'https://open-meteo.com/',
           locationCitation: 'Mt. Kalisungan, Laguna (14.1475Â°N, 121.3454Â°E Â· 760m)',
         }
       : null,

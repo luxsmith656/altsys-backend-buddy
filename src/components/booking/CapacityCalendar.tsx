@@ -247,13 +247,13 @@ export function CapacityCalendar({
         </div>
         <div className="flex items-center gap-2 shrink-0">
           <a
-            href="https://www.accuweather.com/en/ph/calauan/263792/weather-forecast/263792"
+            href="https://open-meteo.com/"
             target="_blank"
             rel="noopener noreferrer"
             className="inline-flex items-center gap-1 hover:underline text-primary font-medium"
-            title="AccuWeather local mountain forecast for Calauan & Mt. Kalisungan"
+            title="Open-Meteo forecast for Mt. Kalisungan coordinates"
           >
-            <span>Forecast: AccuWeather (Calauan, Laguna)</span>
+            <span>Forecast: Open-Meteo (Mt. Kalisungan coordinates)</span>
             <ExternalLink className="h-2.5 w-2.5" />
           </a>
           <span className="text-muted-foreground/60">•</span>

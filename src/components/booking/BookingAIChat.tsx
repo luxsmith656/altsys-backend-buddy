@@ -125,10 +125,10 @@ function getWeatherHikeAdvice(
   const hotDay = weather.maxTempC >= 32;
   const comfortable = weather.maxTempC < 30 && weather.rainProbability < 30;
 
-  const realWebsiteLink = weather.sourceUrl || 'https://www.accuweather.com/en/ph/calauan/263792/weather-forecast/263792';
+  const realWebsiteLink = weather.sourceUrl || 'https://open-meteo.com/';
   const citationBlock =
     `\n\n🌐 **Official Local Weather Forecast Website:**\n` +
-    `• [AccuWeather (Calauan, Laguna)](${realWebsiteLink})\n` +
+    `• [Open-Meteo (Mt. Kalisungan coordinates)](${realWebsiteLink})\n` +
     `• [Zoom Earth Live Satellite Radar](https://zoom.earth/#view=14.1475,121.3454,12z)`;
 
   if (comfortable) {
@@ -384,7 +384,7 @@ function generateResponse(
         `1. **Select a date** on the booking calendar above\n` +
         `2. I'll automatically analyze the live Mt. Kalisungan weather for that day! 🌤️\n\n` +
         `You can also view the live forecast right now on the official local weather website:\n` +
-        `• [AccuWeather (Calauan, Laguna)](https://www.accuweather.com/en/ph/calauan/263792/weather-forecast/263792)\n` +
+        `• [Open-Meteo (Mt. Kalisungan coordinates)](https://open-meteo.com/)\n` +
         `• [Zoom Earth Live Satellite Radar](https://zoom.earth/#view=14.1475,121.3454,12z)`,
       quickReplies: ['Help me pick a date', 'Are there river crossings?', 'What should I bring?'],
     };

@@ -2,9 +2,9 @@
  * Dedicated weather service for Mount Kalisungan (Calauan & Nagcarlan, Laguna, Philippines).
  *
  * Coordinates: 14.1475° N, 121.3454° E (Mt. Kalisungan Center & Summit Ridge, ~760m / 629m peak).
- * Primary Provider: AccuWeather (Calauan, Laguna - Station Key: 263792).
- * Fallback Provider: Open-Meteo High-Resolution Tropical Weather API.
- * Rate Limiting: Strictly throttled to max 10 AccuWeather calls/day with persistent daily caching.
+ * Provider: Open-Meteo High-Resolution Tropical Weather API.
+ * The browser uses this public provider directly so a failed optional API key
+ * can never create a console error or make the booking flow appear broken.
  */
 
 export const MT_KALISUNGAN_COORDS = {
@@ -24,8 +24,11 @@ export const ACCUWEATHER_USAGE_KEY = 'accuweather_daily_usage_v1';
 export const ACCUWEATHER_DAILY_CACHE_KEY = 'accuweather_daily_forecast_cache_v1';
 const LEGACY_CACHE_KEY = 'mt_kalisungan_16d_weather_v2';
 
-export const ACCUWEATHER_SOURCE_NAME = 'AccuWeather (Calauan, Laguna)';
-export const ACCUWEATHER_SOURCE_URL = 'https://www.accuweather.com/en/ph/calauan/263792/weather-forecast/263792';
+export const OPEN_METEO_SOURCE_NAME = 'Open-Meteo (Mt. Kalisungan coordinates)';
+export const OPEN_METEO_SOURCE_URL = 'https://open-meteo.com/';
+// Kept as aliases for older callers and cached data migrations.
+export const ACCUWEATHER_SOURCE_NAME = OPEN_METEO_SOURCE_NAME;
+export const ACCUWEATHER_SOURCE_URL = OPEN_METEO_SOURCE_URL;
 
 export type WeatherCategory = 'thunderstorm' | 'rain' | 'fog' | 'cloudy' | 'clear';
 
@@ -332,8 +335,8 @@ export async function fetchAccuWeather5DayForecast(apiKey: string): Promise<Reco
   }
 
   const days: Record<string, KalisunganDayWeather> = {};
-  const sourceName = ACCUWEATHER_SOURCE_NAME;
-  const sourceUrl = ACCUWEATHER_SOURCE_URL;
+  const sourceName = OPEN_METEO_SOURCE_NAME;
+  const sourceUrl = OPEN_METEO_SOURCE_URL;
   const locationCitation = 'Mt. Kalisungan, Calauan & Nagcarlan, Laguna, Philippines (AccuWeather Station 263792 · 629m Peak)';
   const now = Date.now();
 
@@ -410,10 +413,10 @@ export async function fetchOpenMeteoForecast(): Promise<KalisunganForecastResult
   }
 
   const days: Record<string, KalisunganDayWeather> = {};
-  const sourceName = ACCUWEATHER_SOURCE_NAME;
-  const sourceUrl = ACCUWEATHER_SOURCE_URL;
+  const sourceName = OPEN_METEO_SOURCE_NAME;
+  const sourceUrl = OPEN_METEO_SOURCE_URL;
   const locationCitation =
-    'Mt. Kalisungan, Calauan & Nagcarlan, Laguna, Philippines (AccuWeather Calauan & Open-Meteo · 629m Peak)';
+    'Mt. Kalisungan, Calauan & Nagcarlan, Laguna, Philippines (Open-Meteo · 629m Peak)';
   const now = Date.now();
 
   for (let i = 0; i < daily.time.length; i++) {
@@ -458,11 +461,8 @@ export async function fetchOpenMeteoForecast(): Promise<KalisunganForecastResult
  * Rules:
  * 1. Checks persistent daily cache first. If a forecast saved today exists and is fresh (< 6h),
  *    returns it immediately (0 API calls).
- * 2. Checks AccuWeather API key and daily call counter (< 10 calls today).
- * 3. If within budget (< 10 calls), queries AccuWeather 5-day daily forecast and increments usage count.
- * 4. Merges AccuWeather results with Open-Meteo for extended days (6–16) or falls back completely to
- *    Open-Meteo if budget reached (>= 10 calls), API key missing, or AccuWeather encounters an error.
- * 5. Saves result to persistent daily cache for subsequent instant loads.
+ * 2. Queries Open-Meteo for the mountain coordinates and a 16-day forecast.
+ * 3. Saves the result to persistent daily cache for subsequent instant loads.
  */
 export async function fetchKalisungan16DayForecast(): Promise<KalisunganForecastResult> {
   const today = getLocalTodayDateString();
@@ -497,23 +497,8 @@ export async function fetchKalisungan16DayForecast(): Promise<KalisunganForecast
     }
   }
 
-  // 2. Check AccuWeather key and daily call budget (< 10 calls today)
-  const apiKey = getAccuWeatherApiKey();
-  const usage = getAccuWeatherDailyUsage(today);
-  const canCallAccuWeather = Boolean(apiKey) && usage.count < MAX_ACCUWEATHER_CALLS_PER_DAY;
-
-  let accuWeatherDays: Record<string, KalisunganDayWeather> | null = null;
-
-  if (canCallAccuWeather && apiKey) {
-    try {
-      recordAccuWeatherCall(today);
-      accuWeatherDays = await fetchAccuWeather5DayForecast(apiKey);
-    } catch (err) {
-      console.warn('AccuWeather API call failed; falling back seamlessly to Open-Meteo:', err);
-    }
-  }
-
-  // 3. Fetch Open-Meteo for extended days or fallback
+  // Use one authoritative live source. This avoids forbidden optional-key
+  // requests creating browser console errors before the fallback can run.
   let fallbackResult: KalisunganForecastResult;
   try {
     fallbackResult = await fetchOpenMeteoForecast();
@@ -535,18 +520,12 @@ export async function fetchKalisungan16DayForecast(): Promise<KalisunganForecast
     throw err;
   }
 
-  // 4. Merge AccuWeather precision days over Open-Meteo
-  const finalDays: Record<string, KalisunganDayWeather> = { ...fallbackResult.days };
-  if (accuWeatherDays && Object.keys(accuWeatherDays).length > 0) {
-    Object.assign(finalDays, accuWeatherDays);
-  }
-
   const finalResult: KalisunganForecastResult = {
-    days: finalDays,
-    sourceName: ACCUWEATHER_SOURCE_NAME,
-    sourceUrl: ACCUWEATHER_SOURCE_URL,
+    days: fallbackResult.days,
+    sourceName: OPEN_METEO_SOURCE_NAME,
+    sourceUrl: OPEN_METEO_SOURCE_URL,
     locationCitation:
-      'Mt. Kalisungan, Calauan & Nagcarlan, Laguna, Philippines (AccuWeather Calauan & Open-Meteo · 629m Peak)',
+      'Mt. Kalisungan, Calauan & Nagcarlan, Laguna, Philippines (Open-Meteo · 629m Peak)',
     fetchedAt: Date.now(),
   };
 

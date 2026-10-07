@@ -200,7 +200,7 @@ describe('Mt. Kalisungan Weather Service', () => {
     // Daily count remains 10 and was not incremented
     expect(getAccuWeatherDailyUsage(today).count).toBe(10);
     expect(result.days[today]).toBeDefined();
-    expect(result.sourceName).toBe('AccuWeather (Calauan, Laguna)');
+    expect(result.sourceName).toBe('Open-Meteo (Mt. Kalisungan coordinates)');
   });
 
   it('seamlessly falls back to Open-Meteo when AccuWeather returns an API error', async () => {
@@ -237,6 +237,6 @@ describe('Mt. Kalisungan Weather Service', () => {
 
     const result = await fetchKalisungan16DayForecast();
     expect(result.days[today]).toBeDefined();
-    expect(result.sourceName).toBe('AccuWeather (Calauan, Laguna)');
+    expect(result.sourceName).toBe('Open-Meteo (Mt. Kalisungan coordinates)');
   });
 });

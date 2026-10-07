@@ -165,15 +165,6 @@ const GUIDE_STATUS_STYLES: Record<string, string> = {
   'off-duty': 'bg-muted text-muted-foreground',
 };
 
-interface HikingExperienceReview {
-  id: string;
-  reviewer_name: string;
-  rating: number;
-  trail_name: string;
-  review_text: string;
-  created_at: string;
-}
-
 const ANNOUNCEMENT_TYPE_STYLES: Record<string, string> = {
   info: 'bg-primary/10 text-primary border-primary/30',
   warning: 'bg-warning/10 text-yellow-700 dark:text-yellow-400 border-warning/30',
@@ -428,7 +419,6 @@ export default function AdminDashboard() {
 
   /* ── Reviews panel (shown after scan) ── */
   const [guideRatingForScan, setGuideRatingForScan] = useState<GuideRating | null>(null);
-  const [hikingExperienceReviewsForScan, setHikingExperienceReviewsForScan] = useState<HikingExperienceReview[]>([]);
   const [reviewsLoadingForScan, setReviewsLoadingForScan] = useState(false);
 
   /* ── QR Scan: Payment recording ── */
@@ -624,7 +614,6 @@ export default function AdminDashboard() {
   useEffect(() => {
     if (!scannedBooking) {
       setGuideRatingForScan(null);
-      setHikingExperienceReviewsForScan([]);
       setReviewsLoadingForScan(false);
       return;
     }
@@ -641,26 +630,7 @@ export default function AdminDashboard() {
       setGuideRatingForScan(null);
     }
 
-    // Hiking experience reviews are stored in Supabase (reviews table)
-    let active = true;
-    setReviewsLoadingForScan(true);
-    void (async () => {
-      const { data, error } = await supabase
-        .from('reviews')
-        .select('id, reviewer_name, rating, trail_name, review_text, created_at')
-        .eq('is_approved', true)
-        .order('created_at', { ascending: false })
-        .limit(4);
-
-      if (!active) return;
-      if (!error && data) setHikingExperienceReviewsForScan(data as HikingExperienceReview[]);
-      else setHikingExperienceReviewsForScan([]);
-      setReviewsLoadingForScan(false);
-    })();
-
-    return () => {
-      active = false;
-    };
+    setReviewsLoadingForScan(false);
   }, [scannedBooking?.id]);
 
   /* ── Load all bookings (for Bookings tab + Payments tab) ── */
@@ -2487,12 +2457,12 @@ export default function AdminDashboard() {
                         </div>
                       )}
 
-                      {/* ── Reviews (guide + hiking experience) ── */}
+                      {/* ── Guide reviews ── */}
                       <div className="rounded-xl border border-border/30 bg-secondary/10 p-4 space-y-3">
                         <div className="flex items-start justify-between gap-3">
                           <div>
-                            <p className="text-sm font-semibold">Guide & Hiking Reviews</p>
-                            <p className="text-xs text-muted-foreground">Recent ratings for this booking.</p>
+                            <p className="text-sm font-semibold">Guide Reviews</p>
+                            <p className="text-xs text-muted-foreground">Recent ratings for the assigned mountain guide.</p>
                           </div>
                           {reviewsLoadingForScan ? (
                             <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
@@ -2528,31 +2498,6 @@ export default function AdminDashboard() {
                           )}
                         </div>
 
-                        <div className="space-y-1.5">
-                          <p className="text-xs font-bold uppercase tracking-wide text-muted-foreground">Hiking Experience</p>
-                          {reviewsLoadingForScan ? (
-                            <p className="text-xs text-muted-foreground">Loading reviews...</p>
-                          ) : hikingExperienceReviewsForScan.length > 0 ? (
-                            <div className="space-y-2">
-                              {hikingExperienceReviewsForScan.slice(0, 3).map((r) => (
-                                <div key={r.id} className="rounded-lg border border-border/10 bg-secondary/30 p-3 space-y-1.5">
-                                  <div className="flex items-center justify-between gap-3">
-                                    <p className="text-xs font-semibold">{r.reviewer_name}</p>
-                                    <div className="flex items-center gap-2">
-                                      <span className="text-amber-500 text-xs" aria-hidden="true">
-                                        {'★'.repeat(Math.round(r.rating))}{'☆'.repeat(5 - Math.round(r.rating))}
-                                      </span>
-                                      <span className="text-[11px] text-muted-foreground">{Math.round(r.rating)}/5</span>
-                                    </div>
-                                  </div>
-                                  <p className="text-xs text-muted-foreground leading-relaxed">"{r.review_text}"</p>
-                                </div>
-                              ))}
-                            </div>
-                          ) : (
-                            <p className="text-xs text-muted-foreground">No approved hiking reviews yet.</p>
-                          )}
-                        </div>
                       </div>
 
                       {/* ── Payment Recording (only here) ── */}
