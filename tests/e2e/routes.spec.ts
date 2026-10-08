@@ -19,8 +19,8 @@ const PUBLIC_EXPECTATIONS: Record<string, string | RegExp> = {
 test('document uses the Mt. Kalisungan logo for the browser tab icon', async ({ page, request }) => {
   await page.goto('/', { waitUntil: 'domcontentloaded' });
   const icon = page.locator('link[rel="icon"]');
-  await expect(icon).toHaveAttribute('href', '/mt-kalisungan-logo.png');
-  const response = await request.get('/mt-kalisungan-logo.png');
+  await expect(icon).toHaveAttribute('href', '/mt-kalisungan-favicon.png');
+  const response = await request.get('/mt-kalisungan-favicon.png');
   expect(response.ok()).toBe(true);
   expect(response.headers()['content-type']).toContain('image/png');
 });
