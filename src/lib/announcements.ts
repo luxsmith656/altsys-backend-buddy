@@ -14,6 +14,7 @@ export interface AdminAnnouncement {
   isImportant: boolean;
   starts_at?: string;
   expires_at?: string;
+  location_id?: string | null;
 }
 
 const KEY = 'mtk_admin_announcements_v1';
@@ -73,6 +74,16 @@ export function visibleAnnouncements(items: AdminAnnouncement[], role?: string |
   }).sort((a, b) => +new Date(b.created_at) - +new Date(a.created_at));
 }
 
+/** Central announcements have no location; local announcements are scoped to active bookings. */
+export function scopeAnnouncementsByBookingLocations(
+  items: AdminAnnouncement[],
+  activeBookingLocationIds: string[] = [],
+): AdminAnnouncement[] {
+  const locations = new Set(activeBookingLocationIds.filter(Boolean));
+  if (!locations.size) return items;
+  return items.filter((item) => !item.location_id || locations.has(item.location_id));
+}
+
 export function saveAnnouncements(items: AdminAnnouncement[]): void {
   if (typeof window === 'undefined') return;
   localStorage.setItem(KEY, JSON.stringify(items));
@@ -97,6 +108,7 @@ export async function fetchAnnouncementsFromDb(): Promise<AdminAnnouncement[]> {
         created_at: d.created_at || new Date().toISOString(),
         starts_at: d.starts_at || undefined,
         expires_at: d.expires_at || undefined,
+        location_id: d.location_id ? String(d.location_id) : null,
       }));
       saveAnnouncements(mapped);
       return mapped;
@@ -130,6 +142,7 @@ export async function addAnnouncement(item: AdminAnnouncement): Promise<AdminAnn
         created_at: item.created_at,
         starts_at: item.starts_at || null,
         expires_at: item.expires_at || null,
+        location_id: item.location_id || null,
       }) as any);
   if (error) {
     saveAnnouncements(all);

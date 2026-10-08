@@ -130,7 +130,6 @@ import TrailRecorder from '@/components/map/TrailRecorder';
 import QRCameraScanner from '@/components/admin/QRCameraScanner';
 import DemographicsTab from '@/components/admin/DemographicsTab';
 import OverviewDashboard from '@/components/admin/OverviewDashboard';
-import HikeAnalytics from '@/components/admin/HikeAnalytics';
 import ActiveSupportAlerts from '@/components/admin/ActiveSupportAlerts';
 const CentralAccountManagement = lazy(() => import('@/components/admin/CentralAccountManagement'));
 const CentralAnalyticsReporting = lazy(() => import('@/components/admin/CentralAnalyticsReporting'));
@@ -1486,6 +1485,7 @@ export default function AdminDashboard() {
       isImportant: annImportant || annType === 'warning' || annType === 'closure',
       starts_at: startsAt,
       expires_at: expiresAt,
+      location_id: isSuperAdmin ? null : activeLocationId,
     };
     try {
       const saved = await addAnnouncement(newAnn);
@@ -1864,7 +1864,9 @@ export default function AdminDashboard() {
           <TabsContent value="overview" className="space-y-6 mt-0">
             <ActiveSupportAlerts locationId={isSuperAdmin ? null : activeLocationId} />
             <OverviewDashboard locationId={activeLocationId} locationIds={analyticsLocationIds} />
-            <HikeAnalytics locationIds={analyticsLocationIds} />
+            <Suspense fallback={<p role="status">Loading analytics...</p>}>
+              <CentralAnalyticsReporting locationIds={analyticsLocationIds} />
+            </Suspense>
             <MDRRMOAccessAudit locationId={activeLocationId} />
           </TabsContent>
 

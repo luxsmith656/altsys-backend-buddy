@@ -140,6 +140,7 @@ export type Database = {
           target: string
           title: string
           type: string
+            location_id: string | null
         }
         Insert: {
           body: string
@@ -153,6 +154,7 @@ export type Database = {
           target?: string
           title: string
           type?: string
+            location_id?: string | null
         }
         Update: {
           body?: string
@@ -166,6 +168,7 @@ export type Database = {
           target?: string
           title?: string
           type?: string
+            location_id?: string | null
         }
         Relationships: []
       }
