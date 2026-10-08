@@ -51,8 +51,10 @@ export default function ActiveSupportAlerts({ locationId }: Props) {
     const channel = supabase.channel(`admin-support-alerts-${locationId || 'all'}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'emergency_alerts' }, () => void load())
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'bookings' }, () => void load())
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'booking_messages' }, () => void load())
       .subscribe();
-    return () => { void supabase.removeChannel(channel); };
+    const timer = window.setInterval(() => void load(), 30_000);
+    return () => { window.clearInterval(timer); void supabase.removeChannel(channel); };
   }, [load, locationId]);
 
   const updateAlert = async (id: string, status: 'acknowledged' | 'resolved') => {

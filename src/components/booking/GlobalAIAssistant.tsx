@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import BookingAIChat, { type BookingSuggestion } from '@/components/booking/BookingAIChat';
-import { CalendarCheck, QrCode, X } from 'lucide-react';
+import { CalendarCheck, QrCode, X, WifiOff } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import KaliAvatar from '@/components/kali/KaliAvatar';
 import DraggableKaliDock from '@/components/kali/DraggableKaliDock';
@@ -120,6 +120,23 @@ export default function GlobalAIAssistant() {
                 <KaliAvatar expression="listening" size="sm" className="h-8 w-8 rounded-full" />
               </div>
               <span className="whitespace-nowrap">Ask Kali AI</span>
+            </button>
+
+            {/* Deterministic fallback preview for low-signal/offline operations. */}
+            <button
+              type="button"
+              onClick={() => {
+                setActionsOpen(false);
+                window.dispatchEvent(new CustomEvent('open-global-ai-assistant', {
+                  detail: { prompt: 'Show me the offline help for my role.', offline: true },
+                }));
+              }}
+              className="flex items-center gap-2.5 rounded-2xl border border-border/40 bg-card/95 px-3.5 py-2 text-xs font-semibold text-foreground shadow-2xl backdrop-blur-md transition-all hover:bg-secondary/60"
+            >
+              <div className="grid h-8 w-8 shrink-0 place-items-center rounded-xl bg-sky-500/15 text-sky-700 dark:text-sky-300">
+                <WifiOff className="h-4 w-4" />
+              </div>
+              <span className="whitespace-nowrap">Simulate offline help</span>
             </button>
           </div>
         )}

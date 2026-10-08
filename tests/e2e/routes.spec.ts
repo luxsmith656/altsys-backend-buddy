@@ -16,6 +16,15 @@ const PUBLIC_EXPECTATIONS: Record<string, string | RegExp> = {
   '/guide/:guideId': 'This guide profile is unavailable',
 };
 
+test('document uses the Mt. Kalisungan logo for the browser tab icon', async ({ page, request }) => {
+  await page.goto('/', { waitUntil: 'domcontentloaded' });
+  const icon = page.locator('link[rel="icon"]');
+  await expect(icon).toHaveAttribute('href', '/mt-kalisungan-logo.png');
+  const response = await request.get('/mt-kalisungan-logo.png');
+  expect(response.ok()).toBe(true);
+  expect(response.headers()['content-type']).toContain('image/png');
+});
+
 for (const route of APP_ROUTES) {
   test(`registered route ${route.path} renders the intended page`, async ({ page }) => {
     const monitor = attachRuntimeMonitor(page);

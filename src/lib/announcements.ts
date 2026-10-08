@@ -2,6 +2,7 @@ import { supabase } from '@/integrations/supabase/client';
 
 export type AnnouncementType = 'info' | 'warning' | 'closure';
 export type AnnouncementTarget = 'all' | 'admins' | 'hikers' | 'guides';
+export type AnnouncementApprovalStatus = 'pending' | 'approved' | 'rejected';
 
 export interface AdminAnnouncement {
   id: string;
@@ -15,6 +16,10 @@ export interface AdminAnnouncement {
   starts_at?: string;
   expires_at?: string;
   location_id?: string | null;
+  approval_status?: AnnouncementApprovalStatus;
+  approved_by?: string | null;
+  approved_at?: string | null;
+  rejection_reason?: string | null;
 }
 
 const KEY = 'mtk_admin_announcements_v1';
@@ -61,6 +66,7 @@ export function visibleAnnouncements(items: AdminAnnouncement[], role?: string |
   const normalizedRole = role === 'super_admin' ? 'admin' : role;
   const now = Date.now();
   return items.filter((item) => {
+    if ((item.approval_status || 'approved') !== 'approved') return false;
     const startsAt = item.starts_at ? new Date(item.starts_at).getTime() : null;
     const expiresAt = item.expires_at ? new Date(item.expires_at).getTime() : null;
     if (startsAt !== null && now < startsAt) return false;
@@ -109,6 +115,10 @@ export async function fetchAnnouncementsFromDb(): Promise<AdminAnnouncement[]> {
         starts_at: d.starts_at || undefined,
         expires_at: d.expires_at || undefined,
         location_id: d.location_id ? String(d.location_id) : null,
+        approval_status: (d.approval_status as AnnouncementApprovalStatus) || 'approved',
+        approved_by: d.approved_by ? String(d.approved_by) : null,
+        approved_at: d.approved_at || null,
+        rejection_reason: d.rejection_reason ? String(d.rejection_reason) : null,
       }));
       saveAnnouncements(mapped);
       return mapped;
@@ -143,6 +153,10 @@ export async function addAnnouncement(item: AdminAnnouncement): Promise<AdminAnn
         starts_at: item.starts_at || null,
         expires_at: item.expires_at || null,
         location_id: item.location_id || null,
+        approval_status: item.approval_status || 'approved',
+        approved_by: item.approved_by || null,
+        approved_at: item.approved_at || null,
+        rejection_reason: item.rejection_reason || null,
       }) as any);
   if (error) {
     saveAnnouncements(all);
@@ -150,6 +164,20 @@ export async function addAnnouncement(item: AdminAnnouncement): Promise<AdminAnn
   }
 
   return next;
+}
+
+export async function setAnnouncementApproval(
+  id: string,
+  status: Extract<AnnouncementApprovalStatus, 'approved' | 'rejected'>,
+  options: { approvedBy?: string | null; rejectionReason?: string | null } = {},
+): Promise<void> {
+  const { error } = await (supabase.from('announcements' as any).update({
+    approval_status: status,
+    approved_by: options.approvedBy || null,
+    approved_at: status === 'approved' ? new Date().toISOString() : null,
+    rejection_reason: status === 'rejected' ? (options.rejectionReason || 'Not approved by Central Admin') : null,
+  }).eq('id', id) as any);
+  if (error) throw error;
 }
 
 export async function removeAnnouncement(id: string): Promise<AdminAnnouncement[]> {

@@ -13,6 +13,7 @@ import { getKaliRoleLabel } from '@/lib/kaliContext';
 import { useAuth } from '@/hooks/useAuth';
 import ReactMarkdown from 'react-markdown';
 import { getPricingConfig, getDynamicFeePolicyText } from '@/lib/pricingService';
+import { getOfflineRoleHelp } from '@/lib/offline-role-help';
 
 
 interface WeatherSnapshot {
@@ -596,6 +597,7 @@ export default function BookingAIChat({
   const touchStartX = useRef<number | null>(null);
   const previousDateKey = useRef<string | null>(null);
   const inFlight = useRef(false);
+  const offlineModeRef = useRef(false);
   const contextGuidance = useRef<Array<{ title: string; message: string }>>([]);
   const [basicGuidance, setBasicGuidance] = useState(false);
   const latestReply = [...messages].reverse().find((message) => message.role === 'assistant');
@@ -651,7 +653,7 @@ export default function BookingAIChat({
 
 
   const getOnlineAnswer = useCallback(async (text: string): Promise<string | null> => {
-    if (!navigator.onLine) return null;
+    if (!navigator.onLine || offlineModeRef.current) return null;
     try {
       const { data: { session } } = await supabase.auth.getSession();
       const thread = [
@@ -742,9 +744,10 @@ export default function BookingAIChat({
   }, [messages, date, hikeTime, groupSize, hikeType, groupComposition, publishedRoute, weatherInsight, pageContext, role, user]);
 
   const sendMessage = useCallback(
-    async (text: string) => {
+    async (text: string, forceOffline = false) => {
       if (!text.trim() || inFlight.current) return;
       inFlight.current = true;
+      offlineModeRef.current = forceOffline;
       setIsTyping(true);
       const userMsg: ChatMsg = { id: generateId(), role: 'user', content: text };
       setMessages((prev) => [...prev, userMsg]);
@@ -770,9 +773,12 @@ export default function BookingAIChat({
           { date, groupSize, hikeType, weatherInsight, groupComposition, publishedRoute },
           (comp) => onGroupCompositionSet?.(comp),
         );
-        addAIMessage(response.content, response.quickReplies);
+        const roleHelp = getOfflineRoleHelp(role);
+        const directory = `\n\n---\n\n### ${roleHelp.title}\n${roleHelp.body}\n\n${roleHelp.links.map((link) => `- [${link.label}](${link.href})`).join('\n')}`;
+        addAIMessage(`${response.content}${directory}`, response.quickReplies);
         setTimeout(() => inputRef.current?.focus(), 100);
       } finally {
+        offlineModeRef.current = false;
         inFlight.current = false;
         setIsTyping(false);
       }
@@ -783,11 +789,11 @@ export default function BookingAIChat({
   useEffect(() => {
     const openAssistant = (e?: Event) => {
       setIsOpen(true);
-      const customEvent = e as CustomEvent<{ prompt?: string; guidance?: Array<{ title: string; message: string }> }>;
+      const customEvent = e as CustomEvent<{ prompt?: string; offline?: boolean; guidance?: Array<{ title: string; message: string }> }>;
       if (customEvent?.detail?.guidance) contextGuidance.current = customEvent.detail.guidance;
       if (customEvent?.detail?.prompt) {
         setTimeout(() => {
-          void sendMessage(customEvent.detail.prompt!);
+          void sendMessage(customEvent.detail.prompt!, Boolean(customEvent.detail.offline));
         }, 300);
       }
     };

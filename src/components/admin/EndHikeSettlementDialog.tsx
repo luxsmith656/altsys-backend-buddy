@@ -123,6 +123,12 @@ export default function EndHikeSettlementDialog({
         changeReturned: !isFullySettled ? Math.max(0, changeDue) : meta.changeReturned ?? 0,
         paymentSettledAt: now,
         paymentSettledBy: adminUser?.id || 'admin',
+        additionalPaymentStatus: 'paid',
+        additionalPaymentDue: 0,
+        additionalPaymentSettledAt: now,
+        horseHelpRequests: (meta.horseHelpRequests ?? []).map((request) =>
+          request.status === 'requested' ? { ...request, status: 'paid', paidAt: now } : request,
+        ),
       });
 
       // 1. Update Hiker Sessions to completed

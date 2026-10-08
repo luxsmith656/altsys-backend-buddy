@@ -20,14 +20,17 @@ import {
   addAnnouncement,
   fetchAnnouncementsFromDb,
   removeAnnouncement,
+  setAnnouncementApproval,
   type AdminAnnouncement,
   type AnnouncementTarget,
   type AnnouncementType,
 } from '@/lib/announcements';
+import { useAuth } from '@/hooks/useAuth';
 import { usePricing } from '@/hooks/usePricing';
 import { formatPeso } from '@/lib/payments';
 
 export default function CentralAnnouncements() {
+  const { user } = useAuth();
   const { pricing } = usePricing();
   const [announcements, setAnnouncements] = useState<AdminAnnouncement[]>([]);
   const [filterTarget, setFilterTarget] = useState<string>('all_filter');
@@ -103,6 +106,16 @@ export default function CentralAnnouncements() {
       await refreshAnnouncements();
     } catch (err: any) {
       toast.error(`Could not remove announcement: ${err.message}`);
+    }
+  };
+
+  const handleApproval = async (announcement: AdminAnnouncement, status: 'approved' | 'rejected') => {
+    try {
+      await setAnnouncementApproval(announcement.id, status, { approvedBy: user?.id });
+      toast.success(status === 'approved' ? 'Announcement approved and published.' : 'Announcement rejected.');
+      await refreshAnnouncements();
+    } catch (err: any) {
+      toast.error(`Could not update approval: ${err.message}`);
     }
   };
 
@@ -255,7 +268,7 @@ export default function CentralAnnouncements() {
                     <Megaphone className="h-4 w-4 text-primary" /> Active Broadcast Log
                   </CardTitle>
                   <CardDescription className="text-xs">
-                    Showing {filteredAnnouncements.length} published municipal announcements.
+                    Showing {filteredAnnouncements.length} municipal announcements, including pending local notices.
                   </CardDescription>
                 </div>
 
@@ -339,6 +352,16 @@ export default function CentralAnnouncements() {
                           </Badge>
                         )}
 
+                        {ann.approval_status === 'pending' && (
+                          <Badge variant="outline" className="text-[10px] border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-300">
+                            Pending Central Review
+                          </Badge>
+                        )}
+                        {ann.approval_status === 'rejected' && (
+                          <Badge variant="outline" className="text-[10px] border-destructive/40 bg-destructive/10 text-destructive">
+                            Rejected
+                          </Badge>
+                        )}
                         {ann.isImportant && (
                           <Badge className="text-[10px] bg-primary text-primary-foreground">
                             Pinned
@@ -362,14 +385,23 @@ export default function CentralAnnouncements() {
                       </div>
                     </div>
 
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => handleDelete(ann.id)}
-                      className="h-8 w-8 p-0 text-destructive hover:bg-destructive/10 shrink-0"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
+                    <div className="flex shrink-0 items-center gap-1">
+                      {ann.approval_status === 'pending' && (
+                        <>
+                          <Button variant="outline" size="sm" onClick={() => void handleApproval(ann, 'approved')} className="h-8 text-[11px] text-emerald-700">Approve</Button>
+                          <Button variant="outline" size="sm" onClick={() => void handleApproval(ann, 'rejected')} className="h-8 text-[11px] text-destructive">Reject</Button>
+                        </>
+                      )}
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleDelete(ann.id)}
+                        className="h-8 w-8 p-0 text-destructive hover:bg-destructive/10"
+                        aria-label={`Delete announcement ${ann.title}`}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
                   </div>
                 </div>
               ))}

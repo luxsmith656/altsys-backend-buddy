@@ -6,6 +6,7 @@ import { motion } from 'framer-motion';
 import ReactMarkdown from 'react-markdown';
 import type { ChatMessage } from '@/types';
 import { getOfflineAnswer, learnFromResponse, getCacheSize } from '@/lib/trail-offline-kb';
+import { getOfflineRoleHelp } from '@/lib/offline-role-help';
 import { getProphetAIForecastContext } from '@/lib/ml/prophetDataService';
 import KaliAvatar from '@/components/kali/KaliAvatar';
 import { getKaliExpression, getKaliQuickReplies } from '@/lib/kaliPersonality';
@@ -53,7 +54,8 @@ export default function ChatPage() {
 
     // Offline fallback
     if (!navigator.onLine) {
-      const answer = getOfflineAnswer(text.trim());
+      const roleHelp = getOfflineRoleHelp(role);
+      const answer = `${getOfflineAnswer(text.trim())}\n\n---\n\n### ${roleHelp.title}\n${roleHelp.body}\n\n${roleHelp.links.map((link) => `- [${link.label}](${link.href})`).join('\n')}`;
       setMessages((prev) => [...prev, { role: 'assistant', content: answer }]);
       setLoading(false);
       return;
@@ -146,7 +148,8 @@ export default function ChatPage() {
     } catch (e: any) {
       // If network failed mid-request, try offline fallback
       if (!navigator.onLine) {
-        const answer = getOfflineAnswer(text.trim());
+        const roleHelp = getOfflineRoleHelp(role);
+        const answer = `${getOfflineAnswer(text.trim())}\n\n---\n\n### ${roleHelp.title}\n${roleHelp.body}\n\n${roleHelp.links.map((link) => `- [${link.label}](${link.href})`).join('\n')}`;
         setMessages((prev) => {
           const last = prev[prev.length - 1];
           if (last?.role === 'assistant') {
