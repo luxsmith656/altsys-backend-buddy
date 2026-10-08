@@ -12,7 +12,7 @@ import logo from '@/assets/logo.png';
 import { signInWithFirebaseGoogle } from '@/lib/firebase-auth';
 import { isFirebaseConfigured } from '@/lib/firebase';
 import { resolvePostLoginPath } from '@/lib/post-login';
-import { emailPasswordReset } from '@/lib/accountSecurity';
+import { ResetPasswordDialog } from '@/components/auth/ResetPasswordDialog';
 
 export default function Login() {
   const [email, setEmail] = useState('');
@@ -23,28 +23,6 @@ export default function Login() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const [resetOpen, setResetOpen] = useState(false);
-  const [resetEmail, setResetEmail] = useState('');
-  const [resetLoading, setResetLoading] = useState(false);
-
-  const handleResetPassword = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const targetEmail = resetEmail.trim().toLowerCase();
-    if (!targetEmail) {
-      toast.error('Please enter your email address');
-      return;
-    }
-    setResetLoading(true);
-    try {
-      await emailPasswordReset(targetEmail, window.location.origin);
-      toast.success('Password reset link sent! Check your inbox or spam folder.');
-      setResetOpen(false);
-    } catch (err: any) {
-      toast.error(err?.message || 'Could not send reset password email');
-    } finally {
-      setResetLoading(false);
-    }
-  };
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
@@ -166,40 +144,7 @@ export default function Login() {
         </div>
       </div>
 
-      {/* Reset Password Dialog */}
-      <Dialog open={resetOpen} onOpenChange={setResetOpen}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>Reset Password</DialogTitle>
-            <DialogDescription>
-              Enter your registered account email and we'll send you a secure link to reset your password.
-            </DialogDescription>
-          </DialogHeader>
-          <form onSubmit={handleResetPassword} className="space-y-4 pt-2">
-            <div className="space-y-2">
-              <Label htmlFor="reset-email">Email address</Label>
-              <Input
-                id="reset-email"
-                type="email"
-                placeholder="you@example.com"
-                value={resetEmail}
-                onChange={(e) => setResetEmail(e.target.value)}
-                required
-                autoFocus
-              />
-            </div>
-            <DialogFooter className="gap-2 sm:gap-0 pt-2">
-              <Button type="button" variant="ghost" onClick={() => setResetOpen(false)} disabled={resetLoading}>
-                Cancel
-              </Button>
-              <Button type="submit" disabled={resetLoading}>
-                {resetLoading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
-                Send Reset Link
-              </Button>
-            </DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
+      <ResetPasswordDialog open={resetOpen} onOpenChange={setResetOpen} defaultEmail={email} />
     </div>
   );
 }
