@@ -1,5 +1,6 @@
 ﻿import { parseMeta } from '@/lib/bookingMeta';
 import { calculateFees, calculateGuidesNeeded } from '@/lib/payments';
+import { bookingPaymentMethod } from '@/lib/bookingReceipt';
 import { isSameMonth, isSameWeek } from 'date-fns';
 
 export interface GuideHikeRecord {
@@ -114,7 +115,7 @@ export function calculateGuideEarnings(
       hikerPhone: meta.phoneNumber || booking.emergency_contact_phone || '—',
       groupSize,
       guideFee: fee,
-      paymentMethod: meta.paymentMethod || booking.payment_method || 'Onsite Cash / GCash',
+      paymentMethod: bookingPaymentMethod(booking),
       paymentStatus,
       assignmentStatus: isCompleted ? 'completed' : assignmentStatus,
       bookingStatus: booking.status || 'confirmed',

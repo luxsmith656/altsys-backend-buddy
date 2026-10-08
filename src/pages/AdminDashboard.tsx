@@ -414,8 +414,6 @@ export default function AdminDashboard() {
   const [checkInVerified, setCheckInVerified] = useState(false);
   const [checkInHeadcount, setCheckInHeadcount] = useState('');
   const [lifecycleSaving, setLifecycleSaving] = useState(false);
-  const [checkOutVerified, setCheckOutVerified] = useState(false);
-  const [checkOutHeadcount, setCheckOutHeadcount] = useState('');
 
   /* ── Reviews panel (shown after scan) ── */
   const [guideRatingForScan, setGuideRatingForScan] = useState<GuideRating | null>(null);
@@ -451,7 +449,7 @@ export default function AdminDashboard() {
   const [calendarFloatingOpen, setCalendarFloatingOpen] = useState(false);
   const [newGuideName, setNewGuideName] = useState('');
   const [newGuidePhone, setNewGuidePhone] = useState('');
-  
+
   const [newGuideEmail, setNewGuideEmail] = useState('');
   const [newGuidePassword, setNewGuidePassword] = useState('');
   const [newGuideFee, setNewGuideFee] = useState('500');
@@ -693,8 +691,6 @@ export default function AdminDashboard() {
       setScannedBooking(exactData);
       setCheckInHeadcount(String(exactData.group_size));
       setCheckInVerified(false);
-      setCheckOutHeadcount(String(exactData.group_size));
-      setCheckOutVerified(false);
       setScanLoading(false);
       return;
     }
@@ -713,8 +709,6 @@ export default function AdminDashboard() {
       setScannedBooking(nameData);
       setCheckInHeadcount(String(nameData.group_size));
       setCheckInVerified(false);
-      setCheckOutHeadcount(String(nameData.group_size));
-      setCheckOutVerified(false);
       toast.info('Found booking record.');
     } else {
       toast.error('No booking found. Try the QR code, booking ID, or hiker name/phone.');
@@ -988,42 +982,6 @@ export default function AdminDashboard() {
     else {
       setScannedBooking({ ...scannedBooking, notes: encodeMeta(nextMeta) });
       toast.success(`Peak stay extended by one hour. ${formatPeso(calculatePeakExtensionFee(hours))} total extension fee.`);
-    }
-    setLifecycleSaving(false);
-  };
-
-  const completeGroupHike = async () => {
-    if (!scannedBooking) return;
-    if (!checkOutVerified || Number(checkOutHeadcount) !== Number(scannedBooking.group_size)) {
-      toast.error('Verify the returning group headcount before ending this hike.');
-      return;
-    }
-    setLifecycleSaving(true);
-    const now = new Date().toISOString();
-    const meta = parseMeta(scannedBooking.notes);
-    const nextMeta = {
-      ...meta,
-      groupPhase: 'completed' as const,
-      hikeCompletedAt: now,
-      hikeCompletedBy: adminUser?.id ?? 'admin',
-      guideReviewRequestedAt: now,
-    };
-    const { error: sessionError } = await supabase
-      .from('hiker_sessions')
-      .update({ status: 'completed', tracking_phase: 'completed', end_time: now } as any)
-      .eq('booking_id', scannedBooking.id)
-      .eq('status', 'active');
-    const { error: bookingError } = await supabase
-      .from('bookings')
-      .update({ notes: encodeMeta(nextMeta) })
-      .eq('id', scannedBooking.id);
-    if (sessionError || bookingError) {
-      toast.error(`Could not close the hike: ${(sessionError || bookingError)?.message}`);
-    } else {
-      setScannedBooking({ ...scannedBooking, notes: encodeMeta(nextMeta) });
-      setHikeStarted(false);
-      toast.success('Hike closed. The booking owner can now submit the guide review.');
-      void loadAllTabBookings();
     }
     setLifecycleSaving(false);
   };
@@ -1817,7 +1775,7 @@ export default function AdminDashboard() {
               </Select>
             </div>
           </div>
-          
+
         </motion.div>
 
         <ImportantAnnouncements />
@@ -1862,7 +1820,7 @@ export default function AdminDashboard() {
 
           <div className="flex-1 min-w-0">
           {/* ─────────────────────────────── BOOKINGS TAB ── */}
-          
+
           <TabsContent value="overview" className="space-y-6 mt-0">
             <ActiveSupportAlerts locationId={isSuperAdmin ? null : activeLocationId} />
             <OverviewDashboard locationId={activeLocationId} locationIds={analyticsLocationIds} />
@@ -2587,10 +2545,10 @@ export default function AdminDashboard() {
                                 {formatPeso(meta.amountPaid ?? totalFee)}
                               </span>
                             </div>
-                            {meta.paymentMethod && (
+                            {bookingReceipt(scannedBooking).paymentMethod !== 'Not recorded' && (
                               <div className="flex justify-between items-center text-xs">
                                 <span className="text-muted-foreground">Payment Method:</span>
-                                <span className="font-medium uppercase">{meta.paymentMethod}</span>
+                                <span className="font-medium">{bookingReceipt(scannedBooking).paymentMethod}</span>
                               </div>
                             )}
                             {meta.assignedGuide && (
@@ -3070,7 +3028,7 @@ export default function AdminDashboard() {
                   {isSuperAdmin && <TabsTrigger value="accounts">Accounts</TabsTrigger>}
                   {isSuperAdmin && <TabsTrigger value="pricing">Pricing & Capacity</TabsTrigger>}
                   {isSuperAdmin && <TabsTrigger value="reports">Central Reports</TabsTrigger>}
-                  
+
                 </TabsList>
               </div>
               {isSuperAdmin && <TabsContent value="accounts"><Suspense fallback={<p role="status">Loading accounts...</p>}><CentralAccountManagement /></Suspense></TabsContent>}
@@ -3381,9 +3339,9 @@ export default function AdminDashboard() {
           </TabsContent>
 
           <TabsContent value="finance" className="mt-0">
-            
+
             <PaymentSummaryTab />
-          
+
           </TabsContent>
 
           </div>
@@ -3513,7 +3471,6 @@ export default function AdminDashboard() {
           setScannedBooking(null);
           setHikeStarted(false);
           setCheckInVerified(false);
-          setCheckOutVerified(false);
         }}
         adminUser={adminUser}
       />

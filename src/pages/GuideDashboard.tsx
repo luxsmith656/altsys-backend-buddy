@@ -42,7 +42,7 @@ import {
 } from 'lucide-react';
 import { motion } from 'framer-motion';
 import './guide-dashboard.css';
-import { parseMeta } from '@/lib/bookingMeta';
+import { encodeMeta, parseMeta } from '@/lib/bookingMeta';
 import { format } from 'date-fns';
 import { toast } from 'sonner';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
@@ -63,6 +63,7 @@ import { calculateGuideEarnings, GuideEarningsSummary } from '@/lib/guideEarning
 import { formatPeso } from '@/lib/payments';
 import BookingReceipt from '@/components/booking/BookingReceipt';
 import { getHorseHelpOption, requestHorseHelpForBooking, HORSE_HELP_OPTIONS, type HorseHelpStation } from '@/lib/hikeSupport';
+import { completeHike } from '@/lib/hikeCompletion';
 import ImportantAnnouncements from '@/components/common/ImportantAnnouncements';
 
 const QUOTA_PER_GUIDE_PER_DAY = 5;
@@ -387,14 +388,34 @@ export default function GuideDashboard() {
 
   /* ── Mark complete ── */
   const handleMarkComplete = async (a: AssignmentRow) => {
+    if (a.status === 'completed' || a.booking?.status === 'completed') {
+      toast.info('This hike is already completed.');
+      return;
+    }
+    if (!a.booking?.id) {
+      toast.error('The booking details are unavailable. Refresh and try again.');
+      return;
+    }
     try {
-      const { error } = await supabase
-        .from('booking_assignments' as any)
-        .update({ status: 'completed', decided_at: new Date().toISOString() } as any)
-        .eq('id', a.id);
-
-      if (error) throw error;
-      toast.success('Hike marked as completed. Great job!');
+      const now = new Date().toISOString();
+      const meta = parseMeta(a.booking.notes);
+      const nextNotes = encodeMeta({
+        ...meta,
+        groupPhase: 'completed',
+        hikeCompletedAt: meta.hikeCompletedAt || now,
+        hikeCompletedBy: meta.hikeCompletedBy || user?.id || guideRow?.id || 'guide',
+        guideReviewRequestedAt: meta.guideReviewRequestedAt || now,
+        guideStatus: 'completed',
+      });
+      const result = await completeHike({
+        bookingId: a.booking.id,
+        notes: nextNotes,
+        hikerUserId: a.booking.user_id,
+        guideName: guideRow?.full_name,
+        completedBy: user?.id || guideRow?.id || 'guide',
+      });
+      if (!result.success) throw new Error(result.error || 'The hike could not be completed.');
+      toast.success(result.alreadyCompleted ? 'This hike was already completed.' : 'Hike completed. Final payment status is shown in the receipt.');
       void load();
     } catch (err: any) {
       toast.error(err?.message || 'Failed to update assignment');

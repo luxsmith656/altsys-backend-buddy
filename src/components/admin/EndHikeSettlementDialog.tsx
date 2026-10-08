@@ -3,6 +3,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { parseMeta, encodeMeta } from '@/lib/bookingMeta';
 import { calculateFees, calculatePeakExtensionFee, formatPeso } from '@/lib/payments';
 import { bookingReceipt } from '@/lib/bookingReceipt';
+import { completeHike } from '@/lib/hikeCompletion';
 import {
   Dialog,
   DialogContent,
@@ -50,8 +51,6 @@ export default function EndHikeSettlementDialog({
 }: EndHikeSettlementDialogProps) {
   const [loading, setLoading] = useState(false);
   const [cashTendered, setCashTendered] = useState<string>('');
-  const [checkoutHeadcount, setCheckoutHeadcount] = useState<string>('');
-  const [headcountVerified, setHeadcountVerified] = useState<boolean>(false);
 
   const meta = parseMeta(booking?.notes);
   const groupSize = Number(booking?.group_size || meta.actualGroupSize || 1);
@@ -71,11 +70,9 @@ export default function EndHikeSettlementDialog({
   const alreadyPaid = receipt.paid;
   const remainingBalance = Math.max(0, totalAmountDue - alreadyPaid);
 
+  const recordedPaymentMethod = String(meta.paymentMethod || (booking as any)?.payment_method || '').toLowerCase();
   const isOnlinePayment =
-    (meta.paymentMethod === 'gcash' ||
-      meta.paymentMethod === 'bank_transfer' ||
-      (booking as any)?.payment_method === 'online' ||
-      (booking as any)?.payment_method === 'gcash') &&
+    ['gcash', 'bank_transfer', 'online'].includes(recordedPaymentMethod) &&
     (booking?.payment_status === 'paid' || alreadyPaid >= totalAmountDue);
 
   const isFullySettled = remainingBalance === 0;
@@ -83,8 +80,6 @@ export default function EndHikeSettlementDialog({
   // Initialize defaults on open
   useEffect(() => {
     if (open && booking) {
-      setCheckoutHeadcount(String(groupSize));
-      setHeadcountVerified(false);
       setCashTendered(remainingBalance > 0 ? String(remainingBalance) : '0');
     }
   }, [open, booking, groupSize, remainingBalance]);
@@ -96,11 +91,6 @@ export default function EndHikeSettlementDialog({
 
   const handleEndHike = async () => {
     if (!booking || loading) return;
-
-    if (!headcountVerified || Number(checkoutHeadcount) !== groupSize) {
-      toast.error(`Please verify that all ${groupSize} returning hikers are accounted for.`);
-      return;
-    }
 
     if (!isFullySettled && !isOnlinePayment && !isCashSufficient) {
       toast.error(`Cash tendered (₱${parsedCash}) is less than balance due (₱${remainingBalance}).`);
@@ -117,7 +107,7 @@ export default function EndHikeSettlementDialog({
         hikeCompletedBy: adminUser?.id || 'admin',
         guideReviewRequestedAt: now,
         paymentStatus: 'paid',
-        paymentMethod: isOnlinePayment ? meta.paymentMethod || 'online' : 'onsite',
+        paymentMethod: (recordedPaymentMethod || (isOnlinePayment ? 'online' : 'onsite')) as any,
         amountPaid: totalAmountDue,
         cashTendered: !isFullySettled ? parsedCash : meta.cashTendered ?? totalAmountDue,
         changeReturned: !isFullySettled ? Math.max(0, changeDue) : meta.changeReturned ?? 0,
@@ -131,54 +121,16 @@ export default function EndHikeSettlementDialog({
         ),
       });
 
-      // 1. Update Hiker Sessions to completed
-      const { error: sessionError } = await supabase
-          .from('hiker_sessions')
-          .update({
-            status: 'completed',
-            tracking_phase: 'completed',
-            end_time: now,
-          })
-          .eq('booking_id', booking.id)
-          .eq('status', 'active');
-      if (sessionError) throw sessionError;
+      const completion = await completeHike({
+        bookingId: booking.id,
+        notes: updatedNotes,
+        hikerUserId: booking.user_id,
+        guideName: meta.assignedGuide,
+        completedBy: adminUser?.id || 'admin',
+      });
+      if (!completion.success) throw new Error(completion.error || 'The hike could not be closed.');
 
-      // 2. Update Booking Status & Notes (payment_status is embedded in notes metadata)
-      const { error: bookingError } = await supabase
-        .from('bookings')
-        .update({
-          status: 'completed',
-          notes: updatedNotes,
-        } as any)
-        .eq('id', booking.id);
-
-      if (bookingError) throw bookingError;
-
-      // 3. Complete Guide Assignment if one exists
-      const { error: assignmentError } = await supabase
-          .from('booking_assignments')
-          .update({ status: 'completed', decided_at: now })
-          .eq('booking_id', booking.id);
-      // The payment is committed at this point. Never offer another collection
-      // because a subsequent guide update failed; refresh and report partial sync.
       const syncWarnings: string[] = [];
-      if (assignmentError) syncWarnings.push(`Guide assignment: ${assignmentError.message}`);
-
-      // 4. If guide assigned, update guide roster availability
-      try {
-        if (!assignmentError && (meta.assignedGuideId || meta.assignedGuide)) {
-          let guideQuery = supabase.from('guides' as any).update({ status: 'available' });
-          if (meta.assignedGuideId) {
-            guideQuery = guideQuery.eq('id', meta.assignedGuideId);
-          } else if (meta.assignedGuide) {
-            guideQuery = guideQuery.ilike('full_name', meta.assignedGuide);
-          }
-          const { error: rosterError } = await guideQuery;
-          if (rosterError) syncWarnings.push(`Guide availability: ${rosterError.message}`);
-        }
-      } catch (e) {
-        syncWarnings.push(`Guide availability: ${e instanceof Error ? e.message : 'Update failed'}`);
-      }
 
       // 5. Log Audit Activity
       try {
@@ -271,31 +223,6 @@ export default function EndHikeSettlementDialog({
           </div>
 
           {/* Headcount Verification */}
-          <div className="rounded-2xl border border-border/50 bg-card p-3.5 space-y-2">
-            <div className="flex items-center justify-between text-xs">
-              <span className="font-semibold text-foreground">Returned Headcount Verification</span>
-              <span className="text-muted-foreground">Booked: {groupSize} pax</span>
-            </div>
-            <div className="flex items-center gap-3">
-              <Input
-                type="number"
-                min="1"
-                value={checkoutHeadcount}
-                onChange={(e) => setCheckoutHeadcount(e.target.value)}
-                className="w-24 h-9 text-xs font-bold"
-              />
-              <label className="flex items-center gap-2 text-xs text-muted-foreground cursor-pointer select-none">
-                <input
-                  type="checkbox"
-                  checked={headcountVerified}
-                  onChange={(e) => setHeadcountVerified(e.target.checked)}
-                  className="rounded border-border text-primary focus:ring-primary h-4 w-4"
-                />
-                <span>All {groupSize} hikers safely returned</span>
-              </label>
-            </div>
-          </div>
-
           {/* Payment Breakdown Card */}
           <div className="rounded-2xl border border-border/50 bg-secondary/10 p-4 space-y-3">
             <div className="flex items-center justify-between">
@@ -354,7 +281,7 @@ export default function EndHikeSettlementDialog({
 
               {alreadyPaid > 0 && (
                 <div className="flex justify-between text-xs text-muted-foreground">
-                  <span>Already Paid ({meta.paymentMethod || 'Online'})</span>
+                  <span>Already Paid ({receipt.paymentMethod})</span>
                   <span className="text-emerald-600 dark:text-emerald-400 font-semibold">-{formatPeso(alreadyPaid)}</span>
                 </div>
               )}
@@ -367,8 +294,8 @@ export default function EndHikeSettlementDialog({
           </div>
 
           {/* Payment Method Handling */}
-          {isOnlinePayment || isFullySettled ? (
-            /* CASE A: Paid Online / Zero Balance */
+          {isOnlinePayment ? (
+            /* CASE A: Paid Online */
             <div className="rounded-2xl border border-emerald-500/30 bg-emerald-500/10 p-4 space-y-2 animate-in fade-in">
               <div className="flex items-center gap-2 text-emerald-700 dark:text-emerald-300 font-bold text-sm">
                 <CheckCircle2 className="h-5 w-5 shrink-0" />
@@ -377,7 +304,7 @@ export default function EndHikeSettlementDialog({
               <p className="text-xs text-muted-foreground leading-relaxed">
                 The total amount of <strong>{formatPeso(totalAmountDue)}</strong> was confirmed via{' '}
                 <span className="capitalize font-semibold text-foreground">
-                  {meta.paymentMethod || 'Online Transfer'}
+                  {receipt.paymentMethod}
                 </span>
                 . No additional cash collection is needed.
               </p>
@@ -387,8 +314,19 @@ export default function EndHikeSettlementDialog({
                 </p>
               )}
             </div>
+          ) : isFullySettled ? (
+            /* CASE B: Onsite payment already fully settled */
+            <div className="rounded-2xl border border-emerald-500/30 bg-emerald-500/10 p-4 space-y-2 animate-in fade-in">
+              <div className="flex items-center gap-2 text-emerald-700 dark:text-emerald-300 font-bold text-sm">
+                <CheckCircle2 className="h-5 w-5 shrink-0" />
+                <span>Payment Fully Settled</span>
+              </div>
+              <p className="text-xs text-muted-foreground leading-relaxed">
+                Settled via <strong>{receipt.paymentMethod}</strong>. No additional collection is needed.
+              </p>
+            </div>
           ) : (
-            /* CASE B: Onsite / Cash Collection with Change Calculator */
+            /* CASE C: Onsite / Cash Collection with Change Calculator */
             <div className="rounded-2xl border border-amber-500/30 bg-amber-500/5 p-4 space-y-4 animate-in fade-in">
               <div className="flex items-center gap-2 text-amber-700 dark:text-amber-300 font-bold text-sm">
                 <Banknote className="h-5 w-5 shrink-0" />
@@ -481,7 +419,7 @@ export default function EndHikeSettlementDialog({
           <Button
             type="button"
             onClick={handleEndHike}
-            disabled={loading || !isCashSufficient || !headcountVerified || Number(checkoutHeadcount) !== groupSize}
+            disabled={loading || !isCashSufficient}
             className="gap-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-bold rounded-xl shadow-lg"
           >
             {loading ? (
