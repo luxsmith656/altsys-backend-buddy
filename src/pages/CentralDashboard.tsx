@@ -30,7 +30,6 @@ import CentralAccountManagement from '@/components/admin/CentralAccountManagemen
 import CentralPricingManagement from '@/components/admin/CentralPricingManagement';
 import CentralAnnouncements from '@/components/admin/CentralAnnouncements';
 import CentralAnalyticsReporting from '@/components/admin/CentralAnalyticsReporting';
-import ImportantAnnouncements from '@/components/common/ImportantAnnouncements';
 import { format, startOfMonth } from 'date-fns';
 
 interface LocStats {
@@ -224,7 +223,6 @@ export default function CentralDashboard() {
   return (
     <div className="central-dashboard min-h-screen px-4 pb-16 pt-20 lg:px-8 bg-gradient-to-b from-background via-background/95 to-secondary/10">
       <div className="max-w-7xl mx-auto space-y-6">
-        <ImportantAnnouncements />
         {/* Executive Command Header */}
         <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} className="space-y-4">
           <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-4 border-b border-border/30">

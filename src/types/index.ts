@@ -77,6 +77,7 @@ export interface BookingMeta {
   changeReturned?: number;
   paymentSettledAt?: string;
   paymentSettledBy?: string;
+  additionalPaymentSettledAt?: string;
   transactionId?: string;
   entryFee?: number;
   guideFee?: number;

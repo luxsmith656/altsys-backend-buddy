@@ -36,6 +36,17 @@ describe('announcement audience and dismissal rules', () => {
     expect(visibleAnnouncements(items, 'hiker').map((item) => item.id)).toEqual(['new', 'old']);
   });
 
+  it('keeps local notices hidden until Central Admin approves them', () => {
+    const items = [
+      announcement('approved', 'hikers', { approval_status: 'approved' }),
+      announcement('pending', 'hikers', { approval_status: 'pending' }),
+      announcement('rejected', 'hikers', { approval_status: 'rejected' }),
+    ];
+
+    expect(visibleAnnouncements(items, 'hiker').map((item) => item.id)).toEqual(['approved']);
+    expect(visibleAnnouncements(items, 'guide').map((item) => item.id)).toEqual([]);
+  });
+
   it('keeps the local announcement cache aligned with the role-filtered active feed', () => {
     saveAnnouncements([announcement('guide', 'guides'), announcement('all', 'all')]);
     expect(loadAnnouncements('admin').map((item) => item.id)).toEqual(['all']);

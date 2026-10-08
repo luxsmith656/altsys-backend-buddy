@@ -1480,12 +1480,14 @@ export default function AdminDashboard() {
       title: annTitle.trim(),
       body: annBody.trim(),
       type: annType,
-      target: annTarget,
+      // Local notices are delivered only to hikers and guides after Central approval.
+      target: isSuperAdmin ? annTarget : (annTarget === 'guides' ? 'guides' : 'hikers'),
       created_at: new Date().toISOString(),
       isImportant: annImportant || annType === 'warning' || annType === 'closure',
       starts_at: startsAt,
       expires_at: expiresAt,
       location_id: isSuperAdmin ? null : activeLocationId,
+      approval_status: isSuperAdmin ? 'approved' : 'pending',
     };
     try {
       const saved = await addAnnouncement(newAnn);
@@ -1498,12 +1500,12 @@ export default function AdminDashboard() {
     setAnnTitle('');
     setAnnBody('');
     setAnnType('info');
-    setAnnTarget('all');
+    setAnnTarget(isSuperAdmin ? 'all' : 'hikers');
     setAnnImportant(false);
     setAnnStartDate('');
     setAnnEndDate('');
     setAnnSending(false);
-    toast.success('Announcement posted!');
+    toast.success(isSuperAdmin ? 'Announcement published.' : 'Announcement submitted to Central Admin for approval.');
   };
 
   const deleteAnnouncement = async (id: string) => {
@@ -3287,11 +3289,11 @@ export default function AdminDashboard() {
                 <CardContent className="space-y-4">
                                     <div className="space-y-2">
                     <Label>Audience / Target</Label>
-                    <Select value={annTarget} onValueChange={(v) => setAnnTarget(v as AnnouncementTarget)}>
+                    <Select value={isSuperAdmin ? annTarget : (annTarget === 'guides' ? 'guides' : 'hikers')} onValueChange={(v) => setAnnTarget(v as AnnouncementTarget)}>
                       <SelectTrigger><SelectValue /></SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="all">🌐 All (Admins, Hikers & Guides)</SelectItem>
-                        <SelectItem value="admins">🛡️ Trailhead Admins Only</SelectItem>
+                        {isSuperAdmin && <SelectItem value="all">🌐 All Users & Staff</SelectItem>}
+                        {isSuperAdmin && <SelectItem value="admins">🛡️ Trailhead Admins Only</SelectItem>}
                         <SelectItem value="hikers">🥾 Hikers Only</SelectItem>
                         <SelectItem value="guides">🧭 Guides Only</SelectItem>
                       </SelectContent>
