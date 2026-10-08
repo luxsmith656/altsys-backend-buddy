@@ -27,6 +27,7 @@ import { optimizeAvatar } from '@/lib/avatarImage';
 import { Camera } from 'lucide-react';
 import { profileChanged } from '@/components/common/ProfileAvatar';
 import { changeAccountPassword, emailPasswordReset } from '@/lib/accountSecurity';
+import { ResetPasswordDialog } from '@/components/auth/ResetPasswordDialog';
 
 interface Profile {
   full_name: string;
@@ -58,6 +59,7 @@ export default function ProfilePage() {
   const [confirmNewPassword, setConfirmNewPassword] = useState('');
   const [passwordSaving, setPasswordSaving] = useState(false);
   const [resetSending, setResetSending] = useState(false);
+  const [resetOpen, setResetOpen] = useState(false);
 
   /* ── Booking state ── */
 
@@ -391,7 +393,7 @@ export default function ProfilePage() {
                   <h3 className="font-medium">Forgot your password?</h3>
                   <p className="mt-1 text-sm text-muted-foreground">We’ll send a secure reset link to {user.email}.</p>
                 </div>
-                <Button type="button" variant="outline" onClick={() => void handleSendPasswordReset()} disabled={resetSending}>
+                <Button type="button" variant="outline" onClick={() => setResetOpen(true)} disabled={resetSending}>
                   {resetSending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Mail className="mr-2 h-4 w-4" />}
                   Email Reset Link
                 </Button>
@@ -401,6 +403,7 @@ export default function ProfilePage() {
         </motion.div>
 
       </div>
+      <ResetPasswordDialog open={resetOpen} onOpenChange={setResetOpen} defaultEmail={user?.email ?? ''} defaultPhone={profile.phone} onPhoneResetDone={() => void supabase.auth.signOut()} />
     </div>
   );
 }
