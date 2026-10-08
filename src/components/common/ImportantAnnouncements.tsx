@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
-import { fetchAnnouncementsFromDb, visibleAnnouncements, type AdminAnnouncement } from '@/lib/announcements';
+import { fetchAnnouncementsFromDb, scopeAnnouncementsByBookingLocations, visibleAnnouncements, type AdminAnnouncement } from '@/lib/announcements';
 import { loadRemovedNotificationIds, markNotificationRemoved } from '@/lib/notifications';
 
 export default function ImportantAnnouncements() {
@@ -15,9 +15,24 @@ export default function ImportantAnnouncements() {
   const refresh = useCallback(async () => {
     const stored = await fetchAnnouncementsFromDb();
     const removed = new Set(userId ? loadRemovedNotificationIds(userId) : []);
-    setItems(visibleAnnouncements(stored, role).filter((item) =>
-      item.isImportant && !removed.has(`ann:${item.id}`),
-    ));
+    let visible = visibleAnnouncements(stored, role);
+    if (role === 'hiker' && userId) {
+      const { data: bookings, error: bookingError } = await supabase
+        .from('bookings')
+        .select('location_id,status')
+        .eq('user_id', userId)
+        .not('status', 'in', '(cancelled,completed,ended,rejected,declined)');
+      if (bookingError) {
+        // Fail closed for local notices when booking scope cannot be verified.
+        visible = visible.filter((item) => !item.location_id);
+      } else {
+        const activeLocations = (bookings ?? [])
+          .map((booking) => booking.location_id)
+          .filter((locationId): locationId is string => Boolean(locationId));
+        visible = scopeAnnouncementsByBookingLocations(visible, activeLocations);
+      }
+    }
+    setItems(visible.filter((item) => item.isImportant && !removed.has(`ann:${item.id}`)));
   }, [role, userId]);
 
   useEffect(() => {

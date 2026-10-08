@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { loadAnnouncements, saveAnnouncements, visibleAnnouncements, type AdminAnnouncement } from '@/lib/announcements';
+import { loadAnnouncements, saveAnnouncements, scopeAnnouncementsByBookingLocations, visibleAnnouncements, type AdminAnnouncement } from '@/lib/announcements';
 
 const announcement = (id: string, target: AdminAnnouncement['target'], overrides: Partial<AdminAnnouncement> = {}): AdminAnnouncement => ({
   id,
@@ -39,5 +39,17 @@ describe('announcement audience and dismissal rules', () => {
   it('keeps the local announcement cache aligned with the role-filtered active feed', () => {
     saveAnnouncements([announcement('guide', 'guides'), announcement('all', 'all')]);
     expect(loadAnnouncements('admin').map((item) => item.id)).toEqual(['all']);
+  });
+
+  it('keeps central notices visible while scoping a hiker to active booking locations', () => {
+    const items = [
+      announcement('central', 'all'),
+      announcement('lamot-1', 'hikers', { location_id: 'lamot-1' }),
+      announcement('lamot-2', 'hikers', { location_id: 'lamot-2' }),
+    ];
+    expect(scopeAnnouncementsByBookingLocations(items, ['lamot-2']).map((item) => item.id))
+      .toEqual(['central', 'lamot-2']);
+    expect(scopeAnnouncementsByBookingLocations(items, []).map((item) => item.id))
+      .toEqual(['central', 'lamot-1', 'lamot-2']);
   });
 });

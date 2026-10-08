@@ -53,6 +53,7 @@ export function CapacityCalendar({
   onMonthChange,
   weatherMap,
 }: CapacityCalendarProps) {
+  const capacityMap = monthCapacity ?? {};
   const [currentMonth, setCurrentMonth] = React.useState(() => {
     const now = new Date();
     return new Date(now.getFullYear(), now.getMonth(), 1);
@@ -77,7 +78,7 @@ export function CapacityCalendar({
 
   const getSlotInfo = (date: Date) => {
     const dateStr = format(date, 'yyyy-MM-dd');
-    const cap = monthCapacity[dateStr];
+    const cap = capacityMap[dateStr];
     const totalMax = cap?.max_capacity ?? defaultMaxCapacity;
 
     let max: number;
@@ -153,7 +154,9 @@ export function CapacityCalendar({
             ratio <= 0.3 ? 'low' : 'good';
 
           const dateStr = format(day, 'yyyy-MM-dd');
-          const dayWeather = weatherMap ? weatherMap[dateStr] : undefined;
+          // Weather is an enhancement only. A failed/empty forecast must never
+          // disable or crash date selection and capacity checking.
+          const dayWeather = weatherMap && typeof weatherMap === 'object' ? weatherMap[dateStr] : undefined;
 
           return (
             <button

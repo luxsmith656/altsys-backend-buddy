@@ -387,7 +387,7 @@ export default function AdminUserManagement({
 
       {/* ── Change Password Modal ── */}
       <Dialog open={!!passwordTarget} onOpenChange={(open) => !open && setPasswordTarget(null)}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className="w-[calc(100%-1rem)] max-w-[calc(100%-1rem)] max-h-[calc(100dvh-1rem)] overflow-y-auto sm:max-w-md">
           <form onSubmit={handleSavePassword}>
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2 text-base">
@@ -445,7 +445,7 @@ export default function AdminUserManagement({
 
       {/* ── Edit User Info Modal ── */}
       <Dialog open={!!editTarget} onOpenChange={(open) => !open && setEditTarget(null)}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className="w-[calc(100%-1rem)] max-w-[calc(100%-1rem)] max-h-[calc(100dvh-1rem)] overflow-y-auto sm:max-w-md">
           <form onSubmit={handleSaveEdit}>
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2 text-base">

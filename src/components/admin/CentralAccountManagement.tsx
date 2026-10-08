@@ -649,7 +649,7 @@ export default function CentralAccountManagement() {
 
       {/* ──────────────── MODAL 1: ADD LOCAL ADMIN ACCOUNT ──────────────── */}
       <Dialog open={addOpen} onOpenChange={setAddOpen}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className="w-[calc(100%-1rem)] max-w-[calc(100%-1rem)] max-h-[calc(100dvh-1rem)] overflow-y-auto sm:max-w-md">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-base">
               <Plus className="h-4 w-4 text-primary" /> Register Local Administrator
@@ -736,7 +736,7 @@ export default function CentralAccountManagement() {
 
       {/* ──────────────── MODAL 2: EDIT ACCOUNT ──────────────── */}
       <Dialog open={!!editTarget} onOpenChange={(open) => !open && setEditTarget(null)}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className="w-[calc(100%-1rem)] max-w-[calc(100%-1rem)] max-h-[calc(100dvh-1rem)] overflow-y-auto sm:max-w-md">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-base">
               <Edit className="h-4 w-4 text-primary" /> Edit Account Details
@@ -822,7 +822,7 @@ export default function CentralAccountManagement() {
 
       {/* ──────────────── MODAL 3: RESET PASSWORD ──────────────── */}
       <Dialog open={!!passwordTarget} onOpenChange={(open) => !open && setPasswordTarget(null)}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className="w-[calc(100%-1rem)] max-w-[calc(100%-1rem)] max-h-[calc(100dvh-1rem)] overflow-y-auto sm:max-w-md">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-base">
               <KeyRound className="h-4 w-4 text-primary" /> Reset Credentials
@@ -895,7 +895,7 @@ export default function CentralAccountManagement() {
 
       {/* ──────────────── MODAL 5: VIEW DETAILS (READ-ONLY FOR GUIDES & HIKERS) ──────────────── */}
       <Dialog open={!!viewTarget} onOpenChange={(open) => !open && setViewTarget(null)}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className="w-[calc(100%-1rem)] max-w-[calc(100%-1rem)] max-h-[calc(100dvh-1rem)] overflow-y-auto sm:max-w-md">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-base">
               <Eye className="h-4 w-4 text-primary" /> Account Details &amp; Profile

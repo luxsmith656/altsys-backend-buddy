@@ -155,21 +155,24 @@ function normalizeCity(city: string | undefined): string {
   return c.charAt(0).toUpperCase() + c.slice(1);
 }
 
-export default function CentralAnalyticsReporting() {
+export default function CentralAnalyticsReporting({ locationIds }: { locationIds?: string[] } = {}) {
   const { locations, activeLocationId, setActiveLocationId } = useLocations();
   const { pricing } = usePricing();
+  const scopedLocationIds = useMemo(() => new Set((locationIds ?? []).filter(Boolean)), [locationIds]);
+  const isScoped = scopedLocationIds.size > 0;
 
   // Strict jump-off stations (Lamot 2, Lamot 1, Sto. Tomas)
   const jumpOffStations = useMemo(() => {
     return locations
       .filter((loc) => !loc.name.toLowerCase().includes('mount kalisungan') && loc.slug !== 'mt-kalisungan')
+      .filter((loc) => !isScoped || scopedLocationIds.has(loc.id))
       .sort((a, b) => {
         const aText = `${a.slug} ${a.name}`.toLowerCase();
         const bText = `${b.slug} ${b.name}`.toLowerCase();
         const score = (t: string) => (t.includes('lamot') && t.includes('2') ? 1 : t.includes('lamot') && t.includes('1') ? 2 : 3);
         return score(aText) - score(bText);
       });
-  }, [locations]);
+  }, [locations, isScoped, scopedLocationIds]);
 
   const [loading, setLoading] = useState(true);
   const [bookings, setBookings] = useState<BookingData[]>([]);
@@ -189,13 +192,21 @@ export default function CentralAnalyticsReporting() {
     setLoading(true);
     try {
       const [bookingsRes, guidesRes, sessionsRes] = await Promise.all([
-        supabase
-          .from('bookings')
-          .select('id, location_id, booking_date, status, group_size, notes, created_at, emergency_contact_name')
-          .order('booking_date', { ascending: false }),
-        supabase
-          .from('guides' as any)
-          .select('id, full_name, phone, location_id, is_active, specialty, status'),
+        (() => {
+          let query = supabase
+            .from('bookings')
+            .select('id, location_id, booking_date, status, group_size, notes, created_at, emergency_contact_name')
+            .order('booking_date', { ascending: false });
+          if (isScoped) query = query.in('location_id', [...scopedLocationIds]);
+          return query;
+        })(),
+        (() => {
+          let query = supabase
+            .from('guides' as any)
+            .select('id, full_name, phone, location_id, is_active, specialty, status');
+          if (isScoped) query = query.in('location_id', [...scopedLocationIds]);
+          return query;
+        })(),
         supabase
           .from('hiker_sessions')
           .select('id, status')
@@ -212,7 +223,7 @@ export default function CentralAnalyticsReporting() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [isScoped, scopedLocationIds]);
 
   useEffect(() => {
     void fetchData();
@@ -220,15 +231,19 @@ export default function CentralAnalyticsReporting() {
 
   // Synchronize local station selector with Central activeLocationId if set
   useEffect(() => {
-    if (activeLocationId) {
+    if (isScoped) {
+      setSelectedStation('all');
+    } else if (activeLocationId) {
       setSelectedStation(activeLocationId);
     } else {
       setSelectedStation('all');
     }
-  }, [activeLocationId]);
+  }, [activeLocationId, isScoped]);
 
   const handleStationChange = (val: string) => {
+    if (isScoped && val !== 'all' && !scopedLocationIds.has(val)) return;
     setSelectedStation(val);
+    if (isScoped) return;
     if (val === 'all') {
       setActiveLocationId(null);
     } else {

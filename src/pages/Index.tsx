@@ -11,6 +11,7 @@ import HikerReviews from '@/components/landing/HikerReviews';
 import GuideRatings from '@/components/landing/GuideRatings';
 import TrailOverview from '@/components/landing/TrailOverview';
 import ReservingGuide from '@/components/landing/ReservingGuide';
+import FeaturedHiker from '@/components/landing/FeaturedHiker';
 import { useAuth } from '@/hooks/useAuth';
 
 type LiveWeather = {
@@ -364,6 +365,9 @@ export default function Index() {
 
       {/* About / Gallery */}
       <TrailGallery />
+
+      {/* Featured hiker story */}
+      <FeaturedHiker />
 
       {/* Divider: Gallery → Overview */}
       <WaveDivider />
