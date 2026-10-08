@@ -14,12 +14,26 @@ export async function changeAccountPassword(email: string, currentPassword: stri
   if (error) throw error;
 }
 
+const PUBLIC_SITE_URL = 'https://mtkali.vercel.app';
+
+/** Reset links must open the real site, never a preview/editor host. */
+export function resolveResetOrigin(origin: string) {
+  try {
+    const host = new URL(origin).hostname;
+    if (host === 'localhost' || host === '127.0.0.1') return origin;
+    if (/lovable\.(app|dev)$|lovableproject\.com$/.test(host)) return PUBLIC_SITE_URL;
+    return origin;
+  } catch {
+    return PUBLIC_SITE_URL;
+  }
+}
+
 export async function emailPasswordReset(email: string, origin: string) {
   const normalizedEmail = email.trim().toLowerCase();
   if (!normalizedEmail) throw new Error('Enter your account email address.');
 
   const { error } = await supabase.auth.resetPasswordForEmail(normalizedEmail, {
-    redirectTo: `${origin}/reset-password`,
+    redirectTo: `${resolveResetOrigin(origin)}/reset-password`,
   });
   if (error) throw error;
 }
