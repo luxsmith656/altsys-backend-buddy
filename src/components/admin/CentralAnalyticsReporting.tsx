@@ -835,6 +835,7 @@ export default function CentralAnalyticsReporting({ locationIds }: { locationIds
 
   return (
     <div className="space-y-6">
+      <h2 className="sr-only">Visitor &amp; Hike Analytics</h2>
       {/* ──────────────── TOP CONTROL BAR: FILTERS, DATE INTERVAL & ACTIONS ──────────────── */}
       <Card className="glass-card border-border/30 overflow-hidden">
         <CardContent className="p-4 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
