@@ -135,12 +135,12 @@ export type Database = {
           expires_at: string | null
           id: string
           is_important: boolean
+          location_id: string | null
           source: string | null
           starts_at: string | null
           target: string
           title: string
           type: string
-            location_id: string | null
         }
         Insert: {
           body: string
@@ -149,12 +149,12 @@ export type Database = {
           expires_at?: string | null
           id: string
           is_important?: boolean
+          location_id?: string | null
           source?: string | null
           starts_at?: string | null
           target?: string
           title: string
           type?: string
-            location_id?: string | null
         }
         Update: {
           body?: string
@@ -163,14 +163,22 @@ export type Database = {
           expires_at?: string | null
           id?: string
           is_important?: boolean
+          location_id?: string | null
           source?: string | null
           starts_at?: string | null
           target?: string
           title?: string
           type?: string
-            location_id?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "announcements_location_id_fkey"
+            columns: ["location_id"]
+            isOneToOne: false
+            referencedRelation: "locations"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       booking_assignments: {
         Row: {
@@ -542,6 +550,75 @@ export type Database = {
         }
         Relationships: []
       }
+      emergency_alerts: {
+        Row: {
+          acknowledged_at: string | null
+          acknowledged_by: string | null
+          booking_id: string | null
+          created_at: string
+          id: string
+          latitude: number | null
+          location_id: string | null
+          longitude: number | null
+          message: string
+          reporter_role: string
+          resolved_at: string | null
+          resolved_by: string | null
+          session_id: string | null
+          status: string
+          user_id: string
+        }
+        Insert: {
+          acknowledged_at?: string | null
+          acknowledged_by?: string | null
+          booking_id?: string | null
+          created_at?: string
+          id?: string
+          latitude?: number | null
+          location_id?: string | null
+          longitude?: number | null
+          message?: string
+          reporter_role?: string
+          resolved_at?: string | null
+          resolved_by?: string | null
+          session_id?: string | null
+          status?: string
+          user_id: string
+        }
+        Update: {
+          acknowledged_at?: string | null
+          acknowledged_by?: string | null
+          booking_id?: string | null
+          created_at?: string
+          id?: string
+          latitude?: number | null
+          location_id?: string | null
+          longitude?: number | null
+          message?: string
+          reporter_role?: string
+          resolved_at?: string | null
+          resolved_by?: string | null
+          session_id?: string | null
+          status?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "emergency_alerts_booking_id_fkey"
+            columns: ["booking_id"]
+            isOneToOne: false
+            referencedRelation: "bookings"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "emergency_alerts_session_id_fkey"
+            columns: ["session_id"]
+            isOneToOne: false
+            referencedRelation: "hiker_sessions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       guide_off_duty_requests: {
         Row: {
           created_at: string
@@ -549,6 +626,8 @@ export type Database = {
           guide_id: string
           id: string
           reason: string
+          request_type: string
+          review_note: string | null
           reviewed_at: string | null
           reviewed_by: string | null
           start_date: string
@@ -560,6 +639,8 @@ export type Database = {
           guide_id: string
           id?: string
           reason?: string
+          request_type?: string
+          review_note?: string | null
           reviewed_at?: string | null
           reviewed_by?: string | null
           start_date: string
@@ -571,6 +652,8 @@ export type Database = {
           guide_id?: string
           id?: string
           reason?: string
+          request_type?: string
+          review_note?: string | null
           reviewed_at?: string | null
           reviewed_by?: string | null
           start_date?: string
@@ -1109,7 +1192,15 @@ export type Database = {
           trail_name?: string
           user_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "reviews_booking_id_fkey"
+            columns: ["booking_id"]
+            isOneToOne: false
+            referencedRelation: "bookings"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       system_settings: {
         Row: {
@@ -1369,12 +1460,12 @@ export type Database = {
         }
         Returns: undefined
       }
-      admin_assign_hike_guide: {
-        Args: { p_booking_id: string; p_guide_id: string; p_trail_id?: string }
+      admin_approve_booking_reschedule: {
+        Args: { p_approved: boolean; p_booking_id: string; p_reason?: string }
         Returns: Json
       }
-      admin_reassign_hike_guide: {
-        Args: { p_booking_id: string; p_guide_id: string; p_reason: string }
+      admin_assign_hike_guide: {
+        Args: { p_booking_id: string; p_guide_id: string; p_trail_id?: string }
         Returns: Json
       }
       admin_can_access_location: {
@@ -1427,6 +1518,10 @@ export type Database = {
           isSetofReturn: true
         }
       }
+      complete_hike_session: {
+        Args: { p_booking_id: string; p_notes: string }
+        Returns: Json
+      }
       get_booking_slot_capacity: {
         Args: { p_end_date: string; p_start_date: string }
         Returns: {
@@ -1452,10 +1547,6 @@ export type Database = {
       guide_can_read_booking: {
         Args: { _booking_id: string }
         Returns: boolean
-      }
-      guide_reassign_hike_assignment: {
-        Args: { p_assignment_id: string; p_replacement_guide_id: string | null; p_reason: string }
-        Returns: Json
       }
       has_role: {
         Args: {
@@ -1497,6 +1588,10 @@ export type Database = {
       mdrrmo_log_access: {
         Args: { p_booking_ids?: string[]; p_location_id?: string }
         Returns: number
+      }
+      refresh_guide_duty_status: {
+        Args: { p_guide_id: string }
+        Returns: string
       }
       safe_booking_meta: { Args: { _notes: string }; Returns: Json }
       session_location_id: { Args: { _session_id: string }; Returns: string }

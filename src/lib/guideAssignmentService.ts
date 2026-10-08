@@ -149,7 +149,7 @@ export async function declineAndReassignGuide({
 }: DeclineAndReassignParams): Promise<{ success: boolean; error?: string }> {
   try {
     const cleanReason = reason.trim() || 'Not available';
-    const { data, error } = await supabase.rpc('guide_reassign_hike_assignment', {
+    const { data, error } = await (supabase.rpc as any)('guide_reassign_hike_assignment', {
       p_assignment_id: assignmentId,
       p_replacement_guide_id: replacementGuideId || null,
       p_reason: cleanReason,
@@ -213,7 +213,7 @@ export async function reassignGuideByAdmin({
 }: AdminReassignParams): Promise<{ success: boolean; error?: string }> {
   try {
     const cleanReason = reason.trim() || 'Admin reassignment';
-    const { data, error } = await supabase.rpc('admin_reassign_hike_guide', {
+    const { data, error } = await (supabase.rpc as any)('admin_reassign_hike_guide', {
       p_booking_id: bookingId,
       p_guide_id: newGuideId,
       p_reason: cleanReason,
