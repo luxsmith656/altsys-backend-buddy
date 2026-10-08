@@ -85,7 +85,6 @@ export default function Login() {
                 <button
                   type="button"
                   onClick={() => {
-                    setResetEmail(email || '');
                     setResetOpen(true);
                   }}
                   className="text-xs text-primary hover:underline font-medium transition-colors"
