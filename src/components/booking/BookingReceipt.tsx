@@ -19,6 +19,7 @@ export default function BookingReceipt({ booking, showDetails = true }: { bookin
       <dt>Hikers</dt><dd>{booking.group_size ?? meta.groupSize ?? 'Not recorded'}</dd>
       <dt>Guide</dt><dd>{meta.assignedGuide || 'Awaiting assignment'}{meta.guidePhone && <a className="block text-primary underline" href={`tel:${meta.guidePhone}`}>{meta.guidePhone}</a>}</dd>
       <dt>Route</dt><dd>{meta.assignedTrailName || meta.assignedTrail || 'Awaiting assignment'}</dd>
+      <dt>Payment method</dt><dd>{receipt.paymentMethod}</dd>
       {!!meta.companions?.length && <><dt>Companions</dt><dd>{meta.companions.join(', ')}</dd></>}
     </dl>}
     <div className="border-y py-3 flex justify-between gap-3"><span>{!meta.originalQuote && receipt.originalTotal != null ? 'Earliest recorded total' : 'Original booking quote'}</span><strong>{receipt.originalTotal == null ? 'Not recorded' : formatPeso(receipt.originalTotal)}</strong></div>
@@ -28,7 +29,7 @@ export default function BookingReceipt({ booking, showDetails = true }: { bookin
       <h4 className="pt-2 font-medium">Additional expenses</h4>
       {receipt.extras.length ? receipt.extras.map((line, index) => <div key={`${line.label}-${index}`} className="flex justify-between gap-3"><span className="break-words min-w-0">{line.label}</span><span className="shrink-0">{formatPeso(line.amount)}</span></div>) : <p className="text-muted-foreground">None recorded</p>}
       <div className="border-t pt-2 flex justify-between font-semibold"><span>Total</span><span>{formatPeso(receipt.total)}</span></div>
-      <div className="flex justify-between"><span>Recorded payment</span><span>{formatPeso(receipt.paid)}</span></div>
+      <div className="flex justify-between"><span>Recorded payment ({receipt.paymentMethod})</span><span>{formatPeso(receipt.paid)}</span></div>
       <div className="flex justify-between font-semibold"><span>Balance due</span><span>{formatPeso(receipt.balance)}</span></div>
       <p className="text-xs text-muted-foreground">{meta.paymentSettledAt ? `Settled ${new Date(meta.paymentSettledAt).toLocaleString('en-PH', { timeZone: 'Asia/Manila' })} (Manila)` : 'Payment not yet settled'}</p>
       {(meta.transactionId || meta.paymentReference) && <p className="break-all text-xs">Reference: {meta.transactionId || meta.paymentReference}</p>}

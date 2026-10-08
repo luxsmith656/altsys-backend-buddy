@@ -8,8 +8,19 @@ export interface ReceiptBooking {
   group_size?: number;
   booking_date?: string;
   total_amount?: number | null;
+  payment_method?: string | null;
 }
 const money = (value: unknown, fallback = 0): number => value != null && Number.isFinite(Number(value)) ? Math.round(Number(value) * 100) / 100 : fallback;
+
+export function bookingPaymentMethod(booking: ReceiptBooking): string {
+  const meta = parseMeta(booking.notes);
+  const raw = String(meta.paymentMethod || booking.payment_method || '').toLowerCase();
+  if (raw === 'gcash') return 'GCash';
+  if (raw === 'bank_transfer' || raw === 'bank transfer') return 'Bank transfer';
+  if (raw === 'online') return 'Online payment';
+  if (raw === 'cash' || raw === 'onsite' || raw === 'onsite cash') return 'Onsite cash';
+  return raw ? raw.replace(/_/g, ' ') : 'Not recorded';
+}
 
 export function canChangeBooking(booking: ReceiptBooking, sessions: { status?: string; end_time?: string | null }[] = []) {
   const meta = parseMeta(booking.notes);
@@ -46,5 +57,5 @@ export function bookingReceipt(booking: ReceiptBooking) {
   const paid = getRecordedRevenue(meta);
   const originalTotal = meta.originalQuote ? money(meta.originalQuote.total)
     : history[0]?.previousAmount > 0 ? money(history[0].previousAmount) : null;
-  return { base, baseLines, extras, total, paid, balance: Math.max(0, money(total - paid)), originalTotal, history };
+  return { base, baseLines, extras, total, paid, balance: Math.max(0, money(total - paid)), originalTotal, history, paymentMethod: bookingPaymentMethod(booking) };
 }
