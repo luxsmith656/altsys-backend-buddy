@@ -56,6 +56,7 @@ import {
 } from 'lucide-react';
 import BookingChat from '@/components/booking/BookingChat';
 import BookingReceipt from '@/components/booking/BookingReceipt';
+import HikerTrailResult from '@/components/booking/HikerTrailResult';
 import { bookingReceipt, canChangeBooking } from '@/lib/bookingReceipt';
 import { QRCodeSVG } from 'qrcode.react';
 import { toast } from 'sonner';
@@ -107,6 +108,7 @@ export default function HikerDashboard() {
   const [chatBooking, setChatBooking] = useState<{ id: string; date: string } | null>(null);
   const [companionQrBooking, setCompanionQrBooking] = useState<any | null>(null);
   const [receiptBookingId, setReceiptBookingId] = useState<string | null>(null);
+  const [trailResult, setTrailResult] = useState<{ sessionId?: string; bookingId?: string; title: string } | null>(null);
   const receiptBooking = bookings.find(booking => booking.id === receiptBookingId);
   const canChange = (booking: (typeof bookings)[number]) => canChangeBooking(booking, sessions.filter(session => session.booking_id === booking.id));
 
@@ -704,6 +706,14 @@ export default function HikerDashboard() {
                             <CalendarCheck className="h-3.5 w-3.5" /> Details / receipt
                           </Button>
                         )}
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="gap-1.5 text-xs"
+                          onClick={() => setTrailResult({ sessionId: hikeItem.sessionId, bookingId: hikeItem.bookingId, title: hikeItem.title })}
+                        >
+                          <Map className="h-3.5 w-3.5" /> View trail
+                        </Button>
                         {alreadyReviewed ? (
                           <span className="px-3 py-1 rounded-full text-xs bg-primary/20 text-primary font-semibold">✓ Reviewed</span>
                         ) : (
@@ -764,6 +774,15 @@ export default function HikerDashboard() {
             </CardContent>
           </Card>
         )}
+
+        <HikerTrailResult
+          open={Boolean(trailResult)}
+          onClose={() => setTrailResult(null)}
+          userId={user?.id ?? ''}
+          sessionId={trailResult?.sessionId}
+          bookingId={trailResult?.bookingId}
+          title={trailResult?.title}
+        />
 
         {/* ── 1-3 Days Date Change & Cancellation Policy Banner ── */}
         <div className="mb-6 rounded-2xl border border-amber-500/30 bg-amber-500/10 p-4 flex items-start gap-3 text-xs">
