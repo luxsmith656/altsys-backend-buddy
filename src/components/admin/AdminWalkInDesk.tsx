@@ -51,6 +51,7 @@ import { getGuideFeePerGuide, HIKE_TIME_OPTIONS, type HikeType } from '@/lib/hik
 import { useAuth } from '@/hooks/useAuth';
 import { usePricing } from '@/hooks/usePricing';
 import { useNavigate } from 'react-router-dom';
+import { isMissingTotalAmountColumn, withoutTotalAmount } from '@/lib/walkInBooking';
 
 interface AdminWalkInDeskProps {
   locationId: string | null;
@@ -217,9 +218,7 @@ export default function AdminWalkInDesk({
       });
 
       // 1. Insert confirmed booking record
-      const { data: newBooking, error: bookingErr } = await supabase
-        .from('bookings')
-        .insert({
+      const bookingPayload = {
           id: bookingId,
           user_id: user?.id,
           booking_date: bookingDate,
@@ -231,9 +230,16 @@ export default function AdminWalkInDesk({
           emergency_contact_phone: emergencyPhone.trim() || phoneNumber.trim(),
           notes: metaNotes,
           location_id: locationId,
-        } as any)
-        .select()
-        .single();
+        } as Record<string, unknown>;
+      let bookingResult = await supabase.from('bookings').insert(bookingPayload as any).select().single();
+      if (bookingResult.error && isMissingTotalAmountColumn(bookingResult.error)) {
+        bookingResult = await supabase
+          .from('bookings')
+          .insert(withoutTotalAmount(bookingPayload) as any)
+          .select()
+          .single();
+      }
+      const { data: newBooking, error: bookingErr } = bookingResult;
 
       if (bookingErr) throw bookingErr;
 
