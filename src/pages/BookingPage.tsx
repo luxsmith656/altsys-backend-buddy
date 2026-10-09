@@ -214,7 +214,6 @@ export default function BookingPage() {
   const navigate = useNavigate();
   const [step, setStep] = useState(1);
   const [adminWalkInOpen, setAdminWalkInOpen] = useState(false);
-  const [forceHikerView, setForceHikerView] = useState(false);
 
   // Scroll to top on step transition for mobile & desktop
   useEffect(() => {
@@ -1374,11 +1373,10 @@ export default function BookingPage() {
   }
 
   /* â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ ADMIN ON-SITE WALK-IN COUNTER â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
-  if ((role === 'admin' || role === 'super_admin') && !forceHikerView) {
+  if (role === 'admin' || role === 'super_admin') {
     return (
       <AdminWalkInDesk
         locationId={startLocationId || null}
-        onToggleHikerView={() => setForceHikerView(true)}
       />
     );
   }
@@ -1387,23 +1385,6 @@ export default function BookingPage() {
   return (
     <div className="min-h-screen overflow-x-hidden pt-20 pb-24 md:pb-12 px-2 sm:px-4">
       <div className="container max-w-5xl mx-auto">
-        {/* Admin Preview Mode Banner */}
-        {forceHikerView && (
-          <div className="mb-6 p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs shadow-sm">
-            <span className="font-semibold text-amber-600 dark:text-amber-400">
-              ðŸ‘ï¸ Admin Preview Mode: Viewing public online hiker booking wizard.
-            </span>
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => setForceHikerView(false)}
-              className="text-xs h-8 gap-1.5 border-amber-500/40 text-amber-600 dark:text-amber-400 hover:bg-amber-500/10"
-            >
-              Return to Trailhead Walk-In Desk
-            </Button>
-          </div>
-        )}
-
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="text-center mb-10">
           <h1 className="text-3xl font-bold mb-2">
             Book Your <span className="text-gradient">Hike</span>

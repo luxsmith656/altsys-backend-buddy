@@ -29,7 +29,6 @@ import {
   AlertTriangle,
   Play,
   RotateCcw,
-  Eye,
   CreditCard,
   Building,
 } from 'lucide-react';
@@ -55,12 +54,10 @@ import { isMissingTotalAmountColumn, withoutTotalAmount } from '@/lib/walkInBook
 
 interface AdminWalkInDeskProps {
   locationId: string | null;
-  onToggleHikerView?: () => void;
 }
 
 export default function AdminWalkInDesk({
   locationId,
-  onToggleHikerView,
 }: AdminWalkInDeskProps) {
   const { user } = useAuth();
   const { pricing } = usePricing();
@@ -316,17 +313,6 @@ export default function AdminWalkInDesk({
         </div>
 
         <div className="flex items-center gap-2 shrink-0">
-          {onToggleHikerView && (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={onToggleHikerView}
-              className="text-xs gap-1.5 h-9 rounded-xl border-border/40"
-            >
-              <Eye className="h-4 w-4" />
-              Preview Online Hiker View
-            </Button>
-          )}
           <Button
             variant="outline"
             size="sm"
