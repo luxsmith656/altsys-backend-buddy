@@ -95,6 +95,13 @@ export function saveAnnouncements(items: AdminAnnouncement[]): void {
   localStorage.setItem(KEY, JSON.stringify(items));
 }
 
+function explainAnnouncementSchemaError(error: { code?: string; message?: string }): Error {
+  if (error.code === 'PGRST204' && /approval_status|approved_by|approved_at|rejection_reason/i.test(error.message || '')) {
+    return new Error('Announcement approval fields are missing in the hosted database. Apply 20261009110000_repair_announcement_and_reassignment_schema.sql, then retry.');
+  }
+  return new Error(error.message || 'Announcement database request failed.');
+}
+
 export async function fetchAnnouncementsFromDb(): Promise<AdminAnnouncement[]> {
   try {
     const { data, error } = await (supabase
@@ -160,7 +167,7 @@ export async function addAnnouncement(item: AdminAnnouncement): Promise<AdminAnn
       }) as any);
   if (error) {
     saveAnnouncements(all);
-    throw error;
+    throw explainAnnouncementSchemaError(error);
   }
 
   return next;
@@ -177,7 +184,7 @@ export async function setAnnouncementApproval(
     approved_at: status === 'approved' ? new Date().toISOString() : null,
     rejection_reason: status === 'rejected' ? (options.rejectionReason || 'Not approved by Central Admin') : null,
   }).eq('id', id) as any);
-  if (error) throw error;
+  if (error) throw explainAnnouncementSchemaError(error);
 }
 
 export async function removeAnnouncement(id: string): Promise<AdminAnnouncement[]> {
@@ -195,7 +202,7 @@ export async function removeAnnouncement(id: string): Promise<AdminAnnouncement[
   const { error } = await (supabase.from('announcements' as any).delete().eq('id', id) as any);
   if (error) {
     saveAnnouncements(all);
-    throw error;
+    throw explainAnnouncementSchemaError(error);
   }
 
   return next;

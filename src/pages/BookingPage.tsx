@@ -782,7 +782,7 @@ export default function BookingPage() {
 
   const timeSlotStatuses = useMemo(() => {
     if (!date) return [];
-    if (slotCapacityLoading || slotCapacityError) {
+    if (slotCapacityLoading) {
       return HIKE_TIME_OPTIONS[hikeType].map((option) => ({
         time: option.time,
         summitSlot: '',
@@ -790,6 +790,11 @@ export default function BookingPage() {
         reason: 'capacity_check_failed' as const,
       }));
     }
+    // Capacity is advisory in the calendar. If the aggregate RPC is
+    // unavailable (for example on a newly opened future month), keep the
+    // date and time selectable; the database trigger remains authoritative
+    // when the booking is submitted.
+    if (slotCapacityError) return getBookingSlotStatuses(format(date, 'yyyy-MM-dd'), HIKE_TIME_OPTIONS[hikeType], hikeType, []);
     return getBookingSlotStatuses(format(date, 'yyyy-MM-dd'), HIKE_TIME_OPTIONS[hikeType], hikeType, scheduledBookings);
   }, [date, hikeType, scheduledBookings, slotCapacityError, slotCapacityLoading]);
 
@@ -978,7 +983,7 @@ export default function BookingPage() {
   const validateStep = () => {
     if (step === 1) {
       if (!date) return 'Please select a date on the calendar.';
-      if (slotCapacityRequested && (slotCapacityLoading || slotCapacityError)) return 'Live capacity could not be verified. Please wait for the check to finish or refresh before continuing.';
+      if (slotCapacityRequested && slotCapacityLoading) return 'Checking availability for this date. Please wait a moment.';
       if (groupSize < 1 || groupSize > 30) return 'Group size must be between 1 and 30.';
       if (slotsForDate !== null && groupSize > slotsForDate) {
         return `Only ${slotsForDate} slot${slotsForDate !== 1 ? 's' : ''} available on this date. Reduce group size or choose another date.`;

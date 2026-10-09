@@ -835,4 +835,24 @@ END $$;
 -- ─────────────────────────────────────────────────────────────────────────────
 NOTIFY pgrst, 'reload schema';
 
+-- ─────────────────────────────────────────────────────────────────────────────
+-- SECTION 15: REPAIR ANNOUNCEMENT, MESSAGE, AND GUIDE REASSIGNMENT COLUMNS
+-- Run this section when the hosted schema cache is behind the repository.
+-- ─────────────────────────────────────────────────────────────────────────────
+ALTER TABLE IF EXISTS public.announcements
+  ADD COLUMN IF NOT EXISTS approval_status text NOT NULL DEFAULT 'approved',
+  ADD COLUMN IF NOT EXISTS approved_by uuid REFERENCES auth.users(id) ON DELETE SET NULL,
+  ADD COLUMN IF NOT EXISTS approved_at timestamptz,
+  ADD COLUMN IF NOT EXISTS rejection_reason text;
+
+ALTER TABLE IF EXISTS public.booking_assignments
+  ADD COLUMN IF NOT EXISTS reassignment_reason text,
+  ADD COLUMN IF NOT EXISTS replaced_by uuid,
+  ADD COLUMN IF NOT EXISTS replaces uuid;
+
+ALTER TABLE IF EXISTS public.booking_messages
+  ADD COLUMN IF NOT EXISTS recipient_role text;
+
+NOTIFY pgrst, 'reload schema';
+
 

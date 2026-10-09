@@ -220,6 +220,9 @@ export async function reassignGuideByAdmin({
     });
     if (error) {
       if (error.code === 'PGRST202') throw new Error('Atomic guide reassignment is not installed. Apply migration 20261006120000_guide_message_audience_and_reassignment.sql.');
+      if (error.code === 'PGRST204' && /reassignment_reason|recipient_role/i.test(error.message || '')) {
+        throw new Error('Guide reassignment fields are missing in the hosted database. Apply 20261009110000_repair_announcement_and_reassignment_schema.sql.');
+      }
       throw error;
     }
     const result = data as unknown as {
