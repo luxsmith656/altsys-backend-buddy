@@ -28,7 +28,7 @@ before(async () => {
     );
     CREATE TABLE public.booking_assignments(
       id uuid PRIMARY KEY DEFAULT gen_random_uuid(), booking_id uuid, guide_id uuid,
-      location_id uuid, status text, decided_at timestamptz, reassignment_reason text,
+      location_id uuid, status text, decided_at timestamptz,
       created_at timestamptz DEFAULT now()
     );
     CREATE TABLE public.booking_messages(
@@ -55,6 +55,7 @@ before(async () => {
     GRANT SELECT, INSERT, UPDATE ON public.bookings, public.guides, public.booking_assignments, public.booking_messages TO authenticated;
   `);
   await db.exec(await readFile('supabase/migrations/20261006120000_guide_message_audience_and_reassignment.sql', 'utf8'));
+  await db.exec(await readFile('supabase/migrations/20261009130000_reinstall_atomic_guide_reassignment.sql', 'utf8'));
   await db.exec(await readFile('supabase/migrations/20261007120000_ensure_booking_message_recipient_role.sql', 'utf8'));
 });
 

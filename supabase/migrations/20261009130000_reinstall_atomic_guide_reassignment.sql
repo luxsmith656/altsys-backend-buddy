@@ -1,81 +1,23 @@
--- Scope booking conversations by recipient, and make admin guide reassignment atomic.
--- Keep this migration self-contained. Earlier hosted databases may not have
--- received the later schema-repair migration before this RPC was installed.
-ALTER TABLE public.booking_assignments
+-- Repair for hosted databases where 20261006120000 was committed but its
+-- atomic reassignment functions were not installed. Safe to run repeatedly.
+
+ALTER TABLE IF EXISTS public.booking_assignments
   ADD COLUMN IF NOT EXISTS reassignment_reason text;
 
-ALTER TABLE public.booking_messages
+ALTER TABLE IF EXISTS public.booking_messages
   ADD COLUMN IF NOT EXISTS recipient_role text;
 
-ALTER TABLE public.booking_messages
-  DROP CONSTRAINT IF EXISTS booking_messages_recipient_role_check;
-ALTER TABLE public.booking_messages
-  ADD CONSTRAINT booking_messages_recipient_role_check
-  CHECK (recipient_role IS NULL OR recipient_role IN ('hiker', 'guide', 'admin'));
+DO $$
+BEGIN
+  IF to_regclass('public.booking_messages') IS NOT NULL THEN
+    ALTER TABLE public.booking_messages
+      DROP CONSTRAINT IF EXISTS booking_messages_recipient_role_check;
+    ALTER TABLE public.booking_messages
+      ADD CONSTRAINT booking_messages_recipient_role_check
+      CHECK (recipient_role IS NULL OR recipient_role IN ('hiker', 'guide', 'admin'));
+  END IF;
+END $$;
 
-DROP POLICY IF EXISTS bm_owner_select ON public.booking_messages;
-DROP POLICY IF EXISTS bm_owner_insert ON public.booking_messages;
-DROP POLICY IF EXISTS bm_guide_select ON public.booking_messages;
-DROP POLICY IF EXISTS bm_guide_insert ON public.booking_messages;
-DROP POLICY IF EXISTS bm_guide_recipient_select ON public.booking_messages;
-DROP POLICY IF EXISTS bm_hiker_conversation_select ON public.booking_messages;
-DROP POLICY IF EXISTS bm_hiker_conversation_insert ON public.booking_messages;
-
-CREATE POLICY bm_hiker_conversation_select ON public.booking_messages
-  FOR SELECT TO authenticated
-  USING (
-    EXISTS (
-      SELECT 1 FROM public.bookings b
-      WHERE b.id = booking_messages.booking_id
-        AND b.user_id = auth.uid()
-    )
-    AND (
-      sender_id = auth.uid()
-      OR recipient_role = 'hiker'
-      OR (recipient_role IS NULL AND sender_role = 'system')
-    )
-  );
-
-CREATE POLICY bm_hiker_conversation_insert ON public.booking_messages
-  FOR INSERT TO authenticated
-  WITH CHECK (
-    sender_id = auth.uid()
-    AND sender_role = 'hiker'
-    AND recipient_role IN ('guide', 'admin')
-    AND EXISTS (
-      SELECT 1 FROM public.bookings b
-      WHERE b.id = booking_messages.booking_id
-        AND b.user_id = auth.uid()
-    )
-  );
-
-CREATE POLICY bm_guide_recipient_select ON public.booking_messages
-  FOR SELECT TO authenticated
-  USING (
-    EXISTS (
-      SELECT 1 FROM public.booking_assignments ba
-      JOIN public.guides assigned_guide ON assigned_guide.id = ba.guide_id
-      WHERE ba.booking_id = booking_messages.booking_id
-        AND ba.status IN ('pending', 'accepted')
-        AND assigned_guide.user_id = auth.uid()
-    )
-    AND (
-      (sender_id = auth.uid() AND sender_role = 'guide')
-      OR (sender_role = 'hiker' AND recipient_role = 'guide')
-      OR (sender_role = 'guide' AND recipient_role = 'hiker')
-    )
-  );
-
-CREATE POLICY bm_guide_insert ON public.booking_messages
-  FOR INSERT TO authenticated
-  WITH CHECK (
-    sender_id = auth.uid()
-    AND sender_role = 'guide'
-    AND recipient_role IN ('hiker', 'admin')
-    AND public.guide_can_manage_booking(booking_id)
-  );
-
--- A single transaction replaces the old client-side multi-request reassign flow.
 CREATE OR REPLACE FUNCTION public.admin_reassign_hike_guide(
   p_booking_id uuid,
   p_guide_id uuid,
@@ -163,31 +105,19 @@ BEGIN
   END IF;
 
   meta := meta || jsonb_build_object(
-    'assignedGuide', g.full_name,
-    'assignedGuideId', g.id,
-    'guideStatus', 'reassigned_pending',
-    'previousGuide', old_guide_name,
-    'previousGuideId', old_guide_id,
-    'guideChangeReason', trim(p_reason),
-    'guideChangedAt', now()
+    'assignedGuide', g.full_name, 'assignedGuideId', g.id,
+    'guideStatus', 'reassigned_pending', 'previousGuide', old_guide_name,
+    'previousGuideId', old_guide_id, 'guideChangeReason', trim(p_reason), 'guideChangedAt', now()
   );
   UPDATE public.bookings SET notes = meta::text WHERE id = b.id;
 
   RETURN jsonb_build_object(
-    'guideUserId', g.user_id,
-    'guideName', g.full_name,
-    'guidePhone', g.phone,
-    'oldGuideUserId', old_guide_user_id,
-    'oldGuideName', old_guide_name,
-    'hikerUserId', b.user_id,
-    'bookingDate', b.booking_date,
-    'locationId', b.location_id
+    'guideUserId', g.user_id, 'guideName', g.full_name, 'guidePhone', g.phone,
+    'oldGuideUserId', old_guide_user_id, 'oldGuideName', old_guide_name,
+    'hikerUserId', b.user_id, 'bookingDate', b.booking_date, 'locationId', b.location_id
   );
 END;
 $$;
-
-REVOKE ALL ON FUNCTION public.admin_reassign_hike_guide(uuid, uuid, text) FROM PUBLIC;
-GRANT EXECUTE ON FUNCTION public.admin_reassign_hike_guide(uuid, uuid, text) TO authenticated;
 
 CREATE OR REPLACE FUNCTION public.guide_reassign_hike_assignment(
   p_assignment_id uuid,
@@ -205,7 +135,9 @@ DECLARE
   replacement_assignment_id uuid;
 BEGIN
   IF auth.uid() IS NULL THEN RAISE EXCEPTION 'Sign in to update this assignment' USING ERRCODE = '42501'; END IF;
-  IF length(trim(COALESCE(p_reason, ''))) < 3 THEN RAISE EXCEPTION 'A reason of at least 3 characters is required'; END IF;
+  IF length(trim(COALESCE(p_reason, ''))) < 3 THEN
+    RAISE EXCEPTION 'A reason of at least 3 characters is required';
+  END IF;
 
   SELECT * INTO current_assignment FROM public.booking_assignments
   WHERE id = p_assignment_id FOR UPDATE;
@@ -217,6 +149,7 @@ BEGIN
   IF NOT FOUND THEN RAISE EXCEPTION 'Only the assigned guide may decline this booking' USING ERRCODE = '42501'; END IF;
   SELECT * INTO b FROM public.bookings WHERE id = current_assignment.booking_id FOR UPDATE;
   IF NOT FOUND OR b.status IN ('completed', 'cancelled') THEN RAISE EXCEPTION 'This hike has already ended'; END IF;
+
   BEGIN
     meta := COALESCE(NULLIF(b.notes, '')::jsonb, '{}'::jsonb);
     IF jsonb_typeof(meta) <> 'object' THEN meta := jsonb_build_object('userNotes', b.notes); END IF;
@@ -267,16 +200,16 @@ BEGIN
   UPDATE public.bookings SET notes = meta::text WHERE id = b.id;
 
   RETURN jsonb_build_object(
-    'oldGuideUserId', current_guide.user_id,
-    'oldGuideName', current_guide.full_name,
-    'replacementGuideUserId', replacement.user_id,
-    'replacementGuideName', replacement.full_name,
-    'hikerUserId', b.user_id,
-    'bookingDate', b.booking_date,
-    'bookingId', b.id
+    'oldGuideUserId', current_guide.user_id, 'oldGuideName', current_guide.full_name,
+    'replacementGuideUserId', replacement.user_id, 'replacementGuideName', replacement.full_name,
+    'hikerUserId', b.user_id, 'bookingDate', b.booking_date, 'bookingId', b.id
   );
 END;
 $$;
 
+REVOKE ALL ON FUNCTION public.admin_reassign_hike_guide(uuid, uuid, text) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.admin_reassign_hike_guide(uuid, uuid, text) TO authenticated;
 REVOKE ALL ON FUNCTION public.guide_reassign_hike_assignment(uuid, uuid, text) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.guide_reassign_hike_assignment(uuid, uuid, text) TO authenticated;
+
+NOTIFY pgrst, 'reload schema';
