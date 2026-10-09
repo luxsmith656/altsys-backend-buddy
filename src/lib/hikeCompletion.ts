@@ -28,8 +28,7 @@ export async function completeHike({
   guideName,
   completedBy,
 }: CompletionInput): Promise<CompleteHikeResult> {
-  const rpc = supabase.rpc as unknown as (name: string, args: Record<string, unknown>) => Promise<{ data: unknown; error: { message: string } | null }>;
-  const { data, error } = await rpc('complete_hike_session', {
+  const { data, error } = await supabase.rpc('complete_hike_session', {
     p_booking_id: bookingId,
     p_notes: notes,
   });
