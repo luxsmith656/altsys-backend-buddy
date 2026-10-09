@@ -23,3 +23,13 @@ test('guide referral copies this guide and the booking preserves a manual overri
   await page.getByRole('option', { name: 'Lamot 1', exact: true }).click();
   await expect(page.getByRole('combobox', { name: /Starting Location/ })).toContainText('Lamot 1');
 });
+
+test('booking remains usable when the selected date has no forecast entry', async ({ page }) => {
+  await installGuideFixture(page);
+  const dateWithoutForecast = new Date(Date.now() + 30 * 86400000).toISOString().slice(0, 10);
+
+  await page.goto(`/booking?date=${dateWithoutForecast}&ready=1`);
+  await expect(page.getByRole('heading', { name: 'Select Schedule' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Continue', exact: true })).toBeEnabled();
+  await expect(page.locator('body')).not.toContainText('Application error');
+});

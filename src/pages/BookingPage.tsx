@@ -285,6 +285,7 @@ export default function BookingPage() {
   // â”€â”€ Mt. Kalisungan 16-day weather forecast (Open-Meteo) â”€â”€
   const [kalisunganForecast, setKalisunganForecast] = useState<Record<string, KalisunganDayWeather>>({});
   const [kalisunganForecastLoading, setKalisunganForecastLoading] = useState(false);
+  const forecastRef = useRef<Record<string, KalisunganDayWeather>>({});
 
   useEffect(() => {
     let active = true;
@@ -293,7 +294,9 @@ export default function BookingPage() {
         setKalisunganForecastLoading(true);
         const res = await fetchKalisungan16DayForecast();
         if (active) {
-          setKalisunganForecast(normalizeForecastDays(res?.days));
+          const days = normalizeForecastDays(res?.days);
+          forecastRef.current = days;
+          setKalisunganForecast(days);
         }
       } catch (err) {
         console.warn('Could not load Mt. Kalisungan forecast:', err);
@@ -304,6 +307,10 @@ export default function BookingPage() {
     void loadWeather();
     return () => { active = false; };
   }, []);
+
+  useEffect(() => {
+    forecastRef.current = kalisunganForecast;
+  }, [kalisunganForecast]);
 
   const selectedKalisunganWeather = useMemo(() => {
     if (!date) return null;
@@ -811,10 +818,11 @@ export default function BookingPage() {
       setWeatherLoading(true);
       setWeatherError(null);
 
-      let dayWeather = kalisunganForecast[formattedDate];
+      let dayWeather = forecastRef.current[formattedDate];
       if (!dayWeather) {
         const res = await fetchKalisungan16DayForecast();
         const days = normalizeForecastDays(res?.days);
+        forecastRef.current = days;
         setKalisunganForecast(days);
         dayWeather = days[formattedDate];
       }
@@ -841,7 +849,7 @@ export default function BookingPage() {
     } finally {
       if (requestId === weatherRequestId.current) setWeatherLoading(false);
     }
-  }, [kalisunganForecast]);
+  }, []);
 
   useEffect(() => {
     if (!date) {
