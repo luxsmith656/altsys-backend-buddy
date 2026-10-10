@@ -12,8 +12,10 @@ import KaliAvatar from '@/components/kali/KaliAvatar';
 import { getKaliExpression, getKaliQuickReplies } from '@/lib/kaliPersonality';
 import { getKaliRoleLabel } from '@/lib/kaliContext';
 import { useAuth } from '@/hooks/useAuth';
+import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { getPricingConfig, getDynamicFeePolicyText } from '@/lib/pricingService';
+import { containsProfanity, PROFANITY_NOTICE } from '@/lib/contentModeration';
 
 const CHAT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/trail-chat-rag`;
 const QUICK_QUESTIONS = [
@@ -47,6 +49,7 @@ export default function ChatPage() {
 
   const send = async (text: string) => {
     if (!text.trim() || loading) return;
+    if (containsProfanity(text)) { toast.error(PROFANITY_NOTICE); return; }
     const userMsg: ChatMessage = { role: 'user', content: text.trim() };
     setMessages((prev) => [...prev, userMsg]);
     setInput('');

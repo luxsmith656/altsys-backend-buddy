@@ -384,6 +384,14 @@ export default function AdminWalkInDesk({
               <Play className="h-4 w-4" />
               Start Hike &amp; Live Tracking
             </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => navigate('/admin?tab=requests')}
+              className="text-xs gap-1.5 h-10 px-4 rounded-xl"
+            >
+              Manage Booking
+            </Button>
           </div>
         </Card>
       ) : (

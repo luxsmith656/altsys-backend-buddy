@@ -195,7 +195,7 @@ export default function CentralDashboard() {
 
   // Filtered bookings for the audit table
   const filteredBookings = useMemo(() => {
-    return recentBookings.filter((b) => {
+    const filtered = recentBookings.filter((b) => {
       if (activeLocationId && b.location_id !== activeLocationId) return false;
       if (ledgerStatusFilter !== 'all' && b.status !== ledgerStatusFilter) return false;
       if (ledgerSearch.trim()) {
@@ -209,6 +209,15 @@ export default function CentralDashboard() {
       }
       return true;
     });
+    const priority = (booking: BookingRecord) => {
+      const meta = parseMeta(booking.notes);
+      if (booking.status === 'completed') return 3;
+      if (booking.status === 'pending' || booking.status === 'adjustment_pending' || (booking.status === 'confirmed' && !meta.assignedGuide)) return 0;
+      if (booking.status === 'confirmed') return 1;
+      if (meta.onsiteStartConfirmed) return 2;
+      return 4;
+    };
+    return [...filtered].sort((a, b) => priority(a) - priority(b) || a.booking_date.localeCompare(b.booking_date));
   }, [recentBookings, activeLocationId, ledgerStatusFilter, ledgerSearch]);
 
   useEffect(() => {
@@ -221,7 +230,7 @@ export default function CentralDashboard() {
   );
 
   return (
-    <div className="central-dashboard min-h-screen px-4 pb-16 pt-20 lg:px-8 bg-gradient-to-b from-background via-background/95 to-secondary/10">
+    <div className="central-dashboard min-h-screen px-4 pb-24 pt-20 lg:px-8 md:pb-16 bg-gradient-to-b from-background via-background/95 to-secondary/10">
       <div className="max-w-7xl mx-auto space-y-6">
         {/* Executive Command Header */}
         <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} className="space-y-4">
@@ -609,6 +618,20 @@ export default function CentralDashboard() {
           </div>
         </Tabs>
       </div>
+      <nav aria-label="Central mobile navigation" className="fixed inset-x-3 bottom-3 z-50 grid grid-cols-5 gap-1 rounded-2xl border border-border/70 bg-card/95 p-2 shadow-2xl backdrop-blur-2xl md:hidden">
+        {[
+          { value: 'overview', label: 'Overview', icon: Building2 },
+          { value: 'analytics', label: 'Analytics', icon: BarChart3 },
+          { value: 'accounts', label: 'Accounts', icon: Users },
+          { value: 'pricing', label: 'Capacity', icon: DollarSign },
+          { value: 'announcements', label: 'Alerts', icon: Megaphone },
+        ].map(({ value, label, icon: Icon }) => (
+          <button key={value} type="button" onClick={() => setActiveTab(value)} className={`flex min-w-0 flex-col items-center gap-1 rounded-xl px-1 py-2 text-[10px] font-semibold transition-colors ${activeTab === value ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-secondary'}`}>
+            <Icon className="h-4 w-4" />
+            <span className="truncate">{label}</span>
+          </button>
+        ))}
+      </nav>
     </div>
   );
 }

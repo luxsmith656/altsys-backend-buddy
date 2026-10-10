@@ -160,7 +160,8 @@ export async function declineAndReassignGuide({
     }
     const result = data as unknown as {
       replacementGuideUserId: string | null; replacementGuideName: string | null;
-      oldGuideName: string; hikerUserId: string | null; bookingDate: string;
+      oldGuideUserId: string | null; oldGuideName: string; hikerUserId: string | null; bookingDate: string;
+      locationId: string | null;
     };
     if (!result || typeof result !== 'object' || Array.isArray(result)) throw new Error('Guide reassignment returned an invalid response. Refresh before retrying.');
     const date = result.bookingDate || 'your scheduled date';
@@ -191,6 +192,39 @@ export async function declineAndReassignGuide({
         category: 'booking',
         link: `/hiker?booking=${encodeURIComponent(bookingId)}`,
       }).catch((error) => console.warn('Guide handoff committed, but hiker notification failed:', error));
+    }
+
+    if (!result.replacementGuideUserId) {
+      const { error: adminMessageError } = await supabase.from('booking_messages' as any).insert({
+        booking_id: bookingId,
+        sender_id: result.oldGuideUserId,
+        sender_role: 'guide',
+        recipient_role: 'admin',
+        kind: 'reassignment_request',
+        content: `Guide ${result.oldGuideName} returned this booking to admin dispatch. Reason: ${cleanReason}`,
+      } as any);
+      if (adminMessageError) console.warn('Guide handoff committed, but admin dispatch message could not be added:', adminMessageError.message);
+
+      const { data: scopedAdmins } = await supabase
+        .from('user_locations' as any)
+        .select('user_id')
+        .eq('location_id', result.locationId || '');
+      const scopedIds = [...new Set(((scopedAdmins as any[]) || []).map((row) => row.user_id).filter(Boolean))];
+      if (scopedIds.length) {
+        const { data: adminRoles } = await supabase
+          .from('user_roles' as any)
+          .select('user_id,role')
+          .in('user_id', scopedIds)
+          .in('role', ['admin', 'super_admin']);
+        await Promise.all([...new Set(((adminRoles as any[]) || []).map((row) => row.user_id).filter(Boolean))].map((id) =>
+          notifyUser(id, {
+            title: 'Guide reassignment requested',
+            body: `${result.oldGuideName} returned Booking #${bookingId.slice(0, 8)} to dispatch. Reason: ${cleanReason}`,
+            category: 'booking',
+            link: '/admin?tab=requests',
+          }).catch((error) => console.warn('Guide handoff committed, but admin notification failed:', error)),
+        ));
+      }
     }
 
     return { success: true };

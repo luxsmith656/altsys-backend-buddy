@@ -70,6 +70,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import KaliContextPanel from '@/components/kali/KaliContextPanel';
 import { useKaliContext } from '@/hooks/useKaliContext';
+import { containsProfanity, PROFANITY_NOTICE } from '@/lib/contentModeration';
 
 const STATUS_STYLES: Record<string, string> = {
   confirmed: 'bg-primary/20 text-primary',
@@ -111,6 +112,31 @@ export default function HikerDashboard() {
   const [trailResult, setTrailResult] = useState<{ sessionId?: string; bookingId?: string; title: string } | null>(null);
   const receiptBooking = bookings.find(booking => booking.id === receiptBookingId);
   const canChange = (booking: (typeof bookings)[number]) => canChangeBooking(booking, sessions.filter(session => session.booking_id === booking.id));
+
+  useEffect(() => {
+    const onOpenBookingChat = (event: Event) => {
+      const bookingId = (event as CustomEvent<{ bookingId?: string }>).detail?.bookingId;
+      const booking = bookingId ? bookings.find((item) => item.id === bookingId) : null;
+      if (booking) setChatBooking({ id: booking.id, date: booking.booking_date });
+    };
+    window.addEventListener('open-booking-chat', onOpenBookingChat);
+    return () => window.removeEventListener('open-booking-chat', onOpenBookingChat);
+  }, [bookings]);
+
+  useEffect(() => {
+    if (!user || bookings.length === 0) return;
+    const bookingIds = new Set(bookings.map((booking) => booking.id));
+    const channel = supabase
+      .channel(`hiker-booking-message-alerts-${user.id}`)
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'booking_messages' }, (payload) => {
+        const message = payload.new as { booking_id?: string; sender_id?: string | null; recipient_role?: string | null };
+        if (message.booking_id && bookingIds.has(message.booking_id) && message.sender_id !== user.id && message.recipient_role === 'hiker') {
+          window.dispatchEvent(new CustomEvent('booking-admin-message', { detail: { bookingId: message.booking_id } }));
+        }
+      })
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [user, bookings]);
 
   useEffect(() => {
     if (!user) return;
@@ -298,6 +324,7 @@ export default function HikerDashboard() {
     fullName?: string;
   }) => {
     if (!user || !hikeItem.assignedGuide) { toast.error('There is no assigned guide to review for this hike.'); return; }
+    if (containsProfanity(guideReviewText)) { toast.error(PROFANITY_NOTICE); return; }
     setSubmittingReview(true);
     const assignedGuide = hikeItem.assignedGuide;
 
@@ -339,12 +366,23 @@ export default function HikerDashboard() {
   /* ── Derived data ── */
   const adjustmentPending = bookings.filter((b) => b.status === 'adjustment_pending');
   const visibleBookings = useMemo(
-    () => bookings.filter((booking) => {
-      const meta = parseMeta(booking.notes);
-      return booking.status !== 'completed'
-        && meta.groupPhase !== 'completed'
-        && !meta.hikeCompletedAt;
-    }),
+    () => bookings
+      .filter((booking) => {
+        const meta = parseMeta(booking.notes);
+        return booking.status !== 'completed'
+          && meta.groupPhase !== 'completed'
+          && !meta.hikeCompletedAt;
+      })
+      .sort((a, b) => {
+        const priority = (booking: any) => {
+          const meta = parseMeta(booking.notes);
+          if (booking.status === 'pending' || booking.status === 'adjustment_pending' || (booking.status === 'confirmed' && !meta.assignedGuide)) return 0;
+          if (booking.status === 'confirmed') return 1;
+          if (meta.onsiteStartConfirmed) return 2;
+          return 3;
+        };
+        return priority(a) - priority(b) || String(a.booking_date).localeCompare(String(b.booking_date));
+      }),
     [bookings],
   );
   const hasNotifications = adjustmentPending.length > 0;
@@ -1013,7 +1051,7 @@ export default function HikerDashboard() {
                         className="w-full gap-1 px-2 text-[11px]"
                         onClick={() => setChatBooking({ id: b.id, date: b.booking_date })}
                       >
-                        <CalendarClock className="h-3.5 w-3.5" /> Reschedule
+                        <MessageCircle className="h-3.5 w-3.5" /> Chat
                       </Button>
                       )}
                     </div>

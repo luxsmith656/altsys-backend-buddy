@@ -273,7 +273,8 @@ BEGIN
     'replacementGuideName', replacement.full_name,
     'hikerUserId', b.user_id,
     'bookingDate', b.booking_date,
-    'bookingId', b.id
+    'bookingId', b.id,
+    'locationId', b.location_id
   );
 END;
 $$;

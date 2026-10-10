@@ -152,7 +152,10 @@ export default function ReassignGuideDialog({
             <UserCog className="h-5 w-5" /> Reassign Mountain Guide
           </DialogTitle>
           <DialogDescription className="text-xs">
-            Replace {currentGuideName ?? 'the currently assigned guide'} with another active guide. Both guides and the hiker will be automatically notified with your stated reason.
+            {currentGuideName
+              ? `Replace ${currentGuideName} with another active guide.`
+              : 'Assign an active guide to this booking.'}{' '}
+            The guide and hiker will be automatically notified with your stated reason.
           </DialogDescription>
         </DialogHeader>
 

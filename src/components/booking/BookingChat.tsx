@@ -4,12 +4,13 @@ import { useAuth } from '@/hooks/useAuth';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
-import { Loader2, Send, CalendarClock } from 'lucide-react';
+import { Bell, Loader2, Send, CalendarClock } from 'lucide-react';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 import { canChangeBooking } from '@/lib/bookingReceipt';
 import { Textarea } from '@/components/ui/textarea';
 import { notifyUser } from '@/lib/firestoreNotifications';
+import { containsProfanity, PROFANITY_NOTICE } from '@/lib/contentModeration';
 
 interface Msg {
   id: string;
@@ -53,6 +54,7 @@ export default function BookingChat({
   const [newDate, setNewDate] = useState('');
   const [rescheduleReason, setRescheduleReason] = useState('');
   const [decisionReason, setDecisionReason] = useState('');
+  const [unreadCount, setUnreadCount] = useState(0);
   const scroller = useRef<HTMLDivElement | null>(null);
 
   const load = async () => {
@@ -63,6 +65,7 @@ export default function BookingChat({
       .eq('booking_id', bookingId)
       .order('created_at', { ascending: true });
     setMsgs((data as any) ?? []);
+    setUnreadCount(0);
     setLoading(false);
     setTimeout(() => scroller.current?.scrollTo({ top: 99999 }), 50);
   };
@@ -80,6 +83,10 @@ export default function BookingChat({
             (role === 'hiker' && (message.sender_id === user?.id || message.recipient_role === 'hiker'));
           if (!visibleToRole) return;
           setMsgs((current) => current.some((item) => item.id === message.id) ? current : [...current, message]);
+          if (message.sender_id !== user?.id && message.sender_role === 'admin') {
+            window.dispatchEvent(new CustomEvent('booking-admin-message', { detail: { bookingId } }));
+          }
+          if (message.sender_id !== user?.id && !open) setUnreadCount((count) => count + 1);
           setTimeout(() => scroller.current?.scrollTo({ top: 99999 }), 50);
         })
       .subscribe();
@@ -89,6 +96,7 @@ export default function BookingChat({
   const send = async (kind: string = 'chat', content?: string): Promise<boolean> => {
     const body = (content ?? text).trim();
     if (!body) return false;
+    if (containsProfanity(body)) { toast.error(PROFANITY_NOTICE); return false; }
     setSending(true);
     const { error } = await supabase.from('booking_messages' as any).insert({
       booking_id: bookingId,
@@ -172,7 +180,10 @@ export default function BookingChat({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-lg">
         <DialogHeader>
-          <DialogTitle>Booking conversation</DialogTitle>
+          <DialogTitle className="flex items-center gap-2">
+            <Bell className="h-4 w-4 text-primary" /> Booking conversation
+            {unreadCount > 0 && <span className="rounded-full bg-destructive px-1.5 py-0.5 text-[10px] text-destructive-foreground">{unreadCount}</span>}
+          </DialogTitle>
           <DialogDescription>Messages about your booking on {format(new Date(bookingDate), 'MMM d, yyyy')}.</DialogDescription>
         </DialogHeader>
 

@@ -11,9 +11,11 @@ import KaliAvatar from '@/components/kali/KaliAvatar';
 import { getKaliExpression, getKaliQuickReplies } from '@/lib/kaliPersonality';
 import { getKaliRoleLabel } from '@/lib/kaliContext';
 import { useAuth } from '@/hooks/useAuth';
+import { toast } from 'sonner';
 import ReactMarkdown from 'react-markdown';
 import { getPricingConfig, getDynamicFeePolicyText } from '@/lib/pricingService';
 import { getOfflineRoleHelp } from '@/lib/offline-role-help';
+import { containsProfanity, PROFANITY_NOTICE } from '@/lib/contentModeration';
 
 
 interface WeatherSnapshot {
@@ -746,6 +748,7 @@ export default function BookingAIChat({
   const sendMessage = useCallback(
     async (text: string, forceOffline = false) => {
       if (!text.trim() || inFlight.current) return;
+      if (containsProfanity(text)) { toast.error(PROFANITY_NOTICE); return; }
       inFlight.current = true;
       offlineModeRef.current = forceOffline;
       setIsTyping(true);

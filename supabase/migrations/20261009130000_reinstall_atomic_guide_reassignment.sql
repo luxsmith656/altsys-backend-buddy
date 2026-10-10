@@ -202,7 +202,8 @@ BEGIN
   RETURN jsonb_build_object(
     'oldGuideUserId', current_guide.user_id, 'oldGuideName', current_guide.full_name,
     'replacementGuideUserId', replacement.user_id, 'replacementGuideName', replacement.full_name,
-    'hikerUserId', b.user_id, 'bookingDate', b.booking_date, 'bookingId', b.id
+    'hikerUserId', b.user_id, 'bookingDate', b.booking_date, 'bookingId', b.id,
+    'locationId', b.location_id
   );
 END;
 $$;

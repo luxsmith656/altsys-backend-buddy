@@ -475,6 +475,21 @@ export default function AdminDashboard() {
   /* ── Computed: Derived lists ── */
   const filteredTabBookings = useMemo(() => {
     let list = allTabBookings;
+    const queuePriority = (booking: any) => {
+      const meta = parseMeta(booking.notes);
+      const completed = booking.status === 'completed' || meta.groupPhase === 'completed' || Boolean(meta.hikeCompletedAt);
+      if (completed) return 3;
+      if (booking.status === 'pending' || booking.status === 'adjustment_pending' || (booking.status === 'confirmed' && !meta.assignedGuide)) return 0;
+      if (booking.status === 'confirmed') return 1;
+      if (meta.onsiteStartConfirmed) return 2;
+      return 4;
+    };
+    if (bookingTabFilter === 'all') {
+      list = list.filter((b) => {
+        const m = parseMeta(b.notes);
+        return b.status !== 'completed' && m.groupPhase !== 'completed' && !m.hikeCompletedAt;
+      });
+    }
     if (bookingTabFilter === 'started') {
       list = list.filter((b) => {
         const m = parseMeta(b.notes);
@@ -508,7 +523,7 @@ export default function AdminDashboard() {
         );
       });
     }
-    return list;
+    return [...list].sort((a, b) => queuePriority(a) - queuePriority(b) || String(a.booking_date).localeCompare(String(b.booking_date)));
   }, [allTabBookings, bookingTabFilter, bookingSearch]);
 
   const pendingCount = useMemo(
@@ -1951,6 +1966,14 @@ export default function AdminDashboard() {
                   const meta = parseMeta(b.notes);
                   const displayStatus = getDisplayStatus(b);
                   const isAdjusted = b.status === 'adjustment_pending';
+                  const guideNeedsDispatch =
+                    !meta.assignedGuide &&
+                    !meta.onsiteStartConfirmed &&
+                    !['cancelled', 'completed'].includes(b.status);
+                  const assignedGuideId =
+                    meta.assignedGuideId ||
+                    guides.find((g) => g.name.toLowerCase() === String(meta.assignedGuide || '').toLowerCase())?.id ||
+                    null;
                   return (
                     <Card
                       key={b.id}
@@ -1992,6 +2015,16 @@ export default function AdminDashboard() {
                                 <div>
                                   <p className="text-xs text-muted-foreground">Assigned Guide</p>
                                   <p className="font-semibold">{meta.assignedGuide}</p>
+                                </div>
+                              )}
+                              {guideNeedsDispatch && (
+                                <div className="col-span-full rounded-md border border-amber-500/30 bg-amber-500/5 p-3">
+                                  <p className="text-xs font-semibold text-amber-700 dark:text-amber-300">
+                                    Guide reassignment requested
+                                  </p>
+                                  <p className="mt-1 text-sm">
+                                    {meta.guideDeclineReason || meta.guideChangeReason || 'The previous guide returned this booking to admin dispatch.'}
+                                  </p>
                                 </div>
                               )}
                               {meta.adjustedDate && (
@@ -2108,13 +2141,17 @@ export default function AdminDashboard() {
                                 <Button size="sm" variant="outline" className="gap-1.5 border-emerald-500/40 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/10" onClick={() => setEditingPaymentBooking(b)}>
                                   <DollarSign className="h-3.5 w-3.5" /> Edit Price / Services
                                 </Button>
-                                {meta.assignedGuide && (
+                                {(meta.assignedGuide || guideNeedsDispatch) && (
                                   <Button size="sm" variant="outline" className="gap-1.5 border-amber-500/40 text-amber-600 dark:text-amber-400 hover:bg-amber-500/10"
                                     onClick={() => {
-                                      const gid = guides.find((g) => g.name === meta.assignedGuide)?.id ?? null;
-                                      setReassignFor({ bookingId: b.id, guideName: meta.assignedGuide || null, guideId: gid, locationId: b.location_id ?? null });
+                                      setReassignFor({
+                                        bookingId: b.id,
+                                        guideName: meta.assignedGuide || meta.previousGuide || null,
+                                        guideId: assignedGuideId,
+                                        locationId: b.location_id ?? null,
+                                      });
                                     }}>
-                                    <UserCog className="h-3.5 w-3.5" /> Reassign Guide
+                                    <UserCog className="h-3.5 w-3.5" /> {guideNeedsDispatch ? 'Assign Guide' : 'Reassign Guide'}
                                   </Button>
                                 )}
                                 <AlertDialog>

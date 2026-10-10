@@ -45,6 +45,7 @@ export default function KaliContextPanel({ role, insights }: KaliContextPanelPro
   const [open, setOpen] = useState(false);
   const [reply, setReply] = useState('');
   const [dismissedInsightIds, setDismissedInsightIds] = useState<string[]>([]);
+  const [adminMessageBookingId, setAdminMessageBookingId] = useState<string | null>(null);
   const previousInsightIds = useRef<string[]>([]);
   const sortedInsights = useMemo(
     () => [...insights].sort((a, b) => severityRank[a.severity] - severityRank[b.severity]),
@@ -73,10 +74,22 @@ export default function KaliContextPanel({ role, insights }: KaliContextPanelPro
     previousInsightIds.current = nextIds;
   }, [sortedInsights]);
 
-  if (!insight) return null;
+  useEffect(() => {
+    const onBookingMessage = (event: Event) => {
+      const detail = (event as CustomEvent<{ bookingId?: string }>).detail;
+      if (detail?.bookingId) {
+        setAdminMessageBookingId(detail.bookingId);
+        setOpen(true);
+      }
+    };
+    window.addEventListener('booking-admin-message', onBookingMessage);
+    return () => window.removeEventListener('booking-admin-message', onBookingMessage);
+  }, []);
 
-  const label = `${insight.title}: ${insight.message}`;
-  const askKali = (prompt = followUpPrompt(insight)) => {
+  if (!insight && !adminMessageBookingId) return null;
+
+  const label = adminMessageBookingId ? 'Admin has a new booking message' : `${insight!.title}: ${insight!.message}`;
+  const askKali = (prompt = insight ? followUpPrompt(insight) : 'I have a new booking message. Take me to the booking conversation.') => {
     setOpen(false);
     setReply('');
     window.dispatchEvent(
@@ -87,6 +100,13 @@ export default function KaliContextPanel({ role, insights }: KaliContextPanelPro
         },
       })
     );
+  };
+
+  const openAdminMessage = () => {
+    if (!adminMessageBookingId) return;
+    window.dispatchEvent(new CustomEvent('open-booking-chat', { detail: { bookingId: adminMessageBookingId } }));
+    setAdminMessageBookingId(null);
+    setOpen(false);
   };
 
   const viewMinorRequirements = () => {
@@ -114,14 +134,14 @@ export default function KaliContextPanel({ role, insights }: KaliContextPanelPro
           {/* Notification-style Compact Header */}
           <header className="flex items-center gap-2 border-b border-border/30 bg-muted/30 px-3 py-1.5">
             <KaliAvatar
-              expression={reply ? 'listening' : insight.expression}
+              expression={adminMessageBookingId ? 'alert' : reply ? 'listening' : insight!.expression}
               activity={reply ? 'listening' : 'speaking'}
               size="sm"
               className="h-6 w-6"
             />
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-1.5">
-                <span className="text-[11px] font-bold text-foreground truncate">{thinkingLabel(insight)}</span>
+                <span className="text-[11px] font-bold text-foreground truncate">{adminMessageBookingId ? 'New booking message' : thinkingLabel(insight!)}</span>
                 <span className="text-[9px] px-1 rounded bg-primary/10 text-primary font-medium">{getKaliRoleLabel(role)}</span>
               </div>
             </div>
@@ -137,6 +157,16 @@ export default function KaliContextPanel({ role, insights }: KaliContextPanelPro
 
           {/* Compact Notification Body */}
           <div className="max-h-[22rem] space-y-2 overscroll-contain overflow-y-auto p-2.5 text-xs">
+            {adminMessageBookingId && (
+              <div className="flex items-start gap-2 rounded-xl border border-primary/30 bg-primary/10 p-2 text-primary">
+                <BellRing className="h-3.5 w-3.5 shrink-0" />
+                <div className="min-w-0 flex-1">
+                  <p className="text-[11px] font-bold leading-tight">Admin has a message about your booking</p>
+                  <p className="mt-0.5 text-xs leading-normal text-foreground">Open the booking conversation to read it. Kali will take you there without sending an AI request.</p>
+                  <button type="button" onClick={openAdminMessage} className="mt-2 rounded-md bg-primary px-2 py-1 text-[10px] font-bold text-primary-foreground">Open message</button>
+                </div>
+              </div>
+            )}
             {visibleInsights.map((item) => (
               <div key={item.id} className={cn('flex items-start gap-2 rounded-xl border p-2', severityClasses(item.severity))}>
                 <InsightIcon severity={item.severity} />
