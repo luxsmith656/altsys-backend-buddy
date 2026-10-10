@@ -13,6 +13,7 @@ import TrailOverview from '@/components/landing/TrailOverview';
 import ReservingGuide from '@/components/landing/ReservingGuide';
 import FeaturedHiker from '@/components/landing/FeaturedHiker';
 import { useAuth } from '@/hooks/useAuth';
+import { TRAILS } from '@/lib/map-data';
 
 type LiveWeather = {
   temperature: number;
@@ -74,12 +75,32 @@ function useLiveWeather(): { weather: LiveWeather | null; loading: boolean; erro
 }
 
 function SummitPathOverlay() {
+  const [routeIndex, setRouteIndex] = useState(0);
+  const route = TRAILS[routeIndex] ?? TRAILS[0];
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setRouteIndex((current) => (current + 1) % TRAILS.length), 6500);
+    return () => window.clearInterval(timer);
+  }, []);
+
+  const path = route.path;
+  const minLat = Math.min(...path.map(([lat]) => lat));
+  const maxLat = Math.max(...path.map(([lat]) => lat));
+  const minLng = Math.min(...path.map(([, lng]) => lng));
+  const maxLng = Math.max(...path.map(([, lng]) => lng));
+  const pathD = path.map(([lat, lng], index) => {
+    const x = 18 + ((lng - minLng) / Math.max(0.00001, maxLng - minLng)) * 364;
+    const y = 96 - ((lat - minLat) / Math.max(0.00001, maxLat - minLat)) * 76;
+    return `${index === 0 ? 'M' : 'L'}${x.toFixed(1)},${y.toFixed(1)}`;
+  }).join(' ');
+  const routeLabel = route.name.includes('Lamot 1') ? 'Lamot 1' : route.name.includes('Sto.') ? 'Sto. Tomas' : 'Lamot 2';
+
   return (
     <div className="hidden sm:block glass-card rounded-2xl p-4 sm:p-5">
       <div className="flex items-center justify-between mb-3">
         <div>
-          <div className="text-xs uppercase tracking-wide text-muted-foreground/80">Summit path (preview)</div>
-          <div className="text-sm font-semibold">Sample route line</div>
+          <div className="text-xs uppercase tracking-wide text-muted-foreground/80">Route preview</div>
+          <div className="text-sm font-semibold">{routeLabel} route</div>
         </div>
         <div className="text-xs text-muted-foreground text-right">
           <div className="font-medium text-foreground/90">Start</div>
@@ -98,7 +119,7 @@ function SummitPathOverlay() {
           </defs>
 
           <motion.path
-            d="M20,90 C70,50 120,60 165,40 C220,15 250,35 290,25 C330,15 350,30 380,18"
+            d={pathD}
             fill="none"
             stroke="url(#pathGradient)"
             strokeWidth="3.5"
@@ -116,11 +137,11 @@ function SummitPathOverlay() {
         </svg>
 
         <div className="absolute left-3 bottom-2 text-[11px] text-muted-foreground">
-          <span className="text-foreground/90 font-medium">Start</span> • Trailhead
+          <span className="text-foreground/90 font-medium">Start</span> • {routeLabel}
         </div>
         <div className="absolute right-3 top-2 text-[11px] text-muted-foreground text-right">
           <div>
-            <span className="text-foreground/90 font-medium">Arrive</span> • Summit
+            <span className="text-foreground/90 font-medium">Arrive</span> • Peak
           </div>
           <div className="text-[10px]">~622 m</div>
         </div>

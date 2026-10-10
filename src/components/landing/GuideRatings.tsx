@@ -106,18 +106,29 @@ export default function GuideRatings() {
   useEffect(() => {
     const localRatings = getTop3Guides();
     const load = async () => {
-      const { data } = await supabase.from('guides' as any).select('id,full_name,specialty,referral_code').eq('is_active', true).order('full_name').limit(60);
-      const dbGuides = ((data as any[]) ?? []).map((guide) => ({
+      const { data } = await supabase.from('guides' as any).select('id,full_name,specialty,referral_code,photo_url').eq('is_active', true).order('full_name').limit(60);
+      const guideRows = (data as any[]) ?? [];
+      const guideIds = guideRows.map((guide) => guide.id).filter(Boolean);
+      const { data: reviewRows } = guideIds.length
+        ? await supabase.from('guide_reviews' as any).select('guide_id,rating,comment,reviewer_name,created_at').in('guide_id', guideIds).order('created_at', { ascending: false })
+        : { data: [] as any[] };
+      const reviewsByGuide = new Map<string, any[]>();
+      ((reviewRows as any[]) ?? []).forEach((review) => reviewsByGuide.set(review.guide_id, [...(reviewsByGuide.get(review.guide_id) ?? []), review]));
+      const dbGuides = guideRows.map((guide) => {
+        const reviews = reviewsByGuide.get(guide.id) ?? [];
+        const totalRating = reviews.reduce((sum, review) => sum + Number(review.rating || 0), 0);
+        return {
         guideId: guide.id,
         guideName: guide.full_name,
         trail: guide.specialty || 'Mt. Kalisungan local guide',
-        totalRating: 0,
-        reviewCount: 0,
-        avgRating: 0,
-        recentReviews: [],
-        photoUrl: guidePhotoForName(guide.full_name),
+        totalRating,
+        reviewCount: reviews.length,
+        avgRating: reviews.length ? totalRating / reviews.length : 0,
+        recentReviews: reviews.slice(0, 3).map((review) => ({ rating: Number(review.rating || 0), comment: review.comment || '', hikerName: review.reviewer_name || 'Hiker', date: review.created_at || '' })),
+        photoUrl: guide.photo_url || guidePhotoForName(guide.full_name),
         referralCode: guide.referral_code || null,
-      } as GuideRating & { photoUrl?: string | null }));
+        } as GuideRating & { photoUrl?: string | null };
+      }).sort((a, b) => b.avgRating - a.avgRating || b.reviewCount - a.reviewCount);
       const source = dbGuides.length ? dbGuides : GUIDE_DIRECTORY.map((guide) => ({ guideId: guide.emailSlug, guideName: guide.name, trail: 'Mt. Kalisungan local guide', totalRating: 0, reviewCount: 0, avgRating: 0, recentReviews: [], photoUrl: guide.photoUrl }));
       setGuides(source.length ? source as GuideRating[] : localRatings);
     };

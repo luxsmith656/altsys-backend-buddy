@@ -31,7 +31,12 @@ export function summarizeAdminOverview(bookings: OverviewBooking[], sessions: Ov
     if (session.status !== 'active' || session.end_time || session.participant_role === 'guide' || !session.booking_id) continue;
     const booking = bookings.find((b) => b.id === session.booking_id);
     if (!booking || ['completed', 'cancelled', 'declined'].includes(booking.status)) continue;
-    activeGroups.set(booking.id, { id: booking.id, name: parseMeta(booking.notes).fullName || 'Hiking group', groupSize: booking.group_size, startTime: session.start_time });
+    const meta = parseMeta(booking.notes);
+    // Count people, not the booking's dispatch/group field. Older records may
+    // have a stale group_size, while newer records carry the actual companions.
+    const companionCount = Array.isArray(meta.companionDetails) ? meta.companionDetails.length : 0;
+    const peopleCount = companionCount > 0 ? companionCount + 1 : Math.max(1, Number(booking.group_size) || 1);
+    activeGroups.set(booking.id, { id: booking.id, name: meta.fullName || 'Hiking group', groupSize: peopleCount, startTime: session.start_time });
   }
   return {
     totalBookings: todayBookings.filter((b) => !['cancelled', 'declined'].includes(b.status)).length,

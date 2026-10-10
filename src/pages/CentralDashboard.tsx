@@ -121,7 +121,18 @@ export default function CentralDashboard() {
           const locId = s.location_id || bookingLocMap.get(s.booking_id);
           return locId === loc.id;
         });
-        const active = locSessions.filter((s) => s.participant_role !== 'guide').length;
+        const activeBookingIds = new Set(
+          locSessions
+            .filter((s) => s.participant_role !== 'guide' && s.booking_id)
+            .map((s) => s.booking_id as string),
+        );
+        const active = [...activeBookingIds].reduce((sum, bookingId) => {
+          const booking = bookingList.find((item) => item.id === bookingId);
+          if (!booking) return sum;
+          const meta = parseMeta(booking.notes);
+          const companions = Array.isArray(meta.companionDetails) ? meta.companionDetails.length : 0;
+          return sum + (companions > 0 ? companions + 1 : Math.max(1, Number(booking.group_size) || 1));
+        }, 0);
         const activeSessions = new Set(locSessions.map((s) => s.booking_id).filter(Boolean)).size;
 
         return {

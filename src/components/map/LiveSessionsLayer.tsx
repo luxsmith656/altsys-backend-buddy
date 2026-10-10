@@ -21,6 +21,8 @@ type ActiveSession = {
   client_session_id?: string | null;
 };
 
+type ParticipantProfile = { name: string; avatarUrl: string | null };
+
 type LocationPoint = {
   session_id: string;
   latitude: number;
@@ -46,16 +48,17 @@ const roleColor: Record<string, string> = {
   admin: '#ea580c',
 };
 
-function liveMarkerIcon(role: string, heading: number | null, isSelf: boolean) {
-  const color = roleColor[role] ?? '#16a34a';
+function liveMarkerIcon(role: string, heading: number | null, isSelf: boolean, avatarUrl: string | null, bookingColor: string) {
+  const color = bookingColor || roleColor[role] || '#16a34a';
   const rotation = Number.isFinite(heading) ? Number(heading) : 0;
   const label = isSelf ? 'YOU' : role === 'guide' ? 'G' : role === 'ranger' ? 'R' : 'H';
+  const shape = role === 'guide' ? 'clip-path:polygon(50% 0%, 92% 18%, 84% 76%, 50% 100%, 16% 76%, 8% 18%)' : 'border-radius:50%';
+  const image = avatarUrl ? `<img src="${avatarUrl}" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:inherit" />` : `<span style="position:relative;color:white;font:800 ${isSelf ? '8px' : '11px'} system-ui">${label}</span>`;
   return L.divIcon({
     className: '',
     html: `
       <div style="position:relative;width:38px;height:38px;display:grid;place-items:center">
-        <div style="position:absolute;inset:3px;border-radius:${role === 'guide' ? '9px' : '50%'};background:${color};border:3px solid white;box-shadow:0 3px 10px rgba(15,23,42,.4)"></div>
-        <span style="position:relative;color:white;font:800 ${isSelf ? '8px' : '11px'} system-ui">${label}</span>
+        <div style="position:absolute;inset:3px;${shape};overflow:hidden;background:${color};border:3px solid ${color};box-shadow:0 3px 10px rgba(15,23,42,.4);display:grid;place-items:center">${image}</div>
         <span style="position:absolute;left:15px;top:-7px;color:${color};font-size:16px;line-height:1;transform:rotate(${rotation}deg);transform-origin:4px 25px;text-shadow:0 1px 2px white">▲</span>
       </div>`,
     iconSize: [38, 38],
@@ -74,7 +77,7 @@ export default function LiveSessionsLayer({
   const map = useMap();
   const [sessions, setSessions] = useState<ActiveSession[]>([]);
   const [paths, setPaths] = useState<Record<string, LocationPoint[]>>({});
-  const [names, setNames] = useState<Record<string, string>>({});
+  const [profiles, setProfiles] = useState<Record<string, ParticipantProfile>>({});
   const [localSnapshot, setLocalSnapshot] = useState<TrackerSnapshot | null>(null);
   const centeredRef = useRef(false);
   const gpsErrorShownRef = useRef(false);
@@ -141,15 +144,26 @@ export default function LiveSessionsLayer({
 
     if (mode === 'monitor') {
       const userIds = Array.from(new Set(visibleSessions.map((session) => session.user_id)));
-      const { data: profiles } = await supabase
+      const { data: profileRows } = await supabase
         .from('profiles')
-        .select('user_id,full_name')
+        .select('user_id,full_name,avatar_url')
         .in('user_id', userIds);
-      const nextNames: Record<string, string> = {};
-      (profiles ?? []).forEach((profile) => {
-        nextNames[profile.user_id] = profile.full_name || 'Trail participant';
+      const nextProfiles: Record<string, ParticipantProfile> = {};
+      (profileRows ?? []).forEach((profile) => {
+        nextProfiles[profile.user_id] = { name: profile.full_name || 'Trail participant', avatarUrl: profile.avatar_url || null };
       });
-      setNames(nextNames);
+      const { data: guideRows } = await supabase
+        .from('guides' as any)
+        .select('user_id,full_name,photo_url')
+        .in('user_id', userIds);
+      (guideRows as any[] | null ?? []).forEach((guide) => {
+        const current = nextProfiles[guide.user_id];
+        nextProfiles[guide.user_id] = {
+          name: current?.name || guide.full_name || 'Mountain guide',
+          avatarUrl: current?.avatarUrl || guide.photo_url || null,
+        };
+      });
+      setProfiles(nextProfiles);
     }
   }, [locationId, mode, onSelfLocationChange, userId]);
 
@@ -255,22 +269,26 @@ export default function LiveSessionsLayer({
             ? Number(latest.heading)
             : null;
         const line = points.map((point) => [point.latitude, point.longitude] as [number, number]);
+        const bookingColor = session.booking_id
+          ? ['#16a34a', '#2563eb', '#9333ea', '#ea580c', '#0891b2'][Array.from(session.booking_id).reduce((sum, char) => sum + char.charCodeAt(0), 0) % 5]
+          : roleColor[role] ?? '#16a34a';
+        const profile = profiles[session.user_id];
         return (
           <Fragment key={session.id}>
             {line.length > 1 && (
               <Polyline
                 positions={line}
-                pathOptions={{ color: roleColor[role] ?? '#16a34a', weight: isSelf ? 5 : 3, opacity: 0.78 }}
+                pathOptions={{ color: bookingColor, weight: isSelf ? 5 : 3, opacity: 0.78 }}
               />
             )}
             <Marker
               position={[latest.latitude, latest.longitude]}
-              icon={liveMarkerIcon(role, heading, isSelf)}
+              icon={liveMarkerIcon(role, heading, isSelf, profile?.avatarUrl ?? null, bookingColor)}
               zIndexOffset={role === 'guide' ? 2100 : 2200}
             >
               <Popup>
                 <div className="min-w-[180px] text-sm">
-                  <p className="font-bold">{isSelf ? 'Your live location' : names[session.user_id] || 'Trail participant'}</p>
+                  <p className="font-bold">{isSelf ? 'Your live location' : profile?.name || 'Trail participant'}</p>
                   <p className="capitalize text-xs">{role} · {session.tracking_phase || 'ascent'}</p>
                   <p className="mt-1 text-xs">Last update: {new Date(latest.timestamp).toLocaleString()}</p>
                   {latest.accuracy != null && <p className="text-xs">GPS accuracy: ±{Math.round(Number(latest.accuracy))} m</p>}

@@ -2,6 +2,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { encodeMeta, parseMeta } from '@/lib/bookingMeta';
 import { notifyUser } from '@/lib/firestoreNotifications';
 import { confirmReservation } from '@/lib/notification-service';
+import { calculateGuidesNeeded } from '@/lib/payments';
 
 export interface AcceptAssignmentParams {
   assignmentId: string;
@@ -75,7 +76,7 @@ export async function acceptGuideAssignment({
     // Read the booking before changing assignment state so a denied read leaves it untouched.
     const { data: booking, error: fetchError } = await supabase
       .from('bookings')
-      .select('notes, user_id, booking_date')
+      .select('notes, user_id, booking_date, group_size')
       .eq('id', bookingId)
       .single();
 
@@ -83,13 +84,23 @@ export async function acceptGuideAssignment({
     if (!booking) throw new Error('Assigned booking was not found.');
 
     const meta = parseMeta(booking.notes);
+    const existingGuides = Array.isArray((meta as any).assignedGuides) ? (meta as any).assignedGuides : [];
+    const isAdditionalGuide = Boolean(meta.assignedGuideId && meta.assignedGuideId !== guideId);
+    const assignedGuides = [
+      ...existingGuides.filter((guide: any) => guide?.id !== guideId),
+      { id: guideId, name: guideName, status: 'accepted', acceptedAt: decidedAt },
+    ];
     const updatedMeta = encodeMeta({
       ...meta,
-      assignedGuide: guideName,
-      assignedGuideId: guideId,
-      guideStatus: 'accepted',
-      guideAcceptedAt: decidedAt,
-    });
+      ...(isAdditionalGuide ? {} : {
+        assignedGuide: guideName,
+        assignedGuideId: guideId,
+        guideStatus: 'accepted',
+        guideAcceptedAt: decidedAt,
+      }),
+      assignedGuides,
+      additionalGuides: isAdditionalGuide ? assignedGuides.filter((guide: any) => guide.id !== meta.assignedGuideId) : [],
+    } as any);
 
     const { error: assignError } = await supabase
       .from('booking_assignments' as any)
@@ -97,15 +108,26 @@ export async function acceptGuideAssignment({
       .eq('id', assignmentId);
     if (assignError) throw assignError;
 
+    const { count: acceptedCount } = await supabase
+      .from('booking_assignments' as any)
+      .select('id', { count: 'exact', head: true })
+      .eq('booking_id', bookingId)
+      .eq('status', 'accepted');
+    const requiredGuides = calculateGuidesNeeded(Number((booking as any).group_size) || 1);
+    // Older clients/mocks may not expose a count response. In the real API a
+    // successful count is numeric; only that response should gate confirmation.
+    const bookingStatus = acceptedCount == null || acceptedCount >= requiredGuides ? 'confirmed' : 'pending';
     const { error: bookingUpdateError } = await supabase
       .from('bookings')
-      .update({ status: 'confirmed', notes: updatedMeta } as any)
+      .update({ status: bookingStatus, notes: updatedMeta } as any)
       .eq('id', bookingId);
     if (bookingUpdateError) throw bookingUpdateError;
 
     const warnings: string[] = [];
-    const email = await confirmReservation({ id: bookingId });
-    if (email.success === false) warnings.push(`Confirmation email: ${email.error}`);
+    if (bookingStatus === 'confirmed') {
+      const email = await confirmReservation({ id: bookingId });
+      if (email.success === false) warnings.push(`Confirmation email: ${email.error}`);
+    }
 
     const effectiveHikerId = hikerUserId || booking?.user_id;
     const effectiveDate = bookingDate || booking?.booking_date || 'your scheduled date';
@@ -124,8 +146,10 @@ export async function acceptGuideAssignment({
     // 4. Notify Hiker
     if (effectiveHikerId) {
       await notifyUser(effectiveHikerId, {
-        title: '🎉 Mountain Guide Confirmed!',
-        body: `Your mountain guide ${guideName} has accepted your hike booking for ${effectiveDate}.`,
+        title: bookingStatus === 'confirmed' ? '🎉 Mountain Guides Confirmed!' : '📋 Guide Assignment Accepted',
+        body: bookingStatus === 'confirmed'
+          ? `All required mountain guides have accepted your hike booking for ${effectiveDate}.`
+          : `${guideName} accepted your hike booking for ${effectiveDate}. Dispatch is still confirming the remaining guide assignment.`,
         category: 'booking',
         link: `/hiker?booking=${encodeURIComponent(bookingId)}`,
       }).catch(() => warnings.push('In-app notification could not be delivered.'));
@@ -135,6 +159,39 @@ export async function acceptGuideAssignment({
   } catch (err: any) {
     console.error('acceptGuideAssignment error:', err);
     return { success: false, error: err?.message || 'Failed to accept assignment' };
+  }
+}
+
+export async function addAdditionalGuideToBooking({ bookingId, guideId, guideUserId, guideName, bookingDate }: {
+  bookingId: string;
+  guideId: string;
+  guideUserId?: string | null;
+  guideName: string;
+  bookingDate?: string;
+}): Promise<{ success: boolean; error?: string; warnings?: string[] }> {
+  try {
+    const { data, error } = await (supabase.rpc as any)('admin_add_hike_guide', {
+      p_booking_id: bookingId,
+      p_guide_id: guideId,
+    });
+    if (error) throw error;
+    const warnings: string[] = [];
+    const date = data?.bookingDate || bookingDate || 'your scheduled date';
+    const { error: messageError } = await supabase.from('booking_messages' as any).insert({
+      booking_id: bookingId,
+      sender_role: 'system',
+      kind: 'system',
+      content: `Admin assigned additional mountain guide ${guideName}. Awaiting guide acceptance for ${date}.`,
+    } as any);
+    if (messageError) warnings.push(`Booking message: ${messageError.message}`);
+    if (guideUserId) await notifyUser(guideUserId, {
+      title: 'Additional Hike Guide Assignment',
+      body: `You have been assigned as an additional guide for Booking #${bookingId.slice(0, 8)} on ${date}. Please review and accept.`,
+      category: 'booking',
+    }).catch(() => warnings.push('Guide notification could not be delivered.'));
+    return warnings.length ? { success: true, warnings } : { success: true };
+  } catch (error: any) {
+    return { success: false, error: error?.message || 'Failed to assign the additional guide' };
   }
 }
 

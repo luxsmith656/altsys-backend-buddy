@@ -95,7 +95,7 @@ import {
 } from 'lucide-react';
 import BookingChat from '@/components/booking/BookingChat';
 import ReassignGuideDialog from '@/components/booking/ReassignGuideDialog';
-import { assignGuideToBooking } from '@/lib/guideAssignmentService';
+import { addAdditionalGuideToBooking, assignGuideToBooking } from '@/lib/guideAssignmentService';
 import EditBookingDialog from '@/components/booking/EditBookingDialog';
 import { AdminOffDutyApprovals } from '@/components/booking/OffDutyManager';
 import AdminUserManagement from '@/components/admin/AdminUserManagement';
@@ -462,6 +462,7 @@ export default function AdminDashboard() {
   // Accept flow
   const [acceptDialogId, setAcceptDialogId] = useState<string | null>(null);
   const [selectedGuide, setSelectedGuide] = useState('');
+  const [selectedAdditionalGuide, setSelectedAdditionalGuide] = useState('');
   const [selectedTrailZoneId, setSelectedTrailZoneId] = useState('');
   const [acceptSaving, setAcceptSaving] = useState(false);
 
@@ -1194,6 +1195,33 @@ export default function AdminDashboard() {
         assignedTrailAuto: routeInfo.auto,
       },
     });
+    const requiredGuides = calculateFees(Number(booking?.group_size) || 1).guidesNeeded;
+    if (result.success && requiredGuides > 1) {
+      if (!selectedAdditionalGuide || selectedAdditionalGuide === selectedGuide) {
+        toast.error('Select a second different guide for groups over five hikers.');
+        setAcceptSaving(false);
+        return;
+      }
+      const secondGuide = guides.find((guide) => guide.id === selectedAdditionalGuide);
+      if (!secondGuide?.user_id) {
+        toast.error('The second guide account could not be found. Refresh the guide list.');
+        setAcceptSaving(false);
+        return;
+      }
+      const secondResult = await addAdditionalGuideToBooking({
+        bookingId: acceptDialogId,
+        guideId: secondGuide.id,
+        guideUserId: secondGuide.user_id,
+        guideName: secondGuide.name,
+        bookingDate: booking?.booking_date,
+      });
+      if (!secondResult.success) {
+        toast.error(`Primary guide assigned, but second guide was not assigned: ${secondResult.error}`);
+        setAcceptSaving(false);
+        return;
+      }
+      secondResult.warnings?.forEach((warning) => toast.warning(warning));
+    }
     if (!result.success) {
       toast.error(`Failed to assign guide: ${result.error}`);
     } else {
@@ -1208,6 +1236,7 @@ export default function AdminDashboard() {
       setPendingBookings((prev) => prev.filter((b) => b.id !== acceptDialogId));
       setAcceptDialogId(null);
       setSelectedGuide('');
+      setSelectedAdditionalGuide('');
       setSelectedTrailZoneId('');
       loadAllTabBookings();
       loadUpcomingCapacities();
@@ -2266,7 +2295,15 @@ export default function AdminDashboard() {
                     </CardTitle>
                   </CardHeader>
                   <CardContent className="space-y-4 mt-0">
-                    <p className="text-sm text-muted-foreground">Select an available guide to assign to this booking.</p>
+                    {(() => {
+                      const requiredGuides = acceptBooking ? calculateFees(Number(acceptBooking.group_size) || 1).guidesNeeded : 1;
+                      return (
+                        <div className="rounded-lg border border-primary/20 bg-primary/5 px-3 py-2 text-sm text-foreground">
+                          <span className="font-semibold">{acceptBooking?.group_size || 1} pax · {requiredGuides} guide{requiredGuides === 1 ? '' : 's'} required.</span>{' '}
+                          {requiredGuides > 1 ? 'This group must have two accepted guide assignments before check-in.' : 'Select an available guide to assign to this booking.'}
+                        </div>
+                      );
+                    })()}
                     <div className="space-y-2">
                       <Label>Assign Guide</Label>
                       <Select value={selectedGuide} onValueChange={setSelectedGuide}>
@@ -2280,6 +2317,20 @@ export default function AdminDashboard() {
                         </SelectContent>
                       </Select>
                     </div>
+                    {acceptBooking && calculateFees(Number(acceptBooking.group_size) || 1).guidesNeeded > 1 && (
+                      <div className="space-y-2">
+                        <Label>Second Guide</Label>
+                        <Select value={selectedAdditionalGuide} onValueChange={setSelectedAdditionalGuide}>
+                          <SelectTrigger><SelectValue placeholder="Select a second available guide…" /></SelectTrigger>
+                          <SelectContent>
+                            {guides.filter((g) => g.is_active && g.status !== 'off-duty' && g.status !== 'off_duty' && g.user_id && g.location_id === acceptBooking.location_id && g.id !== selectedGuide).map((g) => (
+                              <SelectItem key={g.id} value={g.id}>{g.name} — <span className="capitalize">{g.status}</span> ({g.trail})</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <p className="text-[11px] text-muted-foreground">Both guides receive an assignment and must accept before this booking is confirmed.</p>
+                      </div>
+                    )}
                     <div className="space-y-2">
                       <Label>Official Route</Label>
                       {acceptRouteOptions.length === 0 ? (
@@ -2305,7 +2356,7 @@ export default function AdminDashboard() {
                     </div>
                     <div className="flex flex-col gap-2 pt-2 min-[380px]:flex-row">
                       <Button variant="outline" className="flex-1" onClick={() => { setAcceptDialogId(null); setSelectedTrailZoneId(''); }} disabled={acceptSaving}>Cancel</Button>
-                      <Button className="flex-1 gap-2" onClick={handleAcceptBooking} disabled={!selectedGuide || acceptRouteOptions.length === 0 || (acceptNeedsRouteSelection && !selectedTrailZoneId) || acceptSaving}>
+                      <Button className="flex-1 gap-2" onClick={handleAcceptBooking} disabled={!selectedGuide || (acceptBooking && calculateFees(Number(acceptBooking.group_size) || 1).guidesNeeded > 1 && !selectedAdditionalGuide) || acceptRouteOptions.length === 0 || (acceptNeedsRouteSelection && !selectedTrailZoneId) || acceptSaving}>
                         {acceptSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
                         Confirm & Notify Guide
                       </Button>
