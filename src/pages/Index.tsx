@@ -13,7 +13,10 @@ import TrailOverview from '@/components/landing/TrailOverview';
 import ReservingGuide from '@/components/landing/ReservingGuide';
 import FeaturedHiker from '@/components/landing/FeaturedHiker';
 import { useAuth } from '@/hooks/useAuth';
-import { TRAILS } from '@/lib/map-data';
+import { LAMOT_2_REFERENCE_PATH, normalizeOfficialRoutePath, TRAILS } from '@/lib/map-data';
+import { supabase } from '@/integrations/supabase/client';
+import { getTrailheadIdentity } from '@/lib/mapTrailheads';
+import { officialRoutesForLocation } from '@/lib/officialRoutes';
 
 type LiveWeather = {
   temperature: number;
@@ -76,12 +79,83 @@ function useLiveWeather(): { weather: LiveWeather | null; loading: boolean; erro
 
 function SummitPathOverlay() {
   const [routeIndex, setRouteIndex] = useState(0);
-  const route = TRAILS[routeIndex] ?? TRAILS[0];
+  const [routes, setRoutes] = useState(TRAILS);
+  const route = routes[routeIndex] ?? routes[0] ?? TRAILS[0];
 
   useEffect(() => {
-    const timer = window.setInterval(() => setRouteIndex((current) => (current + 1) % TRAILS.length), 6500);
-    return () => window.clearInterval(timer);
+    let cancelled = false;
+
+    const loadPublishedRoutes = async () => {
+      const [{ data: locations, error: locationError }, { data: routeRows, error: routeError }] = await Promise.all([
+        supabase.from('locations' as any).select('id,name,slug'),
+        supabase
+          .from('trail_zones' as any)
+          .select('id,location_id,name,coordinates_json,recording_metadata,status,is_official,review_status')
+          .eq('status', 'active')
+          .eq('is_official', true)
+          .eq('review_status', 'approved')
+          .order('created_at', { ascending: true }),
+      ]);
+      if (cancelled || locationError || routeError) return;
+
+      const published = officialRoutesForLocation((routeRows as any[]) ?? []);
+      const locationRows = (locations as any[]) ?? [];
+      const findLocation = (slug: string) => locationRows.find((location) => {
+        const identity = getTrailheadIdentity(location.slug, location.name);
+        return identity && (
+          (slug === 'lamot-1' && identity.code === 'L1') ||
+          (slug === 'lamot-2' && identity.code === 'L2') ||
+          (slug === 'sto-tomas' && identity.code === 'ST')
+        );
+      });
+      const findRoute = (locationId: string | undefined) => published
+        .filter((route: any) => route.location_id === locationId)
+        .sort((a: any, b: any) => (b.coordinates_json?.length ?? 0) - (a.coordinates_json?.length ?? 0))[0];
+
+      const lamot2Location = findLocation('lamot-2');
+      const lamot2Row = findRoute(lamot2Location?.id);
+      const lamot2Path = Array.isArray(lamot2Row?.coordinates_json)
+        ? lamot2Row.coordinates_json
+          .map((point: any) => [Number(point.lat), Number(point.lng)] as [number, number])
+          .filter(([lat, lng]: [number, number]) => Number.isFinite(lat) && Number.isFinite(lng))
+        : LAMOT_2_REFERENCE_PATH;
+      const referencePath = lamot2Path.length >= 2 ? lamot2Path : LAMOT_2_REFERENCE_PATH;
+
+      const nextRoutes = ['lamot-1', 'lamot-2', 'sto-tomas'].map((slug, index) => {
+        const location = findLocation(slug);
+        const row = findRoute(location?.id);
+        const fallback = TRAILS[index] ?? TRAILS[0];
+        const rawPath = Array.isArray(row?.coordinates_json)
+          ? row.coordinates_json
+            .map((point: any) => [Number(point.lat), Number(point.lng)] as [number, number])
+            .filter(([lat, lng]: [number, number]) => Number.isFinite(lat) && Number.isFinite(lng))
+          : [];
+        const path = rawPath.length >= 2
+          ? normalizeOfficialRoutePath(
+            rawPath,
+            `${location?.slug ?? ''} ${location?.name ?? ''} ${row?.name ?? ''}`,
+            referencePath,
+            Boolean(row?.recording_metadata?.sharedRouteSuffix),
+          )
+          : fallback.path;
+        const label = slug === 'sto-tomas' ? 'Sto. Tomas' : slug === 'lamot-1' ? 'Lamot 1' : 'Lamot 2';
+        return { ...fallback, name: `${label} Official Route`, path };
+      });
+      if (!cancelled && nextRoutes.every((route) => route.path.length >= 2)) setRoutes(nextRoutes);
+    };
+
+    void loadPublishedRoutes();
+    return () => { cancelled = true; };
   }, []);
+
+  useEffect(() => {
+    if (routeIndex >= routes.length) setRouteIndex(0);
+  }, [routeIndex, routes.length]);
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setRouteIndex((current) => (current + 1) % routes.length), 6500);
+    return () => window.clearInterval(timer);
+  }, [routes.length]);
 
   const path = route.path;
   const minLat = Math.min(...path.map(([lat]) => lat));
@@ -94,8 +168,8 @@ function SummitPathOverlay() {
     return `${index === 0 ? 'M' : 'L'}${x.toFixed(1)},${y.toFixed(1)}`;
   }).join(' ');
   const routeLabel = route.name.includes('Lamot 1') ? 'Lamot 1' : route.name.includes('Sto.') ? 'Sto. Tomas' : 'Lamot 2';
-  const showPrevious = () => setRouteIndex((current) => (current - 1 + TRAILS.length) % TRAILS.length);
-  const showNext = () => setRouteIndex((current) => (current + 1) % TRAILS.length);
+  const showPrevious = () => setRouteIndex((current) => (current - 1 + routes.length) % routes.length);
+  const showNext = () => setRouteIndex((current) => (current + 1) % routes.length);
 
   const startPoint = path[0] ?? [minLat, minLng];
   const endPoint = path.at(-1) ?? [maxLat, maxLng];

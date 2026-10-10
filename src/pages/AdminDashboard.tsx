@@ -180,6 +180,22 @@ const getMappedTab = (tab: string) => {
   return 'overview';
 };
 
+const getBookingDisplayStatus = (booking: any) => {
+  const meta = parseMeta(booking.notes);
+  if (booking.status === 'completed' || meta.groupPhase === 'completed' || Boolean(meta.hikeCompletedAt)) {
+    return 'completed';
+  }
+  if (meta.onsiteStartConfirmed) return 'started';
+  // A guide returning a booking to dispatch removes the active assignment.
+  // Keep it in the pending queue so the local admin can assign a replacement.
+  if (
+    ['confirmed', 'approved'].includes(booking.status) &&
+    !meta.assignedGuideId &&
+    ['declined', 'reassigned_pending'].includes(String(meta.guideStatus || ''))
+  ) return 'pending';
+  return booking.status as string;
+};
+
 export default function AdminDashboard() {
   const [searchParams, setSearchParams] = useSearchParams();
   const routeEditorRef = useRef<HTMLDivElement | null>(null);
@@ -457,6 +473,7 @@ export default function AdminDashboard() {
   const [newGuideFee, setNewGuideFee] = useState('500');
   const [addGuideSaving, setAddGuideSaving] = useState(false);
   const [addGuideOpen, setAddGuideOpen] = useState(false);
+  const [guideRosterOpen, setGuideRosterOpen] = useState(true);
   const [guideActivationSavingId, setGuideActivationSavingId] = useState<string | null>(null);
   const [removeGuideId, setRemoveGuideId] = useState<string | null>(null);
   const [removeGuidePassword, setRemoveGuidePassword] = useState('');
@@ -505,7 +522,7 @@ export default function AdminDashboard() {
         return b.status === 'completed' || m.groupPhase === 'completed' || Boolean(m.hikeCompletedAt);
       });
     } else if (bookingTabFilter === 'pending') {
-      list = list.filter((b) => b.status === 'pending' || b.status === 'adjustment_pending');
+      list = list.filter((b) => b.status === 'pending' || b.status === 'adjustment_pending' || getBookingDisplayStatus(b) === 'pending');
     } else if (bookingTabFilter === 'confirmed') {
       list = list.filter((b) => {
         const m = parseMeta(b.notes);
@@ -531,7 +548,7 @@ export default function AdminDashboard() {
   }, [allTabBookings, bookingTabFilter, bookingSearch]);
 
   const pendingCount = useMemo(
-    () => allTabBookings.filter((b) => b.status === 'pending' || b.status === 'adjustment_pending').length,
+    () => allTabBookings.filter((b) => b.status === 'pending' || b.status === 'adjustment_pending' || getBookingDisplayStatus(b) === 'pending').length,
     [allTabBookings],
   );
 
@@ -1650,14 +1667,7 @@ export default function AdminDashboard() {
   }));
 
   /* ─── Booking display helpers ─── */
-  const getDisplayStatus = (b: any) => {
-    const meta = parseMeta(b.notes);
-    if (b.status === 'completed' || meta.groupPhase === 'completed' || Boolean(meta.hikeCompletedAt)) {
-      return 'completed';
-    }
-    if (meta.onsiteStartConfirmed) return 'started';
-    return b.status as string;
-  };
+  const getDisplayStatus = getBookingDisplayStatus;
 
   const officialRoutesForLocation = useCallback((locationId?: string | null) => {
     return filterOfficialRoutes(zones ?? [], locationId);
@@ -2420,10 +2430,7 @@ export default function AdminDashboard() {
               </p>
             </div>
 
-            <Button variant="outline" className="gap-2" onClick={() => setAddGuideOpen((open) => !open)} aria-expanded={addGuideOpen}>
-              <UserPlus className="h-4 w-4" /> {addGuideOpen ? 'Close guide form' : 'Add guide'}
-            </Button>
-            {addGuideOpen && <Card className="glass-card">
+            <Card className="glass-card">
               <CardHeader>
                 <CardTitle className="text-base flex items-center gap-2">
                   <QrCode className="h-5 w-5 text-primary" /> QR Scanner &amp; Lookup
@@ -2895,7 +2902,7 @@ export default function AdminDashboard() {
                   );
                 })()}
               </CardContent>
-            </Card>}
+            </Card>
           </TabsContent>
               <TabsContent value="live-map" className="relative mt-0 h-[calc(100dvh-9rem)] min-h-[28rem] overflow-hidden rounded-lg border border-border/30 sm:min-h-[600px]">
             <RealtimeMonitorMap locationId={isSuperAdmin ? null : activeLocationId} canAddCheckpoints={false} />
@@ -3157,7 +3164,32 @@ export default function AdminDashboard() {
               </div>
             </div>
 
-            <Card className="glass-card">
+            <div className="flex flex-wrap gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                className="gap-1.5"
+                onClick={() => setAddGuideOpen((open) => !open)}
+                aria-expanded={addGuideOpen}
+              >
+                <UserPlus className="h-4 w-4 text-primary" />
+                {addGuideOpen ? 'Hide add guide form' : 'Add guide'}
+                {addGuideOpen ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                className="gap-1.5"
+                onClick={() => setGuideRosterOpen((open) => !open)}
+                aria-expanded={guideRosterOpen}
+              >
+                <Users className="h-4 w-4 text-primary" />
+                {guideRosterOpen ? 'Hide guide roster' : 'Show guide roster'}
+                {guideRosterOpen ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+              </Button>
+            </div>
+
+            {addGuideOpen && <Card className="glass-card">
               <CardHeader>
                 <CardTitle className="text-base flex items-center gap-2">
                   <UserPlus className="h-4 w-4 text-primary" /> Add Guide
@@ -3181,8 +3213,9 @@ export default function AdminDashboard() {
                   Add Guide
                 </Button>
               </CardContent>
-            </Card>
+            </Card>}
 
+            {guideRosterOpen && <>
             {/* Guide search */}
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
@@ -3314,6 +3347,7 @@ export default function AdminDashboard() {
                 </Card>
               </div>
             )}
+            </>}
 
             {/* Guide summary */}
             <Card className="glass-card">
