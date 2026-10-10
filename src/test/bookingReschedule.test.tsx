@@ -18,7 +18,7 @@ it('does not reopen a completed booking from an already-open reschedule dialog',
     if (table === 'bookings') return { single: async () => ({ data: { status: 'completed', notes: '{}' } }) };
     return Promise.resolve({ data: [{ status: 'completed' }] });
   } }), update: mocks.update }));
-  await act(async () => { render(<BookingChat bookingId="booking" bookingDate="2027-01-01" open onOpenChange={vi.fn()} canRequestReschedule />); });
+  await act(async () => { render(<BookingChat bookingId="booking" bookingDate="2027-01-01" open onOpenChange={vi.fn()} canRequestReschedule initialMode="reschedule" />); });
   fireEvent.change(screen.getByLabelText('Requested hike date'), { target: { value: '2027-01-02' } });
   fireEvent.change(screen.getByLabelText('Reason for reschedule'), { target: { value: 'Schedule conflict' } });
   fireEvent.click(screen.getByRole('button', { name: 'Send request' }));

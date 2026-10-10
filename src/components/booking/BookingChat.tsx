@@ -101,16 +101,23 @@ export default function BookingChat({
     if (!body) return false;
     if (containsProfanity(body)) { toast.error(PROFANITY_NOTICE); return false; }
     setSending(true);
-    const { error } = await supabase.from('booking_messages' as any).insert({
+    const { data: inserted, error } = await supabase.from('booking_messages' as any).insert({
       booking_id: bookingId,
       sender_id: user?.id,
       sender_role: role || 'user',
       recipient_role: kind === 'reschedule_request' ? 'admin' : role === 'hiker' ? 'guide' : 'hiker',
       kind,
       content: body,
-    });
+    }).select('*').single();
     setSending(false);
     if (error) { toast.error(bookingMessageError(error.message)); return false; }
+    // Do not wait for a websocket round trip to show the sender's message.
+    // The realtime event, when enabled, is still de-duplicated by the row id.
+    const insertedMessage = inserted as unknown as Msg | null;
+    if (insertedMessage?.id) {
+      setMsgs((current) => current.some((item) => item.id === insertedMessage.id) ? current : [...current, insertedMessage]);
+      setTimeout(() => scroller.current?.scrollTo({ top: 99999 }), 50);
+    }
     // Persist a realtime bell notification for the other side of the booking.
     // The chat itself remains the source of truth; this only makes new messages discoverable.
     const { data: booking } = await supabase.from('bookings').select('user_id').eq('id', bookingId).maybeSingle();
@@ -233,8 +240,8 @@ export default function BookingChat({
           </Button>
         </div>}
 
-        {canRequestReschedule && (
-          <div className={`${mode === 'chat' ? 'border-t pt-3' : ''} space-y-2`}>
+        {canRequestReschedule && mode === 'reschedule' && (
+          <div className="space-y-2">
             <p className="text-xs font-medium flex items-center gap-1.5">
               <CalendarClock className="h-3.5 w-3.5" /> Request a new date
             </p>
@@ -245,11 +252,9 @@ export default function BookingChat({
             </div>
             <Textarea aria-label="Reason for reschedule" value={rescheduleReason} onChange={(event) => setRescheduleReason(event.target.value)} maxLength={500} rows={2} placeholder="Why do you need to change the date?" />
             <p className="text-[11px] text-muted-foreground">Your booking will move to “adjustment pending” until admin approves.</p>
-            {mode === 'reschedule' && <Button variant="ghost" size="sm" onClick={() => onOpenChange(false)}>Cancel</Button>}
+            <Button variant="ghost" size="sm" onClick={() => onOpenChange(false)}>Cancel</Button>
           </div>
         )}
-
-        {canRequestReschedule && mode === 'chat' && <Button variant="ghost" size="sm" className="w-fit text-xs" onClick={() => setMode('reschedule')}><CalendarClock className="mr-1.5 h-3.5 w-3.5" />Open separate reschedule request</Button>}
 
         {isAdmin && (
           <AdminRescheduleControls bookingId={bookingId} decisionReason={decisionReason} onReasonChange={setDecisionReason} onDecide={adminDecideReschedule} />

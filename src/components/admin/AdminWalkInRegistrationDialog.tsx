@@ -51,7 +51,7 @@ interface AdminWalkInRegistrationDialogProps {
   open: boolean;
   onClose: () => void;
   locationId: string | null;
-  onSuccess: () => void;
+  onSuccess: (booking?: Record<string, unknown>) => void;
 }
 
 export default function AdminWalkInRegistrationDialog({
@@ -242,7 +242,10 @@ export default function AdminWalkInRegistrationDialog({
         guideName: selectedGuide?.full_name,
         assignedGuideId: selectedGuide?.id,
       });
-      onSuccess();
+      onSuccess((newBooking as Record<string, unknown> | null) ?? {
+        ...bookingPayload,
+        id: bookingId,
+      });
     } catch (err: any) {
       console.error('Walk-in registration error:', err);
       toast.error(`Registration failed: ${err?.message || 'Database error'}`);

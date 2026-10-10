@@ -58,6 +58,7 @@ import { isFirebaseConfigured, uploadGuideProfilePhoto } from '@/lib/firebase-st
 import ProfileAvatar, { profileChanged } from '@/components/common/ProfileAvatar';
 import GuideDeclineModal from '@/components/booking/GuideDeclineModal';
 import BookingChat from '@/components/booking/BookingChat';
+import { useBookingMessageAlerts } from '@/hooks/useBookingMessageAlerts';
 import { acceptGuideAssignment } from '@/lib/guideAssignmentService';
 import { calculateGuideEarnings, GuideEarningsSummary } from '@/lib/guideEarnings';
 import { formatPeso } from '@/lib/payments';
@@ -96,6 +97,7 @@ export default function GuideDashboard() {
   const [detailOpen, setDetailOpen] = useState<AssignmentRow | null>(null);
   const [declineOpen, setDeclineOpen] = useState<AssignmentRow | null>(null);
   const [chatBooking, setChatBooking] = useState<{ id: string; date: string } | null>(null);
+  const bookingMessageAlerts = useBookingMessageAlerts(assignments.map((assignment) => assignment.booking_id || assignment.id), chatBooking?.id);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const [statusUpdating, setStatusUpdating] = useState(false);
   const [activeSession, setActiveSession] = useState<any | null>(null);
@@ -896,10 +898,11 @@ export default function GuideDashboard() {
                               size="sm"
                               variant="outline"
                               onClick={() => setChatBooking({ id: a.booking_id || a.id, date: booking?.booking_date || 'Upcoming' })}
-                              className="text-xs h-8 gap-1.5 text-primary border-primary/30"
+                              className={`relative text-xs h-8 gap-1.5 text-primary border-primary/30 ${bookingMessageAlerts.hasUnread(a.booking_id || a.id) ? 'shadow-[0_0_14px_hsl(var(--primary)/0.45)] animate-pulse' : ''}`}
                             >
                               <MessageCircle className="h-3.5 w-3.5" />
                               Message hiker
+                              {bookingMessageAlerts.hasUnread(a.booking_id || a.id) && <span className="absolute -right-1 -top-1 min-w-4 rounded-full bg-destructive px-1 text-[9px] leading-4 text-destructive-foreground">{bookingMessageAlerts.unreadCount(a.booking_id || a.id) > 9 ? '9+' : bookingMessageAlerts.unreadCount(a.booking_id || a.id)}</span>}
                             </Button>
 
                             <Button

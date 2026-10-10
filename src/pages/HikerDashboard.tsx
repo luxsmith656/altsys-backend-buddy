@@ -71,6 +71,7 @@ import { Label } from '@/components/ui/label';
 import KaliContextPanel from '@/components/kali/KaliContextPanel';
 import { useKaliContext } from '@/hooks/useKaliContext';
 import { containsProfanity, PROFANITY_NOTICE } from '@/lib/contentModeration';
+import { useBookingMessageAlerts } from '@/hooks/useBookingMessageAlerts';
 
 const STATUS_STYLES: Record<string, string> = {
   confirmed: 'bg-primary/20 text-primary',
@@ -107,6 +108,7 @@ export default function HikerDashboard() {
   });
   const [submittingReview, setSubmittingReview] = useState(false);
   const [chatBooking, setChatBooking] = useState<{ id: string; date: string; mode?: 'chat' | 'reschedule' } | null>(null);
+  const bookingMessageAlerts = useBookingMessageAlerts(bookings.map((booking) => booking.id), chatBooking?.id);
   const [companionQrBooking, setCompanionQrBooking] = useState<any | null>(null);
   const [receiptBookingId, setReceiptBookingId] = useState<string | null>(null);
   const [trailResult, setTrailResult] = useState<{ sessionId?: string; bookingId?: string; title: string } | null>(null);
@@ -1046,8 +1048,9 @@ export default function HikerDashboard() {
                       {/* Only unstarted bookings can request a different date. */}
                       {canChange(b) && (
                       <div className="grid grid-cols-2 gap-2">
-                        <Button size="sm" variant="outline" className="w-full gap-1 px-2 text-[11px]" onClick={() => setChatBooking({ id: b.id, date: b.booking_date, mode: 'chat' })}>
+                        <Button size="sm" variant="outline" className={`relative w-full gap-1 px-2 text-[11px] ${bookingMessageAlerts.hasUnread(b.id) ? 'border-primary text-primary shadow-[0_0_14px_hsl(var(--primary)/0.45)] animate-pulse' : ''}`} onClick={() => setChatBooking({ id: b.id, date: b.booking_date, mode: 'chat' })}>
                           <MessageCircle className="h-3.5 w-3.5" /> Chat
+                          {bookingMessageAlerts.hasUnread(b.id) && <span className="absolute -right-1 -top-1 min-w-4 rounded-full bg-destructive px-1 text-[9px] leading-4 text-destructive-foreground">{bookingMessageAlerts.unreadCount(b.id) > 9 ? '9+' : bookingMessageAlerts.unreadCount(b.id)}</span>}
                         </Button>
                         <Button size="sm" variant="outline" className="w-full gap-1 px-2 text-[11px]" onClick={() => setChatBooking({ id: b.id, date: b.booking_date, mode: 'reschedule' })}>
                           <CalendarClock className="h-3.5 w-3.5" /> Reschedule

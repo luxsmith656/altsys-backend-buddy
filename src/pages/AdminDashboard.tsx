@@ -94,6 +94,7 @@ import {
   ArrowDown,
 } from 'lucide-react';
 import BookingChat from '@/components/booking/BookingChat';
+import { useBookingMessageAlerts } from '@/hooks/useBookingMessageAlerts';
 import ReassignGuideDialog from '@/components/booking/ReassignGuideDialog';
 import { addAdditionalGuideToBooking, assignGuideToBooking } from '@/lib/guideAssignmentService';
 import EditBookingDialog from '@/components/booking/EditBookingDialog';
@@ -366,6 +367,7 @@ export default function AdminDashboard() {
   /* ── All bookings (used by Bookings tab + Payments tab) ── */
   const [allTabBookings, setAllTabBookings] = useState<any[]>([]);
   const [allTabLoading, setAllTabLoading] = useState(false);
+  const bookingMessageAlerts = useBookingMessageAlerts(allTabBookings.map((booking) => booking.id), chatBooking?.id);
 
   /* ── Duplicate-week detection: same hiker, same ISO week ── */
   const isoWeekKey = (d: string) => {
@@ -2243,9 +2245,10 @@ export default function AdminDashboard() {
                                 <Receipt className="h-3.5 w-3.5" /> View Settlement
                               </Button>
                             )}
-                            <Button size="sm" variant="outline" className="gap-1.5"
+                            <Button size="sm" variant="outline" className={`relative gap-1.5 ${bookingMessageAlerts.hasUnread(b.id) ? 'border-primary text-primary shadow-[0_0_14px_hsl(var(--primary)/0.45)] animate-pulse' : ''}`}
                               onClick={() => setChatBooking({ id: b.id, date: b.booking_date })}>
                               <MessageCircle className="h-3.5 w-3.5" /> Chat
+                              {bookingMessageAlerts.hasUnread(b.id) && <span className="absolute -right-1 -top-1 min-w-4 rounded-full bg-destructive px-1 text-[9px] leading-4 text-destructive-foreground">{bookingMessageAlerts.unreadCount(b.id) > 9 ? '9+' : bookingMessageAlerts.unreadCount(b.id)}</span>}
                             </Button>
                             {duplicateWeekIds.has(b.id) && (
                               <Button size="sm" variant="outline" className="gap-1.5 text-amber-600 border-amber-500/40"
@@ -2666,10 +2669,11 @@ export default function AdminDashboard() {
                             <Button
                               size="sm"
                               variant="outline"
-                              className="text-xs gap-1.5 text-primary border-primary/30"
+                              className={`relative text-xs gap-1.5 text-primary border-primary/30 ${bookingMessageAlerts.hasUnread(scannedBooking.id) ? 'shadow-[0_0_14px_hsl(var(--primary)/0.45)] animate-pulse' : ''}`}
                               onClick={() => setChatBooking({ id: scannedBooking.id, date: scannedBooking.booking_date })}
                             >
                               <MessageCircle className="h-3.5 w-3.5" /> Chat with Hiker
+                              {bookingMessageAlerts.hasUnread(scannedBooking.id) && <span className="absolute -right-1 -top-1 min-w-4 rounded-full bg-destructive px-1 text-[9px] leading-4 text-destructive-foreground">{bookingMessageAlerts.unreadCount(scannedBooking.id) > 9 ? '9+' : bookingMessageAlerts.unreadCount(scannedBooking.id)}</span>}
                             </Button>
                           </div>
                         </div>
@@ -3570,7 +3574,12 @@ export default function AdminDashboard() {
         open={walkInOpen}
         onClose={() => setWalkInOpen(false)}
         locationId={activeLocationId}
-        onSuccess={() => {
+        onSuccess={(newBooking) => {
+          if (newBooking?.id) {
+            setAllTabBookings((current) => current.some((booking) => booking.id === newBooking.id)
+              ? current
+              : [newBooking, ...current]);
+          }
           void loadAllTabBookings();
           void loadPendingBookings();
           void loadUpcomingCapacities();

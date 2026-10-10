@@ -59,9 +59,9 @@ export default function Navbar() {
     const recipient = role === 'admin' || role === 'super_admin' ? 'admin' : role;
     if (typeof (supabase as any).channel !== 'function') return;
     const channel = supabase.channel(`navbar-booking-message-alerts-${user.id}`)
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'booking_messages', filter: `recipient_role=eq.${recipient}` }, (payload) => {
-        const message = payload.new as { id?: string; sender_id?: string | null; booking_id?: string; created_at?: string };
-        if (!message.id || message.sender_id === user.id) return;
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'booking_messages' }, (payload) => {
+        const message = payload.new as { id?: string; sender_id?: string | null; recipient_role?: string | null; booking_id?: string; created_at?: string };
+        if (!message.id || message.sender_id === user.id || message.recipient_role !== recipient) return;
         setChatAlerts((current) => [{ id: `chat:${message.id}`, title: 'New booking chat message', createdAt: message.created_at || new Date().toISOString(), href: role === 'admin' || role === 'super_admin' ? '/admin?tab=requests' : role === 'guide' ? '/guide' : '/hiker' }, ...current].slice(0, 8));
       }).subscribe();
     return () => { supabase.removeChannel(channel); };
@@ -170,7 +170,7 @@ export default function Navbar() {
                   <Button
                     variant="ghost"
                     size="icon"
-                    className="relative"
+                    className={`relative ${chatAlerts.length > 0 ? 'text-primary ring-2 ring-primary/40 shadow-[0_0_16px_hsl(var(--primary)/0.45)] animate-pulse' : ''}`}
                     aria-label="Notifications"
                   >
                     <Bell className="h-4 w-4" />
