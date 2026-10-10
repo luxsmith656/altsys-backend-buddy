@@ -45,7 +45,7 @@ describe('signup without application OTP', () => {
     showRegister(); fillForm();
     fireEvent.submit(screen.getByLabelText('Email').closest('form')!);
     await waitFor(() => expect(state.success).toHaveBeenCalledWith(expect.stringMatching(/check your email/i)));
-    expect(screen.getByText('Login destination')).toBeInTheDocument();
+    expect(await screen.findByText('Login destination')).toBeInTheDocument();
   });
 
   it('retains password matching validation', () => {

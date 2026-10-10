@@ -11,6 +11,11 @@ export function getTrailheadIdentity(slug = '', name = ''): TrailheadIdentity | 
   return null;
 }
 
+/** The three public jump-off names used throughout booking, dispatch, and maps. */
+export function trailheadLabel(slug = '', name = '', fallback = 'Assigned trailhead'): string {
+  return getTrailheadIdentity(slug, name)?.label ?? fallback;
+}
+
 export function filterByTrailhead<T extends { location_id?: string | null }>(
   rows: T[],
   selectedLocationId: string,

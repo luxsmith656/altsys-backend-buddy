@@ -111,6 +111,7 @@ import { confirmReservation } from '@/lib/notification-service';
 import { motion } from 'framer-motion';
 import { toast } from 'sonner';
 import { officialRoutesForLocation as filterOfficialRoutes, selectAssignedOfficialRoute } from '@/lib/officialRoutes';
+import { trailheadLabel } from '@/lib/mapTrailheads';
 import { loadGuideRatings, renderStars, type GuideRating } from '@/lib/guideRatings';
 import { getHikeTypeLabel } from '@/lib/hikeSchedule';
 import { guidePhotoForName } from '@/lib/guideDirectory';
@@ -495,6 +496,7 @@ export default function AdminDashboard() {
   const [selectedAdditionalGuide, setSelectedAdditionalGuide] = useState('');
   const [selectedTrailZoneId, setSelectedTrailZoneId] = useState('');
   const [acceptSaving, setAcceptSaving] = useState(false);
+  const [busyGuideIds, setBusyGuideIds] = useState<Set<string>>(new Set());
 
   // Adjust flow
   const [adjustDialogId, setAdjustDialogId] = useState<string | null>(null);
@@ -709,10 +711,13 @@ export default function AdminDashboard() {
     const raw = (typeof overrideValue === 'string' ? overrideValue : qrInput).trim();
     if (!raw) { toast.error('Enter QR code data, booking ID, or hiker name.'); return; }
     let q = raw;
+    let parsedQr: Record<string, unknown> | null = null;
     try {
       const parsed = JSON.parse(raw);
-      if (parsed?.bookingId) q = parsed.bookingId;
-      else if (parsed?.id) q = parsed.id;
+      if (parsed && typeof parsed === 'object') parsedQr = parsed as Record<string, unknown>;
+      if (typeof parsedQr?.bookingId === 'string') q = parsedQr.bookingId;
+      else if (typeof parsedQr?.id === 'string') q = parsedQr.id;
+      else q = '';
     } catch {
       // Plain booking IDs are valid scanner input when the payload is not JSON.
     }
@@ -722,16 +727,24 @@ export default function AdminDashboard() {
     setHikeStarted(false);
     setShowScanPayForm(false);
 
-    let exactQuery: any = supabase
-      .from('bookings')
-      .select('*')
-      .or(`qr_code_data.eq.${raw},qr_code_data.eq.${q},id.eq.${q}`)
-      .limit(1);
-    if (!isSuperAdmin) {
-      if (!activeLocationId) { setScanLoading(false); toast.error('Select an assigned location first.'); return; }
-      exactQuery = exactQuery.eq('location_id', activeLocationId);
+    if (!isSuperAdmin && !activeLocationId) {
+      setScanLoading(false);
+      toast.error('Select an assigned location first.');
+      return;
     }
-    const { data: exactData } = await exactQuery.maybeSingle();
+
+    // QR payloads are JSON and may contain commas, quotes, or braces. Avoid a
+    // hand-built PostgREST .or(...) expression, which treats those characters
+    // as query syntax and silently misses valid walk-in permits.
+    const findExact = async (column: 'id' | 'qr_code_data', value: string) => {
+      if (!value) return null;
+      let query: any = supabase.from('bookings').select('*').eq(column, value).limit(1);
+      if (!isSuperAdmin) query = query.eq('location_id', activeLocationId);
+      const { data, error } = await query;
+      if (error) return null;
+      return data?.[0] ?? null;
+    };
+    const exactData = await findExact('id', q) || await findExact('qr_code_data', raw) || (q !== raw ? await findExact('qr_code_data', q) : null);
 
     if (exactData) {
       setScannedBooking(exactData);
@@ -741,15 +754,14 @@ export default function AdminDashboard() {
       return;
     }
 
-    let nameQuery: any = supabase
-      .from('bookings')
-      .select('*')
-      .or(`emergency_contact_name.ilike.%${q}%,notes.ilike.%${q}%,emergency_contact_phone.ilike.%${q}%`)
-      .not('status', 'eq', 'cancelled')
-      .order('created_at', { ascending: false })
-      .limit(1);
-    if (!isSuperAdmin) nameQuery = nameQuery.eq('location_id', activeLocationId);
-    const { data: nameData } = await nameQuery.maybeSingle();
+    const findName = async (column: 'emergency_contact_name' | 'emergency_contact_phone') => {
+      if (!q) return null;
+      let query: any = supabase.from('bookings').select('*').ilike(column, `%${q}%`).not('status', 'eq', 'cancelled').order('created_at', { ascending: false }).limit(1);
+      if (!isSuperAdmin) query = query.eq('location_id', activeLocationId);
+      const { data } = await query;
+      return data?.[0] ?? null;
+    };
+    const nameData = await findName('emergency_contact_name') || await findName('emergency_contact_phone');
 
     if (nameData) {
       setScannedBooking(nameData);
@@ -1445,7 +1457,7 @@ export default function AdminDashboard() {
         name: g.full_name,
         phone: g.phone || '—',
         status: refreshedStatuses[g.id] || g.status || 'available',
-        trail: g.specialty || activeLocName || 'Local trail',
+        trail: trailheadLabel(locations.find((location) => location.id === g.location_id)?.slug, locations.find((location) => location.id === g.location_id)?.name, activeLocName || 'Local trail'),
         totalHikes: 0,
         per_trip_fee: Number(g.per_trip_fee || 0),
         location_id: g.location_id,
@@ -1703,6 +1715,48 @@ export default function AdminDashboard() {
     [acceptBooking, activeLocationId, officialRoutesForLocation],
   );
   const acceptNeedsRouteSelection = acceptRouteOptions.length > 1;
+
+  useEffect(() => {
+    let cancelled = false;
+    const loadBusyGuides = async () => {
+      if (!acceptBooking?.booking_date || !acceptBooking.location_id) {
+        setBusyGuideIds(new Set());
+        return;
+      }
+      const { data: sameDayBookings } = await supabase
+        .from('bookings')
+        .select('id')
+        .eq('location_id', acceptBooking.location_id)
+        .eq('booking_date', acceptBooking.booking_date)
+        .not('status', 'in', '(cancelled,declined,completed)')
+        .neq('id', acceptBooking.id);
+      const bookingIds = (sameDayBookings ?? []).map((row: any) => row.id).filter(Boolean);
+      if (bookingIds.length === 0) {
+        if (!cancelled) setBusyGuideIds(new Set());
+        return;
+      }
+      const { data: assignments } = await supabase
+        .from('booking_assignments' as any)
+        .select('guide_id')
+        .in('booking_id', bookingIds)
+        .in('status', ['pending', 'accepted']);
+      if (!cancelled) setBusyGuideIds(new Set((assignments ?? []).map((row: any) => row.guide_id).filter(Boolean)));
+    };
+    void loadBusyGuides();
+    return () => { cancelled = true; };
+  }, [acceptBooking?.booking_date, acceptBooking?.id, acceptBooking?.location_id]);
+
+  const assignableGuides = useMemo(() => guides.filter((guide) => {
+    const status = String(guide.status || '').toLowerCase();
+    return guide.is_active && Boolean(guide.user_id) && guide.location_id === acceptBooking?.location_id
+      && ['available', 'on-duty', 'on_duty', 'on duty', ''].includes(status)
+      && !busyGuideIds.has(guide.id);
+  }), [acceptBooking?.location_id, busyGuideIds, guides]);
+
+  const routeDisplayName = useCallback((route: any, locationId?: string | null) => {
+    const location = locations.find((item) => item.id === locationId);
+    return trailheadLabel(location?.slug, location?.name, route?.name || 'Official route');
+  }, [locations]);
 
   const BOOKING_STATUS_STYLE: Record<string, string> = {
     pending: 'bg-warning/20 text-warning',
@@ -2343,9 +2397,9 @@ export default function AdminDashboard() {
                       <Select value={selectedGuide} onValueChange={setSelectedGuide}>
                         <SelectTrigger><SelectValue placeholder="Select a guide…" /></SelectTrigger>
                         <SelectContent>
-                          {guides.filter((g) => g.is_active && g.status !== 'off-duty' && g.status !== 'off_duty' && g.user_id && g.location_id === acceptBooking?.location_id).map((g) => (
+                          {assignableGuides.map((g) => (
                             <SelectItem key={g.id} value={g.id}>
-                              {g.name} — <span className="capitalize">{g.status}</span> ({g.trail})
+                              {g.name} — <span className="capitalize">{g.status || 'available'}</span> ({routeDisplayName(null, g.location_id)})
                             </SelectItem>
                           ))}
                         </SelectContent>
@@ -2357,8 +2411,8 @@ export default function AdminDashboard() {
                         <Select value={selectedAdditionalGuide} onValueChange={setSelectedAdditionalGuide}>
                           <SelectTrigger><SelectValue placeholder="Select a second available guide…" /></SelectTrigger>
                           <SelectContent>
-                            {guides.filter((g) => g.is_active && g.status !== 'off-duty' && g.status !== 'off_duty' && g.user_id && g.location_id === acceptBooking.location_id && g.id !== selectedGuide).map((g) => (
-                              <SelectItem key={g.id} value={g.id}>{g.name} — <span className="capitalize">{g.status}</span> ({g.trail})</SelectItem>
+                            {assignableGuides.filter((g) => g.id !== selectedGuide).map((g) => (
+                              <SelectItem key={g.id} value={g.id}>{g.name} — <span className="capitalize">{g.status || 'available'}</span> ({routeDisplayName(null, g.location_id)})</SelectItem>
                             ))}
                           </SelectContent>
                         </Select>
@@ -2373,7 +2427,7 @@ export default function AdminDashboard() {
                         </div>
                       ) : acceptRouteOptions.length === 1 ? (
                         <div className="rounded-md border border-primary/25 bg-primary/10 px-3 py-2 text-sm">
-                          Auto-assigned: <span className="font-semibold">{acceptRouteOptions[0].name}</span>
+                          Auto-assigned: <span className="font-semibold">{routeDisplayName(acceptRouteOptions[0], acceptBooking?.location_id)}</span>
                         </div>
                       ) : (
                         <Select value={selectedTrailZoneId} onValueChange={setSelectedTrailZoneId}>
@@ -2381,7 +2435,7 @@ export default function AdminDashboard() {
                           <SelectContent>
                             {acceptRouteOptions.map((route: any) => (
                               <SelectItem key={route.id} value={route.id}>
-                                {route.name} {route.difficulty ? `- ${route.difficulty}` : ''}
+                                {routeDisplayName(route, acceptBooking?.location_id)} {route.difficulty ? `- ${route.difficulty}` : ''}
                               </SelectItem>
                             ))}
                           </SelectContent>

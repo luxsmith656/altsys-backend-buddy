@@ -7,6 +7,9 @@ export default defineConfig({
   test: {
     environment: "jsdom",
     globals: true,
+    // Map and modal integration tests can legitimately exceed Vitest's
+    // five-second default when the full suite runs in parallel on CI.
+    testTimeout: 15000,
     setupFiles: ["./src/test/setup.ts"],
     include: ["src/**/*.{test,spec}.{ts,tsx}"],
     coverage: {

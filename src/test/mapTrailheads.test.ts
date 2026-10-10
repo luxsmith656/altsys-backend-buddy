@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { filterByTrailhead, getTrailheadIdentity } from '@/lib/mapTrailheads';
+import { filterByTrailhead, getTrailheadIdentity, trailheadLabel } from '@/lib/mapTrailheads';
 
 describe('central map trailhead identity and scope', () => {
   it.each([
@@ -12,6 +12,12 @@ describe('central map trailhead identity and scope', () => {
 
   it('does not mislabel generic or unknown trailheads', () => {
     expect(getTrailheadIdentity('mt-kalisungan', 'Mount Kalisungan')).toBeNull();
+  });
+
+  it('uses the official jump-off labels for admin-facing route names', () => {
+    expect(trailheadLabel('lamot-2', 'Sitio Lamot 2')).toBe('Lamot 2');
+    expect(trailheadLabel('sto-tomas', 'Sto. Tomas')).toBe('Sto. Tomas');
+    expect(trailheadLabel('unknown', 'Unmapped route', 'Official route')).toBe('Official route');
   });
 
   it('shows all station records or only records assigned to the selected station', () => {

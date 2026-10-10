@@ -108,6 +108,11 @@ export default function BookingChat({
     const insertedMessage = inserted as unknown as Msg | null;
     if (insertedMessage?.id) {
       setMsgs((current) => current.some((item) => item.id === insertedMessage.id) ? current : [...current, insertedMessage]);
+      // Keep action buttons/bells current immediately, even when the realtime
+      // socket is delayed or disabled in the current browser session.
+      window.dispatchEvent(new CustomEvent('booking-message-alert', {
+        detail: { bookingId, messageId: insertedMessage.id },
+      }));
       setTimeout(() => scroller.current?.scrollTo({ top: 99999 }), 50);
     }
     // Persist a realtime bell notification for the other side of the booking.

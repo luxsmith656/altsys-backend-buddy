@@ -49,6 +49,8 @@ import { useAuth } from '@/hooks/useAuth';
 import { usePricing } from '@/hooks/usePricing';
 import { useNavigate } from 'react-router-dom';
 import { isMissingTotalAmountColumn, withoutTotalAmount } from '@/lib/walkInBooking';
+import { useLocations } from '@/hooks/useLocations';
+import { trailheadLabel } from '@/lib/mapTrailheads';
 
 interface AdminWalkInDeskProps {
   locationId: string | null;
@@ -60,6 +62,8 @@ export default function AdminWalkInDesk({
   const { user } = useAuth();
   const { pricing } = usePricing();
   const navigate = useNavigate();
+  const { locations } = useLocations();
+  const activeLocation = locations.find((location) => location.id === locationId) ?? null;
 
   // Form State
   const [fullName, setFullName] = useState('');
@@ -74,7 +78,7 @@ export default function AdminWalkInDesk({
   const [medicalNotes, setMedicalNotes] = useState('');
   const [specialNotes, setSpecialNotes] = useState('');
   const [assignedGuideId, setAssignedGuideId] = useState<string>('');
-  const [assignedRouteName, setAssignedRouteName] = useState<string>('Summit Trail (Main Peak)');
+  const [assignedRouteName, setAssignedRouteName] = useState<string>('Assigned trailhead');
   const [companionDetails, setCompanionDetails] = useState<CompanionDetail[]>([]);
 
   useEffect(() => {
@@ -110,6 +114,10 @@ export default function AdminWalkInDesk({
   const [submitting, setSubmitting] = useState(false);
   const [completedBooking, setCompletedBooking] = useState<any | null>(null);
 
+  useEffect(() => {
+    setAssignedRouteName(trailheadLabel(activeLocation?.slug, activeLocation?.name));
+  }, [activeLocation?.name, activeLocation?.slug]);
+
   // Load active guides for location
   useEffect(() => {
     if (!locationId) {
@@ -125,7 +133,10 @@ export default function AdminWalkInDesk({
       .not('user_id', 'is', null);
 
     q.then(({ data }) => {
-      const list = (data || []).filter((guide) => !['off-duty', 'off_duty'].includes(guide.status || ''));
+      const list = (data || []).filter((guide) => {
+        const status = String(guide.status || '').toLowerCase();
+        return ['available', 'on-duty', 'on_duty', 'on duty', ''].includes(status);
+      });
       setGuides(list);
       setAssignedGuideId((current) => list.some((guide) => guide.id === current) ? current : list[0]?.id || '');
     });
@@ -618,17 +629,11 @@ export default function AdminWalkInDesk({
 
                 <div className="grid sm:grid-cols-2 gap-3">
                   <div className="space-y-1">
-                    <Label className="text-xs">Trail Route</Label>
-                    <Select value={assignedRouteName} onValueChange={setAssignedRouteName}>
-                      <SelectTrigger className="text-xs h-9">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="Summit Trail (Main Peak)" className="text-xs">🏔️ Summit Trail (Main Peak - 622m)</SelectItem>
-                        <SelectItem value="Plantation Trail (Scenic Valley)" className="text-xs">🌴 Plantation Trail (Scenic Valley)</SelectItem>
-                        <SelectItem value="Ridge Trail (Panoramic Route)" className="text-xs">🌄 Ridge Trail (Panoramic Route)</SelectItem>
-                      </SelectContent>
-                    </Select>
+                    <Label className="text-xs">Jump-off route</Label>
+                    <div className="flex h-9 items-center rounded-md border border-primary/30 bg-primary/5 px-3 text-xs font-semibold text-primary">
+                      {assignedRouteName}
+                    </div>
+                    <p className="text-[11px] text-muted-foreground">Set automatically from this admin account.</p>
                   </div>
 
                   <div className="space-y-1">

@@ -47,6 +47,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { useNavigate } from 'react-router-dom';
 import { isMissingTotalAmountColumn, withoutTotalAmount } from '@/lib/walkInBooking';
 import { useLocations } from '@/hooks/useLocations';
+import { trailheadLabel } from '@/lib/mapTrailheads';
 
 interface AdminWalkInRegistrationDialogProps {
   open: boolean;
@@ -114,8 +115,8 @@ export default function AdminWalkInRegistrationDialog({
 
   // Load guides for this location
   useEffect(() => {
-    setAssignedRouteName(activeLocation?.name || 'Assigned trailhead');
-  }, [activeLocation?.name]);
+    setAssignedRouteName(trailheadLabel(activeLocation?.slug, activeLocation?.name));
+  }, [activeLocation?.name, activeLocation?.slug]);
 
   useEffect(() => {
     if (!open) {
@@ -137,7 +138,10 @@ export default function AdminWalkInRegistrationDialog({
       .not('user_id', 'is', null);
 
     q.then(({ data }) => {
-      const list = (data || []).filter((guide) => !['off-duty', 'off_duty'].includes(guide.status || ''));
+      const list = (data || []).filter((guide) => {
+        const status = String(guide.status || '').toLowerCase();
+        return ['available', 'on-duty', 'on_duty', 'on duty', ''].includes(status);
+      });
       setGuides(list);
       setAssignedGuideId((current) => list.some((guide) => guide.id === current) ? current : list[0]?.id || '');
     });
