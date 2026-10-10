@@ -8,7 +8,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import logo from '@/assets/logo.png';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { fetchAnnouncementsFromDb, visibleAnnouncements } from '@/lib/announcements';
-import { loadRemovedNotificationIds, loadSeenNotificationIds } from '@/lib/notifications';
+import { loadRemovedNotificationIds, loadSeenNotificationIds, markNotificationSeen } from '@/lib/notifications';
 import { isFirebaseConfigured } from '@/lib/firebase';
 import { subscribeUserNotifications, type FsNotification } from '@/lib/firestoreNotifications';
 import { supabase } from '@/integrations/supabase/client';
@@ -26,6 +26,15 @@ export default function Navbar() {
   const [chatAlerts, setChatAlerts] = useState<Array<{ id: string; title: string; createdAt: string; href: string }>>([]);
 
   const dashboardPath = role ? getRoleHomePath(role) : '/dashboard';
+
+  const markPreviewSeen = (id: string) => {
+    if (!user) return;
+    markNotificationSeen(user.id, id);
+    if (id.startsWith('fs:')) void import('@/lib/firestoreNotifications').then(({ markFsNotificationRead }) => markFsNotificationRead(id.slice(3)).catch(() => null));
+    setNotifCount((count) => Math.max(0, count - 1));
+    setNotifPreview((current) => current.filter((item) => item.id !== id));
+    if (id.startsWith('chat:')) setChatAlerts((current) => current.filter((item) => item.id !== id));
+  };
 
   const navLinks = user
     ? [
@@ -62,7 +71,12 @@ export default function Navbar() {
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'booking_messages' }, (payload) => {
         const message = payload.new as { id?: string; sender_id?: string | null; recipient_role?: string | null; booking_id?: string; created_at?: string };
         if (!message.id || message.sender_id === user.id || message.recipient_role !== recipient) return;
-        setChatAlerts((current) => [{ id: `chat:${message.id}`, title: 'New booking chat message', createdAt: message.created_at || new Date().toISOString(), href: role === 'admin' || role === 'super_admin' ? '/admin?tab=requests' : role === 'guide' ? '/guide' : '/hiker' }, ...current].slice(0, 8));
+        const href = role === 'admin' || role === 'super_admin'
+          ? `/admin?tab=requests&bookingId=${encodeURIComponent(message.booking_id || '')}`
+          : role === 'guide'
+            ? `/guide?bookingId=${encodeURIComponent(message.booking_id || '')}`
+            : `/hiker?bookingId=${encodeURIComponent(message.booking_id || '')}`;
+        setChatAlerts((current) => [{ id: `chat:${message.id}`, title: 'New booking chat message', createdAt: message.created_at || new Date().toISOString(), href }, ...current].slice(0, 8));
       }).subscribe();
     return () => { supabase.removeChannel(channel); };
   }, [user, role]);
@@ -101,14 +115,21 @@ export default function Navbar() {
         createdAt: n.createdAt,
         read: n.read,
       }));
-      const all = [...anns, ...bookingItems, ...fsItems, ...chatAlerts].filter((n) => !removed.has(n.id));
+      const all = [...anns, ...bookingItems, ...fsItems, ...chatAlerts].filter((n) => {
+        if (removed.has(n.id) || seen.has(n.id)) return false;
+        if ('read' in n && n.read) return false;
+        return true;
+      });
       const unseen = all.filter((n) => {
+        // Firebase read state and the legacy local read ledger must agree. A
+        // stale Firestore snapshot must never resurrect a notification the
+        // user already marked as seen.
         if ('read' in n) return !n.read;
-        return !seen.has(n.id);
+        return true;
       }).length;
       setNotifCount(unseen);
       setNotifPreview(
-        all
+      all
           .sort((a, b) => +new Date(b.createdAt) - +new Date(a.createdAt))
           .slice(0, 4),
       );
@@ -188,7 +209,7 @@ export default function Navbar() {
                     <DropdownMenuItem disabled>No notifications yet</DropdownMenuItem>
                   ) : (
                     notifPreview.map((n) => (
-                    <DropdownMenuItem key={n.id} onClick={() => navigate(n.href || '/notifications')}>
+                    <DropdownMenuItem key={n.id} onClick={() => { markPreviewSeen(n.id); navigate(n.href || '/notifications'); }}>
                         <div className="min-w-0">
                           <p className="text-xs font-medium truncate">{n.title}</p>
                           <p className="text-[10px] text-muted-foreground">{new Date(n.createdAt).toLocaleString()}</p>

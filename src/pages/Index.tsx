@@ -108,12 +108,18 @@ function SummitPathOverlay() {
           (slug === 'sto-tomas' && identity.code === 'ST')
         );
       });
-      const findRoute = (locationId: string | undefined) => published
-        .filter((route: any) => route.location_id === locationId)
+      const findRoute = (slug: string, locationId: string | undefined) => published
+        .filter((route: any) => {
+          if (route.location_id === locationId) return true;
+          const identity = getTrailheadIdentity('', route.name ?? '');
+          return (slug === 'lamot-1' && identity?.code === 'L1')
+            || (slug === 'lamot-2' && identity?.code === 'L2')
+            || (slug === 'sto-tomas' && identity?.code === 'ST');
+        })
         .sort((a: any, b: any) => (b.coordinates_json?.length ?? 0) - (a.coordinates_json?.length ?? 0))[0];
 
       const lamot2Location = findLocation('lamot-2');
-      const lamot2Row = findRoute(lamot2Location?.id);
+      const lamot2Row = findRoute('lamot-2', lamot2Location?.id);
       const lamot2Path = Array.isArray(lamot2Row?.coordinates_json)
         ? lamot2Row.coordinates_json
           .map((point: any) => [Number(point.lat), Number(point.lng)] as [number, number])
@@ -123,7 +129,7 @@ function SummitPathOverlay() {
 
       const nextRoutes = ['lamot-1', 'lamot-2', 'sto-tomas'].map((slug, index) => {
         const location = findLocation(slug);
-        const row = findRoute(location?.id);
+        const row = findRoute(slug, location?.id);
         const fallback = TRAILS[index] ?? TRAILS[0];
         const rawPath = Array.isArray(row?.coordinates_json)
           ? row.coordinates_json

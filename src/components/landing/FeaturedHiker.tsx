@@ -11,6 +11,7 @@ type FeaturedReview = {
   review_text: string;
   trail_name: string;
   rating: number;
+  difficulty?: string | null;
 };
 
 const fallback: FeaturedReview = {
@@ -27,20 +28,25 @@ export default function FeaturedHiker() {
   useEffect(() => {
     let active = true;
     void supabase
-      .from('reviews')
-      .select('user_id, reviewer_name, review_text, trail_name, rating')
+      .from('reviews' as any)
+      // Keep the public landing page compatible until the optional feedback
+      // columns are applied remotely. `*` returns them automatically later.
+      .select('*')
       .eq('is_approved', true)
       .order('rating', { ascending: false })
       .order('created_at', { ascending: false })
-      .limit(1)
-      .maybeSingle()
+      .limit(12)
       .then(async ({ data }) => {
         if (!active || !data) return;
-        const review = data as FeaturedReview;
+        const row = Array.isArray(data)
+          ? data.find((item: any) => !item.review_type || item.review_type === 'trail')
+          : data;
+        if (!row) return;
+        const review = row as unknown as FeaturedReview;
         const { data: profile } = review.user_id
           ? await supabase.from('profiles').select('avatar_url').eq('user_id', review.user_id).maybeSingle()
           : { data: null };
-        if (active) setReview({ ...review, photo_url: profile?.avatar_url ?? null });
+        if (active) setReview({ ...review, photo_url: review.photo_url || profile?.avatar_url || null });
       });
     return () => { active = false; };
   }, []);
@@ -67,6 +73,7 @@ export default function FeaturedHiker() {
             </div>
             <h2 id="featured-hiker-title" className="text-2xl font-bold md:text-3xl">A trail story worth sharing</h2>
             <p className="text-base italic leading-7 text-muted-foreground">“{review.review_text}”</p>
+            {review.difficulty && <p className="text-xs font-medium text-primary">Trail difficulty: {review.difficulty}</p>}
             <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border/50 pt-4 text-sm">
               <div>
                 <p className="font-semibold">{review.reviewer_name}</p>

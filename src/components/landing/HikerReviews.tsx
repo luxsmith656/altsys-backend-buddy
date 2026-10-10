@@ -10,6 +10,8 @@ interface Review {
   trail_name: string;
   review_text: string;
   created_at: string;
+  difficulty?: string | null;
+  photo_url?: string | null;
 }
 
 const fallbackReviews: Review[] = [
@@ -95,6 +97,10 @@ function ReviewCard({ review, index }: { review: Review; index: number }) {
       <p className="text-sm text-muted-foreground leading-relaxed flex-1 italic">
         &ldquo;{review.review_text}&rdquo;
       </p>
+      {review.photo_url && (
+        <img src={review.photo_url} alt="Hiker trail feedback" loading="lazy" className="h-28 w-full rounded-xl object-cover" />
+      )}
+      {review.difficulty && <p className="text-xs font-medium text-primary">Trail difficulty: {review.difficulty}</p>}
 
       {/* Footer: name/date + trail badge */}
       <div className="flex items-center justify-between pt-3 border-t border-border/10 mt-1">
@@ -113,14 +119,17 @@ export default function HikerReviews() {
 
   const fetchReviews = async () => {
     const { data, error } = await supabase
-      .from('reviews')
-      .select('id, reviewer_name, rating, trail_name, review_text, created_at')
+      .from('reviews' as any)
+      // `*` keeps this public read valid before the trail-feedback migration
+      // is applied; new columns are included automatically afterward.
+      .select('*')
       .eq('is_approved', true)
       .order('created_at', { ascending: false })
-      .limit(6);
+      .limit(20);
 
     if (!error && data && data.length > 0) {
-      setReviews(data);
+      const trailReviews = (data as any[]).filter((review) => !review.review_type || review.review_type === 'trail');
+      setReviews((trailReviews as unknown as Review[]).slice(0, 6));
     }
   };
 

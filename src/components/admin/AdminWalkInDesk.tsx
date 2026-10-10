@@ -43,8 +43,6 @@ import {
   ENTRY_FEE_PER_PERSON,
   ENV_FEE_PER_PERSON,
   MAX_PAX_PER_GUIDE,
-  PEAK_EXTENSION_FEE_PER_HOUR,
-  HORSE_EMERGENCY_SERVICE_FEE,
 } from '@/lib/payments';
 import { getGuideFeePerGuide, HIKE_TIME_OPTIONS, type HikeType } from '@/lib/hikeSchedule';
 import { useAuth } from '@/hooks/useAuth';
@@ -77,8 +75,6 @@ export default function AdminWalkInDesk({
   const [specialNotes, setSpecialNotes] = useState('');
   const [assignedGuideId, setAssignedGuideId] = useState<string>('');
   const [assignedRouteName, setAssignedRouteName] = useState<string>('Summit Trail (Main Peak)');
-  const [peakHours, setPeakHours] = useState<number>(0);
-  const [horseCount, setHorseCount] = useState<number>(0);
   const [companionDetails, setCompanionDetails] = useState<CompanionDetail[]>([]);
 
   useEffect(() => {
@@ -138,8 +134,6 @@ export default function AdminWalkInDesk({
   // Fees calculation
   const fees = calculateFees(groupSize, {
     hikeType,
-    peakExtensionHours: peakHours,
-    emergencyHorseCount: horseCount,
     pricing,
   });
   const maxPaxRatio = pricing?.maxPaxPerGuide || MAX_PAX_PER_GUIDE;
@@ -205,10 +199,6 @@ export default function AdminWalkInDesk({
         entryFee: fees.entryFee,
         envFee: fees.envFee,
         guideFee: fees.guideFee,
-        peakExtensionHours: peakHours > 0 ? peakHours : undefined,
-        peakExtensionFee: fees.peakExtensionFee > 0 ? fees.peakExtensionFee : undefined,
-        emergencyHorseCount: horseCount > 0 ? horseCount : undefined,
-        emergencyHorseFee: fees.emergencyHorseFee > 0 ? fees.emergencyHorseFee : undefined,
         totalFee: totalAmount,
         baseFee: fees.entryFee + fees.envFee + fees.guideFee,
         originalQuote: { total: totalAmount, capturedAt: new Date().toISOString() },
@@ -284,8 +274,6 @@ export default function AdminWalkInDesk({
     setEmergencyPhone('');
     setMedicalNotes('');
     setSpecialNotes('');
-    setPeakHours(0);
-    setHorseCount(0);
     setCashTendered('');
     setPaymentReference('');
     setCompletedBooking(null);
@@ -660,44 +648,6 @@ export default function AdminWalkInDesk({
                   </div>
                 </div>
 
-                {/* Add-On Services */}
-                <div className="p-3.5 rounded-2xl bg-secondary/20 border border-border/30 grid grid-cols-2 gap-3">
-                  <div className="space-y-1">
-                    <Label className="text-xs flex items-center justify-between">
-                      <span>Peak Extension</span>
-                      <span className="text-[10px] text-muted-foreground">₱{pricing.peakExtensionFeePerHour}/hr</span>
-                    </Label>
-                    <div className="flex items-center gap-2">
-                      <Input
-                        type="number"
-                        min={0}
-                        max={10}
-                        value={peakHours}
-                        onChange={(e) => setPeakHours(Math.max(0, parseInt(e.target.value, 10) || 0))}
-                        className="text-xs h-8"
-                      />
-                      <span className="text-xs text-muted-foreground">hrs</span>
-                    </div>
-                  </div>
-
-                  <div className="space-y-1">
-                    <Label className="text-xs flex items-center justify-between">
-                      <span>Emergency Horse</span>
-                      <span className="text-[10px] text-muted-foreground">₱{pricing.horseEmergencyFee}/horse</span>
-                    </Label>
-                    <div className="flex items-center gap-2">
-                      <Input
-                        type="number"
-                        min={0}
-                        max={5}
-                        value={horseCount}
-                        onChange={(e) => setHorseCount(Math.max(0, parseInt(e.target.value, 10) || 0))}
-                        className="text-xs h-8"
-                      />
-                      <span className="text-xs text-muted-foreground">qty</span>
-                    </div>
-                  </div>
-                </div>
               </CardContent>
             </Card>
           </div>
@@ -728,18 +678,6 @@ export default function AdminWalkInDesk({
                     <span>Mountain Guide Fee ({fees.guidesNeeded} guide @ {formatPeso(fees.guideFee / fees.guidesNeeded)})</span>
                     <span className="font-semibold text-foreground">{formatPeso(fees.guideFee)}</span>
                   </div>
-                  {fees.peakExtensionFee > 0 && (
-                    <div className="flex justify-between items-center text-primary">
-                      <span>Peak Stay Extension (+{peakHours}h @ ₱{pricing.peakExtensionFeePerHour}/h)</span>
-                      <span className="font-semibold">+{formatPeso(fees.peakExtensionFee)}</span>
-                    </div>
-                  )}
-                  {fees.emergencyHorseFee > 0 && (
-                    <div className="flex justify-between items-center text-amber-600 dark:text-amber-400">
-                      <span>Emergency Horse Service ({horseCount} @ ₱{pricing.horseEmergencyFee})</span>
-                      <span className="font-semibold">+{formatPeso(fees.emergencyHorseFee)}</span>
-                    </div>
-                  )}
                   <div className="pt-2 border-t border-border/30 flex justify-between items-center text-sm">
                     <span className="font-bold text-foreground">Total Fee Due:</span>
                     <span className="text-xl font-black text-emerald-600 dark:text-emerald-400">

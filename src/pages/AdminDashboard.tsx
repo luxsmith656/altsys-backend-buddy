@@ -385,6 +385,16 @@ export default function AdminDashboard() {
   const [allTabLoading, setAllTabLoading] = useState(false);
   const bookingMessageAlerts = useBookingMessageAlerts(allTabBookings.map((booking) => booking.id), chatBooking?.id);
 
+  useEffect(() => {
+    const bookingId = searchParams.get('bookingId');
+    const booking = bookingId ? allTabBookings.find((item) => item.id === bookingId) : null;
+    if (!booking) return;
+    setChatBooking({ id: booking.id, date: booking.booking_date });
+    const next = new URLSearchParams(searchParams);
+    next.delete('bookingId');
+    setSearchParams(next, { replace: true });
+  }, [allTabBookings, searchParams, setSearchParams]);
+
   /* ── Duplicate-week detection: same hiker, same ISO week ── */
   const isoWeekKey = (d: string) => {
     const dt = new Date(d);
@@ -2034,6 +2044,7 @@ export default function AdminDashboard() {
                               <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${BOOKING_STATUS_STYLE[displayStatus] || ''}`}>
                                 {BOOKING_STATUS_LABEL[displayStatus] || displayStatus}
                               </span>
+                              {meta.isWalkIn && <Badge variant="outline" className="border-amber-500/40 text-amber-600 dark:text-amber-400">Walk-in</Badge>}
                               <span className="text-xs text-muted-foreground font-mono">{b.id.slice(0, 8)}…</span>
                             </div>
                             <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-6 gap-y-1.5 text-sm">
@@ -2260,6 +2271,15 @@ export default function AdminDashboard() {
                               <MessageCircle className="h-3.5 w-3.5" /> Chat
                               {bookingMessageAlerts.hasUnread(b.id) && <span className="absolute -right-1 -top-1 min-w-4 rounded-full bg-destructive px-1 text-[9px] leading-4 text-destructive-foreground">{bookingMessageAlerts.unreadCount(b.id) > 9 ? '9+' : bookingMessageAlerts.unreadCount(b.id)}</span>}
                             </Button>
+                            {meta.isWalkIn && (
+                              <Button size="sm" variant="ghost" className="gap-1.5 text-xs" onClick={() => {
+                                const link = `${window.location.origin}/register?walkInBooking=${encodeURIComponent(b.id)}`;
+                                void navigator.clipboard?.writeText(link);
+                                toast.success('Temporary account link copied.');
+                              }}>
+                                <Copy className="h-3.5 w-3.5" /> Copy temporary account link
+                              </Button>
+                            )}
                             {duplicateWeekIds.has(b.id) && (
                               <Button size="sm" variant="outline" className="gap-1.5 text-amber-600 border-amber-500/40"
                                 onClick={() => sendDuplicateWeekReminder(b)}>
@@ -3260,24 +3280,6 @@ export default function AdminDashboard() {
                       <Button variant="outline" size="sm" className="min-w-0 px-2 text-xs" onClick={() => handleSelectGuide(guide)}>
                         <FileText className="h-3.5 w-3.5 mr-1.5" />
                         {selectedGuideId === guide.id ? 'Hide History' : 'View History'}
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className={`col-span-2 text-xs ${guide.is_active ? 'text-destructive border-destructive/30 hover:bg-destructive/10' : 'text-emerald-700 border-emerald-600/30 hover:bg-emerald-500/10'}`}
-                        onClick={() => void setGuideAccountActive(guide.id)}
-                        disabled={!activeLocationId || guideActivationSavingId === guide.id}
-                      >
-                        {guideActivationSavingId === guide.id ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : guide.is_active ? <UserX className="mr-1.5 h-3.5 w-3.5" /> : <UserCheck className="mr-1.5 h-3.5 w-3.5" />}
-                        {guide.is_active ? 'Deactivate Guide' : 'Activate Guide'}
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="col-span-2 text-xs text-destructive border-destructive/30 hover:bg-destructive/10"
-                        onClick={() => setRemoveGuideId(guide.id)}
-                      >
-                        Remove
                       </Button>
                     </div>
                   </CardContent>

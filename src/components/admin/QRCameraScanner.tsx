@@ -15,8 +15,6 @@ interface QRCameraScannerProps {
   loading?: boolean;
 }
 
-const SCANNER_ID = 'qr-camera-scanner-div';
-
 export default function QRCameraScanner({
   onScan,
   manualInput,
@@ -28,6 +26,8 @@ export default function QRCameraScanner({
   const [cameraLoading, setCameraLoading] = useState(false);
   const scannerRef = useRef<Html5Qrcode | null>(null);
   const hasScannedRef = useRef(false);
+  const scannerIdRef = useRef(`qr-camera-scanner-${Math.random().toString(36).slice(2)}`);
+  const scannerId = scannerIdRef.current;
 
   const stopCamera = useCallback(async () => {
     if (scannerRef.current) {
@@ -50,12 +50,12 @@ export default function QRCameraScanner({
       // Ensure DOM has rendered and container is available
       await new Promise((resolve) => setTimeout(resolve, 80));
 
-      const el = document.getElementById(SCANNER_ID);
+      const el = document.getElementById(scannerId);
       if (!el) {
         throw new Error('Camera scanner container is not ready. Please try again.');
       }
 
-      const scanner = new Html5Qrcode(SCANNER_ID);
+      const scanner = new Html5Qrcode(scannerId);
       scannerRef.current = scanner;
 
       const qrCodeSuccessCallback = (decodedText: string, _result: Html5QrcodeResult) => {
@@ -134,7 +134,7 @@ export default function QRCameraScanner({
       {/* Camera view (always mounted in DOM to prevent "Element not found" errors) */}
       <div className={cn('relative transition-all', !cameraActive && !cameraLoading && 'hidden')}>
         <div
-          id={SCANNER_ID}
+          id={scannerId}
           className={cn(
             'w-full rounded-xl overflow-hidden border border-primary/30 bg-black',
             'min-h-[280px]',

@@ -105,6 +105,7 @@ export default function NotificationsPage() {
     const ids = items.map((i) => i.id);
     setSeen(ids);
     saveSeenNotificationIds(user.id, ids);
+    void Promise.all(fsNotifs.filter((item) => !item.read).map((item) => markFsNotificationRead(item.id).catch(() => null)));
   };
 
   return (

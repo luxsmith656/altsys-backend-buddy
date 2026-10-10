@@ -46,6 +46,7 @@ import { calculateFees, formatPeso } from '@/lib/payments';
 import { useAuth } from '@/hooks/useAuth';
 import { useNavigate } from 'react-router-dom';
 import { isMissingTotalAmountColumn, withoutTotalAmount } from '@/lib/walkInBooking';
+import { useLocations } from '@/hooks/useLocations';
 
 interface AdminWalkInRegistrationDialogProps {
   open: boolean;
@@ -62,6 +63,8 @@ export default function AdminWalkInRegistrationDialog({
 }: AdminWalkInRegistrationDialogProps) {
   const { user } = useAuth();
   const navigate = useNavigate();
+  const { locations } = useLocations();
+  const activeLocation = locations.find((location) => location.id === locationId) ?? null;
 
   // Form State
   const [fullName, setFullName] = useState('');
@@ -100,7 +103,7 @@ export default function AdminWalkInRegistrationDialog({
     );
   };
   const [assignedGuideId, setAssignedGuideId] = useState<string>('');
-  const [assignedRouteName, setAssignedRouteName] = useState<string>('Summit Trail (Main Peak)');
+  const [assignedRouteName, setAssignedRouteName] = useState<string>('');
   const [paymentMethod, setPaymentMethod] = useState<'cash' | 'gcash' | 'onsite'>('cash');
   const [paymentReference, setPaymentReference] = useState('');
 
@@ -110,6 +113,10 @@ export default function AdminWalkInRegistrationDialog({
   const [completedBooking, setCompletedBooking] = useState<any | null>(null);
 
   // Load guides for this location
+  useEffect(() => {
+    setAssignedRouteName(activeLocation?.name || 'Assigned trailhead');
+  }, [activeLocation?.name]);
+
   useEffect(() => {
     if (!open) {
       setCompletedBooking(null);
@@ -157,7 +164,7 @@ export default function AdminWalkInRegistrationDialog({
     setSubmitting(true);
     try {
       const selectedGuide = guides.find((g) => g.id === assignedGuideId);
-      if (!locationId || !selectedGuide || selectedGuide.location_id !== locationId) {
+      if (!locationId || !activeLocation || !selectedGuide || selectedGuide.location_id !== locationId) {
         throw new Error('Select a guide assigned to this trailhead before registering a walk-in hike.');
       }
       const bookingId = crypto.randomUUID();
@@ -525,17 +532,10 @@ export default function AdminWalkInRegistrationDialog({
                 </div>
 
                 <div className="space-y-1">
-                  <Label className="text-xs">Trail Route</Label>
-                  <Select value={assignedRouteName} onValueChange={setAssignedRouteName}>
-                    <SelectTrigger className="text-xs h-8">
-                      <SelectValue placeholder="Pick route" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="Summit Trail (Main Peak)" className="text-xs">Summit Trail (Main Peak - 622m)</SelectItem>
-                      <SelectItem value="Plantation Trail (Scenic Valley)" className="text-xs">Plantation Trail (Scenic Valley)</SelectItem>
-                      <SelectItem value="Ridge Trail (Panoramic)" className="text-xs">Ridge Trail (Panoramic Traverse)</SelectItem>
-                    </SelectContent>
-                  </Select>
+                  <Label className="text-xs">Jump-off location</Label>
+                  <div className="flex h-8 items-center rounded-md border border-border/50 bg-background/40 px-3 text-xs font-medium text-foreground">
+                    {activeLocation?.name || 'Assigned trailhead'}
+                  </div>
                 </div>
 
                 <div className="space-y-1">

@@ -108,6 +108,23 @@ export async function uploadGuideProfilePhoto(
   return { url: await getDownloadURL(storageRef), path };
 }
 
+/** Upload a compressed post-hike trail photo. The URL is stored in Supabase; the binary stays in Storage. */
+export async function uploadTrailReviewPhoto(
+  file: File,
+  bookingId: string,
+): Promise<{ url: string; path: string } | null> {
+  const store = getFirebaseStorage();
+  if (!store) return null;
+  const compressed = await compressImage(file, 1200, 0.78);
+  const path = `trail-reviews/${bookingId}_${Date.now()}.jpg`;
+  const storageRef = ref(store, path);
+  await uploadBytes(storageRef, compressed, {
+    contentType: 'image/jpeg',
+    customMetadata: { bookingId, originalName: file.name },
+  });
+  return { url: await getDownloadURL(storageRef), path };
+}
+
 /**
  * Delete a payment screenshot from Firebase Storage by its path.
  */

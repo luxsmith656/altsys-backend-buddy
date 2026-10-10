@@ -59,6 +59,7 @@ interface ActiveSession {
   lastLng?: number;
   lastTs?: string;
   path?: [number, number][];
+  avatarUrl?: string | null;
 }
 
 interface TrailZoneRef {
@@ -116,7 +117,9 @@ function ScopedMonitorMap({ locationId, canAddCheckpoints = false, tools, routeA
   placingRef.current = placingCheckpoint;
   const loadVersion = useRef(0);
   const [loadError, setLoadError] = useState(false);
-  const [viewMode, setViewMode] = useState<'cluster' | 'individual'>('cluster');
+  // Central monitoring defaults to individuals so every active hiker and guide
+  // is visible; a local trailhead keeps the compact group view.
+  const [viewMode, setViewMode] = useState<'cluster' | 'individual'>(locationId ? 'cluster' : 'individual');
   const [stationFilterId, setStationFilterId] = useState('all');
   const [clock, setClock] = useState(() => Date.now());
 
@@ -392,14 +395,16 @@ function ScopedMonitorMap({ locationId, canAddCheckpoints = false, tools, routeA
       const userIds = Array.from(new Set(sessList.map((s) => s.user_id)));
       const { data: profs } = await supabase
         .from('profiles')
-        .select('user_id,full_name')
+        .select('user_id,full_name,avatar_url')
         .in('user_id', userIds);
-      const nameMap: Record<string, string> = {};
-      (profs ?? []).forEach((p: any) => { nameMap[p.user_id] = p.full_name; });
+      const profileMap: Record<string, { name?: string; avatarUrl?: string | null }> = {};
+      (profs ?? []).forEach((p: any) => { profileMap[p.user_id] = { name: p.full_name, avatarUrl: p.avatar_url }; });
       sessList.forEach((session) => {
-        session.hiker_name = session.hiker_name || nameMap[session.user_id] || 'Hiker Lead';
+        session.hiker_name = session.hiker_name || profileMap[session.user_id]?.name || 'Hiker Lead';
+        session.avatarUrl = session.avatarUrl || profileMap[session.user_id]?.avatarUrl || null;
         const guide = sessList.find((candidate) => candidate.booking_id === session.booking_id && session.booking_id && candidate.participant_role === 'guide');
-        if (guide && nameMap[guide.user_id]) session.guideName = nameMap[guide.user_id];
+        if (guide && profileMap[guide.user_id]?.name) session.guideName = profileMap[guide.user_id]?.name;
+        if (guide && profileMap[guide.user_id]?.avatarUrl) (guide as any).avatarUrl = profileMap[guide.user_id]?.avatarUrl;
       });
 
       // Survey progress per session
@@ -601,15 +606,9 @@ function ScopedMonitorMap({ locationId, canAddCheckpoints = false, tools, routeA
       const isCluster = viewMode === 'cluster' && (s.groupSize ?? 1) > 1;
 
       // Color coding
-      const markerColor = isOffline
-        ? '#f97316' // Orange for offline/paused
-        : role === 'guide'
-        ? '#3b82f6' // Blue for guide
-        : role === 'ranger'
-        ? '#a855f7' // Purple for ranger
-        : isCluster
-        ? '#059669' // Emerald cluster
-        : '#22c55e'; // Green for hiker
+      const groupColors = ['#059669', '#2563eb', '#7c3aed', '#db2777', '#d97706', '#0891b2'];
+      const groupColor = groupColors[Math.abs(Array.from(String(s.booking_id || s.id)).reduce((sum, char) => sum + char.charCodeAt(0), 0)) % groupColors.length];
+      const markerColor = isOffline ? '#f97316' : groupColor;
 
       if ((s.path?.length ?? 0) > 1) {
         L.polyline(s.path!, {
@@ -631,7 +630,12 @@ function ScopedMonitorMap({ locationId, canAddCheckpoints = false, tools, routeA
         }).addTo(hikerLayer.current!);
       }
 
-      const iconHtml = `<span style="--marker-color:${markerColor}">${isCluster ? s.groupSize ?? 1 : role === 'guide' ? 'G' : 'H'}</span>`;
+      const label = isCluster ? String(s.groupSize ?? 1) : role === 'guide' ? 'G' : 'H';
+      const shape = role === 'guide' ? 'clip-path:polygon(50% 0,92% 18%,84% 78%,50% 100%,16% 78%,8% 18%)' : 'border-radius:50%';
+      const avatar = s.avatarUrl
+        ? `<img src="${esc(s.avatarUrl)}" alt="" style="width:32px;height:32px;object-fit:cover;border-radius:inherit" />`
+        : `<span>${esc(label)}</span>`;
+      const iconHtml = `<span style="position:relative;--marker-color:${markerColor};display:flex;align-items:center;justify-content:center;width:44px;height:44px;background:${markerColor};border:3px solid ${markerColor};${shape};box-shadow:0 2px 9px rgba(0,0,0,.45);color:#fff;font-weight:800;font-size:11px;overflow:hidden">${avatar}${s.avatarUrl && isCluster ? `<b style="position:absolute;right:-2px;top:-2px;background:#111;color:#fff;border-radius:10px;padding:1px 4px;font-size:9px">${esc(label)}</b>` : ''}</span>`;
       const m = L.marker([s.lastLat!, s.lastLng!], {
         title: `${s.hiker_name ?? 'Hiker Lead'} - select group`,
         alt: `${s.hiker_name ?? 'Hiker Lead'} - select group`,

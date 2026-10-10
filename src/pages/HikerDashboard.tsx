@@ -29,7 +29,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import {
   CalendarCheck,
   Map,
@@ -53,8 +53,10 @@ import {
   Radio,
   Users,
   AlertTriangle,
+  ImageUp,
 } from 'lucide-react';
 import BookingChat from '@/components/booking/BookingChat';
+import BookingRescheduleDialog from '@/components/booking/BookingRescheduleDialog';
 import BookingReceipt from '@/components/booking/BookingReceipt';
 import HikerTrailResult from '@/components/booking/HikerTrailResult';
 import { bookingReceipt, canChangeBooking } from '@/lib/bookingReceipt';
@@ -72,6 +74,7 @@ import KaliContextPanel from '@/components/kali/KaliContextPanel';
 import { useKaliContext } from '@/hooks/useKaliContext';
 import { containsProfanity, PROFANITY_NOTICE } from '@/lib/contentModeration';
 import { useBookingMessageAlerts } from '@/hooks/useBookingMessageAlerts';
+import { isFirebaseConfigured, uploadTrailReviewPhoto } from '@/lib/firebase-storage';
 
 const STATUS_STYLES: Record<string, string> = {
   confirmed: 'bg-primary/20 text-primary',
@@ -90,6 +93,7 @@ const STATUS_LABELS: Record<string, string> = {
 export default function HikerDashboard() {
   const { user } = useAuth();
   const { locations } = useLocations();
+  const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
   const [bookings, setBookings] = useState<any[]>([]);
   const [sessions, setSessions] = useState<any[]>([]);
@@ -103,11 +107,16 @@ export default function HikerDashboard() {
   const [reviewSessionId, setReviewSessionId] = useState<string | null>(null);
   const [guideRating, setGuideRating] = useState(5);
   const [guideReviewText, setGuideReviewText] = useState('');
+  const [trailRating, setTrailRating] = useState(5);
+  const [trailReviewText, setTrailReviewText] = useState('');
+  const [trailDifficulty, setTrailDifficulty] = useState<'easy' | 'moderate' | 'hard'>('moderate');
+  const [trailPhoto, setTrailPhoto] = useState<File | null>(null);
   const [reviewedSessionIds, setReviewedSessionIds] = useState<Set<string>>(() => {
     try { return new Set(JSON.parse(localStorage.getItem('reviewed_sessions') || '[]')); } catch { return new Set(); }
   });
   const [submittingReview, setSubmittingReview] = useState(false);
-  const [chatBooking, setChatBooking] = useState<{ id: string; date: string; mode?: 'chat' | 'reschedule' } | null>(null);
+  const [chatBooking, setChatBooking] = useState<{ id: string; date: string } | null>(null);
+  const [rescheduleBooking, setRescheduleBooking] = useState<{ id: string; date: string } | null>(null);
   const bookingMessageAlerts = useBookingMessageAlerts(bookings.map((booking) => booking.id), chatBooking?.id);
   const [companionQrBooking, setCompanionQrBooking] = useState<any | null>(null);
   const [receiptBookingId, setReceiptBookingId] = useState<string | null>(null);
@@ -124,6 +133,16 @@ export default function HikerDashboard() {
     window.addEventListener('open-booking-chat', onOpenBookingChat);
     return () => window.removeEventListener('open-booking-chat', onOpenBookingChat);
   }, [bookings]);
+
+  useEffect(() => {
+    const bookingId = searchParams.get('bookingId');
+    const booking = bookingId ? bookings.find((item) => item.id === bookingId) : null;
+    if (!booking) return;
+    setChatBooking({ id: booking.id, date: booking.booking_date });
+    const next = new URLSearchParams(searchParams);
+    next.delete('bookingId');
+    setSearchParams(next, { replace: true });
+  }, [bookings, searchParams, setSearchParams]);
 
   useEffect(() => {
     if (!user || bookings.length === 0) return;
@@ -326,7 +345,7 @@ export default function HikerDashboard() {
     fullName?: string;
   }) => {
     if (!user || !hikeItem.assignedGuide) { toast.error('There is no assigned guide to review for this hike.'); return; }
-    if (containsProfanity(guideReviewText)) { toast.error(PROFANITY_NOTICE); return; }
+    if (containsProfanity(guideReviewText) || containsProfanity(trailReviewText)) { toast.error(PROFANITY_NOTICE); return; }
     setSubmittingReview(true);
     const assignedGuide = hikeItem.assignedGuide;
 
@@ -353,6 +372,40 @@ export default function HikerDashboard() {
           if (guideReviewError) console.warn('Guide review sync failed:', guideReviewError.message);
         }
     }
+    let trailPhotoUrl: string | null = null;
+    if (trailPhoto) {
+      if (!isFirebaseConfigured()) {
+        toast.error('Photo storage is not configured. Submit the feedback without a photo or ask the administrator to enable storage.');
+        setSubmittingReview(false);
+        return;
+      }
+      try {
+        const uploaded = await uploadTrailReviewPhoto(trailPhoto, hikeItem.bookingId);
+        trailPhotoUrl = uploaded?.url ?? null;
+      } catch (error) {
+        console.error('Trail feedback photo upload failed:', error);
+        toast.error('The trail photo could not be uploaded. Check your connection or submit without the photo.');
+        setSubmittingReview(false);
+        return;
+      }
+    }
+    const { error: trailReviewError } = await supabase.from('reviews' as any).insert({
+      user_id: user.id,
+      booking_id: hikeItem.bookingId,
+      reviewer_name: hikeItem.fullName || user.email || 'Hiker',
+      rating: trailRating,
+      trail_name: hikeItem.trailName || 'Mt. Kalisungan Trail',
+      review_text: trailReviewText.trim(),
+      review_type: 'trail',
+      difficulty: trailDifficulty,
+      photo_url: trailPhotoUrl,
+      is_approved: false,
+    } as any);
+    if (trailReviewError) {
+      toast.error(`Trail feedback could not be saved: ${trailReviewError.message}`);
+      setSubmittingReview(false);
+      return;
+    }
     // Mark the completed booking as reviewed locally so the action remains one-time.
     const updated = new Set([...reviewedSessionIds, hikeItem.id]);
     if (hikeItem.bookingId) updated.add(hikeItem.bookingId);
@@ -361,6 +414,8 @@ export default function HikerDashboard() {
     localStorage.setItem('reviewed_sessions', JSON.stringify([...updated]));
     setReviewSessionId(null);
     setGuideReviewText('');
+    setTrailReviewText('');
+    setTrailPhoto(null);
     toast.success('Guide review submitted. Thank you for helping future hikers.');
     setSubmittingReview(false);
   };
@@ -801,6 +856,34 @@ export default function HikerDashboard() {
                             </div>
                           )}
 
+                          <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-4 space-y-3">
+                            <p className="text-sm font-semibold">Rate the mountain trail</p>
+                            <div className="space-y-2">
+                              <Label className="text-xs font-bold uppercase tracking-wider">Trail Rating</Label>
+                              <div className="flex gap-1">
+                                {[1, 2, 3, 4, 5].map((n) => (
+                                  <button key={n} type="button" onClick={() => setTrailRating(n)} className="transition-transform hover:scale-110" aria-label={`${n} trail stars`}>
+                                    <Star className={`h-7 w-7 ${n <= trailRating ? 'fill-amber-400 text-amber-400' : 'text-border'}`} />
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+                            <div className="grid gap-2 sm:grid-cols-2">
+                              <div className="space-y-1">
+                                <Label htmlFor={`trailDifficulty-${hikeItem.id}`} className="text-xs">Trail difficulty</Label>
+                                <select id={`trailDifficulty-${hikeItem.id}`} value={trailDifficulty} onChange={(event) => setTrailDifficulty(event.target.value as typeof trailDifficulty)} className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm">
+                                  <option value="easy">Easy</option><option value="moderate">Moderate</option><option value="hard">Hard</option>
+                                </select>
+                              </div>
+                              <label className="flex h-9 cursor-pointer items-center gap-2 self-end rounded-md border border-dashed border-primary/30 px-3 text-xs text-muted-foreground">
+                                <ImageUp className="h-4 w-4 text-primary" />
+                                <span className="truncate">{trailPhoto?.name || 'Add trail photo'}</span>
+                                <input type="file" accept="image/jpeg,image/png,image/webp" className="sr-only" onChange={(event) => setTrailPhoto(event.target.files?.[0] ?? null)} />
+                              </label>
+                            </div>
+                            <Textarea value={trailReviewText} onChange={(event) => setTrailReviewText(event.target.value)} placeholder="How was the trail, difficulty, and summit experience?" rows={2} />
+                          </div>
+
                           <Button className="w-full gap-2" onClick={() => handleSubmitReview(hikeItem)} disabled={submittingReview}>
                             {submittingReview ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
                             Submit Review
@@ -1048,11 +1131,11 @@ export default function HikerDashboard() {
                       {/* Only unstarted bookings can request a different date. */}
                       {canChange(b) && (
                       <div className="grid grid-cols-2 gap-2">
-                        <Button size="sm" variant="outline" className={`relative w-full gap-1 px-2 text-[11px] ${bookingMessageAlerts.hasUnread(b.id) ? 'border-primary text-primary shadow-[0_0_14px_hsl(var(--primary)/0.45)] animate-pulse' : ''}`} onClick={() => setChatBooking({ id: b.id, date: b.booking_date, mode: 'chat' })}>
+                        <Button size="sm" variant="outline" className={`relative w-full gap-1 px-2 text-[11px] ${bookingMessageAlerts.hasUnread(b.id) ? 'border-primary text-primary shadow-[0_0_14px_hsl(var(--primary)/0.45)] animate-pulse' : ''}`} onClick={() => setChatBooking({ id: b.id, date: b.booking_date })}>
                           <MessageCircle className="h-3.5 w-3.5" /> Chat
                           {bookingMessageAlerts.hasUnread(b.id) && <span className="absolute -right-1 -top-1 min-w-4 rounded-full bg-destructive px-1 text-[9px] leading-4 text-destructive-foreground">{bookingMessageAlerts.unreadCount(b.id) > 9 ? '9+' : bookingMessageAlerts.unreadCount(b.id)}</span>}
                         </Button>
-                        <Button size="sm" variant="outline" className="w-full gap-1 px-2 text-[11px]" onClick={() => setChatBooking({ id: b.id, date: b.booking_date, mode: 'reschedule' })}>
+                        <Button size="sm" variant="outline" className="w-full gap-1 px-2 text-[11px]" onClick={() => setRescheduleBooking({ id: b.id, date: b.booking_date })}>
                           <CalendarClock className="h-3.5 w-3.5" /> Reschedule
                         </Button>
                       </div>
@@ -1123,9 +1206,15 @@ export default function HikerDashboard() {
           bookingDate={chatBooking.date}
           open={!!chatBooking}
           onOpenChange={(o) => !o && setChatBooking(null)}
-          canRequestReschedule={Boolean(bookings.find(b => b.id === chatBooking.id && canChange(b)))}
-          initialMode={chatBooking.mode || 'chat'}
-          onAfterReschedule={() => { setChatBooking(null); window.location.reload(); }}
+        />
+      )}
+      {rescheduleBooking && (
+        <BookingRescheduleDialog
+          bookingId={rescheduleBooking.id}
+          bookingDate={rescheduleBooking.date}
+          open={!!rescheduleBooking}
+          onOpenChange={(open) => !open && setRescheduleBooking(null)}
+          onAfterReschedule={() => { setRescheduleBooking(null); void loadData(); }}
         />
       )}
       <KaliContextPanel role="hiker" insights={kaliInsights} />

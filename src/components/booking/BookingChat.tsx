@@ -4,13 +4,12 @@ import { useAuth } from '@/hooks/useAuth';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
-import { Bell, Loader2, Send, CalendarClock } from 'lucide-react';
+import { Bell, Loader2, Send } from 'lucide-react';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
-import { canChangeBooking } from '@/lib/bookingReceipt';
-import { Textarea } from '@/components/ui/textarea';
 import { notifyUser } from '@/lib/firestoreNotifications';
 import { containsProfanity, PROFANITY_NOTICE } from '@/lib/contentModeration';
+import { Textarea } from '@/components/ui/textarea';
 
 interface Msg {
   id: string;
@@ -28,12 +27,9 @@ interface Props {
   bookingDate: string;
   open: boolean;
   onOpenChange: (o: boolean) => void;
-  /** allow the current user to request a reschedule (hiker only) */
-  canRequestReschedule?: boolean;
   /** admin actions (approve/reject reschedule) */
   isAdmin?: boolean;
   onAfterReschedule?: () => void;
-  initialMode?: 'chat' | 'reschedule';
 }
 
 function bookingMessageError(message: string) {
@@ -45,19 +41,15 @@ function bookingMessageError(message: string) {
 
 export default function BookingChat({
   bookingId, bookingDate, open, onOpenChange,
-  canRequestReschedule, isAdmin, onAfterReschedule,
-  initialMode = 'chat',
+  isAdmin, onAfterReschedule,
 }: Props) {
   const { user, role } = useAuth();
   const [msgs, setMsgs] = useState<Msg[]>([]);
   const [text, setText] = useState('');
   const [loading, setLoading] = useState(false);
   const [sending, setSending] = useState(false);
-  const [newDate, setNewDate] = useState('');
-  const [rescheduleReason, setRescheduleReason] = useState('');
   const [decisionReason, setDecisionReason] = useState('');
   const [unreadCount, setUnreadCount] = useState(0);
-  const [mode, setMode] = useState<'chat' | 'reschedule'>(initialMode);
   const scroller = useRef<HTMLDivElement | null>(null);
 
   const load = async () => {
@@ -120,61 +112,44 @@ export default function BookingChat({
     }
     // Persist a realtime bell notification for the other side of the booking.
     // The chat itself remains the source of truth; this only makes new messages discoverable.
-    const { data: booking } = await supabase.from('bookings').select('user_id').eq('id', bookingId).maybeSingle();
+    const { data: booking } = await supabase.from('bookings').select('user_id,location_id').eq('id', bookingId).maybeSingle();
     if (role === 'admin' && booking?.user_id) {
-      await notifyUser(booking.user_id, { title: 'New booking message', body: 'An administrator sent you a message about your booking.', category: 'booking', link: '/hiker' }).catch(() => null);
+      await notifyUser(booking.user_id, {
+        title: 'New booking message',
+        body: 'An administrator sent you a message about your booking.',
+        category: 'booking',
+        link: `/hiker?bookingId=${encodeURIComponent(bookingId)}`,
+      }).catch(() => null);
+    } else if (role === 'guide' && booking?.user_id) {
+      await notifyUser(booking.user_id, {
+        title: 'New guide message',
+        body: 'Your assigned guide sent a message about your booking.',
+        category: 'booking',
+        link: `/hiker?bookingId=${encodeURIComponent(bookingId)}`,
+      }).catch(() => null);
     } else if (role === 'hiker') {
       const { data: assignments } = await supabase.from('booking_assignments' as any).select('guide_id, guides(user_id)').eq('booking_id', bookingId).in('status', ['pending', 'accepted']);
       const guideIds = ((assignments as any[]) || []).map((item) => item.guides?.user_id).filter(Boolean);
-      await Promise.all(guideIds.map((id) => notifyUser(id, { title: 'New booking message', body: 'A hiker sent a message about an assigned booking.', category: 'booking', link: '/guide' }).catch(() => null)));
+      const adminIds = booking?.location_id
+        ? await supabase.from('user_locations').select('user_id').eq('location_id', booking.location_id).then(({ data }) => (data || []).map((item) => item.user_id).filter(Boolean))
+        : [];
+      await Promise.all([
+        ...guideIds.map((id) => notifyUser(id, {
+          title: 'New booking message',
+          body: 'A hiker sent a message about an assigned booking.',
+          category: 'booking',
+          link: `/guide?bookingId=${encodeURIComponent(bookingId)}`,
+        }).catch(() => null)),
+        ...adminIds.map((id) => notifyUser(id, {
+          title: 'New hiker booking message',
+          body: 'A hiker sent a message about a booking in your trailhead.',
+          category: 'booking',
+          link: `/admin?tab=requests&bookingId=${encodeURIComponent(bookingId)}`,
+        }).catch(() => null)),
+      ]);
     }
     if (!content) setText('');
     return true;
-  };
-
-  const requestReschedule = async () => {
-    if (!canRequestReschedule || sending) return;
-    if (!newDate) { toast.error('Pick a new date'); return; }
-    if (rescheduleReason.trim().length < 5) { toast.error('Please explain the reason (at least 5 characters).'); return; }
-    setSending(true);
-    const { data: current, error: readError } = await supabase.from('bookings').select('id,status,notes').eq('id', bookingId).single();
-    const { data: sessions, error: sessionError } = await supabase.from('hiker_sessions').select('status,end_time').eq('booking_id', bookingId);
-    if (readError || sessionError || !current || !canChangeBooking(current, sessions ?? [])) {
-      setSending(false);
-      toast.error(readError?.message || sessionError?.message || 'This hike has started or ended and cannot be rescheduled.');
-      return;
-    }
-    let parsedNotes: Record<string, unknown> = {};
-    try {
-      parsedNotes = current.notes ? JSON.parse(current.notes) as Record<string, unknown> : {};
-    } catch {
-      parsedNotes = current.notes ? { legacyNotes: current.notes } : {};
-    }
-    let update = supabase
-      .from('bookings')
-      .update({
-        status: 'adjustment_pending',
-        requested_new_date: newDate,
-        requested_at: new Date().toISOString(),
-        notes: JSON.stringify({ ...parsedNotes, requestedRescheduleReason: rescheduleReason.trim() }),
-      } as any)
-      .eq('id', bookingId).eq('status', current.status);
-    update = current.notes == null ? update.is('notes', null) : update.eq('notes', current.notes);
-    const { data: changed, error } = await update.select('id').maybeSingle();
-    if (error || !changed) { setSending(false); toast.error(error?.message || 'Booking changed. Reload before requesting a new date.'); return; }
-    const messageSent = await send('reschedule_request', `Hiker requested to reschedule from ${bookingDate} to ${newDate}. Reason: ${rescheduleReason.trim()}`);
-    if (!messageSent) {
-      toast.error('The reschedule was saved, but its message could not be delivered. Contact the administrator directly.');
-      setNewDate('');
-      setRescheduleReason('');
-      setSending(false);
-      onAfterReschedule?.();
-      return;
-    }
-    toast.success('Reschedule request sent to admin');
-    setNewDate('');
-    setRescheduleReason('');
-    onAfterReschedule?.();
   };
 
   const adminDecideReschedule = async (booking: any, approved: boolean) => {
@@ -204,10 +179,10 @@ export default function BookingChat({
             <Bell className="h-4 w-4 text-primary" /> Booking conversation
             {unreadCount > 0 && <span className="rounded-full bg-destructive px-1.5 py-0.5 text-[10px] text-destructive-foreground">{unreadCount}</span>}
           </DialogTitle>
-        <DialogDescription>{mode === 'chat' ? `Messages about your booking on ${format(new Date(bookingDate), 'MMM d, yyyy')}.` : 'Request a date change for this booking. The local admin must approve it.'}</DialogDescription>
+        <DialogDescription>Messages about your booking on {format(new Date(`${bookingDate}T00:00:00`), 'MMM d, yyyy')}.</DialogDescription>
         </DialogHeader>
 
-        {mode === 'chat' && <div ref={scroller} className="h-72 overflow-y-auto border rounded-md p-3 space-y-2 bg-muted/30">
+        <div ref={scroller} className="h-72 overflow-y-auto border rounded-md p-3 space-y-2 bg-muted/30">
           {loading ? (
             <div className="flex items-center justify-center py-10"><Loader2 className="h-5 w-5 animate-spin" /></div>
           ) : msgs.length === 0 ? (
@@ -230,31 +205,15 @@ export default function BookingChat({
               );
             })
           )}
-        </div>}
+        </div>
 
-        {mode === 'chat' && <div className="flex gap-2">
+        <div className="flex gap-2">
           <Input value={text} onChange={(e) => setText(e.target.value)} placeholder="Type a message…"
             onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); void send(); } }} />
           <Button onClick={() => void send()} disabled={sending || !text.trim()}>
             {sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
           </Button>
-        </div>}
-
-        {canRequestReschedule && mode === 'reschedule' && (
-          <div className="space-y-2">
-            <p className="text-xs font-medium flex items-center gap-1.5">
-              <CalendarClock className="h-3.5 w-3.5" /> Request a new date
-            </p>
-            <div className="flex gap-2">
-              <Input aria-label="Requested hike date" type="date" value={newDate} min={new Date().toISOString().slice(0,10)}
-                onChange={(e) => setNewDate(e.target.value)} />
-              <Button size="sm" variant="outline" disabled={sending} onClick={() => void requestReschedule()}>Send request</Button>
-            </div>
-            <Textarea aria-label="Reason for reschedule" value={rescheduleReason} onChange={(event) => setRescheduleReason(event.target.value)} maxLength={500} rows={2} placeholder="Why do you need to change the date?" />
-            <p className="text-[11px] text-muted-foreground">Your booking will move to “adjustment pending” until admin approves.</p>
-            <Button variant="ghost" size="sm" onClick={() => onOpenChange(false)}>Cancel</Button>
-          </div>
-        )}
+        </div>
 
         {isAdmin && (
           <AdminRescheduleControls bookingId={bookingId} decisionReason={decisionReason} onReasonChange={setDecisionReason} onDecide={adminDecideReschedule} />
