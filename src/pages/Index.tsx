@@ -1,7 +1,7 @@
 import { Link, useNavigate } from 'react-router-dom';
 import { useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
-import { Mountain, ArrowUpRight, Wind, Trees, MapPin } from 'lucide-react';
+import { Mountain, ArrowUpRight, Wind, Trees, MapPin, ChevronLeft, ChevronRight } from 'lucide-react';
 import { motion, useReducedMotion } from 'framer-motion';
 import MountainMist from '@/components/landing/MountainMist';
 import heroImage from '@/assets/mt-kalisungan-hero.jpg';
@@ -94,6 +94,8 @@ function SummitPathOverlay() {
     return `${index === 0 ? 'M' : 'L'}${x.toFixed(1)},${y.toFixed(1)}`;
   }).join(' ');
   const routeLabel = route.name.includes('Lamot 1') ? 'Lamot 1' : route.name.includes('Sto.') ? 'Sto. Tomas' : 'Lamot 2';
+  const showPrevious = () => setRouteIndex((current) => (current - 1 + TRAILS.length) % TRAILS.length);
+  const showNext = () => setRouteIndex((current) => (current + 1) % TRAILS.length);
 
   const startPoint = path[0] ?? [minLat, minLng];
   const endPoint = path.at(-1) ?? [maxLat, maxLng];
@@ -106,14 +108,18 @@ function SummitPathOverlay() {
 
   return (
     <div className="hidden sm:block glass-card rounded-2xl p-4 sm:p-5">
-      <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center justify-between mb-3">
         <div>
           <div className="text-xs uppercase tracking-wide text-muted-foreground/80">Route preview</div>
           <div className="text-sm font-semibold">{routeLabel} route</div>
         </div>
-        <div className="text-xs text-muted-foreground text-right">
-          <div className="font-medium text-foreground/90">Start</div>
-          <div>Trailhead</div>
+        <div className="flex items-center gap-1">
+          <button type="button" aria-label="Previous route preview" title="Previous route" onClick={showPrevious} className="grid h-8 w-8 place-items-center rounded-full border border-border/50 hover:bg-background/60">
+            <ChevronLeft className="h-4 w-4" />
+          </button>
+          <button type="button" aria-label="Next route preview" title="Next route" onClick={showNext} className="grid h-8 w-8 place-items-center rounded-full border border-border/50 hover:bg-background/60">
+            <ChevronRight className="h-4 w-4" />
+          </button>
         </div>
       </div>
 
@@ -152,7 +158,7 @@ function SummitPathOverlay() {
           <div>
             <span className="text-foreground/90 font-medium">Arrive</span> • Peak
           </div>
-          <div className="text-[10px]">~622 m</div>
+          <div className="text-[10px]">~{route.elevation.replace('m', '')} m</div>
         </div>
       </div>
     </div>
@@ -201,6 +207,15 @@ export default function Index() {
   const reduceMotion = useReducedMotion();
   const { user } = useAuth();
   const navigate = useNavigate();
+
+  useEffect(() => {
+    const hash = new URLSearchParams(window.location.hash.slice(1));
+    const query = new URLSearchParams(window.location.search);
+    const isRecovery = query.get('type') === 'recovery'
+      || hash.get('type') === 'recovery'
+      || Boolean(hash.get('access_token') && hash.get('refresh_token') && hash.get('type') !== 'signup');
+    if (isRecovery) navigate(`/reset-password${window.location.search}${window.location.hash}`, { replace: true });
+  }, [navigate]);
 
   const handleLearnMore = () => {
     document.getElementById('learn-more')?.scrollIntoView({ behavior: reduceMotion ? 'auto' : 'smooth', block: 'start' });
@@ -267,7 +282,7 @@ export default function Index() {
                 </div>
                 <div>
                   <div className="text-xl font-semibold text-white">3 trails</div>
-                  <div>Summit • Plantation • Ridge</div>
+                  <div>Lamot 1 • Lamot 2 • Sto. Tomas</div>
                 </div>
                 <div>
                   <div className="text-xl font-semibold text-white">AI</div>

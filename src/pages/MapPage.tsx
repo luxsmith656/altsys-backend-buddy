@@ -167,7 +167,7 @@ export default function MapPage() {
     return () => document.body.classList.remove('map-workspace-open');
   }, []);
 
-  const isTrailRecorder = role === 'ranger' || role === 'guide' || role === 'admin' || role === 'super_admin';
+  const isTrailRecorder = role === 'ranger' || role === 'admin' || role === 'super_admin';
   const canMonitorAll = role === 'ranger' || role === 'admin' || role === 'super_admin';
   const isSelfTrackingRole = role === 'hiker' || role === 'guide';
   const [activeMapTab, setActiveMapTab] = useState<'tracker' | 'editor'>('tracker');
@@ -222,7 +222,8 @@ export default function MapPage() {
   const mayChooseMultipleLocations = role === 'super_admin' || role === 'mdrrmo';
   const scopeCount = scopeMode === 'one' ? 1 : scopeMode === 'two' ? 2 : barangayLocations.length;
   const effectiveScopeIds = useMemo(() => {
-    if (!mayChooseMultipleLocations) return activeLocationId ? [activeLocationId] : [];
+    if (!user) return [];
+    if (!mayChooseMultipleLocations) return bookedLocationId ? [bookedLocationId] : activeLocationId ? [activeLocationId] : [];
     const valid = scopeLocationIds.filter((id) => barangayLocations.some((location) => location.id === id));
     return valid.length >= scopeCount ? valid.slice(0, scopeCount) : barangayLocations.slice(0, scopeCount).map((location) => location.id);
   }, [activeLocationId, barangayLocations, mayChooseMultipleLocations, scopeCount, scopeLocationIds]);

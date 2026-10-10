@@ -17,11 +17,12 @@ export default function ResetPasswordPage() {
 
   useEffect(() => {
     let active = true;
-    const hasRecoveryHash = new URLSearchParams(window.location.hash.slice(1)).get('type') === 'recovery';
+    const hashParams = new URLSearchParams(window.location.hash.slice(1));
+    const hasRecoveryHash = hashParams.get('type') === 'recovery' || Boolean(hashParams.get('access_token') && hashParams.get('refresh_token'));
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       if (!active) return;
-      if (event === 'PASSWORD_RECOVERY' && session) setRecoveryReady(true);
+      if ((event === 'PASSWORD_RECOVERY' || hasRecoveryHash) && session) setRecoveryReady(true);
     });
 
     void supabase.auth.getSession().then(({ data }) => {

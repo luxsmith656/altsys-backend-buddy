@@ -5,6 +5,8 @@ import { supabase } from '@/integrations/supabase/client';
 import hikerImage from '@/assets/gallery-hikers.jpg';
 
 type FeaturedReview = {
+  user_id?: string;
+  photo_url?: string | null;
   reviewer_name: string;
   review_text: string;
   trail_name: string;
@@ -16,6 +18,7 @@ const fallback: FeaturedReview = {
   review_text: 'A memorable climb with clear trail guidance from the jump-off to the summit.',
   trail_name: 'Summit Trail',
   rating: 5,
+  photo_url: null,
 };
 
 export default function FeaturedHiker() {
@@ -25,14 +28,19 @@ export default function FeaturedHiker() {
     let active = true;
     void supabase
       .from('reviews')
-      .select('reviewer_name, review_text, trail_name, rating')
+      .select('user_id, reviewer_name, review_text, trail_name, rating')
       .eq('is_approved', true)
       .order('rating', { ascending: false })
       .order('created_at', { ascending: false })
       .limit(1)
       .maybeSingle()
-      .then(({ data }) => {
-        if (active && data) setReview(data as FeaturedReview);
+      .then(async ({ data }) => {
+        if (!active || !data) return;
+        const review = data as FeaturedReview;
+        const { data: profile } = review.user_id
+          ? await supabase.from('profiles').select('avatar_url').eq('user_id', review.user_id).maybeSingle()
+          : { data: null };
+        if (active) setReview({ ...review, photo_url: profile?.avatar_url ?? null });
       });
     return () => { active = false; };
   }, []);
@@ -47,7 +55,7 @@ export default function FeaturedHiker() {
           className="grid overflow-hidden rounded-3xl border border-primary/15 bg-card/70 shadow-xl md:grid-cols-[0.9fr_1.1fr]"
         >
           <div className="relative min-h-64 md:min-h-full">
-            <img src={hikerImage} alt="Hikers on a Mount Kalisungan trail" className="absolute inset-0 h-full w-full object-cover" loading="lazy" />
+            <img src={review.photo_url || hikerImage} alt={review.photo_url ? `${review.reviewer_name}'s profile` : 'Hikers on a Mount Kalisungan trail'} className="absolute inset-0 h-full w-full object-cover" loading="lazy" />
             <div className="absolute inset-0 bg-gradient-to-t from-black/65 via-black/10 to-transparent" />
             <div className="absolute bottom-4 left-4 flex items-center gap-2 text-sm font-semibold text-white">
               <Mountain className="h-4 w-4" /> Trail community highlight
