@@ -454,6 +454,7 @@ export default function AdminDashboard() {
   const [newGuidePassword, setNewGuidePassword] = useState('');
   const [newGuideFee, setNewGuideFee] = useState('500');
   const [addGuideSaving, setAddGuideSaving] = useState(false);
+  const [addGuideOpen, setAddGuideOpen] = useState(false);
   const [guideActivationSavingId, setGuideActivationSavingId] = useState<string | null>(null);
   const [removeGuideId, setRemoveGuideId] = useState<string | null>(null);
   const [removeGuidePassword, setRemoveGuidePassword] = useState('');
@@ -1990,7 +1991,7 @@ export default function AdminDashboard() {
                 <p className="text-muted-foreground">No bookings found for this filter.</p>
               </div>
             ) : (
-              <div className="space-y-4 mt-0">
+              <div className="mt-0 max-h-[min(68dvh,48rem)] space-y-4 overflow-y-auto pr-1 overscroll-contain">
                 {filteredTabBookings.map((b) => {
                   const meta = parseMeta(b.notes);
                   const displayStatus = getDisplayStatus(b);
@@ -2033,8 +2034,8 @@ export default function AdminDashboard() {
                                 <p className="font-semibold">{b.booking_date}</p>
                               </div>
                               <div>
-                                <p className="text-xs text-muted-foreground">Group Size</p>
-                                <p className="font-semibold">{b.group_size} pax</p>
+                                <p className="text-xs text-muted-foreground">Group size</p>
+                                <p className="font-semibold">{b.group_size} hikers · {calculateFees(Number(b.group_size) || 1).guidesNeeded} guide{calculateFees(Number(b.group_size) || 1).guidesNeeded === 1 ? '' : 's'}</p>
                               </div>
                               <div>
                                 <p className="text-xs text-muted-foreground">Phone</p>
@@ -2416,7 +2417,10 @@ export default function AdminDashboard() {
               </p>
             </div>
 
-            <Card className="glass-card">
+            <Button variant="outline" className="gap-2" onClick={() => setAddGuideOpen((open) => !open)} aria-expanded={addGuideOpen}>
+              <UserPlus className="h-4 w-4" /> {addGuideOpen ? 'Close guide form' : 'Add guide'}
+            </Button>
+            {addGuideOpen && <Card className="glass-card">
               <CardHeader>
                 <CardTitle className="text-base flex items-center gap-2">
                   <QrCode className="h-5 w-5 text-primary" /> QR Scanner &amp; Lookup
@@ -2887,7 +2891,7 @@ export default function AdminDashboard() {
                   );
                 })()}
               </CardContent>
-            </Card>
+            </Card>}
           </TabsContent>
               <TabsContent value="live-map" className="relative mt-0 h-[calc(100dvh-9rem)] min-h-[28rem] overflow-hidden rounded-lg border border-border/30 sm:min-h-[600px]">
             <RealtimeMonitorMap locationId={isSuperAdmin ? null : activeLocationId} canAddCheckpoints={false} />

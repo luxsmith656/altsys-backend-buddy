@@ -111,7 +111,7 @@ export function ResetPasswordDialog({ open, onOpenChange, defaultEmail = '', def
             )}
           </TabsContent>
         </Tabs>
-        <div id="reset-recaptcha" />
+        <div id="reset-recaptcha" className="mt-4 flex min-h-[78px] justify-center" aria-label="Phone verification security check" />
       </DialogContent>
     </Dialog>
   );

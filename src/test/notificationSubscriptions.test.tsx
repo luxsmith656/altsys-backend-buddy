@@ -67,7 +67,7 @@ describe('notification listener lifecycle', () => {
     expect(await screen.findByText(notice.title)).toBeVisible();
     fireEvent.click(screen.getByRole('button', { name: 'Mark as seen' }));
     expect(state.markRead).toHaveBeenCalledWith(notice.id);
-    fireEvent.click(screen.getByRole('button', { name: 'Remove' }));
+    fireEvent.click(screen.getByTitle('Delete notification'));
     expect(state.remove).toHaveBeenCalledWith(notice.id);
     expect(screen.queryByText(notice.title)).not.toBeInTheDocument();
   });

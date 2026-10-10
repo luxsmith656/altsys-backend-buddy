@@ -40,13 +40,12 @@ describe('signup without application OTP', () => {
     expect(fetch).not.toHaveBeenCalled();
   });
 
-  it('does not claim sign-in is ready when hosted auth returns no session', async () => {
+  it('asks the new user to confirm hosted email when auth returns no session', async () => {
     state.signUp.mockResolvedValue({ error: null, session: null });
     showRegister(); fillForm();
     fireEvent.submit(screen.getByLabelText('Email').closest('form')!);
-    await waitFor(() => expect(state.error).toHaveBeenCalledWith(expect.stringMatching(/hosted.*confirmation|confirmation.*hosted/i)));
-    expect(state.success).not.toHaveBeenCalled();
-    expect(screen.getByLabelText('Email')).toBeInTheDocument();
+    await waitFor(() => expect(state.success).toHaveBeenCalledWith(expect.stringMatching(/check your email/i)));
+    expect(screen.getByText('Login destination')).toBeInTheDocument();
   });
 
   it('retains password matching validation', () => {

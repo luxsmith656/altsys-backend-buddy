@@ -59,7 +59,11 @@ export default function Register() {
     try {
       const { error, session } = await signUp(email.trim().toLowerCase(), password, fullName.trim(), searchParams.get('guide'));
       if (error) throw error;
-      if (!session) throw new Error('Account submitted, but hosted email confirmation is still enabled. Please contact the administrator to complete account setup.');
+      if (!session) {
+        toast.success('Account created. Check your email to confirm your Mt. Kalisungan account, then sign in.');
+        navigate(redirect ? `/login?redirect=${encodeURIComponent(redirect)}` : '/login');
+        return;
+      }
       navigate(onboarding);
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Could not create your account.';

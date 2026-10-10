@@ -6,6 +6,7 @@ export default function BookingReceipt({ booking, showDetails = true }: { bookin
   const meta = parseMeta(booking.notes);
   const receipt = bookingReceipt(booking);
   const completed = booking.status === 'completed' || Boolean(meta.hikeCompletedAt) || meta.groupPhase === 'completed';
+  const originalQuoteTotal = meta.originalQuote?.total ?? receipt.originalTotal ?? (completed && receipt.extras.length > 0 ? receipt.base : null);
   return <section aria-label="Booking receipt" className="min-w-0 space-y-4 text-sm">
     {meta.additionalPaymentStatus === 'pending' && Number(meta.additionalPaymentDue) > 0 && (
       <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-amber-800 dark:text-amber-200" role="status">
@@ -16,13 +17,15 @@ export default function BookingReceipt({ booking, showDetails = true }: { bookin
       <dt>Lead hiker</dt><dd>{meta.fullName || 'Not recorded'}</dd>
       <dt>Date</dt><dd>{meta.adjustedDate || booking.booking_date || 'Not recorded'}</dd>
       <dt>Start time</dt><dd>{meta.adjustedTime || meta.hikeTime || 'Not recorded'}</dd>
-      <dt>Hikers</dt><dd>{booking.group_size ?? meta.groupSize ?? 'Not recorded'}</dd>
+      <dt>Group size</dt><dd>{booking.group_size ?? meta.groupSize ?? 'Not recorded'} hikers · {receipt.guidesNeeded} guide{receipt.guidesNeeded === 1 ? '' : 's'}</dd>
       <dt>Guide</dt><dd>{meta.assignedGuide || 'Awaiting assignment'}{meta.guidePhone && <a className="block text-primary underline" href={`tel:${meta.guidePhone}`}>{meta.guidePhone}</a>}</dd>
       <dt>Route</dt><dd>{meta.assignedTrailName || meta.assignedTrail || 'Awaiting assignment'}</dd>
       <dt>Payment method</dt><dd>{receipt.paymentMethod}</dd>
       {!!meta.companions?.length && <><dt>Companions</dt><dd>{meta.companions.join(', ')}</dd></>}
     </dl>}
-    <div className="border-y py-3 flex justify-between gap-3"><span>{!meta.originalQuote && receipt.originalTotal != null ? 'Earliest recorded total' : 'Original booking quote'}</span><strong>{receipt.originalTotal == null ? 'Not recorded' : formatPeso(receipt.originalTotal)}</strong></div>
+    {originalQuoteTotal != null && (
+      <div className="border-y py-3 flex justify-between gap-3"><span>Original booking quote</span><strong>{formatPeso(Number(originalQuoteTotal))}</strong></div>
+    )}
     <div className="space-y-2">
       <h3 className="font-semibold">{completed ? 'Final charges' : 'Current charges'}</h3>
       {receipt.baseLines.map(line => <div key={line.label} className="flex justify-between gap-3"><span>{line.label}</span><span className="shrink-0">{formatPeso(line.amount)}</span></div>)}

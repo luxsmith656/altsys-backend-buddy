@@ -57,5 +57,5 @@ export function bookingReceipt(booking: ReceiptBooking) {
   const paid = getRecordedRevenue(meta);
   const originalTotal = meta.originalQuote ? money(meta.originalQuote.total)
     : history[0]?.previousAmount > 0 ? money(history[0].previousAmount) : null;
-  return { base, baseLines, extras, total, paid, balance: Math.max(0, money(total - paid)), originalTotal, history, paymentMethod: bookingPaymentMethod(booking) };
+  return { base, baseLines, extras, total, paid, balance: Math.max(0, money(total - paid)), originalTotal, guidesNeeded: calculated.guidesNeeded, history, paymentMethod: bookingPaymentMethod(booking) };
 }

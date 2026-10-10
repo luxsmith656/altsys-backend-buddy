@@ -23,6 +23,7 @@ export default function Navbar() {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [notifCount, setNotifCount] = useState(0);
   const [notifPreview, setNotifPreview] = useState<Array<{ id: string; title: string; createdAt: string; href?: string }>>([]);
+  const [chatAlerts, setChatAlerts] = useState<Array<{ id: string; title: string; createdAt: string; href: string }>>([]);
 
   const dashboardPath = role ? getRoleHomePath(role) : '/dashboard';
 
@@ -49,6 +50,22 @@ export default function Navbar() {
     const unsub = subscribeUserNotifications(userId, setFsNotifs);
     return () => unsub();
   }, [userId]);
+
+  useEffect(() => {
+    if (!user || !['admin', 'super_admin', 'hiker', 'guide'].includes(role || '')) {
+      setChatAlerts([]);
+      return;
+    }
+    const recipient = role === 'admin' || role === 'super_admin' ? 'admin' : role;
+    if (typeof (supabase as any).channel !== 'function') return;
+    const channel = supabase.channel(`navbar-booking-message-alerts-${user.id}`)
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'booking_messages', filter: `recipient_role=eq.${recipient}` }, (payload) => {
+        const message = payload.new as { id?: string; sender_id?: string | null; booking_id?: string; created_at?: string };
+        if (!message.id || message.sender_id === user.id) return;
+        setChatAlerts((current) => [{ id: `chat:${message.id}`, title: 'New booking chat message', createdAt: message.created_at || new Date().toISOString(), href: role === 'admin' || role === 'super_admin' ? '/admin?tab=requests' : role === 'guide' ? '/guide' : '/hiker' }, ...current].slice(0, 8));
+      }).subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [user, role]);
 
   useEffect(() => {
     if (!user) {
@@ -84,7 +101,7 @@ export default function Navbar() {
         createdAt: n.createdAt,
         read: n.read,
       }));
-      const all = [...anns, ...bookingItems, ...fsItems].filter((n) => !removed.has(n.id));
+      const all = [...anns, ...bookingItems, ...fsItems, ...chatAlerts].filter((n) => !removed.has(n.id));
       const unseen = all.filter((n) => {
         if ('read' in n) return !n.read;
         return !seen.has(n.id);
@@ -97,7 +114,7 @@ export default function Navbar() {
       );
     };
     void loadNotifData();
-  }, [user, role, location.pathname, fsNotifs]);
+  }, [user, role, location.pathname, fsNotifs, chatAlerts]);
 
   const isActive = (path: string) => location.pathname === path;
 

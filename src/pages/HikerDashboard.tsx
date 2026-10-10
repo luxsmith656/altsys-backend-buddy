@@ -106,7 +106,7 @@ export default function HikerDashboard() {
     try { return new Set(JSON.parse(localStorage.getItem('reviewed_sessions') || '[]')); } catch { return new Set(); }
   });
   const [submittingReview, setSubmittingReview] = useState(false);
-  const [chatBooking, setChatBooking] = useState<{ id: string; date: string } | null>(null);
+  const [chatBooking, setChatBooking] = useState<{ id: string; date: string; mode?: 'chat' | 'reschedule' } | null>(null);
   const [companionQrBooking, setCompanionQrBooking] = useState<any | null>(null);
   const [receiptBookingId, setReceiptBookingId] = useState<string | null>(null);
   const [trailResult, setTrailResult] = useState<{ sessionId?: string; bookingId?: string; title: string } | null>(null);
@@ -1045,14 +1045,14 @@ export default function HikerDashboard() {
                       </Button>
                       {/* Only unstarted bookings can request a different date. */}
                       {canChange(b) && (
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="w-full gap-1 px-2 text-[11px]"
-                        onClick={() => setChatBooking({ id: b.id, date: b.booking_date })}
-                      >
-                        <MessageCircle className="h-3.5 w-3.5" /> Chat
-                      </Button>
+                      <div className="grid grid-cols-2 gap-2">
+                        <Button size="sm" variant="outline" className="w-full gap-1 px-2 text-[11px]" onClick={() => setChatBooking({ id: b.id, date: b.booking_date, mode: 'chat' })}>
+                          <MessageCircle className="h-3.5 w-3.5" /> Chat
+                        </Button>
+                        <Button size="sm" variant="outline" className="w-full gap-1 px-2 text-[11px]" onClick={() => setChatBooking({ id: b.id, date: b.booking_date, mode: 'reschedule' })}>
+                          <CalendarClock className="h-3.5 w-3.5" /> Reschedule
+                        </Button>
+                      </div>
                       )}
                     </div>
                   );
@@ -1121,6 +1121,7 @@ export default function HikerDashboard() {
           open={!!chatBooking}
           onOpenChange={(o) => !o && setChatBooking(null)}
           canRequestReschedule={Boolean(bookings.find(b => b.id === chatBooking.id && canChange(b)))}
+          initialMode={chatBooking.mode || 'chat'}
           onAfterReschedule={() => { setChatBooking(null); window.location.reload(); }}
         />
       )}

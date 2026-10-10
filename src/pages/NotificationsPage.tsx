@@ -3,7 +3,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Bell, Megaphone, CalendarCheck, AlertTriangle, CheckCheck, Trash2 } from 'lucide-react';
+import { Bell, Megaphone, CalendarCheck, AlertTriangle, CheckCheck, X } from 'lucide-react';
 import { fetchAnnouncementsFromDb, visibleAnnouncements } from '@/lib/announcements';
 import { loadRemovedNotificationIds, loadSeenNotificationIds, markNotificationRemoved, saveSeenNotificationIds } from '@/lib/notifications';
 import { subscribeUserNotifications, markFsNotificationRead, deleteFsNotification, type FsNotification } from '@/lib/firestoreNotifications';
@@ -173,24 +173,12 @@ export default function NotificationsPage() {
                             Mark as seen
                           </Button>
                         )}
-                        {user && (
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="h-7 px-2 text-xs text-destructive hover:text-destructive"
-                            onClick={() => {
-                              setItems((prev) => prev.filter((x) => x.id !== n.id));
-                              setRemoved((prev) => (prev.includes(n.id) ? prev : [...prev, n.id]));
-                              markNotificationRemoved(user.id, n.id);
-                              if (n.id.startsWith('fs:')) {
-                                void deleteFsNotification(n.id.slice(3));
-                              }
-                            }}
-                          >
-                            <Trash2 className="h-3 w-3 mr-1" />
-                            Remove
-                          </Button>
-                        )}
+                        {user && <Button aria-label="Delete notification" title="Delete notification" variant="ghost" size="icon" className="ml-auto h-7 w-7 text-destructive hover:text-destructive" onClick={() => {
+                          setItems((prev) => prev.filter((x) => x.id !== n.id));
+                          setRemoved((prev) => (prev.includes(n.id) ? prev : [...prev, n.id]));
+                          markNotificationRemoved(user.id, n.id);
+                          if (n.id.startsWith('fs:')) void deleteFsNotification(n.id.slice(3));
+                        }}><X className="h-3.5 w-3.5" /></Button>}
                       </div>
                     </div>
                   );

@@ -181,6 +181,7 @@ export default function MapPage() {
 
   const [simulationHikers, setSimulationHikers] = useState<SimulatedHiker[]>([]);
   const [assignedTrailZoneId, setAssignedTrailZoneId] = useState<string | null>(null);
+  const [bookedLocationId, setBookedLocationId] = useState<string | null>(null);
   const [officialRoutesRevision, setOfficialRoutesRevision] = useState(0);
 
   // Redesign state: Collapsible sidebar, card expansions, search
@@ -266,7 +267,9 @@ export default function MapPage() {
       .order('created_at', { ascending: true });
     if (restrictToAssignedTrail) {
       trackerQuery = trackerQuery.eq('id', assignedTrailZoneId) as typeof trackerQuery;
-    } else if (activeLocationId && role !== 'super_admin' && role !== 'mdrrmo') {
+    } else if (user && role === 'hiker' && bookedLocationId) {
+      trackerQuery = trackerQuery.eq('location_id', bookedLocationId) as typeof trackerQuery;
+    } else if (user && activeLocationId && role !== 'super_admin' && role !== 'mdrrmo') {
       trackerQuery = trackerQuery.eq('location_id', activeLocationId) as typeof trackerQuery;
     }
 
@@ -305,7 +308,12 @@ export default function MapPage() {
           .map((point) => [Number(point.lat), Number(point.lng)] as [number, number])
           .filter(([lat, lng]) => Number.isFinite(lat) && Number.isFinite(lng))
       : undefined;
-    const loaded = officialRoutesForLocation(trackerRows, restrictToAssignedTrail || role === 'super_admin' || role === 'mdrrmo' ? undefined : activeLocationId)
+    const loaded = officialRoutesForLocation(
+      trackerRows,
+      restrictToAssignedTrail || role === 'super_admin' || role === 'mdrrmo' || !user
+        ? undefined
+        : role === 'hiker' && bookedLocationId ? bookedLocationId : activeLocationId,
+    )
       .map((trail, index) => {
         const coords = Array.isArray(trail.coordinates_json) ? (trail.coordinates_json as { lat: number; lng: number }[]) : [];
         const rawPath = coords
@@ -398,7 +406,7 @@ export default function MapPage() {
     } else {
       setRawTrailZones([]);
     }
-  }, [role, assignedTrailZoneId, activeLocationId, isTrailRecorder, locations, barangayLocations]);
+  }, [role, assignedTrailZoneId, bookedLocationId, activeLocationId, isTrailRecorder, locations, barangayLocations, user]);
 
   useEffect(() => {
     let active = true;
@@ -431,6 +439,29 @@ export default function MapPage() {
     return () => {
       active = false;
     };
+  }, [role, user]);
+
+  useEffect(() => {
+    if (!user || role !== 'hiker') {
+      setBookedLocationId(null);
+      return;
+    }
+    let active = true;
+    void supabase
+      .from('bookings')
+      .select('location_id,booking_date,status')
+      .eq('user_id', user.id)
+      .in('status', ['pending', 'confirmed', 'checked_in', 'in_progress'])
+      .gte('booking_date', new Date().toISOString().slice(0, 10))
+      .order('booking_date', { ascending: true })
+      .limit(1)
+      .maybeSingle()
+      .then(({ data, error }) => {
+        if (!active) return;
+        if (error && !isSchemaCacheError(error)) console.warn('Unable to load booked map route', error);
+        setBookedLocationId((data as { location_id?: string | null } | null)?.location_id ?? null);
+      });
+    return () => { active = false; };
   }, [role, user]);
 
   useEffect(() => {

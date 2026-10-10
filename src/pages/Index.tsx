@@ -95,6 +95,15 @@ function SummitPathOverlay() {
   }).join(' ');
   const routeLabel = route.name.includes('Lamot 1') ? 'Lamot 1' : route.name.includes('Sto.') ? 'Sto. Tomas' : 'Lamot 2';
 
+  const startPoint = path[0] ?? [minLat, minLng];
+  const endPoint = path.at(-1) ?? [maxLat, maxLng];
+  const point = ([lat, lng]: [number, number]) => ({
+    x: 18 + ((lng - minLng) / Math.max(0.00001, maxLng - minLng)) * 364,
+    y: 96 - ((lat - minLat) / Math.max(0.00001, maxLat - minLat)) * 76,
+  });
+  const start = point(startPoint as [number, number]);
+  const end = point(endPoint as [number, number]);
+
   return (
     <div className="hidden sm:block glass-card rounded-2xl p-4 sm:p-5">
       <div className="flex items-center justify-between mb-3">
@@ -108,7 +117,7 @@ function SummitPathOverlay() {
         </div>
       </div>
 
-      <div className="relative h-24 rounded-xl bg-background/50 border border-border/40 overflow-hidden">
+      <div className="relative h-36 rounded-xl bg-background/50 border border-border/40 overflow-hidden">
         <svg viewBox="0 0 400 120" className="absolute inset-0 w-full h-full">
           <defs>
             <linearGradient id="pathGradient" x1="0" y1="0" x2="1" y2="0">
@@ -129,11 +138,11 @@ function SummitPathOverlay() {
             transition={{ duration: 1.2, ease: 'easeOut' }}
           />
 
-          <circle cx="20" cy="90" r="6" fill="rgba(34,197,94,0.9)" />
-          <circle cx="20" cy="90" r="10" fill="rgba(34,197,94,0.18)" />
+          <circle cx={start.x} cy={start.y} r="6" fill="rgba(34,197,94,0.9)" />
+          <circle cx={start.x} cy={start.y} r="10" fill="rgba(34,197,94,0.18)" />
 
-          <circle cx="380" cy="18" r="6" fill="rgba(239,68,68,0.9)" />
-          <circle cx="380" cy="18" r="10" fill="rgba(239,68,68,0.18)" />
+          <circle cx={end.x} cy={end.y} r="6" fill="rgba(239,68,68,0.9)" />
+          <circle cx={end.x} cy={end.y} r="10" fill="rgba(239,68,68,0.18)" />
         </svg>
 
         <div className="absolute left-3 bottom-2 text-[11px] text-muted-foreground">

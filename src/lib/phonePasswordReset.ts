@@ -36,6 +36,18 @@ export function getPhoneResetSendError(error: unknown): string {
   if (code === 'auth/invalid-app-credential' || code === 'auth/captcha-check-failed') {
     return 'The security check could not be completed. Reload the page and try again, or use email reset instead.';
   }
+  if (code === 'auth/missing-app-credential') {
+    return 'The security check did not load. Complete the reCAPTCHA and try again.';
+  }
+  if (code === 'auth/unauthorized-domain' || code === 'auth/app-not-authorized') {
+    return 'This website is not authorized for phone verification yet. Add the current site domain to Firebase Authentication > Settings > Authorized domains, or use email reset instead.';
+  }
+  if (code === 'auth/network-request-failed') {
+    return 'The code could not be sent because the network request failed. Check your connection and try again.';
+  }
+  if (code === 'auth/internal-error') {
+    return 'Firebase could not start SMS verification. Refresh the page and try again; if it continues, use email reset.';
+  }
   if (code === 'auth/api-key-not-valid' || code === 'auth/invalid-api-key' || message.includes('api key not valid')) {
     return 'Phone verification is temporarily unavailable because the Firebase web configuration is invalid. Please use email reset or contact the administrator.';
   }
@@ -55,8 +67,12 @@ export async function sendPhoneResetCode(phone: string, containerId: string): Pr
   if (!app) throw new Error('Phone reset is not available right now.');
   const auth = getAuth(app);
   verifier?.clear();
-  verifier = new RecaptchaVerifier(auth, containerId, { size: 'invisible' });
+  const container = document.getElementById(containerId);
+  if (!container) throw new Error('The security check could not load. Close and reopen the reset dialog, then try again.');
+  container.replaceChildren();
+  verifier = new RecaptchaVerifier(auth, container, { size: 'normal' });
   try {
+    await verifier.render();
     return await signInWithPhoneNumber(auth, e164, verifier);
   } catch (error: unknown) {
     throw new Error(getPhoneResetSendError(error));
