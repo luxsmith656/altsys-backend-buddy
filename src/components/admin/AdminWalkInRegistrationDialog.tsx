@@ -48,6 +48,7 @@ import { useNavigate } from 'react-router-dom';
 import { isMissingTotalAmountColumn, withoutTotalAmount } from '@/lib/walkInBooking';
 import { useLocations } from '@/hooks/useLocations';
 import { officialTrailNameFromLocation } from '@/lib/mapTrailheads';
+import { getBusyGuideIdsForSlot } from '@/lib/guideAvailability';
 
 interface AdminWalkInRegistrationDialogProps {
   open: boolean;
@@ -110,6 +111,7 @@ export default function AdminWalkInRegistrationDialog({
 
   // Available data
   const [guides, setGuides] = useState<any[]>([]);
+  const [busyGuideIds, setBusyGuideIds] = useState<Set<string>>(new Set());
   const [submitting, setSubmitting] = useState(false);
   const [completedBooking, setCompletedBooking] = useState<any | null>(null);
 
@@ -153,9 +155,25 @@ export default function AdminWalkInRegistrationDialog({
     });
   }, [open, locationId]);
 
+  useEffect(() => {
+    let cancelled = false;
+    if (!open || !locationId || !bookingDate) {
+      setBusyGuideIds(new Set());
+      return;
+    }
+    void getBusyGuideIdsForSlot({ locationId, bookingDate, hikeTime, hikeType })
+      .then((busy) => { if (!cancelled) setBusyGuideIds(busy); })
+      .catch((error) => {
+        console.error('Could not load walk-in guide availability:', error);
+        if (!cancelled) setBusyGuideIds(new Set(guides.map((guide) => guide.id)));
+      });
+    return () => { cancelled = true; };
+  }, [bookingDate, guides, hikeTime, hikeType, locationId, open]);
+
   // Fees calculation
   const fees = calculateFees(groupSize);
   const totalAmount = fees.total;
+  const selectableGuides = guides.filter((guide) => !busyGuideIds.has(guide.id));
 
   const handleRegisterWalkIn = async () => {
     if (!fullName.trim()) {
@@ -173,7 +191,7 @@ export default function AdminWalkInRegistrationDialog({
 
     setSubmitting(true);
     try {
-      const selectedGuide = guides.find((g) => g.id === assignedGuideId);
+      const selectedGuide = selectableGuides.find((g) => g.id === assignedGuideId);
       if (!locationId || !activeLocation || !selectedGuide || selectedGuide.location_id !== locationId) {
         throw new Error('Select a guide assigned to this trailhead before registering a walk-in hike.');
       }
@@ -234,13 +252,17 @@ export default function AdminWalkInRegistrationDialog({
 
       // 2. Insert accepted assignment for selected guide
       if (selectedGuide) {
-        await supabase.from('booking_assignments' as any).insert({
+        const { error: assignmentError } = await supabase.from('booking_assignments' as any).insert({
           booking_id: bookingId,
           guide_id: selectedGuide.id,
           location_id: locationId,
           status: 'accepted',
           decided_at: new Date().toISOString(),
         } as any);
+        if (assignmentError) {
+          await supabase.from('bookings').delete().eq('id', bookingId);
+          throw assignmentError;
+        }
 
         await supabase.from('booking_messages' as any).insert({
           booking_id: bookingId,
@@ -555,12 +577,12 @@ export default function AdminWalkInRegistrationDialog({
                       <SelectValue placeholder="Select an on-duty guide…" />
                     </SelectTrigger>
                     <SelectContent>
-                      {guides.map((g) => (
+                      {selectableGuides.map((g) => (
                         <SelectItem key={g.id} value={g.id} className="text-xs">
                           {g.full_name} {g.specialty ? `• ${g.specialty}` : ''}
                         </SelectItem>
                       ))}
-                      {guides.length === 0 && (
+                      {selectableGuides.length === 0 && (
                         <div className="p-2 text-xs text-muted-foreground">No guides registered for this location.</div>
                       )}
                     </SelectContent>

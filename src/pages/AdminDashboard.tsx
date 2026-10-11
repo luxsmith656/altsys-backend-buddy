@@ -115,6 +115,7 @@ import { loadGuideRatings, renderStars, type GuideRating } from '@/lib/guideRati
 import { getHikeTypeLabel } from '@/lib/hikeSchedule';
 import { guidePhotoForName } from '@/lib/guideDirectory';
 import { setGuideAccountActiveAtLocation } from '@/lib/guideManagement';
+import { getBusyGuideIdsForSlot } from '@/lib/guideAvailability';
 import {
   BarChart,
   Bar,
@@ -1441,6 +1442,10 @@ export default function AdminDashboard() {
 
   /* ── Load real guides from DB (scoped to active location for admins) ── */
   const loadGuides = async () => {
+    if (!isSuperAdmin && !activeLocationId) {
+      setGuides([]);
+      return;
+    }
     let q: any = supabase.from('guides').select('id, user_id, full_name, phone, specialty, status, per_trip_fee, location_id, is_active, photo_url');
     if (activeLocationId) q = q.eq('location_id', activeLocationId);
     const { data } = await q.order('full_name');
@@ -1468,7 +1473,7 @@ export default function AdminDashboard() {
     setGuides(mapped);
   };
 
-  useEffect(() => { void loadGuides(); /* eslint-disable-next-line */ }, [activeLocationId]);
+  useEffect(() => { void loadGuides(); /* eslint-disable-next-line */ }, [activeLocationId, isSuperAdmin]);
 
   /* ── Clean dummy / unlinked guides from DB ── */
   const handlePurgeDummyGuides = async () => {
@@ -1723,28 +1728,24 @@ export default function AdminDashboard() {
         setBusyGuideIds(new Set());
         return;
       }
-      const { data: sameDayBookings } = await supabase
-        .from('bookings')
-        .select('id')
-        .eq('location_id', acceptBooking.location_id)
-        .eq('booking_date', acceptBooking.booking_date)
-        .not('status', 'in', '(cancelled,declined,completed)')
-        .neq('id', acceptBooking.id);
-      const bookingIds = (sameDayBookings ?? []).map((row: any) => row.id).filter(Boolean);
-      if (bookingIds.length === 0) {
-        if (!cancelled) setBusyGuideIds(new Set());
-        return;
+      try {
+        const meta = parseMeta(acceptBooking.notes);
+        const busy = await getBusyGuideIdsForSlot({
+          locationId: acceptBooking.location_id,
+          bookingDate: acceptBooking.booking_date,
+          hikeTime: meta.hikeTime,
+          hikeType: meta.hikeType,
+          excludeBookingId: acceptBooking.id,
+        });
+        if (!cancelled) setBusyGuideIds(busy);
+      } catch (error) {
+        console.error('Could not load guide availability:', error);
+        if (!cancelled) setBusyGuideIds(new Set(guides.map((guide) => guide.id)));
       }
-      const { data: assignments } = await supabase
-        .from('booking_assignments' as any)
-        .select('guide_id')
-        .in('booking_id', bookingIds)
-        .in('status', ['pending', 'accepted']);
-      if (!cancelled) setBusyGuideIds(new Set((assignments ?? []).map((row: any) => row.guide_id).filter(Boolean)));
     };
     void loadBusyGuides();
     return () => { cancelled = true; };
-  }, [acceptBooking?.booking_date, acceptBooking?.id, acceptBooking?.location_id]);
+  }, [acceptBooking?.booking_date, acceptBooking?.id, acceptBooking?.location_id, acceptBooking?.notes, guides]);
 
   const assignableGuides = useMemo(() => guides.filter((guide) => {
     const status = String(guide.status || '').toLowerCase();

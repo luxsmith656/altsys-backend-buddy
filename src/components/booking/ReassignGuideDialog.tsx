@@ -20,6 +20,8 @@ import {
 import { Loader2, UserCog, AlertCircle, ArrowRight } from 'lucide-react';
 import { toast } from 'sonner';
 import { reassignGuideByAdmin } from '@/lib/guideAssignmentService';
+import { getBusyGuideIdsForSlot } from '@/lib/guideAvailability';
+import { parseMeta } from '@/lib/bookingMeta';
 
 interface Props {
   bookingId: string;
@@ -56,7 +58,7 @@ export default function ReassignGuideDialog({
       try {
         const { data: booking } = await supabase
           .from('bookings')
-          .select('id, user_id, booking_date, location_id, group_size')
+          .select('id, user_id, booking_date, location_id, group_size, notes')
           .eq('id', bookingId)
           .single();
         if (!active) return;
@@ -74,7 +76,21 @@ export default function ReassignGuideDialog({
           .not('user_id', 'is', null)
           .neq('status', 'off_duty');
         if (!active) return;
-        setGuides((availableGuides || []).filter((guide) => guide.id !== currentGuideId));
+        const meta = parseMeta(booking?.notes);
+        const busyGuideIds = await getBusyGuideIdsForSlot({
+          locationId: bookingLocationId,
+          bookingDate: booking.booking_date,
+          hikeTime: meta.hikeTime,
+          hikeType: meta.hikeType,
+          excludeBookingId: booking.id,
+        });
+        if (!active) return;
+        setGuides((availableGuides || []).filter((guide) => {
+          const status = String(guide.status || '').toLowerCase();
+          return guide.id !== currentGuideId
+            && ['available', 'on-duty', 'on_duty', 'on duty', ''].includes(status)
+            && !busyGuideIds.has(guide.id);
+        }));
 
         if (currentGuideId) {
           const { data: currentGuide } = await supabase
@@ -125,7 +141,7 @@ export default function ReassignGuideDialog({
         reason: reason.trim(),
         hikerUserId: bookingInfo?.user_id || null,
         bookingDate: bookingInfo?.booking_date,
-        locationId: locationId || bookingInfo?.location_id,
+        locationId: bookingInfo?.location_id || locationId,
       });
 
       if (res.success) {

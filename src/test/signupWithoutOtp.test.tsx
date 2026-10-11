@@ -23,6 +23,14 @@ function fillForm() {
   }
 }
 
+function acceptAgreement() {
+  fireEvent.click(screen.getByText(/Terms, privacy, and trail safety agreement/));
+  fireEvent.scroll(screen.getByTestId('terms-scroll-panel'));
+  const checks = screen.getAllByRole('checkbox');
+  fireEvent.click(checks[checks.length - 1]);
+  fireEvent.click(screen.getByRole('button', { name: 'I agree' }));
+}
+
 describe('signup without application OTP', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -32,9 +40,9 @@ describe('signup without application OTP', () => {
   afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 
   it('creates an account directly, preserving guide referral and removing OTP selectors', async () => {
-    showRegister(); fillForm();
+    showRegister(); fillForm(); acceptAgreement();
     fireEvent.submit(screen.getByLabelText('Email').closest('form')!);
-    await waitFor(() => expect(state.signUp).toHaveBeenCalledExactlyOnceWith('juan@example.com', 'secret123', 'Juan Cruz', 'guide-123'));
+    await waitFor(() => expect(state.signUp).toHaveBeenCalledExactlyOnceWith('juan@example.com', 'secret123', 'Juan Cruz', 'guide-123', expect.any(String)));
     expect(screen.queryByText(/Verify Via|Send SMS OTP|Send Email OTP|Verify Identity/)).not.toBeInTheDocument();
     expect(await screen.findByText('Onboarding destination')).toBeInTheDocument();
     expect(fetch).not.toHaveBeenCalled();
@@ -42,14 +50,14 @@ describe('signup without application OTP', () => {
 
   it('asks the new user to confirm hosted email when auth returns no session', async () => {
     state.signUp.mockResolvedValue({ error: null, session: null });
-    showRegister(); fillForm();
+    showRegister(); fillForm(); acceptAgreement();
     fireEvent.submit(screen.getByLabelText('Email').closest('form')!);
     await waitFor(() => expect(state.success).toHaveBeenCalledWith(expect.stringMatching(/check your email/i)));
     expect(await screen.findByText('Login destination')).toBeInTheDocument();
   });
 
   it('retains password matching validation', () => {
-    showRegister(); fillForm();
+    showRegister(); fillForm(); acceptAgreement();
     fireEvent.change(screen.getByLabelText('Confirm Password'), { target: { value: 'different' } });
     fireEvent.submit(screen.getByLabelText('Email').closest('form')!);
     expect(state.error).toHaveBeenCalledWith('Passwords do not match');
@@ -59,7 +67,7 @@ describe('signup without application OTP', () => {
   it('prevents duplicate account requests while signup is pending', async () => {
     let finish!: (value: unknown) => void;
     state.signUp.mockImplementation(() => new Promise((resolve) => { finish = resolve; }));
-    showRegister(); fillForm();
+    showRegister(); fillForm(); acceptAgreement();
     const form = screen.getByLabelText('Email').closest('form')!;
     act(() => { fireEvent.submit(form); fireEvent.submit(form); });
     expect(state.signUp).toHaveBeenCalledTimes(1);
@@ -68,7 +76,7 @@ describe('signup without application OTP', () => {
 
   it('surfaces signup failures and makes the form available again', async () => {
     state.signUp.mockRejectedValue(new Error('Auth unavailable'));
-    showRegister(); fillForm();
+    showRegister(); fillForm(); acceptAgreement();
     fireEvent.submit(screen.getByLabelText('Email').closest('form')!);
     await waitFor(() => expect(state.error).toHaveBeenCalledWith('Auth unavailable'));
     expect(screen.getByRole('button', { name: 'Create Account' })).toBeEnabled();

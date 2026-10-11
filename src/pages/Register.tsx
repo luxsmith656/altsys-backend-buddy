@@ -13,6 +13,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { resolvePostLoginPath } from '@/lib/post-login';
 import { validatePasswordConfirmation } from '@/lib/authValidation';
 import { validateEmail, validatePhone } from '@/lib/inputValidation';
+import TermsAgreement from '@/components/auth/TermsAgreement';
 
 export default function Register() {
   const [fullName, setFullName] = useState('');
@@ -20,6 +21,7 @@ export default function Register() {
   const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [agreed, setAgreed] = useState(false);
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
   const [formError, setFormError] = useState('');
@@ -53,11 +55,12 @@ export default function Register() {
     const passwordError = validatePasswordConfirmation(password, confirmPassword);
     if (passwordError) { toast.error(passwordError); return; }
     if (validatePhone(phone)) { toast.error(validatePhone(phone)!); return; }
+    if (!agreed) { toast.error('Please read and accept the terms before creating your account.'); return; }
     submitting.current = true;
     setLoading(true);
     setFormError('');
     try {
-      const { error, session } = await signUp(email.trim().toLowerCase(), password, fullName.trim(), searchParams.get('guide'));
+      const { error, session } = await signUp(email.trim().toLowerCase(), password, fullName.trim(), searchParams.get('guide'), new Date().toISOString());
       if (error) throw error;
       if (!session) {
         toast.success('Account created. Check your email to confirm your Mt. Kalisungan account, then sign in.');
@@ -98,6 +101,7 @@ export default function Register() {
             <div className="space-y-2"><Label htmlFor="phone">Mobile Number</Label><Input id="phone" type="tel" autoComplete="tel" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="09123456789" required /></div>
             <div className="space-y-2"><Label htmlFor="password">Password</Label><Input id="password" type="password" autoComplete="new-password" minLength={6} value={password} onChange={(e) => setPassword(e.target.value)} required /></div>
             <div className="space-y-2"><Label htmlFor="confirmPassword">Confirm Password</Label><Input id="confirmPassword" type="password" autoComplete="new-password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} required /></div>
+            <TermsAgreement agreed={agreed} onAgreedChange={setAgreed} />
             {formError && <p role="alert" className="text-sm text-destructive">{formError}</p>}
             <Button type="submit" className="w-full min-h-11" disabled={loading || googleLoading}>
               {loading && <Loader2 className="h-4 w-4 animate-spin mr-2" />}Create Account

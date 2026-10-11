@@ -13,7 +13,7 @@ interface AuthContextType {
   roleError: string | null;
   retryRole: () => Promise<void>;
   signIn: (email: string, password: string) => Promise<{ error: Error | null }>;
-  signUp: (email: string, password: string, fullName: string, referralGuideId?: string | null) => Promise<{ error: Error | null; session: Session | null }>;
+  signUp: (email: string, password: string, fullName: string, referralGuideId?: string | null, agreementAcceptedAt?: string | null) => Promise<{ error: Error | null; session: Session | null }>;
   signOut: () => Promise<void>;
 }
 
@@ -185,12 +185,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return { error: lastError };
   };
 
-  const signUp = async (email: string, password: string, fullName: string, referralGuideId?: string | null) => {
+  const signUp = async (email: string, password: string, fullName: string, referralGuideId?: string | null, agreementAcceptedAt?: string | null) => {
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
       options: {
-        data: { full_name: fullName, ...(referralGuideId ? { referral_guide_id: referralGuideId } : {}) },
+        data: {
+          full_name: fullName,
+          ...(referralGuideId ? { referral_guide_id: referralGuideId } : {}),
+          ...(agreementAcceptedAt ? { terms_agreed_at: agreementAcceptedAt } : {}),
+        },
         emailRedirectTo: window.location.origin,
       },
     });
