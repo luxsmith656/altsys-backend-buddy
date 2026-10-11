@@ -14,6 +14,12 @@ export type Database = {
   }
   public: {
     Tables: {
+      hike_station_reports: {
+        Row: { id: string; session_id: string; user_id: string; station: number; reported_at: string; created_at: string }
+        Insert: { id: string; session_id: string; user_id: string; station: number; reported_at: string; created_at?: string }
+        Update: { id?: string; station?: number }
+        Relationships: []
+      }
       admin_logs: {
         Row: {
           action: string

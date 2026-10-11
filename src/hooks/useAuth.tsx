@@ -41,6 +41,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     ]);
 
     if (error) {
+      if (!navigator.onLine) {
+        const { getActiveSession } = await import('@/lib/offlineDb');
+        const active = await getActiveSession(u.id);
+        if (active?.participantRole === 'hiker' || active?.participantRole === 'guide') return active.participantRole;
+      }
       const knownRole = resolveKnownAccountRole(u);
       if (knownRole) return knownRole;
       throw error;

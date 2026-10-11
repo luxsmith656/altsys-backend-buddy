@@ -7,7 +7,8 @@ import { completeActiveHikeTracker, ensureActiveHikeTracker } from '@/lib/tracki
 import { ADMIN_CHECKIN_TOKEN_PREFIX } from '@/lib/tracking/sessionAuthorization';
 import type { TrackerSnapshot } from '@/lib/tracking/HikeTracker';
 import { getActiveSession, getSessionPoints } from '@/lib/offlineDb';
-import { splitTrackAtGaps } from '@/lib/tracking/geo';
+import { splitTrackAtGaps, guideFixToTrail } from '@/lib/tracking/geo';
+import StationReportControl from './StationReportControl';
 
 type SessionRole = 'hiker' | 'guide' | 'ranger' | 'admin';
 
@@ -38,6 +39,7 @@ type LocationPoint = {
 };
 
 type Props = {
+  routePaths?: { id?: string; path: [number, number, number?][] }[];
   mode: 'self' | 'monitor';
   userId: string;
   userRole: string | null;
@@ -77,12 +79,14 @@ export default function LiveSessionsLayer({
   userRole,
   locationId,
   onSelfLocationChange,
+  routePaths = [],
 }: Props) {
   const map = useMap();
   const [sessions, setSessions] = useState<ActiveSession[]>([]);
   const [paths, setPaths] = useState<Record<string, LocationPoint[]>>({});
   const [profiles, setProfiles] = useState<Record<string, ParticipantProfile>>({});
   const [localSnapshot, setLocalSnapshot] = useState<TrackerSnapshot | null>(null);
+  const [stationReports, setStationReports] = useState<Record<string, { station: number; reported_at: string }>>({});
   const centeredRef = useRef(false);
   const gpsErrorShownRef = useRef(false);
   const hadSelfSessionRef = useRef(false);
@@ -217,6 +221,12 @@ export default function LiveSessionsLayer({
       });
     });
     setPaths(nextPaths);
+    const { data: reports } = await supabase.from('hike_station_reports')
+      .select('session_id,station,reported_at').in('session_id', ids)
+      .order('reported_at', { ascending: false }).limit(500);
+    const latestReports: typeof stationReports = {};
+    for (const report of reports ?? []) latestReports[report.session_id] ??= report;
+    setStationReports(latestReports);
 
     if (mode === 'monitor') {
       const userIds = Array.from(new Set(visibleSessions.map((session) => session.user_id)));
@@ -248,6 +258,7 @@ export default function LiveSessionsLayer({
     const sessionChannel = supabase
       .channel(`map-live-sessions-${mode}-${userId}-${locationId ?? 'all'}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'hiker_sessions' }, () => void load())
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'hike_station_reports' }, () => void load())
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'hiker_locations' }, () => void load())
       .subscribe();
     const poll = window.setInterval(() => void load(), 30_000);
@@ -332,6 +343,7 @@ export default function LiveSessionsLayer({
 
   return (
     <>
+      {selfSession && (userRole === 'hiker' || userRole === 'guide') && selfSession.id !== selfSession.local_session_id && <StationReportControl sessionId={selfSession.id} userId={userId} />}
       {sessions.map((session) => {
         const points = renderedPaths[session.id] ?? [];
         if (points.length === 0) return null;
@@ -351,6 +363,9 @@ export default function LiveSessionsLayer({
           ? ['#16a34a', '#2563eb', '#9333ea', '#ea580c', '#0891b2'][Array.from(session.booking_id).reduce((sum, char) => sum + char.charCodeAt(0), 0) % 5]
           : roleColor[role] ?? '#16a34a';
         const profile = profiles[session.user_id];
+        const measuredFix = { lat: latest.latitude, lng: latest.longitude };
+        const route = routePaths.find(route => route.id === session.trail_zone_id);
+        const displayFix = route ? guideFixToTrail(measuredFix, Number(latest.accuracy ?? localSnapshot?.lastFix?.accuracy), route.path) : measuredFix;
         return (
           <Fragment key={session.id}>
             {lines.map((line, index) => line.length > 1 && (
@@ -358,15 +373,17 @@ export default function LiveSessionsLayer({
                 pathOptions={{ color: bookingColor, weight: isSelf ? 5 : 3, opacity: 0.78 }} />
             ))}
             <Marker
-              position={[latest.latitude, latest.longitude]}
+              position={[displayFix.lat, displayFix.lng]}
               icon={liveMarkerIcon(role, heading, isSelf, profile?.avatarUrl ?? null, bookingColor)}
               zIndexOffset={role === 'guide' ? 2100 : 2200}
             >
               <Popup>
                 <div className="min-w-[180px] text-sm">
                   <p className="font-bold">{isSelf ? 'Your live location' : profile?.name || 'Trail participant'}</p>
+                  {displayFix !== measuredFix && <p className="text-xs">Position aligned to the nearby trail within GPS uncertainty.</p>}
                   <p className="capitalize text-xs">{role} · {session.tracking_phase || 'ascent'}</p>
                   <p className="mt-1 text-xs">Last update: {new Date(latest.timestamp).toLocaleString()}</p>
+                  {stationReports[session.id] && <p className="text-xs">Reported: {stationReports[session.id].station === 6 ? 'Peak' : `Station ${stationReports[session.id].station}`} at {new Date(stationReports[session.id].reported_at).toLocaleString()} (manual)</p>}
                   {latest.accuracy != null && <p className="text-xs">GPS accuracy: ±{Math.round(Number(latest.accuracy))} m</p>}
                 </div>
               </Popup>

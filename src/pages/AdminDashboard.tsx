@@ -9,7 +9,6 @@ import {
 import { useLocations } from '@/hooks/useLocations';
 import { useTheme } from '@/hooks/useTheme';
 import { cn } from '@/lib/utils';
-import RealtimeMonitorMap from '@/components/admin/RealtimeMonitorMap';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -357,6 +356,10 @@ export default function AdminDashboard() {
 
   useEffect(() => {
     const tab = searchParams.get('tab');
+    if (tab === 'live-map') {
+      navigate('/map', { replace: true });
+      return;
+    }
     const mappedTab = getMappedTab(tab || 'overview');
     if (mappedTab !== activeTab) setActiveTab(mappedTab);
     if (tab === 'requests' || tab === 'scan' || tab === 'live-map' || tab === 'sessions') {
@@ -365,7 +368,7 @@ export default function AdminDashboard() {
     if (['users', 'guides', 'announcements', 'accounts', 'pricing', 'reports'].includes(tab || '')) {
       if (tab !== managementTab) setManagementTab(tab!);
     }
-  }, [activeTab, operationsTab, managementTab, searchParams]);
+  }, [activeTab, operationsTab, managementTab, searchParams, navigate]);
 
   useEffect(() => {
     const openCalendar = () => setCalendarFloatingOpen(true);
@@ -441,7 +444,6 @@ export default function AdminDashboard() {
   const [startingHike, setStartingHike] = useState(false);
   const [hikeStarted, setHikeStarted] = useState(false);
   const [checkInVerified, setCheckInVerified] = useState(false);
-  const [checkInHeadcount, setCheckInHeadcount] = useState('');
   const [lifecycleSaving, setLifecycleSaving] = useState(false);
 
   /* ── Reviews panel (shown after scan) ── */
@@ -748,7 +750,6 @@ export default function AdminDashboard() {
 
     if (exactData) {
       setScannedBooking(exactData);
-      setCheckInHeadcount(String(exactData.group_size));
       setCheckInVerified(false);
       setScanLoading(false);
       return;
@@ -765,7 +766,6 @@ export default function AdminDashboard() {
 
     if (nameData) {
       setScannedBooking(nameData);
-      setCheckInHeadcount(String(nameData.group_size));
       setCheckInVerified(false);
       toast.info('Found booking record.');
     } else {
@@ -777,7 +777,7 @@ export default function AdminDashboard() {
   /* ── QR Scan: start hike ── */
   const handleStartHike = async () => {
     if (!scannedBooking) return;
-    if (!checkInVerified || Number(checkInHeadcount) !== Number(scannedBooking.group_size)) {
+    if (!checkInVerified) {
       toast.error('Verify every person and confirm the booked headcount before starting tracking.');
       return;
     }
@@ -934,7 +934,7 @@ export default function AdminDashboard() {
         onsiteStartConfirmed: true,
         onsiteStartTime: startTime,
         checkinVerifiedAt: startTime,
-        checkinHeadcount: Number(checkInHeadcount),
+        checkinHeadcount: Number(scannedBooking.group_size),
         groupPhase: 'ascent',
         hikerSessionId: session?.id,
         assignedTrailZoneId: routeInfo.route.id,
@@ -1977,7 +1977,6 @@ export default function AdminDashboard() {
                       </Badge>
                     )}
                   </TabsTrigger>
-                  <TabsTrigger value="live-map">Live Map</TabsTrigger>
                 </TabsList>
               </div>
               <TabsContent value="requests" className="space-y-4 mt-0">
@@ -2589,13 +2588,12 @@ export default function AdminDashboard() {
                             <p className="text-xs text-muted-foreground">Review every companion and confirm the actual group before tracking begins.</p>
                           </div>
                           <div className="flex flex-col gap-2 min-[440px]:flex-row min-[440px]:items-center">
-                            <Label className="shrink-0 text-xs">Headcount</Label>
-                            <Input className="min-[440px]:w-28" type="number" min="1" value={checkInHeadcount} onChange={(event) => setCheckInHeadcount(event.target.value)} />
+                            <p className="text-xs">Booked headcount: {scannedBooking.group_size} hikers</p>
                             <span className="text-xs text-muted-foreground">Booked: {scannedBooking.group_size}</span>
                           </div>
                           <label className="flex cursor-pointer items-start gap-2 rounded-lg border border-border/40 bg-background/50 p-3 text-xs">
                             <Checkbox checked={checkInVerified} onCheckedChange={(checked) => setCheckInVerified(checked === true)} />
-                            <span>I verified every person, their details, and the booked headcount.</span>
+                            <span>I confirm that all {scannedBooking.group_size} hikers in this booking are present and their details are correct.</span>
                           </label>
                         </div>
                       )}
@@ -2900,10 +2898,7 @@ export default function AdminDashboard() {
                                 size="sm"
                                 variant="ghost"
                                 onClick={() => {
-                                  setOperationsTab('live-map');
-                                  const next = new URLSearchParams(searchParams);
-                                  next.set('tab', 'live-map');
-                                  setSearchParams(next, { replace: true });
+                                  navigate('/map');
                                 }}
                                 className="w-full gap-1 text-[11px]"
                               >
@@ -2965,7 +2960,7 @@ export default function AdminDashboard() {
                         <Button
                           className="w-full gap-2 font-bold py-2.5"
                           onClick={handleStartHike}
-                          disabled={startingHike || !checkInVerified || Number(checkInHeadcount) !== Number(scannedBooking.group_size)}
+                          disabled={startingHike || !checkInVerified}
                         >
                           {startingHike ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
                           Confirm Onsite Start — Begin Hike
@@ -2976,10 +2971,6 @@ export default function AdminDashboard() {
                 })()}
               </CardContent>
             </Card>
-          </TabsContent>
-              <TabsContent value="live-map" className="relative mt-0 h-[calc(100dvh-9rem)] min-h-[28rem] overflow-hidden rounded-lg border border-border/30 sm:min-h-[600px]">
-            <RealtimeMonitorMap locationId={isSuperAdmin ? null : activeLocationId} canAddCheckpoints={false} />
-            <div className="absolute left-3 right-3 top-3 z-20 max-w-2xl"><ActiveSupportAlerts locationId={isSuperAdmin ? null : activeLocationId} /></div>
           </TabsContent>
 
               <TabsContent value="sessions" className="space-y-4 mt-0">
@@ -3147,10 +3138,7 @@ export default function AdminDashboard() {
                                         size="sm"
                                         variant="outline"
                                         onClick={() => {
-                                          setOperationsTab('live-map');
-                                          const next = new URLSearchParams(searchParams);
-                                          next.set('tab', 'live-map');
-                                          setSearchParams(next, { replace: true });
+                                          navigate('/map');
                                         }}
                                         className="h-7 text-[11px] gap-1 px-2"
                                         title="View live GPS telemetry on Map"

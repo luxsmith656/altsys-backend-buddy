@@ -83,12 +83,12 @@ import {
   interpretKalisunganWeather,
 } from '@/lib/kalisunganWeather';
 
-/* â”€â”€ Weather code â†’ human-readable label (Open-Meteo, tuned for Mt. Kalisungan, Laguna) â”€â”€ */
+/* -- Weather code to human-readable label (Open-Meteo, tuned for Mt. Kalisungan, Laguna) -- */
 function weatherCodeToLabel(code: number): string {
   return interpretKalisunganWeather(code, 0, 28).condition;
 }
 
-/* â”€â”€â”€ Types â”€â”€â”€ */
+/* --- Types --- */
 interface WeatherSnapshot {
   maxTempC: number;
   minTempC: number;
@@ -99,12 +99,12 @@ interface WeatherSnapshot {
   fetchedAt?: number;
 }
 
-/* â”€â”€â”€ Draft persistence key â”€â”€â”€ */
+/* --- Draft persistence key --- */
 const DRAFT_KEY = 'mt-kalisnugon-booking-draft';
 const LAST_BOOKING_AGE_PREFIX = 'mt-kalisungan-last-booking-age:';
 const LAST_BOOKING_PARTICIPANTS_PREFIX = 'mt-kalisungan-last-booking-participants:';
 
-/* â”€â”€â”€ Constants â”€â”€â”€ */
+/* --- Constants --- */
 const STEPS = [
   { id: 1, label: 'Schedule', icon: CalendarCheck },
   { id: 2, label: 'Details', icon: UserRound },
@@ -152,7 +152,7 @@ type SubmittedBooking = {
   totalFee: number;
 };
 
-/* â”€â”€â”€ City autocomplete (compact, used inline) â”€â”€â”€ */
+/* --- City autocomplete (compact, used inline) --- */
 function CityAutocomplete({ value, options, onPick, placeholder }: { value: string; options: string[]; onPick: (city: string, province: string) => void; placeholder?: string }) {
   const [q, setQ] = useState(value || '');
   const [picked, setPicked] = useState(!!value);
@@ -162,7 +162,7 @@ function CityAutocomplete({ value, options, onPick, placeholder }: { value: stri
     <div className="relative">
       <Input
         value={q}
-        placeholder={placeholder || 'Search city / municipalityâ€¦'}
+        placeholder={placeholder || 'Search city / municipality...'}
         onChange={(e) => { setQ(e.target.value); setPicked(false); if (!e.target.value) onPick('', ''); }}
         className="text-sm"
       />
@@ -190,7 +190,7 @@ function CityAutocomplete({ value, options, onPick, placeholder }: { value: stri
   );
 }
 
-/* â”€â”€â”€ Helpers â”€â”€â”€ */
+/* --- Helpers --- */
 
 function parseHourFromTime12(time12: string): number {
   const [time, period] = time12.split(' ');
@@ -207,7 +207,7 @@ function dayDifference(target: Date): number {
   return Math.round((b - a) / (1000 * 60 * 60 * 24));
 }
 
-/* â”€â”€â”€ Component â”€â”€â”€ */
+/* --- Component --- */
 export default function BookingPage() {
   const { user, role } = useAuth();
   const { pricing } = usePricing();
@@ -231,7 +231,7 @@ export default function BookingPage() {
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
-  // â”€â”€ Step 1: Schedule
+  // -- Step 1: Schedule
   const [date, setDate] = useState<Date | undefined>();
   const [hikeType, setHikeType] = useState<HikeType>('morning');
   const [hikeTime, setHikeTime] = useState('06:00 AM');
@@ -282,7 +282,7 @@ export default function BookingPage() {
   const [weatherError, setWeatherError] = useState<string | null>(null);
   const weatherRequestId = useRef(0);
 
-  // â”€â”€ Mt. Kalisungan 16-day weather forecast (Open-Meteo) â”€â”€
+  // -- Mt. Kalisungan 16-day weather forecast (Open-Meteo) --
   const [kalisunganForecast, setKalisunganForecast] = useState<Record<string, KalisunganDayWeather>>({});
   const [kalisunganForecastLoading, setKalisunganForecastLoading] = useState(false);
   const forecastRef = useRef<Record<string, KalisunganDayWeather>>({});
@@ -318,7 +318,7 @@ export default function BookingPage() {
     return kalisunganForecast[key] ?? null;
   }, [date, kalisunganForecast]);
 
-  // â”€â”€ Step 2: Personal details
+  // -- Step 2: Personal details
   const [fullName, setFullName] = useState('');
   const [age, setAge] = useState('');
   const [sex, setSex] = useState<Sex | ''>('');
@@ -334,7 +334,7 @@ export default function BookingPage() {
   const [locationSearch, setLocationSearch] = useState('');
   const [cityPicked, setCityPicked] = useState(false);
 
-  // â”€â”€ Multi-location: hiker picks where to start (Lamot 1, Lamot 2, etc.) â”€â”€
+  // -- Multi-location: hiker picks where to start (Lamot 1, Lamot 2, etc.) --
   const { locations: allLocations, activeLocationId } = useLocations();
   const [startLocationId, setStartLocationId] = useState<string>('');
   const explicitStartLocation = useRef(false);
@@ -362,17 +362,17 @@ export default function BookingPage() {
   const appliedReferralId = useRef<string | null>(null);
   const [referralCodeInput, setReferralCodeInput] = useState('');
 
-  // â”€â”€ Guide dropdown options â”€â”€
+  // -- Guide dropdown options --
   const [guideOptions, setGuideOptions] = useState<string[]>([]);
 
-  // â”€â”€ Step 3: Sworn declaration â”€â”€
+  // -- Step 3: Sworn declaration --
   const [agreedTruthful, setAgreedTruthful] = useState(false);
   const [showSwornPrompt, setShowSwornPrompt] = useState(false);
   const [minorAcknowledged, setMinorAcknowledged] = useState(false);
   const [committedMainAge, setCommittedMainAge] = useState('');
   const [committedCompanionAges, setCommittedCompanionAges] = useState<string[]>([]);
 
-  // â”€â”€ Auto-detected minor status â”€â”€
+  // -- Auto-detected minor status --
   const hasMinors = useMemo(() => {
     const mainIsMinor = committedMainAge.trim() !== '' && Number(committedMainAge) > 0 && Number(committedMainAge) <= 17;
     const companionIsMinor = committedCompanionAges.some(
@@ -394,7 +394,7 @@ export default function BookingPage() {
     if (!hasMinors && minorAcknowledged) setMinorAcknowledged(false);
   }, [hasMinors, minorAcknowledged]);
 
-  // â”€â”€ Step 4: Payment
+  // -- Step 4: Payment
   const [paymentOption, setPaymentOption] = useState<PaymentOption>('onsite');
   const [onlinePayMethod, setOnlinePayMethod] = useState<OnlinePayMethod>('gcash');
   const [transactionRef, setTransactionRef] = useState('');
@@ -405,7 +405,7 @@ export default function BookingPage() {
 
   const phLocations = useMemo(() => getPHLocationOptions(), []);
 
-  // â”€â”€ Step 3: Agreement
+  // -- Step 3: Agreement
   const [agreedRules, setAgreedRules] = useState(false);
   const [agreedPrivacy, setAgreedPrivacy] = useState(false);
   const [hasScrolledRulesToEnd, setHasScrolledRulesToEnd] = useState(false);
@@ -416,7 +416,7 @@ export default function BookingPage() {
   const [loading, setLoading] = useState(false);
   const [booking, setBooking] = useState<SubmittedBooking | null>(null);
 
-  /* â”€â”€ Restore form draft from localStorage â”€â”€ */
+  /* -- Restore form draft from localStorage -- */
   useEffect(() => {
     try {
       const raw = localStorage.getItem(DRAFT_KEY);
@@ -444,7 +444,7 @@ export default function BookingPage() {
     }
   }, []); // mount only
 
-  /* â”€â”€ Save draft on every change â”€â”€ */
+  /* -- Save draft on every change -- */
   useEffect(() => {
     if (booking) return;
     try {
@@ -463,7 +463,7 @@ export default function BookingPage() {
       emailAddress, phoneNumber, province, city, locationSearch,
       companions, companionDetails, medicalNotes, preferredGuide, booking]);
 
-  /* â”€â”€ Fetch guides (real DB rows for fee + location scoping; also feeds dropdown names) â”€â”€ */
+  /* -- Fetch guides (real DB rows for fee + location scoping; also feeds dropdown names) -- */
   useEffect(() => {
     const fetchGuides = async () => {
       const { data: gs } = await supabase
@@ -479,7 +479,7 @@ export default function BookingPage() {
     void fetchGuides();
   }, []);
 
-  /* â”€â”€ Auto-pick first active location if none chosen â”€â”€ */
+  /* -- Auto-pick first active location if none chosen -- */
   useEffect(() => {
     const pool = jumpOffLocations.length > 0 ? jumpOffLocations : allLocations;
     const livePool = pool.some((location) => !location.id.startsWith('loc-'))
@@ -606,7 +606,7 @@ export default function BookingPage() {
   };
 
 
-  /* â”€â”€ Capacity fetching â”€â”€ */
+  /* -- Capacity fetching -- */
   const fetchSlotCapacity = useCallback(async (year: number, month: number) => {
     const start = format(new Date(year, month, 1), 'yyyy-MM-dd');
     const end = format(new Date(year, month + 1, 0), 'yyyy-MM-dd');
@@ -776,7 +776,7 @@ export default function BookingPage() {
     }
   }, []);
 
-  /* â”€â”€ Derived slot count for selected date (Day vs Night Split) â”€â”€ */
+  /* -- Derived slot count for selected date (Day vs Night Split) -- */
   const slotsForDate = useMemo(() => {
     if (!date) return null;
     const dateStr = format(date, 'yyyy-MM-dd');
@@ -985,7 +985,7 @@ export default function BookingPage() {
     hikeType,
   });
 
-  /* â”€â”€ Hike type change â”€â”€ */
+  /* -- Hike type change -- */
   const handleHikeTypeChange = (type: HikeType) => {
     setHikeType(type);
     if (date) setSlotCapacityRequested(true);
@@ -993,7 +993,7 @@ export default function BookingPage() {
     if (recommended) setHikeTime(recommended.time);
   };
 
-  /* â”€â”€ Validation â”€â”€ */
+  /* -- Validation -- */
   const validateStep = () => {
     if (step === 1) {
       if (!date) return 'Please select a date on the calendar.';
@@ -1039,7 +1039,7 @@ export default function BookingPage() {
     setStep((s) => s + 1);
   };
 
-  /* â”€â”€ Screenshot handler â”€â”€ */
+  /* -- Screenshot handler -- */
   const handleScreenshotChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -1051,7 +1051,7 @@ export default function BookingPage() {
     reader.readAsDataURL(file);
   };
 
-  /* â”€â”€ Submit â”€â”€ */
+  /* -- Submit -- */
   const handleBook = async () => {
     if (bookingSubmitLock.current) return;
     if (!user || !date) {
@@ -1310,7 +1310,7 @@ export default function BookingPage() {
     }
   };
 
-  /* â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ SUCCESS SCREEN â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+  /* --------------- SUCCESS SCREEN --------------- */
   if (booking) {
     return (
       <motion.div
@@ -1336,7 +1336,7 @@ export default function BookingPage() {
             <div className="space-y-2 text-sm">
               {[
                 { label: 'Date', value: booking.booking_date },
-                { label: 'Hike Type', value: `${booking.hikeType === 'overnight' || booking.hikeType === 'night' ? 'ðŸŒ™' : 'â˜€ï¸'} ${getHikeTypeLabel(booking.hikeType)} Hike` },
+                { label: 'Hike Type', value: `${booking.hikeType === 'overnight' || booking.hikeType === 'night' ? '' : ''} ${getHikeTypeLabel(booking.hikeType)} Hike` },
                 { label: 'Start Time', value: booking.hikeTime },
                 { label: 'Group Size', value: `${booking.group_size} pax` },
                 { label: 'Full Name', value: booking.fullName },
@@ -1379,7 +1379,7 @@ export default function BookingPage() {
     );
   }
 
-  /* â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ ADMIN ON-SITE WALK-IN COUNTER â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+  /* --------------- ADMIN ON-SITE WALK-IN COUNTER --------------- */
   if (role === 'admin' || role === 'super_admin') {
     return (
       <AdminWalkInDesk
@@ -1388,7 +1388,7 @@ export default function BookingPage() {
     );
   }
 
-  /* â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ HIKER ONLINE BOOKING FORM â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+  /* --------------- HIKER ONLINE BOOKING FORM --------------- */
   return (
     <div className="min-h-screen overflow-x-hidden pt-20 pb-24 md:pb-12 px-2 sm:px-4">
       <div className="container max-w-5xl mx-auto">
@@ -1401,7 +1401,7 @@ export default function BookingPage() {
           </p>
         </motion.div>
 
-        {/* â”€â”€â”€ Step Indicator â”€â”€â”€ */}
+        {/* --- Step Indicator --- */}
         <div className="mb-8 md:mb-12 pb-1">
           <div className="grid grid-cols-4 items-start gap-1 sm:gap-2">
           {STEPS.map((s, i) => {
@@ -1444,7 +1444,7 @@ export default function BookingPage() {
           </div>
         </div>
 
-        {/* â”€â”€â”€ Step Content â”€â”€â”€ */}
+        {/* --- Step Content --- */}
         <div className="max-w-none md:max-w-2xl mx-auto">
           <AnimatePresence mode="wait">
             <motion.div
@@ -1456,7 +1456,7 @@ export default function BookingPage() {
             >
               <Card className="glass-card border-primary/20 p-4 sm:p-8">
 
-                {/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• STEP 1: SCHEDULE â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */}
+                {/* --------------- STEP 1: SCHEDULE --------------- */}
                 {step === 1 && (
                   <div className="space-y-5">
 
@@ -1537,7 +1537,7 @@ export default function BookingPage() {
                           <span>
                             <strong>{format(date, 'MMMM d, yyyy')}</strong>
                             {slotsForDate !== null && (
-                              <> â€” <strong>{slotsForDate}</strong> slot{slotsForDate !== 1 ? 's' : ''} available</>
+                              <>  -  <strong>{slotsForDate}</strong> slot{slotsForDate !== 1 ? 's' : ''} available</>
                             )}
                           </span>
                         </motion.div>
@@ -1593,7 +1593,7 @@ export default function BookingPage() {
                       <Label className="text-[11px] font-bold uppercase tracking-widest text-muted-foreground flex flex-wrap items-center gap-1.5">
                         Preferred Start Time
                         <span className="text-[10px] font-normal normal-case tracking-normal text-muted-foreground/60">
-                          â€” {getHikeTypeLabel(hikeType)} hike schedule
+                           -  {getHikeTypeLabel(hikeType)} hike schedule
                         </span>
                       </Label>
                       <div className="flex flex-wrap gap-2">
@@ -1632,9 +1632,9 @@ export default function BookingPage() {
                               )}
                             >
                               {smartRecommendations?.recommendedTimes.includes(opt.time)
-                                ? 'â­ Recommended'
+                                ? ' Recommended'
                                 : opt.recommended
-                                ? 'â˜… Recommended'
+                                ? ' Recommended'
                                   : opt.notSuggested
                                   ? `${opt.label}`
                                   : opt.label}
@@ -1654,7 +1654,7 @@ export default function BookingPage() {
                   </div>
                 )}
 
-                {/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• STEP 2: PERSONAL DETAILS â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */}
+                {/* --------------- STEP 2: PERSONAL DETAILS --------------- */}
                 {step === 2 && (
                   <div className="space-y-6">
                     <div className="text-center mb-6">
@@ -1756,7 +1756,7 @@ export default function BookingPage() {
                         </Label>
                         <div className="relative">
                           <Input
-                            placeholder="Search PH city or municipalityâ€¦"
+                            placeholder="Search PH city or municipality..."
                             value={locationSearch}
                             onChange={(e) => {
                               setLocationSearch(e.target.value);
@@ -1891,7 +1891,7 @@ export default function BookingPage() {
                                       value={cd.city || ''}
                                       options={phLocations}
                                       onPick={(c) => updateCompanionDetail(idx, 'city', c)}
-                                      placeholder="Search PH city/municipalityâ€¦"
+                                      placeholder="Search PH city/municipality..."
                                     />
                                   </div>
 
@@ -1911,7 +1911,7 @@ export default function BookingPage() {
                         />
                       </div>
 
-                      {/* Minors â€” auto-detected from ages entered above */}
+                      {/* Minors  -  auto-detected from ages entered above */}
                       {hasMinors && (
                         <div id="minor-requirements" data-testid="minor-requirements" tabIndex={-1} className="space-y-3 sm:col-span-2 outline-none">
                           <div className="flex items-center gap-3 p-3 rounded-xl border border-amber-400/60 bg-amber-500/5 text-amber-700 dark:text-amber-300">
@@ -1958,7 +1958,7 @@ export default function BookingPage() {
                         </div>
                       )}
 
-                      {/* Start Location (Lamot 1 / Lamot 2 / Main) â€” REQUIRED */}
+                      {/* Start Location (Lamot 1 / Lamot 2 / Main)  -  REQUIRED */}
                       <div className="space-y-2 sm:col-span-2">
                         <Label htmlFor="startLocation" className="flex items-center gap-1.5">
                           <MapPin className="h-3.5 w-3.5 text-primary" />
@@ -1974,7 +1974,7 @@ export default function BookingPage() {
                           <SelectContent>
                             {(jumpOffLocations.length > 0 ? jumpOffLocations : allLocations.filter(l => l.slug.includes("lamot") || l.slug.includes("tomas"))).map((loc) => (
                               <SelectItem key={loc.id} value={loc.id}>
-                                {loc.name}{loc.lgu ? ` â€” ${loc.lgu}` : ''}
+                                {loc.name}{loc.lgu ? `  -  ${loc.lgu}` : ''}
                               </SelectItem>
                             ))}
                           </SelectContent>
@@ -1984,7 +1984,7 @@ export default function BookingPage() {
                         </p>
                       </div>
 
-                      {/* Map preview â€” shown BEFORE booking is confirmed so hikers see exactly where to go */}
+                      {/* Map preview  -  shown BEFORE booking is confirmed so hikers see exactly where to go */}
                       {selectedLocation && (
                         <div className="sm:col-span-2">
                           <LocationPreview
@@ -2135,7 +2135,7 @@ export default function BookingPage() {
                   </div>
                 )}
 
-                {/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• STEP 3: AGREEMENT â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */}
+                {/* --------------- STEP 3: AGREEMENT --------------- */}
                 {step === 3 && (
                   <div className="space-y-6">
                     <div className="text-center mb-6">
@@ -2159,7 +2159,7 @@ export default function BookingPage() {
                       <p>5. Report medical concerns before the hike and inform rangers of emergencies immediately.</p>
                       <p>6. Respect local community guidelines at Barangay Lamot II and all checkpoints.</p>
                       <p>7. You are responsible for providing accurate details for yourself and companions.</p>
-                      <p className="mt-3 font-semibold text-destructive">8. LIABILITY WAIVER â€” IMPORTANT</p>
+                      <p className="mt-3 font-semibold text-destructive">8. LIABILITY WAIVER  -  IMPORTANT</p>
                       <p>By booking and participating in this activity, the hiker fully acknowledges that hiking involves inherent risks including but not limited to: physical injury, accidents, loss or damage of property, and adverse weather conditions. <strong>The Mt. Kalisungan community, the Local Government Unit (LGU) of Calauan, Barangay Lamot II, the Barangay Council, and any affiliated organization, corporation, or association are NOT liable and shall bear NO responsibility</strong> for any injury, accident, illness, death, loss of personal belongings, or damage to property occurring before, during, or after the hiking activity. ALL LIABILITY rests solely with the hiker and their group. Participation is entirely at the hiker's own risk.</p>
                       <p>9. For minors, the parent or guardian assumes full liability and responsibility. Failure to present required parental consent documents will result in denial of entry.</p>
                       <p>10. Payment of fees does not constitute insurance coverage. Hikers are strongly advised to secure their own personal accident and travel insurance.</p>
@@ -2167,7 +2167,7 @@ export default function BookingPage() {
                       <p className="text-amber-900 dark:text-amber-200 font-medium">To protect guide livelihoods and maintain daily trail capacity limits, <strong>any request for date adjustments, rescheduling, or booking cancellations must be submitted at least 1 to 3 days prior to your confirmed hike date</strong>. Same-day cancellations or no-shows are strictly non-refundable and forfeit assigned guide slots.</p>
                     </div>
                     {!hasScrolledRulesToEnd && (
-                      <p className="text-xs text-amber-600 font-medium">Please scroll to the end of the rules (including 1â€“3 days cancellation policy) to enable agreement.</p>
+                      <p className="text-xs text-amber-600 font-medium">Please scroll to the end of the rules (including 1-3 days cancellation policy) to enable agreement.</p>
                     )}
                     <div className="space-y-4">
                       {hasScrolledRulesToEnd && (
@@ -2235,7 +2235,7 @@ export default function BookingPage() {
                   </div>
                 )}
 
-                {/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• STEP 4: CONFIRM â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */}
+                {/* --------------- STEP 4: CONFIRM --------------- */}
                 {step === 4 && (() => {
                   const { entryFee, envFee, guideFee, guidesNeeded, totalFee } = calculateFees(groupSize, { hikeType });
                   return (
@@ -2247,7 +2247,7 @@ export default function BookingPage() {
                     <div className="space-y-3 p-5 rounded-2xl bg-primary/5 border border-primary/20">
                       {[
                         { label: 'Hike Date', value: date ? format(date, 'MMMM d, yyyy') : '' },
-                        { label: 'Hike Type', value: `${hikeType === 'overnight' ? 'ðŸŒ™' : hikeType === 'night' ? 'ðŸŒ™' : 'â˜€ï¸'} ${getHikeTypeLabel(hikeType)} Hike` },
+                        { label: 'Hike Type', value: `${hikeType === 'overnight' ? '' : hikeType === 'night' ? '' : ''} ${getHikeTypeLabel(hikeType)} Hike` },
                         { label: 'Start Time', value: hikeTime },
                         { label: 'Group Size', value: `${groupSize} Pax` },
                         { label: 'Full Name', value: fullName },
@@ -2266,7 +2266,7 @@ export default function BookingPage() {
                       ))}
                     </div>
 
-                    {/* â”€â”€ Payment Section â”€â”€ */}
+                    {/* -- Payment Section -- */}
                     <div className="space-y-4 p-5 rounded-2xl border border-border/20 bg-secondary/10">
                       <h3 className="font-semibold flex items-center gap-2 text-base">
                         <CreditCard className="h-4 w-4 text-primary" /> Payment Summary
@@ -2355,7 +2355,7 @@ export default function BookingPage() {
                                 <p>Account Name: <strong>{BANK_DETAILS.accountName}</strong></p>
                               </>
                             )}
-                            <p className="text-xs text-muted-foreground pt-1">Amount: <strong>{formatPeso(totalFee)}</strong> â€” use your booking name as reference.</p>
+                            <p className="text-xs text-muted-foreground pt-1">Amount: <strong>{formatPeso(totalFee)}</strong>  -  use your booking name as reference.</p>
                           </div>
 
                           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -2369,7 +2369,7 @@ export default function BookingPage() {
                               />
                             </div>
                             <div className="space-y-2">
-                              <Label htmlFor="amountPaid" className="text-xs">Amount Paid (â‚±)</Label>
+                              <Label htmlFor="amountPaid" className="text-xs">Amount Paid (PHP )</Label>
                               <Input
                                 id="amountPaid"
                                 type="number"
@@ -2387,7 +2387,7 @@ export default function BookingPage() {
                               {isFirebaseConfigured() ? (
                                 <span className="text-[10px] font-normal text-muted-foreground">(saved to secure storage, compressed)</span>
                               ) : (
-                                <span className="text-[10px] font-normal text-amber-500">(Firebase not configured â€” admin will request manually)</span>
+                                <span className="text-[10px] font-normal text-amber-500">(Firebase not configured  -  admin will request manually)</span>
                               )}
                             </Label>
                             {screenshotPreview ? (
@@ -2411,7 +2411,7 @@ export default function BookingPage() {
                           </div>
 
                           <p className="text-xs text-muted-foreground">
-                            Online payment is optional â€” you may pay remaining balance onsite. Proof of payment may be required at check-in.
+                            Online payment is optional  -  you may pay remaining balance onsite. Proof of payment may be required at check-in.
                           </p>
                         </motion.div>
                       )}
@@ -2427,7 +2427,7 @@ export default function BookingPage() {
                       <div className="rounded-2xl border border-amber-500/40 bg-amber-500/10 p-4 text-xs space-y-1.5 animate-in fade-in">
                         <div className="flex items-center gap-2 font-bold text-amber-800 dark:text-amber-300">
                           <AlertTriangle className="h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" />
-                          <span>Important: 1â€“3 Days Notice for Date Changes or Cancellation</span>
+                          <span>Important: 1-3 Days Notice for Date Changes or Cancellation</span>
                         </div>
                         <p className="text-amber-900 dark:text-amber-200 leading-relaxed">
                           To protect assigned mountain guide schedules and environmental carrying capacities, any <strong>schedule adjustment, date change, or booking cancellation must be communicated at least 1 to 3 days before your confirmed hike date</strong>.
@@ -2441,7 +2441,7 @@ export default function BookingPage() {
             </motion.div>
           </AnimatePresence>
 
-          {/* â”€â”€â”€ Navigation Buttons â”€â”€â”€ */}
+          {/* --- Navigation Buttons --- */}
           <div className="hidden md:flex justify-between items-center mt-6">
             <Button
               variant="ghost"
@@ -2469,7 +2469,7 @@ export default function BookingPage() {
                 ) : (
                   <Check className="h-4 w-4" />
                 )}
-                {screenshotUploading ? 'Uploadingâ€¦' : 'Confirm Reservation'}
+                {screenshotUploading ? 'Uploading...' : 'Confirm Reservation'}
               </Button>
             )}
           </div>
@@ -2501,7 +2501,7 @@ export default function BookingPage() {
                   ) : (
                     <Check className="h-4 w-4" />
                   )}
-                  {screenshotUploading ? 'Uploadingâ€¦' : 'Confirm'}
+                  {screenshotUploading ? 'Uploading...' : 'Confirm'}
                 </Button>
               )}
             </div>
@@ -2514,7 +2514,7 @@ export default function BookingPage() {
       </Button>
       <KaliContextPanel role={role ?? 'guest'} insights={kaliInsights} />
 
-      {/* Floating AI Chat â€” left side */}
+      {/* Floating AI Chat  -  left side */}
       <BookingAIChat
         date={date}
         groupSize={groupSize}

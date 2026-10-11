@@ -11,10 +11,13 @@ export interface GoogleSignInResult {
 
 let googleSignInRequest: Promise<GoogleSignInResult> | null = null;
 
+// Start Firebase's persistence initialization before the first button click.
+const googleApp = getFirebaseApp();
+const googleAuth = googleApp ? getAuth(googleApp) : null;
+
 /**
  * Sign in via Firebase Google OAuth, then bridge into a Supabase session.
- * Optimised for latency: the Firebase signOut runs in the background and
- * the bridge call starts the moment we have an ID token.
+ * Keep Firebase authentication alive until the Supabase session is established.
  */
 export async function signInWithFirebaseGoogle(): Promise<GoogleSignInResult> {
   if (googleSignInRequest) return googleSignInRequest;
@@ -32,15 +35,11 @@ async function runGoogleSignIn(): Promise<GoogleSignInResult> {
   if (!app) return { error: new Error('Firebase app failed to initialize.') };
 
   try {
-    const auth = getAuth(app);
+    const auth = googleAuth ?? getAuth(app);
     const result = await signInWithPopup(auth, new GoogleAuthProvider());
     const idToken = await result.user.getIdToken();
 
-    // Kick the bridge call IMMEDIATELY; sign out of Firebase in parallel.
-    const bridgePromise = invokeFirebaseBridge(idToken);
-    void signOut(auth).catch(() => undefined);
-
-    const data = await bridgePromise;
+    const data = await invokeFirebaseBridge(idToken);
     if (!data?.token_hash) return { error: new Error('Bridge did not return a session token.') };
 
     const { error: otpError } = await supabase.auth.verifyOtp({
@@ -49,11 +48,16 @@ async function runGoogleSignIn(): Promise<GoogleSignInResult> {
     });
     if (otpError) return { error: otpError as Error };
 
+    await signOut(auth).catch(() => undefined);
+
     return { error: null, isNewUser: !!data.is_new_user, email: data.email };
   } catch (err: unknown) {
     const e = err as { code?: string; message?: string };
     if (e?.code === 'auth/popup-closed-by-user') {
       return { error: new Error('Sign-in cancelled.') };
+    }
+    if (e?.code === 'auth/popup-blocked') {
+      return { error: new Error('Your browser blocked the Google sign-in window. Allow pop-ups for this site, then tap Google sign-in again.') };
     }
     return { error: err instanceof Error ? err : new Error(String(err)) };
   }

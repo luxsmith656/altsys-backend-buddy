@@ -68,14 +68,19 @@ export const OfflineTileLayer = L.TileLayer.extend({
     const img = document.createElement('img');
     img.setAttribute('role', 'presentation');
     img.alt = '';
+    const displayBlob = (blob: Blob) => {
+      const objectUrl = URL.createObjectURL(blob);
+      img.onload = () => { URL.revokeObjectURL(objectUrl); done(undefined, img); };
+      img.onerror = () => { URL.revokeObjectURL(objectUrl); done(new Error('Cached tile could not be decoded'), img); };
+      img.src = objectUrl;
+    };
     const key = `${coords.z}/${coords.x}/${coords.y}`;
     const url = (this as any).getTileUrl(coords) as string;
     (async () => {
       try {
         const cached = await getTile(key);
         if (cached) {
-          img.src = URL.createObjectURL(cached);
-          done(undefined, img);
+          displayBlob(cached);
           return;
         }
       } catch { /* ignore */ }
@@ -85,8 +90,7 @@ export const OfflineTileLayer = L.TileLayer.extend({
         if (r.ok) {
           const blob = await r.blob();
           void putTile(key, blob);
-          img.src = URL.createObjectURL(blob);
-          done(undefined, img);
+          displayBlob(blob);
         } else {
           done(new Error(`tile ${key} ${r.status}`), img);
         }

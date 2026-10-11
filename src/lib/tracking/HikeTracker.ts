@@ -63,6 +63,9 @@ export class HikeTracker {
   private startTs: number;
   private tickHandle: ReturnType<typeof setInterval> | null = null;
   private nativeStarted = false;
+  private pathCacheCount = -1;
+  private cachedPath: TrackerSnapshot['path'] = [];
+  private cachedSegments: TrackerSnapshot['pathSegments'] = [];
   private gpsFilter = new MotionGpsFilter({
     minAccuracyForStartM: 55,
     maxAccuracyM: 90,
@@ -253,10 +256,15 @@ export class HikeTracker {
       const last = this.lastFix;
       const alt = Number.isFinite(p.alt) ? Number(p.alt) : this.altEMA ?? last?.alt ?? 0;
       const accuracy = Number.isFinite(p.accuracy) ? Number(p.accuracy) : 999;
+      if (last && p.ts <= last.ts) continue;
+      const filtered = this.gpsFilter.filter({ ...p, alt, accuracy }, {
+        moving: Number(p.speed) > 0.5, consecutivePredicted: 4,
+      });
+      if (!filtered.appended || !filtered.point) continue;
       const point: OfflinePoint = {
         sessionId: this.session.id,
-        lat: p.lat,
-        lng: p.lng,
+        lat: filtered.point.lat,
+        lng: filtered.point.lng,
         alt,
         accuracy,
         speed: Number.isFinite(p.speed) ? Number(p.speed) : 0,
@@ -301,7 +309,7 @@ export class HikeTracker {
     }, {
       heading,
       moving: speed > 0.35 || Boolean(this.lastMoveTs && ts - this.lastMoveTs < 8000),
-      consecutivePredicted: 0,
+      consecutivePredicted: 4,
     });
     if (!filtered.appended || !filtered.point) return;
 
@@ -319,7 +327,7 @@ export class HikeTracker {
       const noiseRadius = Math.max(2, Math.min(12, (accuracy + this.lastFix.accuracy) * 0.18));
       const impliedSpeed = dt > 0 ? d / Math.max(1, dt) : 0;
       if (dt < 120 && accuracy > 25 && (d > 90 || impliedSpeed > Math.max(4.5, speed + 2.5))) return;
-      if (d < noiseRadius && dt < 45) {
+      if (d < noiseRadius && speed < 0.5) {
         this.lastFix = { ...this.lastFix, ts, accuracy: Math.min(this.lastFix.accuracy, accuracy) };
         this.emit();
         return;
@@ -428,6 +436,11 @@ export class HikeTracker {
   }
 
   private emit() {
+    if (this.pathCacheCount !== this.points.length) {
+      this.pathCacheCount = this.points.length;
+      this.cachedPath = simplify(this.points, 3);
+      this.cachedSegments = splitTrackAtGaps(this.points).map(segment => simplify(segment, 3));
+    }
     const elapsed = ((this.session.endedAt ?? Date.now()) - this.session.startedAt) / 1000;
     const pace = this.session.distanceM > 0
       ? (this.session.movingSec / (this.session.distanceM / 1000))
@@ -445,9 +458,8 @@ export class HikeTracker {
       peakReachedAt: this.session.peakReachedAt ?? null,
       descentStartedAt: this.session.descentStartedAt ?? null,
       lastFix: this.lastFix,
-      path: simplify(this.points.map((p) => ({ lat: p.lat, lng: p.lng })), 3),
-      pathSegments: splitTrackAtGaps(this.points.map((p) => ({ lat: p.lat, lng: p.lng, ts: p.ts }))).map((segment) =>
-        simplify(segment.map((p) => ({ lat: p.lat, lng: p.lng })), 3)),
+      path: this.cachedPath,
+      pathSegments: this.cachedSegments,
     };
     this.listeners.forEach((l) => l(snap));
   }

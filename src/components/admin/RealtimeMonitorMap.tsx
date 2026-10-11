@@ -107,6 +107,7 @@ function ScopedMonitorMap({ locationId, canAddCheckpoints = false, tools, routeA
   const routeLayer = useRef<L.LayerGroup | null>(null);
 
   const [rawSessions, setRawSessions] = useState<ActiveSession[]>([]);
+  const [stationReports, setStationReports] = useState<Record<string, { station: number; reported_at: string }>>({});
   const [sessions, setSessions] = useState<ActiveSession[]>([]);
   const [checkpoints, setCheckpoints] = useState<Checkpoint[]>([]);
   const [officialRoutes, setOfficialRoutes] = useState<TrailZoneRef[]>([]);
@@ -428,7 +429,16 @@ function ScopedMonitorMap({ locationId, canAddCheckpoints = false, tools, routeA
       nextProgress = map;
     }
 
+    const reportIds = sessList.map(session => session.id);
+    const latestReports: typeof stationReports = {};
+    if (reportIds.length) {
+      const { data: reports } = await supabase.from('hike_station_reports')
+        .select('session_id,station,reported_at').in('session_id', reportIds)
+        .order('reported_at', { ascending: false }).limit(500);
+      for (const report of reports ?? []) latestReports[report.session_id] ??= report;
+    }
     if (version !== loadVersion.current) return;
+    setStationReports(latestReports);
     setProgress(nextProgress);
     setLoadError(Boolean(cpError || routeError));
     setRawSessions(sessList);
@@ -473,6 +483,9 @@ function ScopedMonitorMap({ locationId, canAddCheckpoints = false, tools, routeA
     const refresh = coalescedRefresh(loadData);
     const ch = supabase
       .channel(`realtime-monitor-${locationId ?? 'all'}`)
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'hike_station_reports' }, () => {
+        refresh.schedule();
+      })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'hiker_locations' }, () => {
         refresh.schedule();
       })
@@ -812,6 +825,7 @@ function ScopedMonitorMap({ locationId, canAddCheckpoints = false, tools, routeA
               onClick={() => setSelectedId(group.id)}>
               <strong>{group.lead} · {group.pax == null ? 'Party unknown' : `${group.pax} pax`}</strong>
               <small>{group.phase || 'Phase not recorded'} · {gps.hasFix ? `${gps.stale ? 'Last fix' : 'GPS'} ${gps.ageLabel}` : 'Awaiting GPS'}</small>
+              {stationReports[group.id] && <small>Manual report: {stationReports[group.id].station === 6 ? 'Peak' : `Station ${stationReports[group.id].station}`} · {new Date(stationReports[group.id].reported_at).toLocaleTimeString()}</small>}
             </button></li>;
           })}
         </ul>

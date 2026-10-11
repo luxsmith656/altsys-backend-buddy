@@ -7,7 +7,7 @@ import {
   reviewRecordingQuality,
   type GpsTrackPoint,
 } from '@/lib/tracking/gpsFilter';
-import { haversineM, splitTrackAtGaps } from '@/lib/tracking/geo';
+import { haversineM, splitTrackAtGaps, guideFixToTrail } from '@/lib/tracking/geo';
 
 function offsetPoint(lat: number, lng: number, northM: number, eastM: number) {
   const earthM = 6371000;
@@ -18,6 +18,29 @@ function offsetPoint(lat: number, lng: number, northM: number, eastM: number) {
 }
 
 describe('MotionGpsFilter', () => {
+  it('guides only nearby uncertain fixes to the trail and leaves off-trail positions intact', () => {
+    const path: [number, number][] = [[14.15, 121.3], [14.16, 121.3]];
+    const close = { lat: 14.155, lng: 121.30005 };
+    expect(guideFixToTrail(close, 20, path).lng).toBe(121.3);
+    expect(guideFixToTrail(close, 3, path)).toBe(close);
+    const far = { lat: 14.155, lng: 121.301 };
+    expect(guideFixToTrail(far, 20, path)).toBe(far);
+  });
+  it('rejects invalid coordinates without poisoning the next GPS fix', () => {
+    const filter = new MotionGpsFilter();
+    expect(filter.filter({ lat: NaN, lng: 121.3, ts: 1000, accuracy: 5 }).appended).toBe(false);
+    expect(filter.filter({ lat: 140, lng: 121.3, ts: 2000, accuracy: 5 }).appended).toBe(false);
+    expect(filter.filter({ lat: 14.15, lng: 121.3, ts: 3000, accuracy: 5 }).appended).toBe(true);
+  });
+
+  it('does not invent movement from repeated weak fixes when prediction is disabled', () => {
+    const filter = new MotionGpsFilter();
+    filter.filter({ lat: 14.15, lng: 121.3, ts: 1000, accuracy: 5 });
+    for (let i = 1; i <= 20; i++) {
+      expect(filter.filter({ lat: 14.16, lng: 121.31, ts: 1000 + i * 3000, accuracy: 200, speed: 1, heading: 90 },
+        { moving: true, consecutivePredicted: 4 }).appended).toBe(false);
+    }
+  });
   it('does not draw a fabricated line across a reconnect gap', () => {
     const points = [
       { lat: 14.1766, lng: 121.2193, ts: 1_000_000 },

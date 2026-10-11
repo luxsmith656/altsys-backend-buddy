@@ -180,6 +180,11 @@ export class MotionGpsFilter {
     consecutivePredicted?: number;
     allowWeakStart?: boolean;
   } = {}): MotionFilterResult {
+    if (!Number.isFinite(raw.lat) || !Number.isFinite(raw.lng) || !Number.isFinite(raw.ts)
+      || Math.abs(raw.lat) > 90 || Math.abs(raw.lng) > 180
+      || (raw.accuracy != null && (!Number.isFinite(raw.accuracy) || raw.accuracy < 0))) {
+      return { appended: false, reason: 'weak' };
+    }
     const accuracy = raw.accuracy ?? 999;
     const heading = normalizeHeading(raw.heading ?? opts.heading);
     const moving = opts.moving ?? (raw.speed != null && raw.speed > 0.35);

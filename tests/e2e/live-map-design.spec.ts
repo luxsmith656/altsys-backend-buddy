@@ -12,6 +12,7 @@ for (const role of ['admin', 'guide'] as const) {
       rows.user_roles = [{ user_id: user.id, role }];
       rows.user_locations = [{ user_id: user.id, location_id: 'lamot2' }];
       rows.checkpoints = []; rows.checkpoint_surveys = []; rows.trail_recordings = [];
+      rows.hike_station_reports = [];
       rows.profiles = [{ user_id: 'lead', full_name: 'Sam Lead' }, { user_id: 'guide', full_name: 'Actual Guide' }];
       rows.trail_zones = [{ id: 'official', location_id: 'lamot2', name: 'Lamot 2 Trail', status: 'active', is_official: true, review_status: 'approved', coordinates_json: [{ lat: 14.15, lng: 121.34 }, { lat: 14.16, lng: 121.35 }] }];
       rows.hiker_sessions = role === 'guide' ? [] : [{ id: 'live-1', user_id: 'lead', booking_id: 'booking', location_id: 'lamot2', trail_zone_id: 'official', status: 'active', participant_role: 'hiker', tracking_phase: 'ascent', start_time: new Date().toISOString(), client_session_id: 'admin-checkin:test' }];

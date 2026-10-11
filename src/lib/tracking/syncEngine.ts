@@ -11,6 +11,11 @@ function isSchemaCacheError(error: unknown) {
 }
 
 async function pushOne(item: any) {
+  if (item.kind === 'station') {
+    const { error } = await supabase.from('hike_station_reports').upsert(item.payload, { onConflict: 'id', ignoreDuplicates: true });
+    if (error) throw error;
+    return;
+  }
   if (item.kind === 'session') {
     const s = item.payload;
     const row = {
@@ -159,7 +164,6 @@ export async function syncOnce() {
       } catch (e) {
         console.warn('Sync failed for item', item.kind, e);
         if (item.id != null) await bumpQueueAttempt(item.id);
-        if ((item.attempts ?? 0) >= 8 && item.id != null) await removeQueueItem(item.id);
       }
     }
   } finally {

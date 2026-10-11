@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import type { CSSProperties } from 'react';
-import { MapContainer, TileLayer, Polyline, Marker, Popup, useMap } from 'react-leaflet';
+import { MapContainer, Polyline, Marker, Popup, useMap } from 'react-leaflet';
+import OfflineLayer from '@/components/map/OfflineLayer';
 import { useNavigate } from 'react-router-dom';
 import L from 'leaflet';
 import {
@@ -797,9 +798,9 @@ export default function MapPage() {
               scrollWheelZoom touchZoom doubleClickZoom dragging keyboard
               className="h-full w-full" zoomControl={false} attributionControl={true}>
               <MapInstanceBridge onReady={setMapInstance} />
-              <TileLayer url="https://tile.openstreetmap.org/{z}/{x}/{y}.png" maxZoom={20} attribution="© OpenStreetMap" />
+              <OfflineLayer url="https://tile.openstreetmap.org/{z}/{x}/{y}.png" maxZoom={20} attribution="© OpenStreetMap" />
               {activeMapTab === 'tracker' ? <>
-                {user && isSelfTrackingRole && <LiveSessionsLayer mode="self" userId={user.id} userRole={role} onSelfLocationChange={handleSelfLocationChange} />}
+                {user && isSelfTrackingRole && <LiveSessionsLayer mode="self" userId={user.id} userRole={role} routePaths={availableTrails} onSelfLocationChange={handleSelfLocationChange} />}
                 {canMonitorAll && simulationMode && <ActiveHikersLayer showStations={false} routePath={currentTrail.path as [number, number][]}
                   routeStations={currentTrail.stations} routeDistanceKm={currentRouteDistanceKm} simulationRoutes={simulationRoutes} simulationControlsOpen={simulationControlsOpen}
                   filterMode={mapFilterMode} onlyActive={onlyActiveSessions} onSimulationControlsOpenChange={setSimulationControlsOpen}

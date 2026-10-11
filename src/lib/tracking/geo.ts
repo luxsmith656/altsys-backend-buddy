@@ -1,5 +1,23 @@
 // Geo helpers for the offline tracker
 
+/** Display-only guidance within the fix uncertainty; recorded GPS stays unchanged. */
+export function guideFixToTrail(fix: { lat: number; lng: number }, accuracy: number, path: [number, number, number?][]) {
+  if (!Number.isFinite(accuracy) || accuracy < 6 || accuracy > 40) return fix;
+  const scale = Math.cos(fix.lat * Math.PI / 180);
+  let nearest = fix;
+  let distance = Math.min(12, accuracy / 2);
+  for (let i = 1; i < path.length; i++) {
+    const [a, b] = [path[i - 1], path[i]];
+    const dx = (b[1] - a[1]) * scale, dy = b[0] - a[0];
+    const length = dx * dx + dy * dy;
+    const t = length === 0 ? 0 : Math.max(0, Math.min(1, (((fix.lng - a[1]) * scale * dx) + (fix.lat - a[0]) * dy) / length));
+    const candidate = { lat: a[0] + t * dy, lng: a[1] + t * (b[1] - a[1]) };
+    const d = haversineM(fix, candidate);
+    if (d < distance) { distance = d; nearest = candidate; }
+  }
+  return nearest;
+}
+
 export function haversineM(a: { lat: number; lng: number }, b: { lat: number; lng: number }): number {
   const R = 6371000;
   const toRad = (d: number) => (d * Math.PI) / 180;
