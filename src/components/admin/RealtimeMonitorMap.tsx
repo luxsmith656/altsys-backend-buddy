@@ -17,6 +17,7 @@ import { useLocations } from '@/hooks/useLocations';
 import { coalescedRefresh } from '@/lib/coalescedRefresh';
 import { parseMeta } from '@/lib/bookingMeta';
 import { filterByTrailhead, getTrailheadIdentity } from '@/lib/mapTrailheads';
+import { splitTrackAtGaps } from '@/lib/tracking/geo';
 import { buildRouteStations, cleanTrailPath, LAMOT_2_REFERENCE_PATH, normalizeOfficialRoutePath, routeStationPosition, routeStationsFromMetadata } from '@/lib/map-data';
 import type { CompanionDetail } from '@/types';
 
@@ -59,7 +60,9 @@ interface ActiveSession {
   lastLng?: number;
   lastTs?: string;
   path?: [number, number][];
+  pathPoints?: { lat: number; lng: number; ts: string }[];
   avatarUrl?: string | null;
+  guideAvatarUrl?: string | null;
 }
 
 interface TrailZoneRef {
@@ -384,12 +387,14 @@ function ScopedMonitorMap({ locationId, canAddCheckpoints = false, tools, routeA
         .order('timestamp', { ascending: true })
         .limit(1500);
       const paths: Record<string, [number, number][]> = {};
+      const pathPoints: Record<string, { lat: number; lng: number; ts: string }[]> = {};
       ((pathData as any[]) ?? []).forEach((row) => {
         if (row.latitude != null && row.longitude != null && gpsPresentation({ lat: Number(row.latitude), lng: Number(row.longitude), timestamp: row.timestamp }, Date.now()).hasFix) {
           (paths[row.session_id] ??= []).push([Number(row.latitude), Number(row.longitude)]);
+          (pathPoints[row.session_id] ??= []).push({ lat: Number(row.latitude), lng: Number(row.longitude), ts: row.timestamp });
         }
       });
-      sessList.forEach((s) => { s.path = paths[s.id] ?? []; });
+      sessList.forEach((s) => { s.path = paths[s.id] ?? []; s.pathPoints = pathPoints[s.id] ?? []; });
 
       // Names from profiles
       const userIds = Array.from(new Set(sessList.map((s) => s.user_id)));
@@ -404,7 +409,10 @@ function ScopedMonitorMap({ locationId, canAddCheckpoints = false, tools, routeA
         session.avatarUrl = session.avatarUrl || profileMap[session.user_id]?.avatarUrl || null;
         const guide = sessList.find((candidate) => candidate.booking_id === session.booking_id && session.booking_id && candidate.participant_role === 'guide');
         if (guide && profileMap[guide.user_id]?.name) session.guideName = profileMap[guide.user_id]?.name;
-        if (guide && profileMap[guide.user_id]?.avatarUrl) (guide as any).avatarUrl = profileMap[guide.user_id]?.avatarUrl;
+        if (guide && profileMap[guide.user_id]?.avatarUrl) {
+          (guide as any).avatarUrl = profileMap[guide.user_id]?.avatarUrl;
+          session.guideAvatarUrl = profileMap[guide.user_id]?.avatarUrl;
+        }
       });
 
       // Survey progress per session
@@ -610,13 +618,11 @@ function ScopedMonitorMap({ locationId, canAddCheckpoints = false, tools, routeA
       const groupColor = groupColors[Math.abs(Array.from(String(s.booking_id || s.id)).reduce((sum, char) => sum + char.charCodeAt(0), 0)) % groupColors.length];
       const markerColor = isOffline ? '#f97316' : groupColor;
 
-      if ((s.path?.length ?? 0) > 1) {
-        L.polyline(s.path!, {
-          color: markerColor,
-          weight: 3,
-          opacity: 0.55,
-        }).addTo(hikerLayer.current!);
-      }
+      const pathSegments = splitTrackAtGaps((s.pathPoints ?? (s.path ?? []).map(([lat, lng], index) => ({ lat, lng, ts: String(index) })))).map((segment) =>
+        segment.map((point) => [point.lat, point.lng] as [number, number]));
+      pathSegments.filter((segment) => segment.length > 1).forEach((segment) => {
+        L.polyline(segment, { color: markerColor, weight: 3, opacity: 0.55 }).addTo(hikerLayer.current!);
+      });
 
       // Group spread circle if in cluster mode
       if (isCluster) {
@@ -699,6 +705,9 @@ function ScopedMonitorMap({ locationId, canAddCheckpoints = false, tools, routeA
 
   const groups: LiveMapGroup[] = visibleSessions.map((session) => ({
     id: session.id, lead: session.hiker_name || 'Hiker Lead', guide: session.guideName,
+    selectedRole: session.participant_role,
+    avatarUrl: session.avatarUrl,
+    guideAvatarUrl: session.guideAvatarUrl,
     pax: session.groupSize, phase: session.tracking_phase,
     route: officialRoutes.find((route) => route.id === session.trail_zone_id)?.name,
     lat: session.lastLat, lng: session.lastLng, timestamp: session.lastTs,

@@ -11,7 +11,7 @@ import {
   type OfflineSession, type OfflinePoint, enqueue,
 } from '@/lib/offlineDb';
 import { supabase } from '@/integrations/supabase/client';
-import { haversineM, simplify } from './geo';
+import { haversineM, simplify, splitTrackAtGaps } from './geo';
 import { MotionGpsFilter } from './gpsFilter';
 import {
   clearNativeTrailPoints,
@@ -48,6 +48,7 @@ export interface TrackerSnapshot {
   descentStartedAt: number | null;
   lastFix: { lat: number; lng: number; alt: number; ts: number; accuracy: number; heading: number | null } | null;
   path: { lat: number; lng: number }[];   // simplified for display
+  pathSegments: { lat: number; lng: number }[][]; // gaps are not rendered as fabricated straight lines
 }
 
 export class HikeTracker {
@@ -287,6 +288,8 @@ export class HikeTracker {
     const ts = Number.isFinite(pos.timestamp) ? pos.timestamp : Date.now();
     const speed = pos.coords.speed ?? 0;
     const heading = pos.coords.heading ?? null;
+    const reconnectGap = this.lastFix != null && ts - this.lastFix.ts >= 3 * 60 * 1000;
+    if (reconnectGap) this.gpsFilter.reset();
     const filtered = this.gpsFilter.filter({
       lat: pos.coords.latitude,
       lng: pos.coords.longitude,
@@ -325,7 +328,8 @@ export class HikeTracker {
       if (!isMoving && dt < 30) return;
 
       // Update stats
-      if (isMoving) {
+      const measuredAfterReconnect = !reconnectGap && !(d >= 250 && dt >= 60);
+      if (isMoving && measuredAfterReconnect) {
         this.session.distanceM += d;
         this.session.movingSec += Math.min(dt, 30);
         this.lastMoveTs = ts;
@@ -333,7 +337,7 @@ export class HikeTracker {
         const dAlt = alt - this.lastFix.alt;
         if (dAlt > 1) { this.session.ascentM += dAlt; this.session.ascentSec += dt; }
         else if (dAlt < -1) { this.session.descentM += -dAlt; this.session.descentSec += dt; }
-      } else {
+      } else if (measuredAfterReconnect) {
         this.session.restingSec += Math.min(dt, 30);
         if (!this.idleSince) this.idleSince = ts;
       }
@@ -442,6 +446,8 @@ export class HikeTracker {
       descentStartedAt: this.session.descentStartedAt ?? null,
       lastFix: this.lastFix,
       path: simplify(this.points.map((p) => ({ lat: p.lat, lng: p.lng })), 3),
+      pathSegments: splitTrackAtGaps(this.points.map((p) => ({ lat: p.lat, lng: p.lng, ts: p.ts }))).map((segment) =>
+        simplify(segment.map((p) => ({ lat: p.lat, lng: p.lng })), 3)),
     };
     this.listeners.forEach((l) => l(snap));
   }

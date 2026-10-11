@@ -7,7 +7,7 @@ import {
   reviewRecordingQuality,
   type GpsTrackPoint,
 } from '@/lib/tracking/gpsFilter';
-import { haversineM } from '@/lib/tracking/geo';
+import { haversineM, splitTrackAtGaps } from '@/lib/tracking/geo';
 
 function offsetPoint(lat: number, lng: number, northM: number, eastM: number) {
   const earthM = 6371000;
@@ -18,6 +18,20 @@ function offsetPoint(lat: number, lng: number, northM: number, eastM: number) {
 }
 
 describe('MotionGpsFilter', () => {
+  it('does not draw a fabricated line across a reconnect gap', () => {
+    const points = [
+      { lat: 14.1766, lng: 121.2193, ts: 1_000_000 },
+      { lat: 14.1767, lng: 121.2194, ts: 1_030_000 },
+      { lat: 14.1867, lng: 121.2294, ts: 1_220_000 },
+    ];
+
+    const segments = splitTrackAtGaps(points);
+
+    expect(segments).toHaveLength(2);
+    expect(segments[0]).toHaveLength(2);
+    expect(segments[1]).toEqual([points[2]]);
+  });
+
   it('smooths walking jitter and rejects large GPS spikes', () => {
     const filter = new MotionGpsFilter({ minAccuracyForStartM: 50, maxAccuracyM: 85, minAppendDistanceM: 1.5 });
     const origin = { lat: 14.1766, lng: 121.2193 };

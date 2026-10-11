@@ -5,7 +5,7 @@ type ActiveTrackerOptions = {
   userId: string;
   bookingId?: string | null;
   trailZoneId?: string | null;
-  serverSessionId: string;
+  serverSessionId?: string | null;
   participantRole?: OfflineSession['participantRole'];
   locationId?: string | null;
 };
@@ -15,7 +15,7 @@ let activeTracker: HikeTracker | null = null;
 let activeStart: Promise<HikeTracker> | null = null;
 
 export async function ensureActiveHikeTracker(options: ActiveTrackerOptions) {
-  const key = `${options.userId}:${options.serverSessionId}`;
+  const key = `${options.userId}:${options.serverSessionId ?? 'local'}`;
   if (activeKey === key && activeTracker) return activeTracker;
   if (activeKey === key && activeStart) return activeStart;
 

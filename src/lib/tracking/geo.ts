@@ -11,6 +11,33 @@ export function haversineM(a: { lat: number; lng: number }, b: { lat: number; ln
   return 2 * R * Math.asin(Math.sqrt(s));
 }
 
+/**
+ * Keep reconnect gaps honest on the map. A line across a long period without a
+ * GPS fix is not a measured path, so render the next fix as a new segment.
+ */
+export function splitTrackAtGaps<T extends { lat: number; lng: number; ts?: number | string }>(
+  points: T[],
+  maxGapMs = 3 * 60 * 1000,
+  maxJumpM = 250,
+): T[][] {
+  if (points.length === 0) return [];
+  const segments: T[][] = [[points[0]]];
+  for (let index = 1; index < points.length; index += 1) {
+    const previous = points[index - 1];
+    const current = points[index];
+    const previousTs = typeof previous.ts === 'string' ? Date.parse(previous.ts) : Number(previous.ts);
+    const currentTs = typeof current.ts === 'string' ? Date.parse(current.ts) : Number(current.ts);
+    const timeGap = Number.isFinite(previousTs) && Number.isFinite(currentTs) ? currentTs - previousTs : 0;
+    const distance = haversineM(previous, current);
+    if (timeGap >= maxGapMs || (distance >= maxJumpM && timeGap >= 60 * 1000)) {
+      segments.push([current]);
+    } else {
+      segments[segments.length - 1].push(current);
+    }
+  }
+  return segments.filter((segment) => segment.length > 0);
+}
+
 /** Douglas–Peucker line simplification on lat/lng with epsilon in meters. */
 export function simplify(points: { lat: number; lng: number }[], epsilonM = 5): { lat: number; lng: number }[] {
   if (points.length < 3) return points.slice();

@@ -6,11 +6,14 @@ import { supabase } from '@/integrations/supabase/client';
 import { completeActiveHikeTracker, ensureActiveHikeTracker } from '@/lib/tracking/activeTrackerManager';
 import { ADMIN_CHECKIN_TOKEN_PREFIX } from '@/lib/tracking/sessionAuthorization';
 import type { TrackerSnapshot } from '@/lib/tracking/HikeTracker';
+import { getActiveSession, getSessionPoints } from '@/lib/offlineDb';
+import { splitTrackAtGaps } from '@/lib/tracking/geo';
 
 type SessionRole = 'hiker' | 'guide' | 'ranger' | 'admin';
 
 type ActiveSession = {
   id: string;
+  local_session_id?: string;
   user_id: string;
   booking_id: string | null;
   trail_zone_id?: string | null;
@@ -18,6 +21,7 @@ type ActiveSession = {
   participant_role?: SessionRole;
   tracking_phase?: string;
   start_time: string;
+  status: string;
   client_session_id?: string | null;
 };
 
@@ -83,18 +87,61 @@ export default function LiveSessionsLayer({
   const gpsErrorShownRef = useRef(false);
   const hadSelfSessionRef = useRef(false);
 
+  const loadLocalSelfSession = useCallback(async () => {
+    if (mode !== 'self') return null;
+    const local = await getActiveSession(userId);
+    if (!local) return null;
+    const localPoints = await getSessionPoints(local.id);
+    const points: LocationPoint[] = localPoints.map((point) => ({
+      session_id: local.id,
+      latitude: point.lat,
+      longitude: point.lng,
+      altitude: point.alt,
+      accuracy: point.accuracy,
+      heading: point.heading,
+      timestamp: new Date(point.ts).toISOString(),
+    }));
+    return {
+      session: {
+        id: local.serverSessionId ?? local.id,
+        local_session_id: local.id,
+        user_id: local.userId,
+        booking_id: local.bookingId ?? null,
+        trail_zone_id: local.trailZoneId ?? null,
+        location_id: local.locationId ?? null,
+        participant_role: local.participantRole,
+        tracking_phase: local.phase,
+        start_time: new Date(local.startedAt).toISOString(),
+        status: 'active',
+        client_session_id: local.id,
+      } satisfies ActiveSession,
+      points,
+    };
+  }, [mode, userId]);
+
   const load = useCallback(async () => {
+    if (mode === 'self' && navigator.onLine === false) {
+      const local = await loadLocalSelfSession();
+      if (local) {
+        setSessions([local.session]);
+        setPaths({ [local.session.id]: local.points });
+        const latest = local.points[local.points.length - 1];
+        onSelfLocationChange?.(latest ? { lat: latest.latitude, lng: latest.longitude, timestamp: latest.timestamp } : null);
+      }
+      return;
+    }
     let sessionQuery = supabase
       .from('hiker_sessions')
       .select('id,user_id,booking_id,trail_zone_id,location_id,participant_role,tracking_phase,start_time,status,client_session_id')
-      .eq('status', 'active')
       .like('client_session_id', `${ADMIN_CHECKIN_TOKEN_PREFIX}%`)
       .order('start_time', { ascending: false });
 
     if (mode === 'self') {
-      sessionQuery = sessionQuery.eq('user_id', userId) as typeof sessionQuery;
+      sessionQuery = sessionQuery.eq('user_id', userId).limit(1) as typeof sessionQuery;
     } else if (locationId) {
-      sessionQuery = sessionQuery.eq('location_id', locationId) as typeof sessionQuery;
+      sessionQuery = sessionQuery.eq('status', 'active').eq('location_id', locationId) as typeof sessionQuery;
+    } else {
+      sessionQuery = sessionQuery.eq('status', 'active') as typeof sessionQuery;
     }
 
     let { data, error } = await sessionQuery;
@@ -102,19 +149,48 @@ export default function LiveSessionsLayer({
       let fallback = supabase
         .from('hiker_sessions')
         .select('id,user_id,booking_id,trail_zone_id,start_time,status,client_session_id')
-        .eq('status', 'active')
         .like('client_session_id', `${ADMIN_CHECKIN_TOKEN_PREFIX}%`)
         .order('start_time', { ascending: false });
-      if (mode === 'self') fallback = fallback.eq('user_id', userId) as typeof fallback;
+      if (mode === 'self') fallback = fallback.eq('user_id', userId).limit(1) as typeof fallback;
+      else fallback = fallback.eq('status', 'active') as typeof fallback;
       const result = await fallback;
       data = result.data as typeof data;
       error = result.error;
     }
-    if (error) return;
+    if (error) {
+      const local = await loadLocalSelfSession();
+      if (local) {
+        setSessions([local.session]);
+        setPaths({ [local.session.id]: local.points });
+        const latest = local.points[local.points.length - 1];
+        onSelfLocationChange?.(latest ? { lat: latest.latitude, lng: latest.longitude, timestamp: latest.timestamp } : null);
+      }
+      return;
+    }
 
-    const visibleSessions = ((data as ActiveSession[] | null) ?? []).filter(
-      (session) => mode === 'monitor' || session.user_id === userId,
+    const latestSelfSession = mode === 'self' ? (data as ActiveSession[] | null)?.[0] : null;
+    if (latestSelfSession && latestSelfSession.status !== 'active') {
+      await completeActiveHikeTracker().catch((completionError) => console.warn('Could not close completed local hike tracker', completionError));
+      setSessions([]);
+      setPaths({});
+      onSelfLocationChange?.(null);
+      return;
+    }
+
+    let visibleSessions = ((data as ActiveSession[] | null) ?? []).filter(
+      (session) => session.status === 'active' && (mode === 'monitor' || session.user_id === userId),
     );
+    if (mode === 'self' && visibleSessions.length === 0) {
+      const local = await loadLocalSelfSession();
+      if (local) {
+        visibleSessions = [local.session];
+        setSessions(visibleSessions);
+        setPaths({ [local.session.id]: local.points });
+        const latest = local.points[local.points.length - 1];
+        onSelfLocationChange?.(latest ? { lat: latest.latitude, lng: latest.longitude, timestamp: latest.timestamp } : null);
+        return;
+      }
+    }
     setSessions(visibleSessions);
 
     const ids = visibleSessions.map((session) => session.id);
@@ -165,7 +241,7 @@ export default function LiveSessionsLayer({
       });
       setProfiles(nextProfiles);
     }
-  }, [locationId, mode, onSelfLocationChange, userId]);
+  }, [loadLocalSelfSession, locationId, mode, onSelfLocationChange, userId]);
 
   useEffect(() => {
     void load();
@@ -189,10 +265,9 @@ export default function LiveSessionsLayer({
       hadSelfSessionRef.current = true;
       return;
     }
-    if (hadSelfSessionRef.current) {
-      hadSelfSessionRef.current = false;
-      void completeActiveHikeTracker().catch((error) => console.warn('Could not close local hike tracker', error));
-    }
+    // A missing server snapshot is often a temporary offline/RLS state. Keep
+    // the local tracker alive until staff explicitly completes the hike.
+    if (hadSelfSessionRef.current) return;
   }, [mode, selfSession]);
 
   useEffect(() => {
@@ -203,7 +278,7 @@ export default function LiveSessionsLayer({
       userId,
       bookingId: selfSession.booking_id,
       trailZoneId: selfSession.trail_zone_id ?? null,
-      serverSessionId: selfSession.id,
+      serverSessionId: selfSession.local_session_id === selfSession.id ? null : selfSession.id,
       participantRole: userRole,
       locationId: selfSession.location_id ?? locationId ?? null,
     })
@@ -268,19 +343,20 @@ export default function LiveSessionsLayer({
           : Number.isFinite(Number(latest.heading))
             ? Number(latest.heading)
             : null;
-        const line = points.map((point) => [point.latitude, point.longitude] as [number, number]);
+        const linePoints = points.map((point) => ({ lat: point.latitude, lng: point.longitude, ts: point.timestamp }));
+        const lines = isSelf && localSnapshot?.pathSegments?.length
+          ? localSnapshot.pathSegments.map((segment) => segment.map((point) => [point.lat, point.lng] as [number, number]))
+          : splitTrackAtGaps(linePoints).map((segment) => segment.map((point) => [point.lat, point.lng] as [number, number]));
         const bookingColor = session.booking_id
           ? ['#16a34a', '#2563eb', '#9333ea', '#ea580c', '#0891b2'][Array.from(session.booking_id).reduce((sum, char) => sum + char.charCodeAt(0), 0) % 5]
           : roleColor[role] ?? '#16a34a';
         const profile = profiles[session.user_id];
         return (
           <Fragment key={session.id}>
-            {line.length > 1 && (
-              <Polyline
-                positions={line}
-                pathOptions={{ color: bookingColor, weight: isSelf ? 5 : 3, opacity: 0.78 }}
-              />
-            )}
+            {lines.map((line, index) => line.length > 1 && (
+              <Polyline key={`${session.id}-segment-${index}`} positions={line}
+                pathOptions={{ color: bookingColor, weight: isSelf ? 5 : 3, opacity: 0.78 }} />
+            ))}
             <Marker
               position={[latest.latitude, latest.longitude]}
               icon={liveMarkerIcon(role, heading, isSelf, profile?.avatarUrl ?? null, bookingColor)}

@@ -16,6 +16,16 @@ export function trailheadLabel(slug = '', name = '', fallback = 'Assigned trailh
   return getTrailheadIdentity(slug, name)?.label ?? fallback;
 }
 
+/** Resolve the official public name even when only a database location id is available. */
+export function trailheadLabelFromLocation(
+  locationId: string | null | undefined,
+  slug = '',
+  name = '',
+  fallback = 'Assigned trailhead',
+): string {
+  return trailheadLabel(`${locationId ?? ''} ${slug}`, name, fallback);
+}
+
 export function filterByTrailhead<T extends { location_id?: string | null }>(
   rows: T[],
   selectedLocationId: string,

@@ -1,6 +1,6 @@
 /** Drains the offline queue and uploads sessions / points to Supabase when online. */
 import { supabase } from '@/integrations/supabase/client';
-import { drainQueue, removeQueueItem, bumpQueueAttempt } from '@/lib/offlineDb';
+import { drainQueue, removeQueueItem, bumpQueueAttempt, saveSession } from '@/lib/offlineDb';
 
 let timer: ReturnType<typeof setInterval> | null = null;
 let running = false;
@@ -41,9 +41,10 @@ async function pushOne(item: any) {
 
     const serverUpdateRow = { ...row };
     delete serverUpdateRow.client_session_id;
-    let { error } = s.serverSessionId
-      ? await supabase.from('hiker_sessions').update(serverUpdateRow).eq('id', s.serverSessionId)
-      : await supabase.from('hiker_sessions').upsert(row, { onConflict: 'client_session_id' });
+    let result = s.serverSessionId
+      ? await supabase.from('hiker_sessions').update(serverUpdateRow).eq('id', s.serverSessionId).select('id').maybeSingle()
+      : await supabase.from('hiker_sessions').upsert(row, { onConflict: 'client_session_id' }).select('id').maybeSingle();
+    let { error } = result;
     if (error && isSchemaCacheError(error)) {
       const legacyRow = {
         client_session_id: s.id,
@@ -67,11 +68,14 @@ async function pushOne(item: any) {
       const serverLegacyRow = { ...legacyRow };
       delete serverLegacyRow.client_session_id;
       const fallback = s.serverSessionId
-        ? await supabase.from('hiker_sessions').update(serverLegacyRow).eq('id', s.serverSessionId)
-        : await supabase.from('hiker_sessions').upsert(legacyRow, { onConflict: 'client_session_id' });
+        ? await supabase.from('hiker_sessions').update(serverLegacyRow).eq('id', s.serverSessionId).select('id').maybeSingle()
+        : await supabase.from('hiker_sessions').upsert(legacyRow, { onConflict: 'client_session_id' }).select('id').maybeSingle();
+      result = fallback;
       error = fallback.error;
     }
     if (error) throw error;
+    const serverId = result.data?.id ?? s.serverSessionId ?? null;
+    if (serverId && !s.serverSessionId) await saveSession({ ...s, serverSessionId: serverId });
     return;
   }
 
@@ -123,7 +127,7 @@ async function pushOne(item: any) {
         .from('hiker_sessions').select('id').eq('client_session_id', sessionId).maybeSingle();
       realSessionId = sess?.id;
     }
-    if (!realSessionId) return; // Skip silently
+    if (!realSessionId) throw new Error('Session not found for queued location ping');
     let { error } = await supabase.from('hiker_locations').insert({
       session_id: realSessionId, latitude: lat, longitude: lng, altitude: alt,
       accuracy: accuracy ?? null,
@@ -166,6 +170,10 @@ export async function syncOnce() {
 export function startSyncEngine() {
   if (timer) return;
   window.addEventListener('online', () => void syncOnce());
+  window.addEventListener('pageshow', () => void syncOnce());
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') void syncOnce();
+  });
   timer = setInterval(() => void syncOnce(), 60_000);
   void syncOnce();
 }

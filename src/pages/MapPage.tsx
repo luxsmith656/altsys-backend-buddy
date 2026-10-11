@@ -46,6 +46,7 @@ import { cn } from '@/lib/utils';
 import { useAuth } from '@/hooks/useAuth';
 import { useLocations } from '@/hooks/useLocations';
 import { supabase } from '@/integrations/supabase/client';
+import { getActiveSession } from '@/lib/offlineDb';
 import { officialRoutesForLocation } from '@/lib/officialRoutes';
 import { ADMIN_CHECKIN_TOKEN_PREFIX } from '@/lib/tracking/sessionAuthorization';
 import { encodeMeta, parseMeta } from '@/lib/bookingMeta';
@@ -419,22 +420,25 @@ export default function MapPage() {
     }
 
     void (async () => {
-      const { data, error } = await supabase
-        .from('hiker_sessions')
-        .select('trail_zone_id,start_time,status')
-        .eq('user_id', user.id)
-        .eq('status', 'active')
-        .like('client_session_id', `${ADMIN_CHECKIN_TOKEN_PREFIX}%`)
-        .order('start_time', { ascending: false })
-        .limit(1)
-        .maybeSingle();
-
-      if (!active) return;
-      if (error && !isSchemaCacheError(error)) {
-        console.warn('Unable to load assigned trail for hiker map', error);
-        return;
+      if (navigator.onLine !== false) {
+        const { data, error } = await supabase
+          .from('hiker_sessions')
+          .select('trail_zone_id,start_time,status')
+          .eq('user_id', user.id)
+          .eq('status', 'active')
+          .like('client_session_id', `${ADMIN_CHECKIN_TOKEN_PREFIX}%`)
+          .order('start_time', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        if (!active) return;
+        if (!error && data) {
+          setAssignedTrailZoneId((data as { trail_zone_id?: string | null }).trail_zone_id ?? null);
+          return;
+        }
+        if (error && !isSchemaCacheError(error)) console.warn('Unable to load assigned trail for hiker map', error);
       }
-      setAssignedTrailZoneId((data as { trail_zone_id?: string | null } | null)?.trail_zone_id ?? null);
+      const local = await getActiveSession(user.id);
+      if (active) setAssignedTrailZoneId(local?.trailZoneId ?? null);
     })();
 
     return () => {
@@ -457,10 +461,11 @@ export default function MapPage() {
       .order('booking_date', { ascending: true })
       .limit(1)
       .maybeSingle()
-      .then(({ data, error }) => {
+      .then(async ({ data, error }) => {
         if (!active) return;
         if (error && !isSchemaCacheError(error)) console.warn('Unable to load booked map route', error);
-        setBookedLocationId((data as { location_id?: string | null } | null)?.location_id ?? null);
+        const local = data ? null : await getActiveSession(user.id);
+        setBookedLocationId((data as { location_id?: string | null } | null)?.location_id ?? local?.locationId ?? null);
       });
     return () => { active = false; };
   }, [role, user]);
@@ -472,16 +477,29 @@ export default function MapPage() {
     }
     let active = true;
     void (async () => {
-      const { data } = await supabase
-        .from('hiker_sessions')
-        .select('id,booking_id,participant_role,tracking_phase')
-        .eq('user_id', user.id)
-        .eq('status', 'active')
-        .like('client_session_id', `${ADMIN_CHECKIN_TOKEN_PREFIX}%`)
-        .order('start_time', { ascending: false })
-        .limit(1)
-        .maybeSingle();
-      if (active) setActiveSelfSession(data as typeof activeSelfSession);
+      let data: typeof activeSelfSession | null = null;
+      if (navigator.onLine !== false) {
+        const result = await supabase
+          .from('hiker_sessions')
+          .select('id,booking_id,participant_role,tracking_phase')
+          .eq('user_id', user.id)
+          .eq('status', 'active')
+          .like('client_session_id', `${ADMIN_CHECKIN_TOKEN_PREFIX}%`)
+          .order('start_time', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        data = result.data as typeof activeSelfSession;
+      }
+      if (!data) {
+        const local = await getActiveSession(user.id);
+        data = local ? {
+          id: local.serverSessionId ?? local.id,
+          booking_id: local.bookingId ?? null,
+          participant_role: local.participantRole,
+          tracking_phase: local.phase,
+        } : null;
+      }
+      if (active) setActiveSelfSession(data);
     })();
     const channel = supabase
       .channel(`self-phase-${user.id}`)

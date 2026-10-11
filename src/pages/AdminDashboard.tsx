@@ -2548,7 +2548,6 @@ export default function AdminDashboard() {
                           { label: 'Phone', value: meta.phoneNumber || scannedBooking.emergency_contact_phone || '—' },
                           { label: 'Email', value: meta.emailAddress || '—' },
                           { label: 'Assigned Guide', value: meta.assignedGuide || 'Not yet assigned' },
-                          { label: 'Preferred Guide', value: meta.preferredGuide || 'No preference' },
                           { label: 'Payment', value: `${payStatus.toUpperCase()} — ${formatPeso(meta.amountPaid ?? 0)} / ${formatPeso(totalFee)}` },
                         ].map(({ label, value }) => (
                           <div key={label} className="flex justify-between border-b border-border/10 py-1.5">

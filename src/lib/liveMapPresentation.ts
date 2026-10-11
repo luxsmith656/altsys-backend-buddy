@@ -13,6 +13,9 @@ export interface LiveMapGroup {
   phone?: string;
   emergencyContact?: string;
   medicalNotes?: string;
+  selectedRole?: 'hiker' | 'guide' | 'ranger' | 'admin';
+  avatarUrl?: string | null;
+  guideAvatarUrl?: string | null;
   simulated?: boolean;
 }
 

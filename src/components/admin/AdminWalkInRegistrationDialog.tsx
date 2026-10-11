@@ -47,7 +47,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { useNavigate } from 'react-router-dom';
 import { isMissingTotalAmountColumn, withoutTotalAmount } from '@/lib/walkInBooking';
 import { useLocations } from '@/hooks/useLocations';
-import { trailheadLabel } from '@/lib/mapTrailheads';
+import { trailheadLabelFromLocation } from '@/lib/mapTrailheads';
 
 interface AdminWalkInRegistrationDialogProps {
   open: boolean;
@@ -115,8 +115,8 @@ export default function AdminWalkInRegistrationDialog({
 
   // Load guides for this location
   useEffect(() => {
-    setAssignedRouteName(trailheadLabel(activeLocation?.slug, activeLocation?.name));
-  }, [activeLocation?.name, activeLocation?.slug]);
+    setAssignedRouteName(trailheadLabelFromLocation(locationId, activeLocation?.slug, activeLocation?.name));
+  }, [activeLocation?.name, activeLocation?.slug, locationId]);
 
   useEffect(() => {
     if (!open) {
@@ -538,7 +538,7 @@ export default function AdminWalkInRegistrationDialog({
                 <div className="space-y-1">
                   <Label className="text-xs">Jump-off location</Label>
                   <div className="flex h-8 items-center rounded-md border border-border/50 bg-background/40 px-3 text-xs font-medium text-foreground">
-                    {activeLocation?.name || 'Assigned trailhead'}
+                    {assignedRouteName}
                   </div>
                 </div>
 
