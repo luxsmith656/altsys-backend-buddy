@@ -13,7 +13,7 @@ for (const role of ['admin', 'guide'] as const) {
       rows.user_locations = [{ user_id: user.id, location_id: 'lamot2' }];
       rows.checkpoints = []; rows.checkpoint_surveys = []; rows.trail_recordings = [];
       rows.profiles = [{ user_id: 'lead', full_name: 'Sam Lead' }, { user_id: 'guide', full_name: 'Actual Guide' }];
-      rows.trail_zones = [{ id: 'official', location_id: 'lamot2', name: 'Lamot 2 published trail', status: 'active', is_official: true, review_status: 'approved', coordinates_json: [{ lat: 14.15, lng: 121.34 }, { lat: 14.16, lng: 121.35 }] }];
+      rows.trail_zones = [{ id: 'official', location_id: 'lamot2', name: 'Lamot 2 Trail', status: 'active', is_official: true, review_status: 'approved', coordinates_json: [{ lat: 14.15, lng: 121.34 }, { lat: 14.16, lng: 121.35 }] }];
       rows.hiker_sessions = role === 'guide' ? [] : [{ id: 'live-1', user_id: 'lead', booking_id: 'booking', location_id: 'lamot2', trail_zone_id: 'official', status: 'active', participant_role: 'hiker', tracking_phase: 'ascent', start_time: new Date().toISOString(), client_session_id: 'admin-checkin:test' }];
       rows.bookings = [{ id: 'booking', location_id: 'lamot2', group_size: 3, notes: JSON.stringify({ fullName: 'Sam Lead', assignedGuide: 'Actual Guide', companions: ['Jo Companion'] }) }];
       rows.hiker_locations = [{ session_id: 'live-1', latitude: 14.151, longitude: 121.341, timestamp: new Date().toISOString() }];
@@ -60,8 +60,8 @@ for (const role of ['admin', 'guide'] as const) {
       await expect(toggle).toHaveAttribute('aria-expanded', 'false');
       await expect(page.locator('.live-map-panel')).toBeHidden();
       await page.getByRole('button', { name: 'Routes', exact: true }).click();
-      await expect(page.locator('.live-map-panel')).toContainText('Lamot 2 published trail');
-      await page.getByRole('button', { name: 'Show Lamot 2 published trail on map' }).click();
+      await expect(page.locator('.live-map-panel')).toContainText('Lamot 2 Trail');
+      await page.getByRole('button', { name: 'Show Lamot 2 Trail on map' }).click();
       await page.getByRole('button', { name: 'Close map panel' }).click();
       for (const name of ['Zoom in', 'Zoom out']) {
         const control = page.getByRole('button', { name, exact: true });

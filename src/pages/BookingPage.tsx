@@ -70,6 +70,7 @@ import KaliContextPanel from '@/components/kali/KaliContextPanel';
 import { useKaliContext } from '@/hooks/useKaliContext';
 import { HIKE_TIME_OPTIONS, getGuideFeePerGuide, getHikeTypeLabel, isValidHikeTime, normalizeHikeType, type HikeType } from '@/lib/hikeSchedule';
 import { officialRoutesForLocation } from '@/lib/officialRoutes';
+import { officialTrailNameFromLocation } from '@/lib/mapTrailheads';
 import { guidePhotoForName } from '@/lib/guideDirectory';
 import { getBookingSlotStatuses, type ScheduledBooking } from '@/lib/bookingCapacity';
 import { haversineDistance } from '@/lib/map-data';
@@ -334,7 +335,7 @@ export default function BookingPage() {
   const [cityPicked, setCityPicked] = useState(false);
 
   // â”€â”€ Multi-location: hiker picks where to start (Lamot 1, Lamot 2, etc.) â”€â”€
-  const { locations: allLocations } = useLocations();
+  const { locations: allLocations, activeLocationId } = useLocations();
   const [startLocationId, setStartLocationId] = useState<string>('');
   const explicitStartLocation = useRef(false);
   // Scrape/filter jump-off locations to strictly Lamot 2, Lamot 1, and Sto. Tomas
@@ -538,7 +539,13 @@ export default function BookingPage() {
           : [];
       setPublishedRoute({
         id: route.id,
-        name: route.name,
+        name: officialTrailNameFromLocation(
+          startLocationId,
+          selectedLocation?.slug,
+          selectedLocation?.name,
+          route.name,
+          'Assigned trail',
+        ),
         locationName: selectedLocation?.name ?? 'Selected entry point',
         difficulty: route.difficulty,
         elevationMeters: Number(route.elevation_meters || 0) || undefined,
@@ -1376,7 +1383,7 @@ export default function BookingPage() {
   if (role === 'admin' || role === 'super_admin') {
     return (
       <AdminWalkInDesk
-        locationId={startLocationId || null}
+        locationId={activeLocationId}
       />
     );
   }
@@ -1993,7 +2000,13 @@ export default function BookingPage() {
                           )}>
                             {publishedRoute ? (
                               <>
-                                <strong>Official route for this jump-off:</strong> {publishedRoute.name}
+                                <strong>Official route for this jump-off:</strong> {officialTrailNameFromLocation(
+                                  selectedLocation.id,
+                                  selectedLocation.slug,
+                                  selectedLocation.name,
+                                  publishedRoute.name,
+                                  'Assigned trail',
+                                )}
                                 {publishedRoute.distanceKm ? ` Â· ${publishedRoute.distanceKm.toFixed(1)} km` : ''}
                                 {publishedRoute.elevationMeters ? ` Â· ${publishedRoute.elevationMeters}m` : ''}
                                 <span className="block text-[11px] text-muted-foreground">Synced from the approved trail map.</span>

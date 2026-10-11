@@ -1,6 +1,7 @@
 import { bookingReceipt, type ReceiptBooking } from '@/lib/bookingReceipt';
 import { parseMeta } from '@/lib/bookingMeta';
 import { formatPeso } from '@/lib/payments';
+import { officialTrailNameFromLocation } from '@/lib/mapTrailheads';
 
 export default function BookingReceipt({ booking, showDetails = true }: { booking: ReceiptBooking; showDetails?: boolean }) {
   const meta = parseMeta(booking.notes);
@@ -19,7 +20,7 @@ export default function BookingReceipt({ booking, showDetails = true }: { bookin
       <dt>Start time</dt><dd>{meta.adjustedTime || meta.hikeTime || 'Not recorded'}</dd>
       <dt>Group size</dt><dd>{booking.group_size ?? meta.groupSize ?? 'Not recorded'} hikers · {receipt.guidesNeeded} guide{receipt.guidesNeeded === 1 ? '' : 's'}</dd>
       <dt>Guide</dt><dd>{meta.assignedGuide || 'Awaiting assignment'}{meta.guidePhone && <a className="block text-primary underline" href={`tel:${meta.guidePhone}`}>{meta.guidePhone}</a>}</dd>
-      <dt>Route</dt><dd>{meta.assignedTrailName || meta.assignedTrail || 'Awaiting assignment'}</dd>
+      <dt>Route</dt><dd>{officialTrailNameFromLocation(booking.location_id, '', '', meta.assignedTrailName || meta.assignedTrail, 'Awaiting assignment')}</dd>
       <dt>Payment method</dt><dd>{receipt.paymentMethod}</dd>
       {!!meta.companions?.length && <><dt>Companions</dt><dd>{meta.companions.join(', ')}</dd></>}
     </dl>}

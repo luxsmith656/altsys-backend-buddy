@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { filterByTrailhead, getTrailheadIdentity, trailheadLabel, trailheadLabelFromLocation } from '@/lib/mapTrailheads';
+import { filterByTrailhead, getTrailheadIdentity, officialTrailName, officialTrailNameFromLocation, trailheadLabel, trailheadLabelFromLocation } from '@/lib/mapTrailheads';
 
 describe('central map trailhead identity and scope', () => {
   it.each([
@@ -24,6 +24,13 @@ describe('central map trailhead identity and scope', () => {
     expect(trailheadLabelFromLocation('loc-lamot-1', 'generic-route', 'Mount Kalisungan')).toBe('Lamot 1');
     expect(trailheadLabelFromLocation('loc-lamot-2', '', '')).toBe('Lamot 2');
     expect(trailheadLabelFromLocation('loc-sto-tomas', '', '')).toBe('Sto. Tomas');
+  });
+
+  it('normalizes every route to the three official public names', () => {
+    expect(officialTrailNameFromLocation('loc-lamot-2', '', '', 'Summit Trail (Official Route)')).toBe('Lamot 2 Trail');
+    expect(officialTrailName('lamot-1', 'Sitio Lamot 1', 'Lamot 1 Classic Summit Trail')).toBe('Lamot 1 Trail');
+    expect(officialTrailName('', 'Brgy. Sto. Tomas', 'Sto. Tomas Southern Traverse Trail')).toBe('Sto. Tomas Trail');
+    expect(officialTrailName('', '', 'Unknown route', 'Assigned trail')).toBe('Assigned trail');
   });
 
   it('shows all station records or only records assigned to the selected station', () => {

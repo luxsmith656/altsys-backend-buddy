@@ -15,7 +15,7 @@ import FeaturedHiker from '@/components/landing/FeaturedHiker';
 import { useAuth } from '@/hooks/useAuth';
 import { LAMOT_2_REFERENCE_PATH, normalizeOfficialRoutePath, TRAILS } from '@/lib/map-data';
 import { supabase } from '@/integrations/supabase/client';
-import { getTrailheadIdentity } from '@/lib/mapTrailheads';
+import { officialTrailName, getTrailheadIdentity } from '@/lib/mapTrailheads';
 import { officialRoutesForLocation } from '@/lib/officialRoutes';
 
 type LiveWeather = {
@@ -144,8 +144,8 @@ function SummitPathOverlay() {
             Boolean(row?.recording_metadata?.sharedRouteSuffix),
           )
           : fallback.path;
-        const label = slug === 'sto-tomas' ? 'Sto. Tomas' : slug === 'lamot-1' ? 'Lamot 1' : 'Lamot 2';
-        return { ...fallback, name: `${label} Official Route`, path };
+        const name = officialTrailName(slug, location?.name ?? '', row?.name ?? fallback.name, `${slug} Trail`);
+        return { ...fallback, name, path };
       });
       if (!cancelled && nextRoutes.every((route) => route.path.length >= 2)) setRoutes(nextRoutes);
     };
@@ -173,7 +173,7 @@ function SummitPathOverlay() {
     const y = 96 - ((lat - minLat) / Math.max(0.00001, maxLat - minLat)) * 76;
     return `${index === 0 ? 'M' : 'L'}${x.toFixed(1)},${y.toFixed(1)}`;
   }).join(' ');
-  const routeLabel = route.name.includes('Lamot 1') ? 'Lamot 1' : route.name.includes('Sto.') ? 'Sto. Tomas' : 'Lamot 2';
+  const routeLabel = route.name;
   const showPrevious = () => setRouteIndex((current) => (current - 1 + routes.length) % routes.length);
   const showNext = () => setRouteIndex((current) => (current + 1) % routes.length);
 
@@ -191,7 +191,7 @@ function SummitPathOverlay() {
         <div className="flex items-center justify-between mb-3">
         <div>
           <div className="text-xs uppercase tracking-wide text-muted-foreground/80">Route preview</div>
-          <div className="text-sm font-semibold">{routeLabel} route</div>
+          <div className="text-sm font-semibold">{routeLabel}</div>
         </div>
         <div className="flex items-center gap-1">
           <button type="button" aria-label="Previous route preview" title="Previous route" onClick={showPrevious} className="grid h-8 w-8 place-items-center rounded-full border border-border/50 hover:bg-background/60">

@@ -73,7 +73,7 @@ function createReferenceShapedPath(
 // Trail route data (Official published path on Mt. Kalisungan)
 export const TRAILS = [
   {
-    name: 'Summit Trail (Official Route)',
+    name: 'Lamot 2 Trail',
     difficulty: 'moderate' as const,
     color: '#16a34a',
     elevation: '622m',
@@ -81,7 +81,7 @@ export const TRAILS = [
     path: LAMOT_2_REFERENCE_PATH,
   },
   {
-    name: 'Lamot 1 Classic Summit Trail',
+    name: 'Lamot 1 Trail',
     difficulty: 'moderate' as const,
     color: '#2563eb',
     elevation: '629m',
@@ -89,7 +89,7 @@ export const TRAILS = [
     path: createReferenceShapedPath(TRAILHEAD_COORDINATES['lamot-1'], 0.6, 180, 1),
   },
   {
-    name: 'Sto. Tomas Southern Traverse Trail',
+    name: 'Sto. Tomas Trail',
     difficulty: 'hard' as const,
     color: '#ea580c',
     elevation: '629m',

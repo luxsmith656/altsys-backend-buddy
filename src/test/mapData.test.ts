@@ -18,6 +18,16 @@ describe('published Lamot 2 reference', () => {
   });
 });
 
+describe('public route names', () => {
+  it('uses only the three official route names in fallback map data', () => {
+    expect(TRAILS.map((trail) => trail.name)).toEqual([
+      'Lamot 2 Trail',
+      'Lamot 1 Trail',
+      'Sto. Tomas Trail',
+    ]);
+  });
+});
+
 describe('buildRouteStations', () => {
   it('creates jump-off, five progress stations, and peak', () => {
     const path: [number, number][] = [

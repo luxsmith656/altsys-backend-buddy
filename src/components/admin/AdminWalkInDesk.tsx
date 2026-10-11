@@ -50,7 +50,7 @@ import { usePricing } from '@/hooks/usePricing';
 import { useNavigate } from 'react-router-dom';
 import { isMissingTotalAmountColumn, withoutTotalAmount } from '@/lib/walkInBooking';
 import { useLocations } from '@/hooks/useLocations';
-import { trailheadLabelFromLocation } from '@/lib/mapTrailheads';
+import { officialTrailNameFromLocation } from '@/lib/mapTrailheads';
 
 interface AdminWalkInDeskProps {
   locationId: string | null;
@@ -115,7 +115,13 @@ export default function AdminWalkInDesk({
   const [completedBooking, setCompletedBooking] = useState<any | null>(null);
 
   useEffect(() => {
-    setAssignedRouteName(trailheadLabelFromLocation(locationId, activeLocation?.slug, activeLocation?.name));
+    setAssignedRouteName(officialTrailNameFromLocation(
+      locationId,
+      activeLocation?.slug,
+      activeLocation?.name,
+      '',
+      'Assigned trail',
+    ));
   }, [activeLocation?.name, activeLocation?.slug, locationId]);
 
   // Load active guides for location

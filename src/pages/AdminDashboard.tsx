@@ -111,7 +111,7 @@ import { confirmReservation } from '@/lib/notification-service';
 import { motion } from 'framer-motion';
 import { toast } from 'sonner';
 import { officialRoutesForLocation as filterOfficialRoutes, selectAssignedOfficialRoute } from '@/lib/officialRoutes';
-import { trailheadLabel } from '@/lib/mapTrailheads';
+import { officialTrailNameFromLocation, trailheadLabel } from '@/lib/mapTrailheads';
 import { loadGuideRatings, renderStars, type GuideRating } from '@/lib/guideRatings';
 import { getHikeTypeLabel } from '@/lib/hikeSchedule';
 import { guidePhotoForName } from '@/lib/guideDirectory';
@@ -312,7 +312,7 @@ export default function AdminDashboard() {
             endTime: s.end_time || null,
             status: s.status || 'active',
             trackingPhase: s.tracking_phase || 'ascent',
-            trailName: meta.assignedTrailName || 'Official Route',
+            trailName: officialTrailNameFromLocation(b?.location_id || s.location_id, '', '', meta.assignedTrailName, 'Assigned trail'),
             booking: b,
           });
         } else {
@@ -826,7 +826,7 @@ export default function AdminDashboard() {
           name: guideRow.full_name,
           phone: '',
           status: 'on-duty',
-          trail: routeInfo.route.name,
+          trail: officialTrailNameFromLocation(scannedBooking.location_id, '', '', routeInfo.route.name, 'Assigned trail'),
           totalHikes: 0,
           user_id: guideRow.user_id,
           per_trip_fee: 0,
@@ -938,7 +938,7 @@ export default function AdminDashboard() {
         groupPhase: 'ascent',
         hikerSessionId: session?.id,
         assignedTrailZoneId: routeInfo.route.id,
-        assignedTrailName: routeInfo.route.name,
+        assignedTrailName: officialTrailNameFromLocation(scannedBooking.location_id, '', '', routeInfo.route.name, 'Assigned trail'),
         assignedTrailAuto: routeInfo.auto || meta.assignedTrailAuto,
       });
       await supabase.from('bookings').update({ notes: updatedNotes }).eq('id', scannedBooking.id);
@@ -977,7 +977,7 @@ export default function AdminDashboard() {
         after_state: {
           onsiteStartConfirmed: true,
           startTime,
-          assignedTrail: routeInfo.route.name,
+          assignedTrail: officialTrailNameFromLocation(scannedBooking.location_id, '', '', routeInfo.route.name, 'Assigned trail'),
         },
       });
       loadAllTabBookings();
@@ -1233,7 +1233,7 @@ export default function AdminDashboard() {
       locationId: booking?.location_id ?? guideRow.location_id,
       extraMeta: {
         assignedTrailZoneId: routeInfo.route?.id,
-        assignedTrailName: routeInfo.route?.name,
+        assignedTrailName: officialTrailNameFromLocation(booking?.location_id, '', '', routeInfo.route?.name, 'Assigned trail'),
         assignedTrailAuto: routeInfo.auto,
       },
     });
@@ -1273,7 +1273,7 @@ export default function AdminDashboard() {
         action: 'guide_assigned',
         entity_type: 'booking',
         entity_id: acceptDialogId,
-        after_state: { status: 'pending', assignedGuide: guideName, assignedTrail: routeInfo.route?.name ?? null },
+        after_state: { status: 'pending', assignedGuide: guideName, assignedTrail: officialTrailNameFromLocation(booking?.location_id, '', '', routeInfo.route?.name, 'Assigned trail') },
       });
       setPendingBookings((prev) => prev.filter((b) => b.id !== acceptDialogId));
       setAcceptDialogId(null);
@@ -1755,7 +1755,7 @@ export default function AdminDashboard() {
 
   const routeDisplayName = useCallback((route: any, locationId?: string | null) => {
     const location = locations.find((item) => item.id === locationId);
-    return trailheadLabel(location?.slug, location?.name, route?.name || 'Official route');
+    return officialTrailNameFromLocation(locationId, location?.slug, location?.name, route?.name, 'Assigned trail');
   }, [locations]);
 
   const BOOKING_STATUS_STYLE: Record<string, string> = {

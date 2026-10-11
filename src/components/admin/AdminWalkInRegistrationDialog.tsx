@@ -47,7 +47,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { useNavigate } from 'react-router-dom';
 import { isMissingTotalAmountColumn, withoutTotalAmount } from '@/lib/walkInBooking';
 import { useLocations } from '@/hooks/useLocations';
-import { trailheadLabelFromLocation } from '@/lib/mapTrailheads';
+import { officialTrailNameFromLocation } from '@/lib/mapTrailheads';
 
 interface AdminWalkInRegistrationDialogProps {
   open: boolean;
@@ -115,7 +115,13 @@ export default function AdminWalkInRegistrationDialog({
 
   // Load guides for this location
   useEffect(() => {
-    setAssignedRouteName(trailheadLabelFromLocation(locationId, activeLocation?.slug, activeLocation?.name));
+    setAssignedRouteName(officialTrailNameFromLocation(
+      locationId,
+      activeLocation?.slug,
+      activeLocation?.name,
+      '',
+      'Assigned trail',
+    ));
   }, [activeLocation?.name, activeLocation?.slug, locationId]);
 
   useEffect(() => {

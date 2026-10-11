@@ -7,6 +7,7 @@ export interface ReceiptBooking {
   notes?: string | null;
   group_size?: number;
   booking_date?: string;
+  location_id?: string | null;
   total_amount?: number | null;
   payment_method?: string | null;
 }

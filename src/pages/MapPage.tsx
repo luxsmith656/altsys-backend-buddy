@@ -48,6 +48,7 @@ import { useLocations } from '@/hooks/useLocations';
 import { supabase } from '@/integrations/supabase/client';
 import { getActiveSession } from '@/lib/offlineDb';
 import { officialRoutesForLocation } from '@/lib/officialRoutes';
+import { officialTrailNameFromLocation } from '@/lib/mapTrailheads';
 import { ADMIN_CHECKIN_TOKEN_PREFIX } from '@/lib/tracking/sessionAuthorization';
 import { encodeMeta, parseMeta } from '@/lib/bookingMeta';
 import GuideActiveSupportActions from '@/components/map/GuideActiveSupportActions';
@@ -347,7 +348,13 @@ export default function MapPage() {
           id: trail.id,
           locationId: namedTrailhead?.id ?? trail.location_id,
           locationName: trailhead?.name ?? 'Unassigned trailhead',
-          name: trail.name || `Official Trail ${index + 1}`,
+          name: officialTrailNameFromLocation(
+            trail.location_id,
+            assignedLocation?.slug,
+            assignedLocation?.name,
+            trail.name,
+            `Official Trail ${index + 1}`,
+          ),
           difficulty: (trail.difficulty || 'moderate') as 'easy' | 'moderate' | 'hard',
           color: colors[index % colors.length],
           elevation: `${Number(trail.elevation_meters || 0)}m`,

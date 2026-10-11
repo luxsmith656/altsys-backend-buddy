@@ -3,6 +3,8 @@ export interface TrailheadIdentity {
   label: 'Lamot 1' | 'Lamot 2' | 'Sto. Tomas';
 }
 
+export type OfficialTrailName = 'Lamot 2 Trail' | 'Lamot 1 Trail' | 'Sto. Tomas Trail';
+
 export function getTrailheadIdentity(slug = '', name = ''): TrailheadIdentity | null {
   const value = `${slug} ${name}`.toLowerCase().replace(/[._]/g, ' ');
   if (/lamot[\s-]*1/.test(value)) return { code: 'L1', label: 'Lamot 1' };
@@ -24,6 +26,38 @@ export function trailheadLabelFromLocation(
   fallback = 'Assigned trailhead',
 ): string {
   return trailheadLabel(`${locationId ?? ''} ${slug}`, name, fallback);
+}
+
+/**
+ * Return the only public route names that may appear in booking, maps, and
+ * operations. Route rows created before the naming standard are normalized by
+ * their location first, so an old database name cannot leak into the UI.
+ */
+export function officialTrailName(
+  slug = '',
+  locationName = '',
+  routeName = '',
+  fallback = 'Assigned trail',
+): OfficialTrailName | string {
+  const identity = getTrailheadIdentity(`${slug} ${locationName}`, routeName);
+  if (identity?.code === 'L1') return 'Lamot 1 Trail';
+  if (identity?.code === 'ST') return 'Sto. Tomas Trail';
+  if (identity?.code === 'L2') return 'Lamot 2 Trail';
+
+  // The original published Lamot 2 row was simply called "Summit Trail".
+  // Preserve its identity when older rows do not carry location metadata.
+  if (/summit\s+trail/i.test(routeName)) return 'Lamot 2 Trail';
+  return fallback;
+}
+
+export function officialTrailNameFromLocation(
+  locationId: string | null | undefined,
+  slug = '',
+  locationName = '',
+  routeName = '',
+  fallback = 'Assigned trail',
+): OfficialTrailName | string {
+  return officialTrailName(`${locationId ?? ''} ${slug}`, locationName, routeName, fallback);
 }
 
 export function filterByTrailhead<T extends { location_id?: string | null }>(

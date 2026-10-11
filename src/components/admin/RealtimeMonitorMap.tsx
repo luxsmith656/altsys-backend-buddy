@@ -16,7 +16,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { useLocations } from '@/hooks/useLocations';
 import { coalescedRefresh } from '@/lib/coalescedRefresh';
 import { parseMeta } from '@/lib/bookingMeta';
-import { filterByTrailhead, getTrailheadIdentity } from '@/lib/mapTrailheads';
+import { filterByTrailhead, getTrailheadIdentity, officialTrailNameFromLocation } from '@/lib/mapTrailheads';
 import { splitTrackAtGaps } from '@/lib/tracking/geo';
 import { buildRouteStations, cleanTrailPath, LAMOT_2_REFERENCE_PATH, normalizeOfficialRoutePath, routeStationPosition, routeStationsFromMetadata } from '@/lib/map-data';
 import type { CompanionDetail } from '@/types';
@@ -533,13 +533,20 @@ function ScopedMonitorMap({ locationId, canAddCheckpoints = false, tools, routeA
 
       const stationIdentity = getTrailheadIdentity(trailhead?.slug ?? '', trailhead?.name ?? route.name);
       const routeLabel = stationIdentity?.label ?? trailhead?.name ?? 'Unassigned trailhead';
+      const officialName = officialTrailNameFromLocation(
+        route.location_id,
+        trailhead?.slug,
+        trailhead?.name,
+        route.name,
+        'Assigned trail',
+      );
       const routeColor = ['#059669', '#2563eb', '#dc2626'][routeIndex % 3];
       L.polyline(path, {
         color: routeColor,
         weight: 5,
         opacity: 0.9,
       })
-        .bindPopup(`<strong>${esc(routeLabel)}</strong><br/>${esc(route.name)}<br/><small>Official published route</small>`)
+        .bindPopup(`<strong>${esc(routeLabel)}</strong><br/>${esc(officialName)}<br/><small>Official published route</small>`)
         .addTo(routeLayer.current!);
 
       const pathUnchanged = path.length === rawPath.length
@@ -580,7 +587,7 @@ function ScopedMonitorMap({ locationId, canAddCheckpoints = false, tools, routeA
             iconAnchor: [14, 14],
           }),
         })
-          .bindPopup(`<strong>${esc(station.kind === 'peak' ? 'Shared Mt. Kalisungan peak' : station.kind === 'jump_off' && trailhead ? trailhead.name : `${routeLabel} · ${station.name}`)}</strong><br/>${esc(route.name)}<br/><small>${esc(station.description)}</small>`)
+          .bindPopup(`<strong>${esc(station.kind === 'peak' ? 'Shared Mt. Kalisungan peak' : station.kind === 'jump_off' && trailhead ? trailhead.name : `${routeLabel} · ${station.name}`)}</strong><br/>${esc(officialName)}<br/><small>${esc(station.description)}</small>`)
           .addTo(routeLayer.current!);
       });
     });
@@ -754,7 +761,7 @@ function ScopedMonitorMap({ locationId, canAddCheckpoints = false, tools, routeA
             </select>
           </div>}
           <ul className="live-map-route-list">
-            {visibleRoutes.map(route => <li key={route.id}><button type="button" aria-label={`Show ${route.name} on map`} onClick={() => {
+            {visibleRoutes.map(route => <li key={route.id}><button type="button" aria-label={`Show ${officialTrailNameFromLocation(route.location_id, locations.find((item) => item.id === route.location_id)?.slug, locations.find((item) => item.id === route.location_id)?.name, route.name, 'Assigned trail')} on map`} onClick={() => {
               const rawPath = (route.coordinates_json as { lat: number; lng: number }[]).map(point => [Number(point.lat), Number(point.lng)] as [number, number]);
               const trailhead = locations.find((location) => location.id === route.location_id);
               const referenceRoute = officialRoutes.find((candidate) => {
@@ -777,7 +784,7 @@ function ScopedMonitorMap({ locationId, canAddCheckpoints = false, tools, routeA
               );
               const map = mapRef.current;
               map?.fitBounds(path, { paddingTopLeft: [30, 30], paddingBottomRight: [60, Math.min(map.getSize().y * .4, 260)], maxZoom: 17, animate: false });
-            }}><strong>{route.name}</strong><small>{getTrailheadIdentity(locations.find((item) => item.id === route.location_id)?.slug ?? '', locations.find((item) => item.id === route.location_id)?.name ?? '')?.label ?? 'Trailhead'} · Official route</small></button></li>)}
+            }}><strong>{officialTrailNameFromLocation(route.location_id, locations.find((item) => item.id === route.location_id)?.slug, locations.find((item) => item.id === route.location_id)?.name, route.name, 'Assigned trail')}</strong><small>{getTrailheadIdentity(locations.find((item) => item.id === route.location_id)?.slug ?? '', locations.find((item) => item.id === route.location_id)?.name ?? '')?.label ?? 'Trailhead'} · Official route</small></button></li>)}
           </ul>
           {!visibleRoutes.length && <p className="live-map-empty">No published routes available for this station.</p>}
           {routeActions}

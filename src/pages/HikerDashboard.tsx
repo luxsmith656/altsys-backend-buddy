@@ -4,6 +4,7 @@ import { useLocations } from '@/hooks/useLocations';
 import ProfileAvatar from '@/components/common/ProfileAvatar';
 import ImportantAnnouncements from '@/components/common/ImportantAnnouncements';
 import { supabase } from '@/integrations/supabase/client';
+import { officialTrailNameFromLocation } from '@/lib/mapTrailheads';
 import {
   ADMIN_CHECKIN_TOKEN_PREFIX,
   isAdminAuthorizedSession,
@@ -471,7 +472,7 @@ export default function HikerDashboard() {
         subtitle: `${s.total_distance_km?.toFixed(1) ?? '0'} km completed`,
         assignedGuide: meta.assignedGuide,
         assignedGuideId: meta.assignedGuideId,
-        trailName: meta.assignedTrailName || 'Mount Kalisungan Trail',
+        trailName: officialTrailNameFromLocation(b?.location_id, '', '', meta.assignedTrailName, 'Assigned trail'),
         fullName: meta.fullName,
       });
     });
@@ -491,7 +492,7 @@ export default function HikerDashboard() {
           subtitle: `Group of ${b.group_size} pax • Completed & Settled`,
           assignedGuide: meta.assignedGuide,
           assignedGuideId: meta.assignedGuideId,
-          trailName: meta.assignedTrailName || 'Mount Kalisungan Trail',
+          trailName: officialTrailNameFromLocation(b.location_id, '', '', meta.assignedTrailName, 'Assigned trail'),
           fullName: meta.fullName || b.emergency_contact_name,
         });
       });
