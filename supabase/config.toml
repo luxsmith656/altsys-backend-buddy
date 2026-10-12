@@ -1,9 +1,5 @@
 project_id = "evcqnlbumsfgbfddoonv"
 
-[auth.email.template.confirmation]
-subject = "Confirm your Mt. Kalisungan account"
-content_path = "./supabase/templates/confirmation.html"
-
 [auth.email.template.recovery]
 subject = "Reset your Mt. Kalisungan password"
 content_path = "./supabase/templates/recovery.html"

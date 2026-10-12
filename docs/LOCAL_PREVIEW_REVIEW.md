@@ -82,7 +82,7 @@ With explicit approval, Test Guide and previously approved routes were assigned 
 ## Remaining Work
 - Apply the replacement `20260908120000_restore_guide_reviews.sql` migration manually after review; twelve isolated PostgreSQL tests cover its permissions and legacy preservation. The guide dashboard labels reviews unavailable on legacy schema; that does not certify live review submission or photo persistence.
 - Apply `20260908140000_booking_confirmation_outbox.sql`, deploy the email function, set verified Resend sender and worker secret, then enable the scheduled worker. Seven isolated database tests cover the queue. Verify delivery to one approved real test recipient; no historical backfill or bulk send is configured.
-- Resolve production Firebase notification write permissions without loosening access rules. Hosted Auth's Confirm Email remains enabled as last checked; custom signup OTP screens were removed locally, not the hosted setting.
+- Resolve production Firebase notification write permissions without loosening access rules. Hosted Auth must have Confirm Email disabled for the current immediate-signup flow; the app now reports a clear configuration error instead of directing users to a signup-confirmation email.
 - Settlement is still multiple API writes, not a server-side transaction. Post-payment sync failures now refresh/close the collection dialog and surface follow-up warnings instead of offering duplicate collection.
 - Physical GPS, native screen-off recording, no-signal recovery, peak/descent transitions, external payment providers and every action of every role were not fully exercised.
 - Admin/guide live-map redesign is implemented locally with browser interaction checks. Physical-device field testing remains necessary.

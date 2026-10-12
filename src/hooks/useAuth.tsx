@@ -195,7 +195,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           ...(referralGuideId ? { referral_guide_id: referralGuideId } : {}),
           ...(agreementAcceptedAt ? { terms_agreed_at: agreementAcceptedAt } : {}),
         },
-        emailRedirectTo: window.location.origin,
       },
     });
     return { error: error as Error | null, session: data.session };

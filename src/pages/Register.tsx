@@ -63,8 +63,9 @@ export default function Register() {
       const { error, session } = await signUp(email.trim().toLowerCase(), password, fullName.trim(), searchParams.get('guide'), new Date().toISOString());
       if (error) throw error;
       if (!session) {
-        toast.success('Account created. Check your email to confirm your Mt. Kalisungan account, then sign in.');
-        navigate(redirect ? `/login?redirect=${encodeURIComponent(redirect)}` : '/login');
+        const message = 'Account created, but immediate sign-in is unavailable. The project must have Supabase Auth "Confirm email" disabled for signup.';
+        setFormError(message);
+        toast.error(message);
         return;
       }
       navigate(onboarding);

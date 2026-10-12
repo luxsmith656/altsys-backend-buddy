@@ -48,12 +48,13 @@ describe('signup without application OTP', () => {
     expect(fetch).not.toHaveBeenCalled();
   });
 
-  it('asks the new user to confirm hosted email when auth returns no session', async () => {
+  it('fails clearly when hosted signup confirmation is still enabled', async () => {
     state.signUp.mockResolvedValue({ error: null, session: null });
     showRegister(); fillForm(); acceptAgreement();
     fireEvent.submit(screen.getByLabelText('Email').closest('form')!);
-    await waitFor(() => expect(state.success).toHaveBeenCalledWith(expect.stringMatching(/check your email/i)));
-    expect(await screen.findByText('Login destination')).toBeInTheDocument();
+    await waitFor(() => expect(state.error).toHaveBeenCalledWith(expect.stringMatching(/Confirm email.*disabled/i)));
+    expect(screen.getByRole('alert')).toHaveTextContent(/immediate sign-in is unavailable/i);
+    expect(screen.queryByText('Login destination')).not.toBeInTheDocument();
   });
 
   it('retains password matching validation', () => {

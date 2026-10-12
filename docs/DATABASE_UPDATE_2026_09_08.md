@@ -40,11 +40,11 @@ Expected: the review table, both profile columns, and the review policies. This 
 
 ## Removing signup verification
 
-SQL does not configure hosted Supabase Auth. Disable **Confirm Email** in the project's email authentication settings through Lovable/its connected Supabase settings. Keep email/password sign-in enabled. Password recovery and the Google sign-in token exchange remain authentication mechanisms, not the removed custom signup OTP screen.
+SQL does not configure hosted Supabase Auth. In the project's email authentication settings through Lovable/its connected Supabase settings, keep email/password sign-in and signup enabled, then turn **Confirm Email** off (Supabase calls this `mailer_autoconfirm`). This application intentionally does not send or request a signup-confirmation email. Password recovery remains available through the branded recovery email and `/reset-password` route; the Google sign-in token exchange is unchanged.
 
-See the [Supabase authentication configuration documentation](https://supabase.com/docs/guides/auth/general-configuration). Disabling confirmation means a new email address is not independently verified, so a typo or address entered by someone else is possible. Do not put medical notes, companion details, or other sensitive information in booking-confirmation emails. These settings have **not** been changed by this local code update.
+See the [Supabase authentication configuration documentation](https://supabase.com/docs/guides/auth/general-configuration). Disabling confirmation means a new email address is not independently verified, so a typo or address entered by someone else is possible. Do not put medical notes, companion details, or other sensitive information in booking-confirmation emails.
 
-Read-only verification on 2026-09-08: hosted Auth returned `mailer_autoconfirm: false`, email authentication enabled, phone authentication disabled, and signup enabled. The confirmation setting therefore still needs changing for immediate password signup.
+Read-only verification on 2026-10-12: hosted Auth returned `mailer_autoconfirm: false`, email authentication enabled, phone authentication disabled, and signup enabled. The hosted setting still needs changing for immediate password signup.
 
 ## Test evidence
 

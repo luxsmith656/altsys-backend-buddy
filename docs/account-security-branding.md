@@ -2,14 +2,14 @@
 
 ## Supabase hosted authentication emails
 
-The confirmation and recovery sources are `supabase/templates/confirmation.html` and `supabase/templates/recovery.html`; their subjects and local paths are in `supabase/config.toml`. The hosted project does not read these files automatically. In Lovable Cloud's Supabase project (project ref `evcqnlbumsfgbfddoonv`), or the linked Supabase dashboard:
+Only the recovery source `supabase/templates/recovery.html` is used by this application; its subject and local path are in `supabase/config.toml`. The hosted project does not read local files automatically. In Lovable Cloud's Supabase project (project ref `evcqnlbumsfgbfddoonv`), or the linked Supabase dashboard:
 
-1. Open **Authentication → Email Templates → Confirm signup**. Set the subject to `Confirm your Mt. Kalisungan account` and paste `supabase/templates/confirmation.html` into the body.
+1. Open **Authentication → Providers → Email** and turn **Confirm email** off. Keep Email provider and signups enabled. The hosted settings endpoint should then report `mailer_autoconfirm: true`.
 2. Open **Authentication → Email Templates → Reset Password**. Set the subject to `Reset your Mt. Kalisungan password` and paste `supabase/templates/recovery.html` into the body.
 3. In **Authentication → URL Configuration**, allow `https://mtkali.vercel.app/reset-password` as a redirect URL. Add local preview origins only when password recovery is tested there.
 4. For the sender name/address and reliable delivery, configure SMTP with a verified sending domain. Use a sender such as `Mt. Kalisungan <accounts@verified-domain>` only after that domain is verified with the mail provider. Do not use the Vercel subdomain as if it were owned for DNS verification.
 
-Adding a confirmation template does not enable signup verification. The existing signup behavior remains unchanged unless the hosted **Confirm email** toggle is deliberately enabled.
+Signup no longer requests a confirmation redirect or displays a confirmation-email instruction. If Auth still returns no session after signup, the app shows a configuration error instead of falsely telling the user to check email.
 
 The hosted template must preserve Supabase’s `{{ .ConfirmationURL }}` variable. The link returns to `/reset-password`, where the app validates the recovery session and accepts the new password.
 

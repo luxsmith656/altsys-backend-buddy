@@ -18,6 +18,6 @@ it.each([null, { user: { id: 'user-1' }, access_token: 'test-session' }])('expos
     expect(await result.current.signUp('juan@example.com', 'secret123', 'Juan Cruz', 'guide-1')).toEqual({ error: null, session });
   });
   expect(state.signUp).toHaveBeenCalledWith({ email: 'juan@example.com', password: 'secret123', options: {
-    data: { full_name: 'Juan Cruz', referral_guide_id: 'guide-1' }, emailRedirectTo: window.location.origin,
+    data: { full_name: 'Juan Cruz', referral_guide_id: 'guide-1' },
   } });
 });
