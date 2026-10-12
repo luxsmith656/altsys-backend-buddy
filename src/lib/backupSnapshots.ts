@@ -1,6 +1,6 @@
 import { supabase } from '@/integrations/supabase/client';
 
-export type BackupRole = 'admin' | 'super_admin';
+export type BackupRole = 'super_admin';
 
 export type BackupPayload = {
   format: 'mt-kalisungan-operational-backup';
@@ -21,6 +21,7 @@ export type BackupSummary = {
 };
 
 const tableSpecs = ['bookings', 'booking_assignments', 'guides', 'hiker_sessions', 'hiker_locations', 'announcements', 'daily_capacity'] as const;
+const restoreOrder = ['bookings', 'guides', 'booking_assignments', 'hiker_sessions', 'hiker_locations', 'announcements', 'daily_capacity'] as const;
 
 function sortRows(rows: unknown[]) {
   return [...rows].sort((a, b) => JSON.stringify(a).localeCompare(JSON.stringify(b)));
@@ -70,26 +71,10 @@ function storedPayload(payload: BackupPayload, compressed: { encoding: 'json' | 
 
 export async function createOperationalBackup(scopeRole: BackupRole, locationIds: string[]) {
   const normalizedLocationIds = [...new Set(locationIds)].sort();
-  const filterByLocation = scopeRole === 'admin';
-  if (filterByLocation && normalizedLocationIds.length === 0) {
-    throw new Error('No assigned trailhead is available for this local-admin backup.');
-  }
+  if (scopeRole !== 'super_admin') throw new Error('Only Central Admin can create operational backups.');
   const tables: Record<string, unknown[]> = {};
   for (const table of tableSpecs) {
-    tables[table] = await fetchTable(table, normalizedLocationIds, filterByLocation && table !== 'hiker_locations');
-  }
-
-  // Location-scoped tables are filtered through their parent sessions/bookings.
-  if (filterByLocation) {
-    const bookingIds = new Set((tables.bookings as Array<{ id?: string }>).map((row) => row.id).filter(Boolean));
-    const sessionIds = new Set((tables.hiker_sessions as Array<{ id?: string }>).map((row) => row.id).filter(Boolean));
-    tables.booking_assignments = tables.booking_assignments.filter((row) => bookingIds.has((row as { booking_id?: string }).booking_id));
-    tables.hiker_sessions = tables.hiker_sessions.filter((row) => bookingIds.has((row as { booking_id?: string }).booking_id) || normalizedLocationIds.includes(String((row as { location_id?: string }).location_id ?? '')));
-    tables.hiker_locations = tables.hiker_locations.filter((row) => sessionIds.has((row as { session_id?: string }).session_id));
-    tables.announcements = tables.announcements.filter((row) => {
-      const locationId = (row as { location_id?: string | null }).location_id;
-      return locationId == null || normalizedLocationIds.includes(locationId);
-    });
+    tables[table] = await fetchTable(table, normalizedLocationIds, false);
   }
 
   const payload: BackupPayload = {
@@ -128,14 +113,10 @@ export async function saveUploadedBackup(payload: BackupPayload, scopeRole: Back
   if (payload?.format !== 'mt-kalisungan-operational-backup' || payload.version !== 1 || !payload.tables) {
     throw new Error('This is not a supported Mt. Kalisungan backup file.');
   }
-  if (payload.scopeRole !== scopeRole) {
+  if (scopeRole !== 'super_admin' || payload.scopeRole !== 'super_admin') {
     throw new Error('This backup belongs to a different operational role.');
   }
   const uploadedLocationIds = [...new Set(payload.locationIds ?? [])].sort();
-  const allowed = new Set(allowedLocationIds);
-  if (scopeRole === 'admin' && (uploadedLocationIds.length === 0 || uploadedLocationIds.some((id) => !allowed.has(id)))) {
-    throw new Error('This backup is outside the local admin trailhead scope.');
-  }
   const digest = await fingerprint(payload);
   const compressed = await compressForStorage(payload);
   const { data: userData } = await supabase.auth.getUser();
@@ -149,6 +130,59 @@ export async function saveUploadedBackup(payload: BackupPayload, scopeRole: Back
   }, { onConflict: 'owner_id,fingerprint' });
   if (error) throw new Error(`Backup could not be uploaded: ${error.message}`);
   return digest;
+}
+
+type StoredBackupPayload = {
+  format: BackupPayload['format'];
+  version: BackupPayload['version'];
+  exportedAt: string;
+  scopeRole: BackupRole;
+  locationIds: string[];
+  encoding?: 'json' | 'gzip+base64';
+  data?: string;
+  tables?: Record<string, unknown[]>;
+};
+
+async function decodeStoredPayload(value: unknown): Promise<BackupPayload> {
+  const stored = value as StoredBackupPayload | null;
+  if (!stored || stored.format !== 'mt-kalisungan-operational-backup' || stored.version !== 1) {
+    throw new Error('Stored backup format is not supported.');
+  }
+  if (stored.tables) return stored as unknown as BackupPayload;
+  if (!stored.data) throw new Error('Stored backup has no data.');
+  if (stored.encoding === 'json') return JSON.parse(stored.data) as BackupPayload;
+  if (stored.encoding !== 'gzip+base64' || typeof DecompressionStream === 'undefined') {
+    throw new Error('This browser cannot restore the compressed backup.');
+  }
+  const binary = atob(stored.data);
+  const bytes = Uint8Array.from(binary, (character) => character.charCodeAt(0));
+  const stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream('gzip'));
+  return JSON.parse(await new Response(stream).text()) as BackupPayload;
+}
+
+export async function restoreLatestOperationalBackup() {
+  const { data, error } = await supabase.from('backup_snapshots' as any)
+    .select('payload')
+    .order('updated_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error) throw new Error(`Backup could not be loaded for restore: ${error.message}`);
+  if (!data) throw new Error('No stored backup is available to restore.');
+  const payload = await decodeStoredPayload((data as unknown as { payload: unknown }).payload);
+  await restoreOperationalBackup(payload);
+  return payload;
+}
+
+export async function restoreOperationalBackup(payload: BackupPayload) {
+  if (payload?.format !== 'mt-kalisungan-operational-backup' || payload.version !== 1 || payload.scopeRole !== 'super_admin') {
+    throw new Error('Only a valid Central Admin backup can be restored.');
+  }
+  for (const table of restoreOrder) {
+    const rows = payload.tables[table] ?? [];
+    if (!rows.length) continue;
+    const { error } = await supabase.from(table as any).upsert(rows as any, { onConflict: 'id' });
+    if (error) throw new Error(`Backup restore could not update ${table}: ${error.message}`);
+  }
 }
 
 export function downloadBackup(payload: BackupPayload) {

@@ -3,7 +3,7 @@
 CREATE TABLE IF NOT EXISTS public.backup_snapshots (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   owner_id uuid NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
-  scope_role text NOT NULL CHECK (scope_role IN ('admin', 'super_admin')),
+  scope_role text NOT NULL CHECK (scope_role = 'super_admin'),
   location_ids uuid[] NOT NULL DEFAULT '{}',
   fingerprint text NOT NULL,
   payload jsonb NOT NULL,
@@ -24,8 +24,7 @@ CREATE POLICY backup_snapshots_owner_insert ON public.backup_snapshots
   FOR INSERT TO authenticated
   WITH CHECK (
     owner_id = auth.uid()
-    AND (public.has_role(auth.uid(), 'admin'::public.app_role)
-      OR public.has_role(auth.uid(), 'super_admin'::public.app_role))
+    AND public.has_role(auth.uid(), 'super_admin'::public.app_role)
   );
 
 DROP POLICY IF EXISTS backup_snapshots_owner_update ON public.backup_snapshots;
@@ -33,6 +32,12 @@ CREATE POLICY backup_snapshots_owner_update ON public.backup_snapshots
   FOR UPDATE TO authenticated
   USING (owner_id = auth.uid())
   WITH CHECK (owner_id = auth.uid());
+
+ALTER TABLE public.backup_snapshots
+  DROP CONSTRAINT IF EXISTS backup_snapshots_scope_role_check;
+DELETE FROM public.backup_snapshots WHERE scope_role <> 'super_admin';
+ALTER TABLE public.backup_snapshots
+  ADD CONSTRAINT backup_snapshots_scope_role_check CHECK (scope_role = 'super_admin');
 
 DROP POLICY IF EXISTS backup_snapshots_owner_delete ON public.backup_snapshots;
 CREATE POLICY backup_snapshots_owner_delete ON public.backup_snapshots

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Archive, Download, RefreshCw, Upload } from 'lucide-react';
+import { Archive, Download, RefreshCw, RotateCcw, Upload } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
@@ -13,6 +13,8 @@ import {
   createOperationalBackup,
   downloadBackup,
   listOperationalBackups,
+  restoreLatestOperationalBackup,
+  restoreOperationalBackup,
   saveUploadedBackup,
   type BackupPayload,
   type BackupRole,
@@ -62,11 +64,27 @@ export default function BackupControls({ role, locationIds }: { role: BackupRole
     try {
       const payload = JSON.parse(await file.text()) as BackupPayload;
       await saveUploadedBackup(payload, role, locationIds);
+      await restoreOperationalBackup(payload);
+      setLastBackup(payload);
       await refreshSnapshots();
     } catch {
       // Invalid or unavailable backups remain silent and do not interrupt operations.
     } finally {
       if (fileRef.current) fileRef.current.value = '';
+    }
+  };
+
+  const restoreLatest = async () => {
+    if (saving) return;
+    setSaving(true);
+    try {
+      const payload = await restoreLatestOperationalBackup();
+      setLastBackup(payload);
+      await refreshSnapshots();
+    } catch {
+      // Restore failures stay silent and never create a dashboard toast.
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -90,7 +108,10 @@ export default function BackupControls({ role, locationIds }: { role: BackupRole
             <Download className="mr-2 h-4 w-4" />Download latest
           </DropdownMenuItem>
           <DropdownMenuItem onSelect={(event) => { event.preventDefault(); fileRef.current?.click(); }}>
-            <Upload className="mr-2 h-4 w-4" />Upload backup
+            <Upload className="mr-2 h-4 w-4" />Upload and restore
+          </DropdownMenuItem>
+          <DropdownMenuItem disabled={!snapshots.length || saving} onSelect={() => void restoreLatest()}>
+            <RotateCcw className="mr-2 h-4 w-4" />Restore latest
           </DropdownMenuItem>
           <DropdownMenuSeparator />
           <div className="px-2 py-1.5 text-xs text-muted-foreground" aria-live="polite">
