@@ -31,6 +31,16 @@ ${FEE_POLICY_TEXT}
 - Accepted payment methods: onsite (at the registration desk), GCash, or bank transfer.
 You MAY compute and explain these costs for the person asking. You MUST NEVER reveal what any other hiker paid, payment records, receipts, reference numbers, refunds, collections or total revenue — for those reply: "I can only help with what your own hike would cost. Other people's payment details aren't available here."`;
 
+function buildDynamicFeeSchedule(bookingContext: Record<string, unknown> | null): string {
+  const pricing = bookingContext?.pricing;
+  if (!pricing || typeof pricing !== 'object' || Array.isArray(pricing)) return FEE_SCHEDULE;
+  return `PUBLISHED FEE SCHEDULE (Mount Kalisungan, Philippine Peso):
+${formatFeePolicyText(pricing as Record<string, number>)}
+- Fees are the same regardless of which trail or jump-off point is used; transport to/from the jump-off is arranged by the hiker.
+- Accepted payment methods: onsite (at the registration desk), GCash, or bank transfer.
+You MAY compute and explain these costs for the person asking. You MUST NEVER reveal what any other hiker paid, payment records, receipts, reference numbers, refunds, collections or total revenue — for those reply: "I can only help with what your own hike would cost. Other people's payment details aren't available here."`;
+}
+
 function manilaToday(): string {
   return new Intl.DateTimeFormat("en-CA", { timeZone: TZ }).format(new Date());
 }
@@ -213,14 +223,14 @@ async function buildUserContext(authHeader: string | null): Promise<string> {
         .select("booking_date, group_size, status, notes, created_at")
         .eq("user_id", user.id)
         .order("booking_date", { ascending: false })
-        .limit(5),
+        .limit(1000),
     ]);
 
     const lines: string[] = [];
     lines.push(`Signed-in hiker: ${profile?.full_name || "(name not set)"}${profile?.age ? `, age ${profile.age}` : ""}.`);
     if (profile?.emergency_contact) lines.push(`Emergency contact on file: yes.`);
     if (bookings && bookings.length) {
-      lines.push("Their own bookings (most recent first):");
+      lines.push("Their own booking history (all available records, most recent first):");
       for (const b of bookings) {
         let meta: any = {};
         try { meta = JSON.parse(b.notes || "{}"); } catch { meta = {}; }
@@ -340,17 +350,23 @@ serve(async (req) => {
       systemMessages.push({ role: "system", content: "HIKER CONTEXT (the person you are talking to — their own data only):\n" + userContext });
     }
     if (bookingContext && typeof bookingContext === "object") {
-      systemMessages.push({ role: "system", content: "BOOKING FORM STATE (what they currently have selected):\n" + JSON.stringify(bookingContext) });
-      if (bookingContext.published_route && typeof bookingContext.published_route === 'object') {
+      // Booking history is loaded below from the verified user JWT. Never trust
+      // client-supplied history or personal booking records in the prompt.
+      const safeBookingContext = { ...bookingContext } as Record<string, unknown>;
+      delete safeBookingContext.booking_history;
+      delete safeBookingContext.hiker_booking_history;
+      delete safeBookingContext.personal_bookings;
+      systemMessages.push({ role: "system", content: "BOOKING FORM STATE (what they currently have selected):\n" + JSON.stringify(safeBookingContext) });
+      if (safeBookingContext.published_route && typeof safeBookingContext.published_route === 'object') {
         systemMessages.push({
           role: "system",
-          content: "CURRENT OFFICIAL ROUTE (use this route for trail questions; it is scoped to the selected entry point):\n" + JSON.stringify(bookingContext.published_route),
+          content: "CURRENT OFFICIAL ROUTE (use this route for trail questions; it is scoped to the selected entry point):\n" + JSON.stringify(safeBookingContext.published_route),
         });
       }
-      if (bookingContext.forecasting) {
-        const forecastText = typeof bookingContext.forecasting === 'string'
-          ? bookingContext.forecasting
-          : JSON.stringify(bookingContext.forecasting, null, 2);
+      if (safeBookingContext.forecasting) {
+        const forecastText = typeof safeBookingContext.forecasting === 'string'
+          ? safeBookingContext.forecasting
+          : JSON.stringify(safeBookingContext.forecasting, null, 2);
         systemMessages.push({
           role: "system",
           content: `PROPHET ML FORECASTING & CROWD DATA (Mathematical predictions for Mount Kalisungan):\n${forecastText}`,

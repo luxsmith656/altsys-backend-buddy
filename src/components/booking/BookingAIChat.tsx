@@ -16,6 +16,7 @@ import ReactMarkdown from 'react-markdown';
 import { getPricingConfig, getDynamicFeePolicyText } from '@/lib/pricingService';
 import { getOfflineRoleHelp } from '@/lib/offline-role-help';
 import { containsProfanity, PROFANITY_NOTICE } from '@/lib/contentModeration';
+import { loadKaliMemory, saveKaliMemory } from '@/lib/kaliMemory';
 
 
 interface WeatherSnapshot {
@@ -592,6 +593,7 @@ export default function BookingAIChat({
   const { role, user, loading: authLoading, roleError } = useAuth();
   const [isOpen, setIsOpen] = useState(false);
   const [messages, setMessages] = useState<ChatMsg[]>([]);
+  const [memoryLoadedFor, setMemoryLoadedFor] = useState<string | null>(null);
   const [input, setInput] = useState('');
   const [isTyping, setIsTyping] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -604,6 +606,26 @@ export default function BookingAIChat({
   const [basicGuidance, setBasicGuidance] = useState(false);
   const latestReply = [...messages].reverse().find((message) => message.role === 'assistant');
   const expression = isTyping ? 'thinking' : input ? 'listening' : getKaliExpression(latestReply?.content ?? '');
+
+  useEffect(() => {
+    if (!user?.id) {
+      setMessages([]);
+      setMemoryLoadedFor(null);
+      return;
+    }
+    const restored = loadKaliMemory(user.id);
+    setMessages(restored.map((message) => ({
+      id: generateId(),
+      role: message.role,
+      content: message.content,
+    })));
+    setMemoryLoadedFor(user.id);
+  }, [user?.id]);
+
+  useEffect(() => {
+    if (!user?.id || memoryLoadedFor !== user.id) return;
+    saveKaliMemory(user.id, messages);
+  }, [messages, memoryLoadedFor, user?.id]);
 
   const scrollToBottom = useCallback(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -786,7 +808,7 @@ export default function BookingAIChat({
         setIsTyping(false);
       }
     },
-    [date, groupSize, hikeType, weatherInsight, groupComposition, publishedRoute, onGroupCompositionSet, addAIMessage, getOnlineAnswer],
+    [date, groupSize, hikeType, weatherInsight, groupComposition, publishedRoute, onGroupCompositionSet, addAIMessage, getOnlineAnswer, role],
   );
 
   useEffect(() => {
