@@ -2,6 +2,13 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.48.0";
 import { embed } from "../_shared/kb.ts";
 import { FEE_POLICY_TEXT, formatFeePolicyText } from '../_shared/payments.ts';
+import {
+  type AiRoleScope,
+  isFinanceRole,
+  resolveAiRoleScope,
+  resolveScopedLocationId,
+  roleAudienceInstructions,
+} from '../_shared/ai-role-scope.ts';
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -20,7 +27,7 @@ const PRIVATE_PAYMENT_RE =
 const QUOTE_RE =
   /\b(how much|cost|costs|price|prices|pricing|fee|fees|rate|rates|budget|pay|payable|magkano)\b/i;
 const DATA_INTENT_RE =
-  /\b(how many|how much|number of|count|hiker|hikers|climber|climbers|book(?:ed|ing|ings)?|reserv\w*|slot|slots|capacity|full|busy|crowded|available|availability|attendance|checked[- ]in|check[- ]in|no[- ]show|turnout|schedule[d]?|today|tomorrow|tonight|this week|next week|weekend|this month)\b/i;
+  /\b(how many|how much|number of|count|hiker|hikers|climber|climbers|book(?:ed|ing|ings)?|reserv\w*|slot|slots|capacity|full|busy|crowded|available|availability|attendance|checked[- ]in|check[- ]in|no[- ]show|turnout|schedule[d]?|today|tomorrow|tonight|this week|next week|weekend|this month|revenue|earnings|income|collections?)\b/i;
 
 const TRAIL_INTENT_RE =
   /\b(trail|trails|route|routes|summit|ridge|river|condition|conditions|closed|closure|open|status|muddy|slippery|landslide)\b/i;
@@ -29,16 +36,41 @@ const FEE_SCHEDULE = `PUBLISHED FEE SCHEDULE (Mount Kalisungan, Philippine Peso)
 ${FEE_POLICY_TEXT}
 - Fees are the same regardless of which trail or jump-off point is used; transport to/from the jump-off is arranged by the hiker.
 - Accepted payment methods: onsite (at the registration desk), GCash, or bank transfer.
-You MAY compute and explain these costs for the person asking. You MUST NEVER reveal what any other hiker paid, payment records, receipts, reference numbers, refunds, collections or total revenue — for those reply: "I can only help with what your own hike would cost. Other people's payment details aren't available here."`;
+You MAY compute and explain these costs for the person asking. For hikers and visitors, never reveal another person's payment records, receipts, refunds, collections or revenue. Authorized local and central admins may discuss only the separate server-filtered aggregate revenue context.`;
 
-function buildDynamicFeeSchedule(bookingContext: Record<string, unknown> | null): string {
+function buildDynamicFeeSchedule(bookingContext: Record<string, unknown> | null, financeAuthorized = false): string {
   const pricing = bookingContext?.pricing;
-  if (!pricing || typeof pricing !== 'object' || Array.isArray(pricing)) return FEE_SCHEDULE;
+  if (!pricing || typeof pricing !== 'object' || Array.isArray(pricing)) {
+    return financeAuthorized
+      ? `${FEE_SCHEDULE}\nAuthorized staff may also use the separate server-filtered aggregate revenue context for their permitted trailhead scope.`
+      : FEE_SCHEDULE;
+  }
   return `PUBLISHED FEE SCHEDULE (Mount Kalisungan, Philippine Peso):
 ${formatFeePolicyText(pricing as Record<string, number>)}
 - Fees are the same regardless of which trail or jump-off point is used; transport to/from the jump-off is arranged by the hiker.
 - Accepted payment methods: onsite (at the registration desk), GCash, or bank transfer.
-You MAY compute and explain these costs for the person asking. You MUST NEVER reveal what any other hiker paid, payment records, receipts, reference numbers, refunds, collections or total revenue — for those reply: "I can only help with what your own hike would cost. Other people's payment details aren't available here."`;
+You MAY compute and explain these costs for the person asking.${financeAuthorized ? ' Authorized staff may discuss only the server-filtered aggregate revenue context for their permitted trailhead scope.' : ' You MUST NEVER reveal what any other hiker paid, payment records, receipts, reference numbers, refunds, collections or total revenue — for those reply: "I can only help with what your own hike would cost. Other people\'s payment details aren\'t available here."'}`;
+}
+
+function parseBookingMeta(notes: unknown): Record<string, any> {
+  if (typeof notes !== 'string') return {};
+  try {
+    const parsed = JSON.parse(notes);
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+function numberOrZero(value: unknown): number {
+  const number = Number(value);
+  return Number.isFinite(number) && number > 0 ? number : 0;
+}
+
+function recordedAmount(meta: Record<string, any>): number {
+  const paid = numberOrZero(meta.amountPaid);
+  if (paid) return paid;
+  return String(meta.paymentStatus ?? '').toLowerCase() === 'paid' ? numberOrZero(meta.totalFee) : 0;
 }
 
 function manilaToday(): string {
@@ -69,9 +101,10 @@ const rangeParams = {
 };
 
 const TOOLS = [
-  { type: "function", function: { name: "get_booking_summary", description: "Aggregate booking counts (confirmed/pending/cancelled), total hikers booked, capacity and remaining slots for a date range in Asia/Manila.", parameters: rangeParams } },
-  { type: "function", function: { name: "get_capacity_summary", description: "Capacity and remaining slots for a date range.", parameters: rangeParams } },
-  { type: "function", function: { name: "get_attendance_summary", description: "Expected, checked-in, completed and no-show hiker totals for a date range.", parameters: rangeParams } },
+  { type: "function", function: { name: "get_booking_summary", description: "Aggregate booking counts (confirmed/pending/cancelled), total hikers booked, capacity and remaining slots for a date range in Asia/Manila. Staff may optionally filter by an authorized location_id.", parameters: { ...rangeParams, properties: { ...rangeParams.properties, location_id: { type: "string", description: "Optional authorized trailhead UUID. Never invent one." } } } } },
+  { type: "function", function: { name: "get_capacity_summary", description: "Capacity and remaining slots for a date range, optionally for an authorized location.", parameters: { ...rangeParams, properties: { ...rangeParams.properties, location_id: { type: "string" } } } } },
+  { type: "function", function: { name: "get_attendance_summary", description: "Expected, checked-in, completed and no-show hiker totals for a date range, optionally for an authorized location.", parameters: { ...rangeParams, properties: { ...rangeParams.properties, location_id: { type: "string" } } } } },
+  { type: "function", function: { name: "get_revenue_summary", description: "Authorized staff aggregate of recorded paid revenue by date range and trailhead. Never returns individual payment records.", parameters: { ...rangeParams, properties: { ...rangeParams.properties, location_id: { type: "string" } } } } },
   {
     type: "function",
     function: {
@@ -83,14 +116,20 @@ const TOOLS = [
 ];
 const ALLOWED_TOOLS = new Set(TOOLS.map((t) => t.function.name));
 
-async function getTrailConditions(db: any) {
-  const [{ data: zones }, { data: reports }] = await Promise.all([
-    db.from("trail_zones").select("id, name, difficulty, elevation_meters, max_capacity, status").eq("status", "active").limit(12),
-    db.from("trail_reports").select("zone_id, condition, description, created_at").order("created_at", { ascending: false }).limit(5),
-  ]);
+async function getTrailConditions(db: any, scope: AiRoleScope, requestedLocation: unknown) {
+  const resolved = resolveScopedLocationId(scope, requestedLocation);
+  if ('error' in resolved) return { error: resolved.error };
+  let zoneQuery = db.from("trail_zones").select("id, name, difficulty, elevation_meters, max_capacity, status, location_id").eq("status", "active").limit(24);
+  if (resolved.locationId) zoneQuery = zoneQuery.eq('location_id', resolved.locationId);
+  else if (!scope.allLocations && scope.locationIds.length) zoneQuery = zoneQuery.in('location_id', scope.locationIds);
+  const { data: zones } = await zoneQuery;
+  const zoneIds = (zones ?? []).map((zone: any) => zone.id).filter(Boolean);
+  let reportQuery = db.from("trail_reports").select("zone_id, condition, description, created_at").order("created_at", { ascending: false }).limit(8);
+  if (zoneIds.length) reportQuery = reportQuery.in('zone_id', zoneIds);
+  const { data: reports } = await reportQuery;
   return {
     trails: (zones ?? []).map((z: any) => ({
-      name: z.name, status: z.status, difficulty: z.difficulty,
+      name: z.name, location_id: z.location_id, status: z.status, difficulty: z.difficulty,
       elevation_m: z.elevation_meters, max_capacity: z.max_capacity,
     })),
     recent_reports: (reports ?? []).map((r: any) => ({
@@ -100,15 +139,45 @@ async function getTrailConditions(db: any) {
   };
 }
 
-async function runTool(db: any, name: string, args: any) {
+async function runTool(db: any, scope: AiRoleScope, name: string, args: any) {
+  const resolved = resolveScopedLocationId(scope, args?.location_id);
+  if ('error' in resolved) return { error: resolved.error };
+  if (name === 'get_revenue_summary' && !isFinanceRole(scope.role)) {
+    return { error: 'Revenue data is available only to authorized local or central admins.' };
+  }
   if (name === "get_trail_conditions") {
-    try { return await getTrailConditions(db); }
+    try { return await getTrailConditions(db, scope, args?.location_id); }
     catch { return { error: "Unable to retrieve trail conditions right now." }; }
   }
   const r = validateRange(args?.start_date, args?.end_date);
   if ("error" in r) return { error: r.error };
+  if (name === 'get_revenue_summary') {
+    let query = db.from('bookings').select('location_id, booking_date, status, group_size, notes').gte('booking_date', r.start).lte('booking_date', r.end).neq('status', 'cancelled');
+    if (resolved.locationId) query = query.eq('location_id', resolved.locationId);
+    else if (!scope.allLocations && scope.locationIds.length) query = query.in('location_id', scope.locationIds);
+    const { data: rows, error } = await query.limit(2000);
+    if (error) return { error: 'Unable to retrieve revenue data right now.' };
+    const byLocation = new Map<string, { booking_count: number; hiker_count: number; recorded_revenue: number }>();
+    for (const row of rows ?? []) {
+      const key = row.location_id ?? 'unassigned';
+      const current = byLocation.get(key) ?? { booking_count: 0, hiker_count: 0, recorded_revenue: 0 };
+      current.booking_count += 1;
+      current.hiker_count += Number(row.group_size) || 0;
+      current.recorded_revenue += recordedAmount(parseBookingMeta(row.notes));
+      byLocation.set(key, current);
+    }
+    const summary = [...byLocation.entries()].map(([location_id, values]) => ({ location_id, ...values }));
+    return {
+      start_date: r.start, end_date: r.end, timezone: TZ,
+      booking_count: summary.reduce((sum, item) => sum + item.booking_count, 0),
+      hiker_count: summary.reduce((sum, item) => sum + item.hiker_count, 0),
+      recorded_revenue: summary.reduce((sum, item) => sum + item.recorded_revenue, 0),
+      by_location: summary,
+      note: 'Recorded paid amounts only; pending and unpaid charges are excluded.',
+    };
+  }
   const fn = name === "get_attendance_summary" ? "ai_attendance_summary" : "ai_booking_summary";
-  const { data, error } = await db.rpc(fn, { p_start_date: r.start, p_end_date: r.end });
+  const { data, error } = await db.rpc(fn, { p_start_date: r.start, p_end_date: r.end, p_location_id: resolved.locationId });
   if (error) {
     console.error("[trail-chat-rag] rpc error", fn, error.message);
     return { error: "Unable to retrieve that data right now." };
@@ -135,7 +204,7 @@ function aiConfig() {
   };
 }
 
-async function gatherLiveData(messages: any[]): Promise<string | null> {
+async function gatherLiveData(messages: any[], scope: AiRoleScope): Promise<string | null> {
   const lastUser = [...messages].reverse().find((m) => m?.role === "user")?.content ?? "";
   if (typeof lastUser !== "string" || !(DATA_INTENT_RE.test(lastUser) || TRAIL_INTENT_RE.test(lastUser))) return null;
   if (!SUPABASE_URL || !SERVICE_ROLE) return null;
@@ -148,6 +217,8 @@ async function gatherLiveData(messages: any[]): Promise<string | null> {
       role: "system",
       content:
         `Today in ${TZ} is ${manilaToday()} (now: ${manilaNowLabel()}). Resolve "today", "tomorrow", "this week", "this weekend" against that date.\n` +
+        `${roleAudienceInstructions(scope)}\n` +
+        `Only use a location_id when it is present in the verified scope. Never invent or accept a client-supplied location outside that scope.\n` +
         `Call the tools needed to answer the user's latest question with live numbers. If no live data is needed, answer with the single word NONE.`,
     },
     ...messages.slice(-6),
@@ -170,7 +241,7 @@ async function gatherLiveData(messages: any[]): Promise<string | null> {
       const name = call?.function?.name;
       let args: any = {};
       try { args = JSON.parse(call?.function?.arguments ?? "{}"); } catch { args = {}; }
-      const result = ALLOWED_TOOLS.has(name) ? await runTool(db, name, args) : { error: "unknown tool" };
+      const result = ALLOWED_TOOLS.has(name) ? await runTool(db, scope, name, args) : { error: "unknown tool" };
       facts.push(`${name}(${JSON.stringify(args)}) => ${JSON.stringify(result)}`);
       convo.push({ role: "tool", tool_call_id: call.id, content: JSON.stringify(result) });
     }
@@ -250,6 +321,81 @@ async function buildUserContext(authHeader: string | null): Promise<string> {
   }
 }
 
+/** Operational context is deliberately server-built and scoped from the JWT. */
+async function buildStaffContext(scope: AiRoleScope): Promise<string> {
+  if (!SERVICE_ROLE || !scope.userId || !['admin', 'super_admin', 'mdrrmo'].includes(scope.role)) return '';
+  if (scope.role === 'admin' && !scope.locationIds.length) {
+    return 'No verified trailhead mapping is available for this local admin account. Do not expose booking, hiker or revenue data; tell the user that an administrator must map the account to Lamot 1, Lamot 2 or Sto. Tomas.';
+  }
+
+  const db = createClient(SUPABASE_URL, SERVICE_ROLE, { auth: { persistSession: false, autoRefreshToken: false } });
+  let query = db.from('bookings')
+    .select('id, location_id, booking_date, group_size, status, notes, contact_phone, contact_email')
+    .neq('status', 'cancelled')
+    .order('booking_date', { ascending: false })
+    .limit(1000);
+  if (!scope.allLocations && scope.locationIds.length) query = query.in('location_id', scope.locationIds);
+  const { data: bookings, error } = await query;
+  if (error) {
+    console.error('[trail-chat-rag] staff context error', error.message);
+    return 'Scoped operational data is temporarily unavailable. Do not guess figures.';
+  }
+
+  const { data: locationRows } = await db.from('locations').select('id,name').in('id', scope.locationIds);
+  const locationNames = new Map((locationRows ?? []).map((row: { id: string; name: string }) => [row.id, row.name]));
+  const summaries = new Map<string, { bookings: number; hikers: number; pending: number; confirmed: number; completed: number; revenue: number }>();
+  const operationalRows: string[] = [];
+
+  for (const booking of bookings ?? []) {
+    const meta = parseBookingMeta(booking.notes);
+    const key = booking.location_id ?? 'unassigned';
+    const summary = summaries.get(key) ?? { bookings: 0, hikers: 0, pending: 0, confirmed: 0, completed: 0, revenue: 0 };
+    summary.bookings += 1;
+    summary.hikers += Number(booking.group_size) || 0;
+    if (booking.status === 'pending' || booking.status === 'adjustment_pending') summary.pending += 1;
+    if (booking.status === 'confirmed') summary.confirmed += 1;
+    if (booking.status === 'completed') summary.completed += 1;
+    summary.revenue += recordedAmount(meta);
+    summaries.set(key, summary);
+
+    // Local admins may ask about an individual operational booking in their own scope.
+    if (scope.role === 'admin') {
+      operationalRows.push(
+        `- booking ${String(booking.id).slice(0, 8)} · ${booking.booking_date} · ${booking.group_size} pax · status=${booking.status}` +
+        ` · lead=${meta.fullName || 'not recorded'} · contact=${meta.phoneNumber || booking.contact_phone || 'not recorded'}` +
+        ` · hike=${meta.hikeType || 'not recorded'} ${meta.hikeTime || ''}`.trim() +
+        ` · guide=${meta.assignedGuide || 'unassigned'} · payment_status=${meta.paymentStatus || 'unrecorded'}`,
+      );
+    }
+  }
+
+  const summaryLines = [...summaries.entries()].map(([locationId, summary]) => {
+    const revenue = isFinanceRole(scope.role) ? `, recorded revenue PHP ${summary.revenue.toFixed(2)}` : '';
+    return `- ${locationNames.get(locationId) || 'Unassigned trailhead'} [location_id=${locationId}]: ${summary.bookings} bookings, ${summary.hikers} hikers, ${summary.confirmed} confirmed, ${summary.pending} pending, ${summary.completed} completed${revenue}`;
+  });
+  const lines = [
+    `Verified operational scope: ${scope.locationNames.length ? scope.locationNames.join(', ') : 'all active trailheads'}.`,
+    'Aggregate booking and revenue summary (cancelled bookings excluded):',
+    ...(summaryLines.length ? summaryLines : ['- No bookings in the available records.']),
+  ];
+  if (scope.role === 'admin') {
+    lines.push('Operational booking directory for this trailhead only (use only when the admin asks about a booking or hiker):');
+    lines.push(...(operationalRows.length ? operationalRows.slice(0, 1000) : ['- No booking directory entries.']));
+    lines.push('Medical notes and emergency details are not included in the assistant context; use the authorized booking detail screen only when an operational need requires them.');
+  } else if (scope.role === 'super_admin') {
+    lines.push('Central view is aggregate-first. Compare local admins/trailheads by name, booking totals, hiker totals, capacity and recorded revenue; do not output a raw personal booking directory.');
+  } else {
+    lines.push('MDRRMO view is safety-first and aggregate-first; do not discuss revenue or unnecessary personal details.');
+  }
+  return lines.join('\n');
+}
+
+async function buildAudienceContext(scope: AiRoleScope, authHeader: string | null): Promise<string> {
+  if (scope.role === 'hiker' || scope.role === 'guest') return buildUserContext(authHeader);
+  if (scope.role === 'admin' || scope.role === 'super_admin' || scope.role === 'mdrrmo') return buildStaffContext(scope);
+  return `${roleAudienceInstructions(scope)}\nUse only published trail guidance and authorized aggregate operational facts.`;
+}
+
 const SYSTEM_PROMPT = `You are the Mount Kalisungan Trail Assistant — a warm, human-sounding booking companion and expert guide for Mount Kalisungan (622m), Calauan, Laguna, Philippines.
 
 IDENTITY & SCOPE RULES (ABSOLUTE — NEVER VIOLATE):
@@ -268,13 +414,14 @@ KEY INFORMATION:
 - Safety: register, 2L water per person, proper shoes, start early (before 6 AM), never hike alone, rain gear in transition months.
 - Schedule rules: Morning hikes may start 02:00–08:00 AM, with 10:00 AM shown only as very late and not suggested. Night hikes start 02:00–05:00 PM and continue into the evening; overnight hikes start 02:00–04:00 PM and include an overnight stay. Recommend 06:00 AM for most morning groups, 05:00 AM for kids, seniors or hot weather, and earlier only when the group is prepared.
 
-PERSONAL CONTEXT:
-- When a "HIKER CONTEXT" block is present it describes the person you are talking to and THEIR OWN bookings. Use it naturally — greet them by first name, reference their upcoming or past hikes, tailor advice to their group size and age.
-- Never reveal or discuss any other person's booking, contact, notes or payment details. Only aggregate totals are allowed for everyone else.
+AUDIENCE CONTEXT:
+- When a "HIKER CONTEXT" block is present it describes the signed-in hiker and THEIR OWN bookings. Use it naturally — greet them by first name, reference their upcoming or past hikes, and tailor advice to their group size and age.
+- When a "STAFF OPERATIONAL CONTEXT" block is present, it is already filtered by the verified role and trailhead scope. Local admins may use their own trailhead's booking directory and aggregate revenue for operations. Central admins may compare all trailheads using aggregate data. MDRRMO is safety-first and has no revenue access.
+- Never cross a local admin's scope, and never invent a booking, revenue figure, identity, contact, medical note or payment record that is not in the scoped context.
 
 LIVE OPERATIONAL DATA:
 - When a "LIVE DATA" system message is present it contains real, up-to-date numbers from the registration system. USE THEM. Never claim you lack access to registration numbers when that data is provided.
-- Report bookings and hikers separately (one booking can cover several hikers). Always state the date and that times are Asia/Manila. Cancelled bookings are never counted as confirmed.
+- Report bookings and hikers separately (one booking can cover several hikers). Always state the date and that times are Asia/Manila. Cancelled bookings are never counted as confirmed. For staff revenue, say it is recorded paid revenue and label the trailhead/date.
 - If a figure is not in the LIVE DATA block, say it isn't available — never invent a number.
 
 PUBLISHED ROUTE CONTEXT:
@@ -318,22 +465,28 @@ serve(async (req) => {
     const body = await req.json();
     const messages = body?.messages ?? [];
     const bookingContext = body?.booking_context ?? null;
+    const scope = await resolveAiRoleScope(
+      SUPABASE_URL,
+      ANON_KEY,
+      SERVICE_ROLE,
+      req.headers.get('Authorization'),
+    );
 
     const { key: AI_API_KEY, url: AI_GATEWAY_URL, model: AI_MODEL } = aiConfig();
     if (!AI_API_KEY) throw new Error("LOVABLE_API_KEY is not configured");
 
     const lastUser = [...messages].reverse().find((m: any) => m?.role === "user")?.content ?? "";
-    if (typeof lastUser === "string" && PRIVATE_PAYMENT_RE.test(lastUser)) {
+    if (typeof lastUser === "string" && PRIVATE_PAYMENT_RE.test(lastUser) && !isFinanceRole(scope.role)) {
       const text = "I can only help with what your own hike would cost. Other people's payment details aren't available here.";
       const sse = `data: ${JSON.stringify({ choices: [{ delta: { content: text } }] })}\n\ndata: [DONE]\n\n`;
       return new Response(sse, { headers: { ...corsHeaders, "Content-Type": "text/event-stream" } });
     }
     const askedQuote = typeof lastUser === "string" && QUOTE_RE.test(lastUser);
 
-    const [ragContext, userContext, liveData] = await Promise.all([
+    const [ragContext, audienceContext, liveData] = await Promise.all([
       buildRagContext(typeof lastUser === "string" ? lastUser : "").catch(() => ""),
-      buildUserContext(req.headers.get("Authorization")).catch(() => ""),
-      gatherLiveData(messages).catch((e) => { console.error("[trail-chat-rag] live data error", e); return null; }),
+      buildAudienceContext(scope, req.headers.get("Authorization")).catch((e) => { console.error("[trail-chat-rag] audience context error", e); return ""; }),
+      gatherLiveData(messages, scope).catch((e) => { console.error("[trail-chat-rag] live data error", e); return null; }),
     ]);
 
     const systemMessages: any[] = [
@@ -346,8 +499,14 @@ serve(async (req) => {
         content: "KNOWLEDGE BASE (most relevant curated entries for this question — treat as ground truth):\n\n" + ragContext,
       });
     }
-    if (userContext) {
-      systemMessages.push({ role: "system", content: "HIKER CONTEXT (the person you are talking to — their own data only):\n" + userContext });
+    systemMessages.push({ role: 'system', content: roleAudienceInstructions(scope) });
+    if (audienceContext) {
+      systemMessages.push({
+        role: "system",
+        content: scope.role === 'hiker' || scope.role === 'guest'
+          ? "HIKER CONTEXT (the person you are talking to — their own data only):\n" + audienceContext
+          : "STAFF OPERATIONAL CONTEXT (server-filtered by verified role and location):\n" + audienceContext,
+      });
     }
     if (bookingContext && typeof bookingContext === "object") {
       // Booking history is loaded below from the verified user JWT. Never trust
@@ -373,7 +532,7 @@ serve(async (req) => {
         });
       }
     }
-    if (askedQuote) systemMessages.push({ role: "system", content: buildDynamicFeeSchedule(bookingContext) });
+    if (askedQuote) systemMessages.push({ role: "system", content: buildDynamicFeeSchedule(bookingContext, isFinanceRole(scope.role)) });
     if (liveData) {
       systemMessages.push({
         role: "system",
