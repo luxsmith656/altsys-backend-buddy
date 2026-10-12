@@ -403,7 +403,7 @@ export default function ProfilePage() {
         </motion.div>
 
       </div>
-      <ResetPasswordDialog open={resetOpen} onOpenChange={setResetOpen} defaultEmail={user?.email ?? ''} defaultPhone={profile.phone} onPhoneResetDone={() => void supabase.auth.signOut()} />
+      <ResetPasswordDialog open={resetOpen} onOpenChange={setResetOpen} defaultEmail={user?.email ?? ''} />
     </div>
   );
 }
