@@ -20,15 +20,7 @@ export type BackupSummary = {
   updated_at: string;
 };
 
-const tableSpecs = [
-  ['bookings', 'id,user_id,location_id,booking_date,start_time,hike_type,status,group_size,notes,contact_phone,contact_email,created_at'],
-  ['booking_assignments', 'id,booking_id,guide_id,location_id,status,created_at,decided_at,reassignment_reason,replaced_by,replaces'],
-  ['guides', 'id,user_id,location_id,full_name,phone,status,is_active,per_trip_fee,photo_url,referral_code,created_at'],
-  ['hiker_sessions', 'id,user_id,booking_id,trail_zone_id,location_id,participant_role,tracking_phase,start_time,end_time,status,total_distance_km,encoded_path,last_synced_at,last_track_at'],
-  ['hiker_locations', 'id,session_id,latitude,longitude,altitude,accuracy,speed_m_s,heading,segment,timestamp'],
-  ['announcements', 'id,location_id,created_by,target,type,title,body,is_important,source,starts_at,expires_at,created_at'],
-  ['daily_capacity', '*'],
-] as const;
+const tableSpecs = ['bookings', 'booking_assignments', 'guides', 'hiker_sessions', 'hiker_locations', 'announcements', 'daily_capacity'] as const;
 
 function sortRows(rows: unknown[]) {
   return [...rows].sort((a, b) => JSON.stringify(a).localeCompare(JSON.stringify(b)));
@@ -40,12 +32,40 @@ async function fingerprint(payload: Omit<BackupPayload, 'exportedAt'> & { export
   return Array.from(new Uint8Array(digest)).map((value) => value.toString(16).padStart(2, '0')).join('');
 }
 
-async function fetchTable(table: string, select: string, locationIds: string[], filterByLocation: boolean) {
-  let query = supabase.from(table as any).select(select);
-  if (filterByLocation && locationIds.length) query = query.in('location_id', locationIds) as any;
+async function fetchTable(table: string, locationIds: string[], filterByLocation: boolean) {
+  // Use '*' because deployed projects can have different optional columns.
+  // Scope is applied after reading, avoiding a failed query when one column is absent.
+  const query = supabase.from(table as any).select('*');
   const { data, error } = await query;
   if (error) throw new Error(`Backup could not read ${table}: ${error.message}`);
-  return sortRows((data ?? []) as unknown[]);
+  const rows = (data ?? []) as unknown as Array<Record<string, unknown>>;
+  return sortRows(filterByLocation && locationIds.length
+    ? rows.filter((row) => locationIds.includes(String(row.location_id ?? '')))
+    : rows);
+}
+
+async function compressForStorage(payload: BackupPayload) {
+  const text = JSON.stringify(payload);
+  if (typeof CompressionStream === 'undefined') return { encoding: 'json' as const, data: text };
+  const stream = new Blob([text]).stream().pipeThrough(new CompressionStream('gzip'));
+  const bytes = new Uint8Array(await new Response(stream).arrayBuffer());
+  let binary = '';
+  for (let index = 0; index < bytes.length; index += 0x8000) {
+    binary += String.fromCharCode(...bytes.subarray(index, index + 0x8000));
+  }
+  return { encoding: 'gzip+base64' as const, data: btoa(binary) };
+}
+
+function storedPayload(payload: BackupPayload, compressed: { encoding: 'json' | 'gzip+base64'; data: string }) {
+  return {
+    format: payload.format,
+    version: payload.version,
+    exportedAt: payload.exportedAt,
+    scopeRole: payload.scopeRole,
+    locationIds: payload.locationIds,
+    encoding: compressed.encoding,
+    data: compressed.data,
+  };
 }
 
 export async function createOperationalBackup(scopeRole: BackupRole, locationIds: string[]) {
@@ -55,8 +75,8 @@ export async function createOperationalBackup(scopeRole: BackupRole, locationIds
     throw new Error('No assigned trailhead is available for this local-admin backup.');
   }
   const tables: Record<string, unknown[]> = {};
-  for (const [table, select] of tableSpecs) {
-    tables[table] = await fetchTable(table, select, normalizedLocationIds, filterByLocation && table !== 'hiker_locations');
+  for (const table of tableSpecs) {
+    tables[table] = await fetchTable(table, normalizedLocationIds, filterByLocation && table !== 'hiker_locations');
   }
 
   // Location-scoped tables are filtered through their parent sessions/bookings.
@@ -81,6 +101,7 @@ export async function createOperationalBackup(scopeRole: BackupRole, locationIds
     tables,
   };
   const digest = await fingerprint(payload);
+  const compressed = await compressForStorage(payload);
   const { data: userData } = await supabase.auth.getUser();
   if (!userData.user) throw new Error('You must be signed in to save a backup.');
   const { error } = await supabase.from('backup_snapshots' as any).upsert({
@@ -88,7 +109,7 @@ export async function createOperationalBackup(scopeRole: BackupRole, locationIds
     scope_role: scopeRole,
     location_ids: normalizedLocationIds,
     fingerprint: digest,
-    payload,
+    payload: storedPayload(payload, compressed),
   }, { onConflict: 'owner_id,fingerprint' });
   if (error) throw new Error(`Backup could not be saved: ${error.message}`);
   return { payload, fingerprint: digest };
@@ -116,6 +137,7 @@ export async function saveUploadedBackup(payload: BackupPayload, scopeRole: Back
     throw new Error('This backup is outside the local admin trailhead scope.');
   }
   const digest = await fingerprint(payload);
+  const compressed = await compressForStorage(payload);
   const { data: userData } = await supabase.auth.getUser();
   if (!userData.user) throw new Error('You must be signed in to upload a backup.');
   const { error } = await supabase.from('backup_snapshots' as any).upsert({
@@ -123,7 +145,7 @@ export async function saveUploadedBackup(payload: BackupPayload, scopeRole: Back
     scope_role: payload.scopeRole,
     location_ids: uploadedLocationIds,
     fingerprint: digest,
-    payload,
+    payload: storedPayload(payload, compressed),
   }, { onConflict: 'owner_id,fingerprint' });
   if (error) throw new Error(`Backup could not be uploaded: ${error.message}`);
   return digest;
