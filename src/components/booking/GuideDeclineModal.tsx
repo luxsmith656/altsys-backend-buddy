@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   Dialog,
   DialogContent,
@@ -35,6 +35,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { parseMeta } from '@/lib/bookingMeta';
+import { getBusyGuideIdsForSlot, isGuideEligibleForAssignment } from '@/lib/guideAvailability';
 
 interface GuideDeclineModalProps {
   open: boolean;
@@ -58,12 +59,63 @@ export default function GuideDeclineModal({
   const [actionType, setActionType] = useState<'reassign' | 'dispatch'>('reassign');
   const [replacementGuideId, setReplacementGuideId] = useState<string>('');
   const [submitting, setSubmitting] = useState(false);
+  const [availablePeers, setAvailablePeers] = useState<any[]>([]);
+  const [checkingAvailability, setCheckingAvailability] = useState(false);
+
+  useEffect(() => {
+    if (!open || !assignment?.booking) {
+      setAvailablePeers([]);
+      setReplacementGuideId('');
+      return;
+    }
+
+    let cancelled = false;
+    const booking = assignment.booking;
+    const meta = parseMeta(booking.notes);
+    const locationId = currentGuide?.location_id || booking.location_id;
+    setCheckingAvailability(true);
+
+    if (!locationId) {
+      setAvailablePeers([]);
+      setReplacementGuideId('');
+      setCheckingAvailability(false);
+      return () => { cancelled = true; };
+    }
+
+    void getBusyGuideIdsForSlot({
+      locationId,
+      bookingDate: booking.booking_date,
+      hikeTime: meta.hikeTime,
+      hikeType: meta.hikeType,
+      excludeBookingId: assignment.booking_id || booking.id,
+    }).then((busyGuideIds) => {
+      if (cancelled) return;
+      const eligible = peerGuides.filter((guide) =>
+        guide.id !== currentGuide?.id
+        && guide.is_active
+        && isGuideEligibleForAssignment(guide.status)
+        && !busyGuideIds.has(guide.id),
+      );
+      setAvailablePeers(eligible);
+      setReplacementGuideId((current) => eligible.some((guide) => guide.id === current) ? current : '');
+    }).catch((error) => {
+      console.error('Could not load peer guide availability:', error);
+      if (!cancelled) {
+        // Fail closed: never offer a guide when the conflict check is unavailable.
+        setAvailablePeers([]);
+        setReplacementGuideId('');
+      }
+    }).finally(() => {
+      if (!cancelled) setCheckingAvailability(false);
+    });
+
+    return () => { cancelled = true; };
+  }, [open, assignment?.id, assignment?.booking_id, assignment?.booking, assignment?.booking?.id, assignment?.booking?.booking_date, assignment?.booking?.location_id, assignment?.booking?.notes, currentGuide?.id, currentGuide?.location_id, peerGuides]);
 
   if (!assignment) return null;
 
   const booking = assignment.booking;
   const meta = parseMeta(booking?.notes);
-  const availablePeers = peerGuides.filter((g) => g.id !== currentGuide?.id && g.is_active);
 
   const getEffectiveReason = () => {
     const matched = STANDARD_DECLINE_REASONS.find((r) => r.id === reasonCategory);
@@ -250,7 +302,7 @@ export default function GuideDeclineModal({
                   ))}
                   {availablePeers.length === 0 && (
                     <div className="p-2 text-xs text-muted-foreground">
-                      No other active peer guides found. Choose "Return to Admin Dispatch" instead.
+                      {checkingAvailability ? 'Checking same-time availability…' : 'No conflict-free peer guides found. Choose "Return to Admin Dispatch" instead.'}
                     </div>
                   )}
                 </SelectContent>

@@ -836,6 +836,39 @@ END $$;
 NOTIFY pgrst, 'reload schema';
 
 -- ─────────────────────────────────────────────────────────────────────────────
+-- SECTION 16: FIX ANONYMOUS PUBLIC GUIDE DIRECTORY ACCESS
+-- The public landing page must be able to read active guide cards before login.
+-- Do not call has_role() for anon: that function is intentionally protected.
+-- ─────────────────────────────────────────────────────────────────────────────
+CREATE OR REPLACE FUNCTION public.is_admin_account(_user_id uuid)
+RETURNS boolean
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = public
+AS $$
+  SELECT EXISTS (
+    SELECT 1
+    FROM public.user_roles ur
+    WHERE ur.user_id = _user_id
+      AND ur.role IN ('admin'::public.app_role, 'super_admin'::public.app_role)
+  );
+$$;
+
+REVOKE ALL ON FUNCTION public.is_admin_account(uuid) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.is_admin_account(uuid) TO anon, authenticated;
+
+DROP POLICY IF EXISTS guides_public_read ON public.guides;
+CREATE POLICY guides_public_read ON public.guides
+  FOR SELECT
+  USING (
+    is_active = true
+    AND NOT public.is_admin_account(auth.uid())
+  );
+
+NOTIFY pgrst, 'reload schema';
+
+-- ─────────────────────────────────────────────────────────────────────────────
 -- SECTION 15: REPAIR ANNOUNCEMENT, MESSAGE, AND GUIDE REASSIGNMENT COLUMNS
 -- Run this section when the hosted schema cache is behind the repository.
 -- ─────────────────────────────────────────────────────────────────────────────

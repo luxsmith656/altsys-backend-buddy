@@ -115,7 +115,7 @@ import { loadGuideRatings, renderStars, type GuideRating } from '@/lib/guideRati
 import { getHikeTypeLabel } from '@/lib/hikeSchedule';
 import { guidePhotoForName } from '@/lib/guideDirectory';
 import { setGuideAccountActiveAtLocation } from '@/lib/guideManagement';
-import { getBusyGuideIdsForSlot } from '@/lib/guideAvailability';
+import { getBusyGuideIdsForSlot, isGuideEligibleForAssignment } from '@/lib/guideAvailability';
 import {
   BarChart,
   Bar,
@@ -1748,9 +1748,8 @@ export default function AdminDashboard() {
   }, [acceptBooking?.booking_date, acceptBooking?.id, acceptBooking?.location_id, acceptBooking?.notes, guides]);
 
   const assignableGuides = useMemo(() => guides.filter((guide) => {
-    const status = String(guide.status || '').toLowerCase();
     return guide.is_active && Boolean(guide.user_id) && guide.location_id === acceptBooking?.location_id
-      && ['available', 'on-duty', 'on_duty', 'on duty', ''].includes(status)
+      && isGuideEligibleForAssignment(guide.status)
       && !busyGuideIds.has(guide.id);
   }), [acceptBooking?.location_id, busyGuideIds, guides]);
 

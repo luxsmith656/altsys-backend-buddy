@@ -12,6 +12,18 @@ type AvailabilityInput = {
 type BookingRow = { id: string; booking_date: string; status: string | null; notes: string | null };
 
 const HOLDING_STATUSES = new Set(['pending', 'confirmed', 'accepted', 'active', 'adjustment_pending', 'approved', 'started']);
+const UNASSIGNABLE_GUIDE_STATUSES = new Set(['off_duty', 'inactive', 'deactivated']);
+
+/**
+ * Keep the client roster in sync with the assignment RPC. A reassignment
+ * request changes the current booking, not the guide's availability for a
+ * different booking, so statuses such as `reassigned_pending` remain eligible
+ * until a real schedule conflict or an explicit off-duty state is found.
+ */
+export function isGuideEligibleForAssignment(status: unknown): boolean {
+  const normalized = String(status ?? '').trim().toLowerCase().replace(/[\s-]+/g, '_');
+  return !UNASSIGNABLE_GUIDE_STATUSES.has(normalized);
+}
 
 function rangeFor(date: string, time: string | null | undefined, type: string | null | undefined): [number, number] {
   const start = time ? timeToMinutes(time) : null;

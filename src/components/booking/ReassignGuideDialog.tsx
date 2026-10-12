@@ -20,7 +20,7 @@ import {
 import { Loader2, UserCog, AlertCircle, ArrowRight } from 'lucide-react';
 import { toast } from 'sonner';
 import { reassignGuideByAdmin } from '@/lib/guideAssignmentService';
-import { getBusyGuideIdsForSlot } from '@/lib/guideAvailability';
+import { getBusyGuideIdsForSlot, isGuideEligibleForAssignment } from '@/lib/guideAvailability';
 import { parseMeta } from '@/lib/bookingMeta';
 
 interface Props {
@@ -73,8 +73,7 @@ export default function ReassignGuideDialog({
           .select('id, full_name, status, location_id, user_id, phone, specialty')
           .eq('is_active', true)
           .eq('location_id', bookingLocationId)
-          .not('user_id', 'is', null)
-          .neq('status', 'off_duty');
+          .not('user_id', 'is', null);
         if (!active) return;
         const meta = parseMeta(booking?.notes);
         const busyGuideIds = await getBusyGuideIdsForSlot({
@@ -86,9 +85,8 @@ export default function ReassignGuideDialog({
         });
         if (!active) return;
         setGuides((availableGuides || []).filter((guide) => {
-          const status = String(guide.status || '').toLowerCase();
           return guide.id !== currentGuideId
-            && ['available', 'on-duty', 'on_duty', 'on duty', ''].includes(status)
+            && isGuideEligibleForAssignment(guide.status)
             && !busyGuideIds.has(guide.id);
         }));
 

@@ -2509,7 +2509,7 @@ export default function BookingPage() {
         </div>
       </div>
 
-      <Button type="button" className="fixed left-3 bottom-24 z-40 h-12 rounded-full shadow-lg sm:bottom-6" onClick={() => window.dispatchEvent(new Event('open-global-ai-assistant'))} aria-label="Ask Kali about your booking">
+      <Button type="button" className="fixed bottom-[calc(env(safe-area-inset-bottom)+5.25rem)] left-3 z-40 h-12 rounded-full shadow-lg sm:bottom-6" onClick={() => window.dispatchEvent(new Event('open-global-ai-assistant'))} aria-label="Ask Kali about your booking">
         Ask Kali
       </Button>
       <KaliContextPanel role={role ?? 'guest'} insights={kaliInsights} />
@@ -2592,7 +2592,7 @@ export default function BookingPage() {
           size="icon"
           onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
           aria-label="Back to top"
-          className="fixed bottom-6 right-6 z-40 h-10 w-10 rounded-full shadow-lg border-border/60 bg-background/80 backdrop-blur-md hover:bg-primary hover:text-white transition-all duration-300"
+          className="fixed bottom-[calc(env(safe-area-inset-bottom)+5.25rem)] right-3 z-40 h-10 w-10 rounded-full shadow-lg border-border/60 bg-background/80 backdrop-blur-md hover:bg-primary hover:text-white transition-all duration-300 sm:bottom-6 sm:right-6"
         >
           <ArrowUp className="h-4 w-4" />
         </Button>
