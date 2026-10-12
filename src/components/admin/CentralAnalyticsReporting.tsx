@@ -180,7 +180,7 @@ export default function CentralAnalyticsReporting({ locationIds }: { locationIds
   const [activeSessionsCount, setActiveSessionsCount] = useState(0);
 
   // Filter state
-  const [dateRangeMode, setDateRangeMode] = useState<'all' | 'today' | '7d' | '30d' | 'month' | 'year' | 'custom'>('month');
+  const [dateRangeMode, setDateRangeMode] = useState<'all' | 'today' | 'month' | 'year' | 'custom'>('month');
   const [customStartDate, setCustomStartDate] = useState(format(startOfMonth(new Date()), 'yyyy-MM-dd'));
   const [customEndDate, setCustomEndDate] = useState(format(new Date(), 'yyyy-MM-dd'));
   const [selectedStation, setSelectedStation] = useState<string>('all');
@@ -309,12 +309,6 @@ export default function CentralAnalyticsReporting({ locationIds }: { locationIds
       case 'today': {
         const todayStr = format(today, 'yyyy-MM-dd');
         return { start: parseISO(todayStr), end: parseISO(todayStr) };
-      }
-      case '7d': {
-        return { start: subDays(today, 7), end: today };
-      }
-      case '30d': {
-        return { start: subDays(today, 30), end: today };
       }
       case 'month': {
         return { start: startOfMonth(today), end: endOfMonth(today) };
@@ -865,8 +859,6 @@ export default function CentralAnalyticsReporting({ locationIds }: { locationIds
               {(
                 [
                   { id: 'today', label: 'Today' },
-                  { id: '7d', label: '7 Days' },
-                  { id: '30d', label: '30 Days' },
                   { id: 'month', label: 'This Month' },
                   { id: 'year', label: 'Year' },
                   { id: 'all', label: 'All Time' },

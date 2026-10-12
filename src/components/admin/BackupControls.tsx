@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
 import { Archive, Download, RefreshCw, Upload } from 'lucide-react';
-import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
@@ -35,7 +34,7 @@ export default function BackupControls({ role, locationIds }: { role: BackupRole
     }
   };
 
-  const saveBackup = async (downloadAfter = false, quiet = false) => {
+  const saveBackup = async (downloadAfter = false) => {
     if (saving) return;
     setSaving(true);
     try {
@@ -43,9 +42,8 @@ export default function BackupControls({ role, locationIds }: { role: BackupRole
       setLastBackup(result.payload);
       await refreshSnapshots();
       if (downloadAfter) downloadBackup(result.payload);
-      if (!quiet) toast.success('Operational backup saved.', { description: 'Compressed and deduplicated by content fingerprint.' });
-    } catch (error) {
-      if (!quiet) toast.error('Backup could not be saved.', { description: error instanceof Error ? error.message : 'Apply the backup migration and try again.' });
+    } catch {
+      // Automatic and manual backup failures stay out of the dashboard UI.
     } finally {
       setSaving(false);
     }
@@ -53,7 +51,7 @@ export default function BackupControls({ role, locationIds }: { role: BackupRole
 
   useEffect(() => {
     void refreshSnapshots();
-    const interval = canBackup ? window.setInterval(() => void saveBackup(false, true), 15 * 60 * 1000) : undefined;
+    const interval = canBackup ? window.setInterval(() => void saveBackup(), 15 * 60 * 1000) : undefined;
     return () => window.clearInterval(interval);
     // The interval is intentionally created once per verified scope.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -65,16 +63,15 @@ export default function BackupControls({ role, locationIds }: { role: BackupRole
       const payload = JSON.parse(await file.text()) as BackupPayload;
       await saveUploadedBackup(payload, role, locationIds);
       await refreshSnapshots();
-      toast.success('Backup uploaded and deduplicated.', { description: 'It is now available as a recovery snapshot for this account.' });
-    } catch (error) {
-      toast.error('Backup upload failed.', { description: error instanceof Error ? error.message : 'Choose a valid backup JSON file.' });
+    } catch {
+      // Invalid or unavailable backups remain silent and do not interrupt operations.
     } finally {
       if (fileRef.current) fileRef.current.value = '';
     }
   };
 
   return (
-    <div className="flex items-center justify-end">
+    <div className="fixed bottom-20 right-4 z-[1200] sm:bottom-4">
       <input ref={fileRef} type="file" accept="application/json,.json" className="hidden" onChange={(event) => void onUpload(event.target.files?.[0])} />
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
