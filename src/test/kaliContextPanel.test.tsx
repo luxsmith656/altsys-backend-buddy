@@ -33,6 +33,15 @@ describe('KaliContextPanel', () => {
     expect(screen.queryByRole('region', { name: 'Kali context guidance' })).not.toBeInTheDocument();
   });
 
+  it('renders an admin message alert even when there is no regular insight', () => {
+    render(<KaliContextPanel role="hiker" insights={[]} />);
+
+    fireEvent(window, new CustomEvent('booking-admin-message', { detail: { bookingId: 'booking-1' } }));
+
+    expect(screen.getAllByLabelText('Kali alert expression')).toHaveLength(2);
+    expect(screen.getByText('Admin has a message about your booking')).toBeVisible();
+  });
+
   it('opens the mobile Kali panel and shows the role-aware insight', () => {
     render(<KaliContextPanel role="hiker" insights={[insight]} />);
 

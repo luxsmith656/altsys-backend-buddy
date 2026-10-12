@@ -88,6 +88,9 @@ export default function KaliContextPanel({ role, insights }: KaliContextPanelPro
 
   if (!insight && !adminMessageBookingId) return null;
 
+  // Booking-message alerts can open Kali without a regular insight. Keep the
+  // launcher renderable in that state instead of dereferencing `insight`.
+  const activeExpression = adminMessageBookingId ? 'alert' : insight?.expression ?? 'reassuring';
   const label = adminMessageBookingId ? 'Admin has a new booking message' : `${insight!.title}: ${insight!.message}`;
   const askKali = (prompt = insight ? followUpPrompt(insight) : 'I have a new booking message. Take me to the booking conversation.') => {
     setOpen(false);
@@ -134,7 +137,7 @@ export default function KaliContextPanel({ role, insights }: KaliContextPanelPro
           {/* Notification-style Compact Header */}
           <header className="flex items-center gap-2 border-b border-border/30 bg-muted/30 px-3 py-1.5">
             <KaliAvatar
-              expression={adminMessageBookingId ? 'alert' : reply ? 'listening' : insight!.expression}
+              expression={adminMessageBookingId ? 'alert' : reply ? 'listening' : activeExpression}
               activity={reply ? 'listening' : 'speaking'}
               size="sm"
               className="h-6 w-6"
@@ -290,7 +293,7 @@ export default function KaliContextPanel({ role, insights }: KaliContextPanelPro
         )}
       >
         <KaliAvatar
-          expression={insight.expression}
+          expression={activeExpression}
           size="sm"
           className="h-9 w-9 sm:h-11 sm:w-11 rounded-full border border-primary-foreground/40 bg-primary/80"
         />
