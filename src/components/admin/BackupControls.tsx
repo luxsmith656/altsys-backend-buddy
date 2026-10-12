@@ -25,14 +25,24 @@ export default function BackupControls({ role, locationIds }: { role: BackupRole
   const [saving, setSaving] = useState(false);
   const [lastBackup, setLastBackup] = useState<BackupPayload | null>(null);
   const [snapshots, setSnapshots] = useState<BackupSummary[]>([]);
+  const [status, setStatus] = useState<'checking' | 'saved' | 'restored' | 'error'>('checking');
+  const [statusMessage, setStatusMessage] = useState('Checking the Central backup store...');
   const fileRef = useRef<HTMLInputElement>(null);
-  const canBackup = role === 'super_admin' || locationIds.length > 0;
+  const canBackup = role === 'super_admin';
 
   const refreshSnapshots = async () => {
     try {
-      setSnapshots(await listOperationalBackups());
-    } catch {
-      // The UI remains useful before the backup migration has been applied.
+      const nextSnapshots = await listOperationalBackups();
+      setSnapshots(nextSnapshots);
+      if (nextSnapshots.length && status === 'checking') {
+        setStatus('saved');
+        setStatusMessage('Database backup is available.');
+      }
+      return nextSnapshots;
+    } catch (error) {
+      setStatus('error');
+      setStatusMessage(error instanceof Error ? error.message : 'Backup store is unavailable.');
+      return [];
     }
   };
 
@@ -43,9 +53,12 @@ export default function BackupControls({ role, locationIds }: { role: BackupRole
       const result = await createOperationalBackup(role, locationIds);
       setLastBackup(result.payload);
       await refreshSnapshots();
+      setStatus('saved');
+      setStatusMessage(`Saved to Central database at ${new Date(result.payload.exportedAt).toLocaleString('en-PH')}.`);
       if (downloadAfter) downloadBackup(result.payload);
-    } catch {
-      // Automatic and manual backup failures stay out of the dashboard UI.
+    } catch (error) {
+      setStatus('error');
+      setStatusMessage(error instanceof Error ? error.message : 'Backup could not be saved.');
     } finally {
       setSaving(false);
     }
@@ -53,6 +66,7 @@ export default function BackupControls({ role, locationIds }: { role: BackupRole
 
   useEffect(() => {
     void refreshSnapshots();
+    if (canBackup) void saveBackup();
     const interval = canBackup ? window.setInterval(() => void saveBackup(), 15 * 60 * 1000) : undefined;
     return () => window.clearInterval(interval);
     // The interval is intentionally created once per verified scope.
@@ -67,8 +81,11 @@ export default function BackupControls({ role, locationIds }: { role: BackupRole
       await restoreOperationalBackup(payload);
       setLastBackup(payload);
       await refreshSnapshots();
-    } catch {
-      // Invalid or unavailable backups remain silent and do not interrupt operations.
+      setStatus('restored');
+      setStatusMessage(`Restored Central database data from ${new Date(payload.exportedAt).toLocaleString('en-PH')}.`);
+    } catch (error) {
+      setStatus('error');
+      setStatusMessage(error instanceof Error ? error.message : 'Backup restore failed.');
     } finally {
       if (fileRef.current) fileRef.current.value = '';
     }
@@ -81,8 +98,11 @@ export default function BackupControls({ role, locationIds }: { role: BackupRole
       const payload = await restoreLatestOperationalBackup();
       setLastBackup(payload);
       await refreshSnapshots();
-    } catch {
-      // Restore failures stay silent and never create a dashboard toast.
+      setStatus('restored');
+      setStatusMessage(`Restored Central database data from ${new Date(payload.exportedAt).toLocaleString('en-PH')}.`);
+    } catch (error) {
+      setStatus('error');
+      setStatusMessage(error instanceof Error ? error.message : 'Backup restore failed.');
     } finally {
       setSaving(false);
     }
@@ -115,7 +135,14 @@ export default function BackupControls({ role, locationIds }: { role: BackupRole
           </DropdownMenuItem>
           <DropdownMenuSeparator />
           <div className="px-2 py-1.5 text-xs text-muted-foreground" aria-live="polite">
-            {snapshots.length ? `${snapshots.length} compressed snapshot${snapshots.length === 1 ? '' : 's'}` : 'No snapshot saved yet'}
+            <div className={`mb-1 flex items-center gap-1.5 font-medium ${status === 'error' ? 'text-destructive' : 'text-foreground'}`}>
+              <span className={`h-1.5 w-1.5 rounded-full ${status === 'error' ? 'bg-destructive' : status === 'checking' ? 'bg-amber-500 animate-pulse' : 'bg-emerald-500'}`} />
+              {status === 'checking' ? 'Checking database...' : status === 'error' ? 'Backup needs attention' : status === 'restored' ? 'Restore completed' : 'Backup saved to database'}
+            </div>
+            <div>{statusMessage}</div>
+            <div className="mt-1">
+              {snapshots.length ? `${snapshots.length} compressed snapshot${snapshots.length === 1 ? '' : 's'} available` : 'No snapshot saved yet'}
+            </div>
           </div>
         </DropdownMenuContent>
       </DropdownMenu>
