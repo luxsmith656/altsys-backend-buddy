@@ -30,6 +30,7 @@ import CentralAccountManagement from '@/components/admin/CentralAccountManagemen
 import CentralPricingManagement from '@/components/admin/CentralPricingManagement';
 import CentralAnnouncements from '@/components/admin/CentralAnnouncements';
 import CentralAnalyticsReporting from '@/components/admin/CentralAnalyticsReporting';
+import BackupControls from '@/components/admin/BackupControls';
 import { format, startOfMonth } from 'date-fns';
 
 interface LocStats {
@@ -283,6 +284,8 @@ export default function CentralDashboard() {
             </div>
           )}
         </motion.div>
+
+        <BackupControls role="super_admin" locationIds={jumpOffStations.map((location) => location.id)} />
 
         {/* Hero KPIs Grid */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">

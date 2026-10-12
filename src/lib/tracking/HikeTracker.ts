@@ -242,6 +242,39 @@ export class HikeTracker {
     this.emit();
   }
 
+  /** Broadcast one deliberate GPS update without waiting for the watch interval. */
+  async pingLocation(): Promise<{ lat: number; lng: number; timestamp: number; queued: boolean }> {
+    if (this.session.status !== 'active') throw new Error('Location ping is available only during an active hike.');
+
+    const position = await new Promise<GeolocationPosition>((resolve, reject) => {
+      void getCurrentPlatformPosition(
+        resolve,
+        (error) => reject(new Error(error.message || 'Could not read the current GPS location.')),
+        { enableHighAccuracy: true, maximumAge: 0, timeout: 30_000 },
+      );
+    });
+    const timestamp = Number.isFinite(position.timestamp) ? position.timestamp : Date.now();
+    const point: OfflinePoint = {
+      sessionId: this.session.id,
+      lat: position.coords.latitude,
+      lng: position.coords.longitude,
+      alt: position.coords.altitude ?? this.altEMA ?? 0,
+      accuracy: position.coords.accuracy ?? 999,
+      speed: position.coords.speed ?? 0,
+      heading: position.coords.heading ?? null,
+      ts: timestamp,
+      segment: this.session.phase === 'descent' ? 'descent' : this.session.phase === 'peak' ? 'peak' : 'ascent',
+    };
+    await appendPoint(point);
+    this.points.push(point);
+    this.lastFix = { lat: point.lat, lng: point.lng, alt: point.alt, ts: point.ts, accuracy: point.accuracy, heading: point.heading };
+    await saveSession(this.session);
+    const queued = !navigator.onLine;
+    await this.pushLivePing(point);
+    this.emit();
+    return { lat: point.lat, lng: point.lng, timestamp, queued };
+  }
+
   async pullNativePoints() {
     const nativePoints = await getNativeTrailPoints(this.session.id).catch(() => []);
     if (nativePoints.length === 0) return;

@@ -139,6 +139,7 @@ const CentralPricingManagement = lazy(() => import('@/components/admin/CentralPr
 import { coalescedRefresh } from '@/lib/coalescedRefresh';
 import MDRRMOAccessAudit from '@/components/admin/MDRRMOAccessAudit';
 import PaymentSummaryTab from '@/components/admin/PaymentSummaryTab';
+import BackupControls from '@/components/admin/BackupControls';
 // ForecastingTab removed per user request
 import AdminWalkInRegistrationDialog from '@/components/admin/AdminWalkInRegistrationDialog';
 import EditPaymentDialog from '@/components/booking/EditPaymentDialog';
@@ -1944,6 +1945,10 @@ export default function AdminDashboard() {
           {/* ─────────────────────────────── BOOKINGS TAB ── */}
 
           <TabsContent value="overview" className="space-y-6 mt-0">
+            <BackupControls
+              role={isSuperAdmin ? 'super_admin' : 'admin'}
+              locationIds={isSuperAdmin ? trailheadLocations.map((location) => location.id) : activeLocationId ? [activeLocationId] : []}
+            />
             <ActiveSupportAlerts locationId={isSuperAdmin ? null : activeLocationId} />
             <OverviewDashboard locationId={activeLocationId} locationIds={analyticsLocationIds} />
             <Suspense fallback={<p role="status">Loading analytics...</p>}>

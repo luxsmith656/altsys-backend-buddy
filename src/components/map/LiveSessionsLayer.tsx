@@ -5,10 +5,11 @@ import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { completeActiveHikeTracker, ensureActiveHikeTracker } from '@/lib/tracking/activeTrackerManager';
 import { ADMIN_CHECKIN_TOKEN_PREFIX } from '@/lib/tracking/sessionAuthorization';
-import type { TrackerSnapshot } from '@/lib/tracking/HikeTracker';
+import type { HikeTracker, TrackerSnapshot } from '@/lib/tracking/HikeTracker';
 import { getActiveSession, getSessionPoints } from '@/lib/offlineDb';
 import { splitTrackAtGaps, guideFixToTrail } from '@/lib/tracking/geo';
 import StationReportControl from './StationReportControl';
+import LocationPingControl from './LocationPingControl';
 
 type SessionRole = 'hiker' | 'guide' | 'ranger' | 'admin';
 
@@ -90,6 +91,7 @@ export default function LiveSessionsLayer({
   const centeredRef = useRef(false);
   const gpsErrorShownRef = useRef(false);
   const hadSelfSessionRef = useRef(false);
+  const [activeTracker, setActiveTracker] = useState<HikeTracker | null>(null);
 
   const loadLocalSelfSession = useCallback(async () => {
     if (mode !== 'self') return null;
@@ -295,6 +297,7 @@ export default function LiveSessionsLayer({
     })
       .then((tracker) => {
         if (!active) return;
+        setActiveTracker(tracker);
         unsubscribe = tracker.subscribe(setLocalSnapshot);
       })
       .catch((error) => {
@@ -307,6 +310,7 @@ export default function LiveSessionsLayer({
       });
     return () => {
       active = false;
+      setActiveTracker(null);
       unsubscribe?.();
     };
   }, [locationId, selfSession, userId, userRole]);
@@ -343,6 +347,7 @@ export default function LiveSessionsLayer({
 
   return (
     <>
+      {selfSession && (userRole === 'hiker' || userRole === 'guide') && <LocationPingControl tracker={activeTracker} />}
       {selfSession && (userRole === 'hiker' || userRole === 'guide') && selfSession.id !== selfSession.local_session_id && <StationReportControl sessionId={selfSession.id} userId={userId} />}
       {sessions.map((session) => {
         const points = renderedPaths[session.id] ?? [];
