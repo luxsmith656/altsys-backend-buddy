@@ -54,12 +54,17 @@ export default function BookingChat({
 
   const load = async () => {
     setLoading(true);
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from('booking_messages' as any)
       .select('*')
       .eq('booking_id', bookingId)
       .order('created_at', { ascending: true });
-    setMsgs((data as any) ?? []);
+    if (error) {
+      setMsgs([]);
+      toast.error(bookingMessageError(error.message));
+    } else {
+      setMsgs((data as any) ?? []);
+    }
     setUnreadCount(0);
     setLoading(false);
     setTimeout(() => scroller.current?.scrollTo({ top: 99999 }), 50);

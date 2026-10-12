@@ -23,3 +23,19 @@ it('keeps rescheduling out of the booking conversation', async () => {
   expect(screen.queryByRole('button', { name: 'Send request' })).not.toBeInTheDocument();
   expect(mocks.update).not.toHaveBeenCalled();
 });
+
+it('reports a hiker message read failure instead of silently showing an empty thread', async () => {
+  const messageError = { message: 'permission denied for relation booking_messages' };
+  mocks.from.mockImplementation((table: string) => ({ select: () => ({ eq: () => {
+    if (table === 'booking_messages') return { order: async () => ({ data: null, error: messageError }) };
+    if (table === 'bookings') return { single: async () => ({ data: { status: 'completed', notes: '{}' } }) };
+    return Promise.resolve({ data: [] });
+  } }), update: mocks.update }));
+
+  await act(async () => {
+    render(<BookingChat bookingId="booking" bookingDate="2027-01-01" open onOpenChange={vi.fn()} />);
+  });
+
+  expect(mocks.error).toHaveBeenCalledWith(messageError.message);
+  expect(screen.getByText('No messages yet. Say hi 👋')).toBeInTheDocument();
+});

@@ -57,6 +57,7 @@ before(async () => {
   await db.exec(await readFile('supabase/migrations/20261006120000_guide_message_audience_and_reassignment.sql', 'utf8'));
   await db.exec(await readFile('supabase/migrations/20261009130000_reinstall_atomic_guide_reassignment.sql', 'utf8'));
   await db.exec(await readFile('supabase/migrations/20261007120000_ensure_booking_message_recipient_role.sql', 'utf8'));
+  await db.exec(await readFile('supabase/migrations/20261012120000_repair_hiker_booking_message_delivery.sql', 'utf8'));
 });
 
 beforeEach(async () => {
@@ -105,6 +106,20 @@ test('assigned guide sees hiker-to-guide messages, not messages addressed only t
   await db.exec(`SET test.actor = '${id(2)}'`);
   const visible = await db.query('SELECT content FROM public.booking_messages ORDER BY content');
   assert.deepEqual(visible.rows.map((row) => row.content), ['Guide question']);
+});
+
+test('hiker sees admin messages addressed to hiker and legacy admin rows on own booking', async () => {
+  await db.exec(`RESET ROLE; SET test.actor = '${id(3)}'`);
+  await db.query(`INSERT INTO public.booking_messages (booking_id, sender_id, sender_role, content)
+    VALUES ($1, $2, 'admin', 'Legacy admin update')`, [id(20), id(1)]);
+  await db.exec('SET ROLE authenticated');
+  const visible = await db.query('SELECT content FROM public.booking_messages ORDER BY content');
+  assert.deepEqual(visible.rows.map((row) => row.content), [
+    'Admin update',
+    'Guide question',
+    'Legacy admin update',
+    'Private admin request',
+  ]);
 });
 
 test('booking message recipient migration is safe to rerun and keeps supported audiences constrained', async () => {

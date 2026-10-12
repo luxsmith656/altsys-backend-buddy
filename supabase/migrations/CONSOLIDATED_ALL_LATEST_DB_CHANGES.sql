@@ -886,6 +886,25 @@ ALTER TABLE IF EXISTS public.booking_assignments
 ALTER TABLE IF EXISTS public.booking_messages
   ADD COLUMN IF NOT EXISTS recipient_role text;
 
+-- Hiker booking-chat delivery repair. New admin messages should set
+-- recipient_role = 'hiker'; this legacy branch keeps older admin rows visible
+-- only to the owner of their own booking.
+DROP POLICY IF EXISTS bm_hiker_conversation_select ON public.booking_messages;
+CREATE POLICY bm_hiker_conversation_select ON public.booking_messages
+  FOR SELECT TO authenticated
+  USING (
+    EXISTS (
+      SELECT 1 FROM public.bookings b
+      WHERE b.id = booking_messages.booking_id
+        AND b.user_id = auth.uid()
+    )
+    AND (
+      sender_id = auth.uid()
+      OR recipient_role = 'hiker'
+      OR (recipient_role IS NULL AND sender_role IN ('system', 'admin'))
+    )
+  );
+
 NOTIFY pgrst, 'reload schema';
 
 

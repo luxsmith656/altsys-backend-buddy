@@ -424,7 +424,7 @@ export default function AdminDashboard() {
     const meta = parseMeta(b.notes);
     const msg = `Heads-up: you have more than one booking this week (current date ${b.booking_date}). Is this intentional, or would you like to reschedule one of them?`;
     await supabase.from('booking_messages' as any).insert({
-      booking_id: b.id, sender_id: adminUser?.id, sender_role: 'admin', kind: 'system', content: msg,
+      booking_id: b.id, sender_id: adminUser?.id, sender_role: 'admin', recipient_role: 'hiker', kind: 'system', content: msg,
     });
     toast.success(`Reminder sent to ${meta.fullName || b.emergency_contact_name || 'hiker'}`);
   };
@@ -1307,6 +1307,7 @@ export default function AdminDashboard() {
         booking_id: adjustDialogId,
         sender_id: currentUser?.id ?? null,
         sender_role: 'admin',
+        recipient_role: 'hiker',
         kind: 'reschedule_proposal',
         content: `Admin proposed ${adjustDate} at ${adjustTime}. Reason: ${adjustReason.trim()}`,
       } as any);
