@@ -74,14 +74,21 @@ export async function createUserNotification(
   const db = getFirebaseDb();
   if (!db) return null;
 
-  const docRef = await addDoc(collection(db, 'notifications'), {
-    userId,
-    title: notification.title,
-    body: notification.body,
-    category: notification.category,
-    href: notification.href ?? null,
-    createdAt: serverTimestamp(),
-  });
+  // Notifications are an optional delivery channel. A Firestore outage,
+  // rules mismatch, or offline session must never turn a saved booking into
+  // an error shown to the user.
+  try {
+    const docRef = await addDoc(collection(db, 'notifications'), {
+      userId,
+      title: notification.title,
+      body: notification.body,
+      category: notification.category,
+      href: notification.href ?? null,
+      createdAt: serverTimestamp(),
+    });
 
-  return docRef.id;
+    return docRef.id;
+  } catch {
+    return null;
+  }
 }

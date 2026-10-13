@@ -1285,7 +1285,7 @@ export default function BookingPage() {
           title: 'Booking submitted',
           body: `Your booking for ${dateStr} is now pending admin approval.`,
           category: 'booking',
-        }).catch(() => toast.warning('Booking saved. The in-app notification could not be delivered. Your booking remains available in My Bookings.'));
+        });
       }
       try { localStorage.setItem(`${LAST_BOOKING_AGE_PREFIX}${user.id}`, age); } catch { /* storage unavailable */ }
       try {

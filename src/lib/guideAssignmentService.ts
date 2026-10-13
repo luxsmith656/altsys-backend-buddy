@@ -152,7 +152,7 @@ export async function acceptGuideAssignment({
           : `${guideName} accepted your hike booking for ${effectiveDate}. Dispatch is still confirming the remaining guide assignment.`,
         category: 'booking',
         link: `/hiker?booking=${encodeURIComponent(bookingId)}`,
-      }).catch(() => warnings.push('In-app notification could not be delivered.'));
+      });
     }
 
     return warnings.length ? { success: true, warnings } : { success: true };
@@ -188,7 +188,7 @@ export async function addAdditionalGuideToBooking({ bookingId, guideId, guideUse
       title: 'Additional Hike Guide Assignment',
       body: `You have been assigned as an additional guide for Booking #${bookingId.slice(0, 8)} on ${date}. Please review and accept.`,
       category: 'booking',
-    }).catch(() => warnings.push('Guide notification could not be delivered.'));
+    });
     return warnings.length ? { success: true, warnings } : { success: true };
   } catch (error: any) {
     return { success: false, error: error?.message || 'Failed to assign the additional guide' };
@@ -413,7 +413,7 @@ export async function assignGuideToBooking({
       title: 'New Hike Booking Assignment',
       body: `You have been assigned to Booking #${bookingId.slice(0, 8)} on ${data.bookingDate}. Please review and accept.`,
       category: 'booking',
-    }).catch(() => warnings.push('Guide notification could not be delivered.'));
+    });
     return warnings.length ? { success: true, warnings } : { success: true };
   } catch (error: unknown) {
     const message = error && typeof error === 'object' && 'message' in error ? String(error.message) : 'Failed to assign guide';

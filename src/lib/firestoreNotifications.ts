@@ -97,16 +97,23 @@ export async function notifyUser(
 ): Promise<string | null> {
   const db = getFirebaseDb();
   if (!db) return null;
-  const ref = await addDoc(collection(db, COLLECTION), {
-    userId,
-    title: payload.title,
-    body: payload.body,
-    category: payload.category ?? 'system',
-    link: payload.link ?? null,
-    read: false,
-    createdAt: serverTimestamp(),
-  });
-  return ref.id;
+  // Firestore notifications are best-effort. Booking, chat, SOS, and hike
+  // operations already have their primary Supabase record and must continue
+  // normally when this secondary channel is unavailable.
+  try {
+    const ref = await addDoc(collection(db, COLLECTION), {
+      userId,
+      title: payload.title,
+      body: payload.body,
+      category: payload.category ?? 'system',
+      link: payload.link ?? null,
+      read: false,
+      createdAt: serverTimestamp(),
+    });
+    return ref.id;
+  } catch {
+    return null;
+  }
 }
 
 export async function markFsNotificationRead(id: string): Promise<void> {
