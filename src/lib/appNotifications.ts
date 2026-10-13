@@ -39,6 +39,8 @@ const sortNewest = (items: AppNotification[]) => items
   .slice()
   .sort((a, b) => +new Date(b.createdAt) - +new Date(a.createdAt));
 
+let subscriptionSequence = 0;
+
 /**
  * Durable, authenticated notification write. The database RPC validates that
  * the caller is allowed to notify the booking participant before inserting.
@@ -97,8 +99,14 @@ export function subscribeAppNotifications(
     emit();
   })();
 
+  // The navbar and notification page can be mounted together. Supabase
+  // channels are stateful, so reusing one topic would make the second
+  // listener call `.on()` after the first listener already called
+  // `.subscribe()`. Give each consumer its own channel while retaining the
+  // database filter for this user.
+  const channelName = `app-notifications-${encodeURIComponent(userId)}-${++subscriptionSequence}`;
   const channel = (supabase as any)
-    .channel(`app-notifications-${userId}`)
+    .channel(channelName)
     .on('postgres_changes', {
       event: '*',
       schema: 'public',

@@ -6,6 +6,7 @@ const state = vi.hoisted(() => ({
   channel: vi.fn(),
   removeChannel: vi.fn(),
   callbacks: [] as Array<(payload: any) => void>,
+  channelNames: [] as string[],
 }));
 
 vi.mock('@/integrations/supabase/client', () => ({
@@ -23,6 +24,7 @@ describe('Supabase app notifications', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     state.callbacks = [];
+    state.channelNames = [];
     state.rpc.mockResolvedValue({ data: 'notification-1', error: null });
     state.from.mockReturnValue({
       select: () => ({
@@ -31,14 +33,17 @@ describe('Supabase app notifications', () => {
         }),
       }),
     });
-    const channel = {
-      on: vi.fn((_event: string, _config: unknown, callback: (payload: any) => void) => {
-        state.callbacks.push(callback);
-        return channel;
-      }),
-      subscribe: vi.fn(),
-    };
-    state.channel.mockReturnValue(channel);
+    state.channel.mockImplementation((name: string) => {
+      state.channelNames.push(name);
+      const channel = {
+        on: vi.fn((_event: string, _config: unknown, callback: (payload: any) => void) => {
+          state.callbacks.push(callback);
+          return channel;
+        }),
+        subscribe: vi.fn(),
+      };
+      return channel;
+    });
   });
 
   it('passes booking scope to the authorized notification RPC', async () => {
@@ -73,5 +78,16 @@ describe('Supabase app notifications', () => {
     expect(updates.at(-1)?.[0]).toMatchObject({ id: 'notification-1', title: 'Guide assigned' });
     stop();
     expect(state.removeChannel).toHaveBeenCalled();
+  });
+
+  it('uses separate channel instances for concurrent notification listeners', () => {
+    const stopFirst = subscribeAppNotifications('hiker-1', vi.fn());
+    const stopSecond = subscribeAppNotifications('hiker-1', vi.fn());
+
+    expect(state.channelNames).toHaveLength(2);
+    expect(state.channelNames[0]).not.toBe(state.channelNames[1]);
+
+    stopFirst();
+    stopSecond();
   });
 });
