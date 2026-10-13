@@ -16,6 +16,9 @@ export type BackupSummary = {
   fingerprint: string;
   scope_role: BackupRole;
   location_ids: string[];
+  exported_at: string;
+  payload_encoding: 'json' | 'gzip+base64';
+  payload_bytes: number;
   created_at: string;
   updated_at: string;
 };
@@ -69,6 +72,10 @@ function storedPayload(payload: BackupPayload, compressed: { encoding: 'json' | 
   };
 }
 
+function byteLength(value: string) {
+  return new TextEncoder().encode(value).byteLength;
+}
+
 export async function createOperationalBackup(scopeRole: BackupRole, locationIds: string[]) {
   const normalizedLocationIds = [...new Set(locationIds)].sort();
   if (scopeRole !== 'super_admin') throw new Error('Only Central Admin can create operational backups.');
@@ -94,6 +101,9 @@ export async function createOperationalBackup(scopeRole: BackupRole, locationIds
     scope_role: scopeRole,
     location_ids: normalizedLocationIds,
     fingerprint: digest,
+    exported_at: payload.exportedAt,
+    payload_encoding: compressed.encoding,
+    payload_bytes: byteLength(compressed.data),
     payload: storedPayload(payload, compressed),
   }, { onConflict: 'owner_id,fingerprint' });
   if (error) throw new Error(`Backup could not be saved: ${error.message}`);
@@ -102,8 +112,8 @@ export async function createOperationalBackup(scopeRole: BackupRole, locationIds
 
 export async function listOperationalBackups() {
   const { data, error } = await supabase.from('backup_snapshots' as any)
-    .select('id,fingerprint,scope_role,location_ids,created_at,updated_at')
-    .order('updated_at', { ascending: false })
+    .select('id,fingerprint,scope_role,location_ids,exported_at,payload_encoding,payload_bytes,created_at,updated_at')
+    .order('exported_at', { ascending: false })
     .limit(20);
   if (error) throw new Error(`Backups could not be loaded: ${error.message}`);
   return (data ?? []) as unknown as BackupSummary[];
@@ -126,6 +136,9 @@ export async function saveUploadedBackup(payload: BackupPayload, scopeRole: Back
     scope_role: payload.scopeRole,
     location_ids: uploadedLocationIds,
     fingerprint: digest,
+    exported_at: payload.exportedAt,
+    payload_encoding: compressed.encoding,
+    payload_bytes: byteLength(compressed.data),
     payload: storedPayload(payload, compressed),
   }, { onConflict: 'owner_id,fingerprint' });
   if (error) throw new Error(`Backup could not be uploaded: ${error.message}`);
@@ -162,13 +175,33 @@ async function decodeStoredPayload(value: unknown): Promise<BackupPayload> {
 
 export async function restoreLatestOperationalBackup() {
   const { data, error } = await supabase.from('backup_snapshots' as any)
-    .select('payload')
-    .order('updated_at', { ascending: false })
+    .select('id')
+    .order('exported_at', { ascending: false })
     .limit(1)
     .maybeSingle();
   if (error) throw new Error(`Backup could not be loaded for restore: ${error.message}`);
   if (!data) throw new Error('No stored backup is available to restore.');
-  const payload = await decodeStoredPayload((data as unknown as { payload: unknown }).payload);
+  return restoreOperationalBackupById(String((data as unknown as { id: string }).id));
+}
+
+export async function loadOperationalBackup(id: string) {
+  const { data, error } = await supabase.from('backup_snapshots' as any)
+    .select('payload')
+    .eq('id', id)
+    .maybeSingle();
+  if (error) throw new Error(`Backup could not be loaded: ${error.message}`);
+  if (!data) throw new Error('That backup version is no longer available.');
+  return decodeStoredPayload((data as unknown as { payload: unknown }).payload);
+}
+
+export async function downloadStoredBackup(id: string) {
+  const payload = await loadOperationalBackup(id);
+  downloadBackup(payload);
+  return payload;
+}
+
+export async function restoreOperationalBackupById(id: string) {
+  const payload = await loadOperationalBackup(id);
   await restoreOperationalBackup(payload);
   return payload;
 }

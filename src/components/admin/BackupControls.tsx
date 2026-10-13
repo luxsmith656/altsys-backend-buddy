@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Archive, Download, RefreshCw, RotateCcw, Upload } from 'lucide-react';
+import { Archive, Download, HardDrive, RefreshCw, RotateCcw, Upload } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
@@ -7,12 +7,17 @@ import {
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import {
   createOperationalBackup,
   downloadBackup,
   listOperationalBackups,
+  downloadStoredBackup,
+  restoreOperationalBackupById,
   restoreLatestOperationalBackup,
   restoreOperationalBackup,
   saveUploadedBackup,
@@ -108,6 +113,37 @@ export default function BackupControls({ role, locationIds }: { role: BackupRole
     }
   };
 
+  const downloadSnapshot = async (snapshot: BackupSummary) => {
+    try {
+      await downloadStoredBackup(snapshot.id);
+    } catch (error) {
+      setStatus('error');
+      setStatusMessage(error instanceof Error ? error.message : 'Backup download failed.');
+    }
+  };
+
+  const restoreSnapshot = async (snapshot: BackupSummary) => {
+    if (saving) return;
+    setSaving(true);
+    try {
+      const payload = await restoreOperationalBackupById(snapshot.id);
+      setLastBackup(payload);
+      setStatus('restored');
+      setStatusMessage(`Restored the ${new Date(payload.exportedAt).toLocaleString('en-PH')} version.`);
+    } catch (error) {
+      setStatus('error');
+      setStatusMessage(error instanceof Error ? error.message : 'Backup restore failed.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const formatSize = (bytes: number) => {
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  };
+
   return (
     <div className="fixed bottom-20 right-4 z-[1200] sm:bottom-4">
       <input ref={fileRef} type="file" accept="application/json,.json" className="hidden" onChange={(event) => void onUpload(event.target.files?.[0])} />
@@ -133,6 +169,35 @@ export default function BackupControls({ role, locationIds }: { role: BackupRole
           <DropdownMenuItem disabled={!snapshots.length || saving} onSelect={() => void restoreLatest()}>
             <RotateCcw className="mr-2 h-4 w-4" />Restore latest
           </DropdownMenuItem>
+          <DropdownMenuSub>
+            <DropdownMenuSubTrigger disabled={!snapshots.length}>
+              <HardDrive className="mr-2 h-4 w-4" />Backup history ({snapshots.length})
+            </DropdownMenuSubTrigger>
+            <DropdownMenuSubContent className="max-h-80 w-72 overflow-y-auto">
+              {snapshots.map((snapshot) => (
+                <DropdownMenuSub key={snapshot.id}>
+                  <DropdownMenuSubTrigger className="pr-2">
+                    <span className="min-w-0">
+                      <span className="block truncate text-xs font-medium">
+                        {new Date(snapshot.exported_at).toLocaleString('en-PH')}
+                      </span>
+                      <span className="block text-[11px] text-muted-foreground">
+                        {formatSize(snapshot.payload_bytes)} · {snapshot.payload_encoding === 'gzip+base64' ? 'compressed' : 'JSON'}
+                      </span>
+                    </span>
+                  </DropdownMenuSubTrigger>
+                  <DropdownMenuSubContent>
+                    <DropdownMenuItem onSelect={() => void downloadSnapshot(snapshot)}>
+                      <Download className="mr-2 h-4 w-4" />Download this version
+                    </DropdownMenuItem>
+                    <DropdownMenuItem disabled={saving} onSelect={() => void restoreSnapshot(snapshot)}>
+                      <RotateCcw className="mr-2 h-4 w-4" />Restore this version
+                    </DropdownMenuItem>
+                  </DropdownMenuSubContent>
+                </DropdownMenuSub>
+              ))}
+            </DropdownMenuSubContent>
+          </DropdownMenuSub>
           <DropdownMenuSeparator />
           <div className="px-2 py-1.5 text-xs text-muted-foreground" aria-live="polite">
             <div className={`mb-1 flex items-center gap-1.5 font-medium ${status === 'error' ? 'text-destructive' : 'text-foreground'}`}>
