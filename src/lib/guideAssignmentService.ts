@@ -143,13 +143,13 @@ export async function acceptGuideAssignment({
     } as any);
     if (messageError) warnings.push(`Booking chat: ${messageError.message}`);
 
-    // 4. Notify Hiker
-    if (effectiveHikerId) {
+    // A confirmed status transition is delivered by the booking lifecycle
+    // trigger. Keep the earlier, partial-assignment notice so multi-guide
+    // groups still know one guide accepted while dispatch continues.
+    if (effectiveHikerId && bookingStatus !== 'confirmed') {
       await notifyUser(effectiveHikerId, {
-        title: bookingStatus === 'confirmed' ? '🎉 Mountain Guides Confirmed!' : '📋 Guide Assignment Accepted',
-        body: bookingStatus === 'confirmed'
-          ? `All required mountain guides have accepted your hike booking for ${effectiveDate}.`
-          : `${guideName} accepted your hike booking for ${effectiveDate}. Dispatch is still confirming the remaining guide assignment.`,
+        title: '📋 Guide Assignment Accepted',
+        body: `${guideName} accepted your hike booking for ${effectiveDate}. Dispatch is still confirming the remaining guide assignment.`,
         category: 'booking',
         link: `/hiker?booking=${encodeURIComponent(bookingId)}`,
         bookingId,

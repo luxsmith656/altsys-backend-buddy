@@ -7,7 +7,6 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { Bell, Loader2, Send } from 'lucide-react';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
-import { notifyUser } from '@/lib/firestoreNotifications';
 import { containsProfanity, PROFANITY_NOTICE } from '@/lib/contentModeration';
 import { Textarea } from '@/components/ui/textarea';
 
@@ -120,48 +119,9 @@ export default function BookingChat({
       }));
       setTimeout(() => scroller.current?.scrollTo({ top: 99999 }), 50);
     }
-    // Persist a realtime bell notification for the other side of the booking.
-    // The chat itself remains the source of truth; this only makes new messages discoverable.
-    const { data: booking } = await supabase.from('bookings').select('user_id,location_id').eq('id', bookingId).maybeSingle();
-    if (role === 'admin' && booking?.user_id) {
-      await notifyUser(booking.user_id, {
-        title: 'New booking message',
-        body: 'An administrator sent you a message about your booking.',
-        category: 'booking',
-        link: `/hiker?bookingId=${encodeURIComponent(bookingId)}`,
-        bookingId,
-      }).catch(() => null);
-    } else if (role === 'guide' && booking?.user_id) {
-      await notifyUser(booking.user_id, {
-        title: 'New guide message',
-        body: 'Your assigned guide sent a message about your booking.',
-        category: 'booking',
-        link: `/hiker?bookingId=${encodeURIComponent(bookingId)}`,
-        bookingId,
-      }).catch(() => null);
-    } else if (role === 'hiker') {
-      const { data: assignments } = await supabase.from('booking_assignments' as any).select('guide_id, guides(user_id)').eq('booking_id', bookingId).in('status', ['pending', 'accepted']);
-      const guideIds = ((assignments as any[]) || []).map((item) => item.guides?.user_id).filter(Boolean);
-      const adminIds = booking?.location_id
-        ? await supabase.from('user_locations').select('user_id').eq('location_id', booking.location_id).then(({ data }) => (data || []).map((item) => item.user_id).filter(Boolean))
-        : [];
-      await Promise.all([
-        ...guideIds.map((id) => notifyUser(id, {
-          title: 'New booking message',
-          body: 'A hiker sent a message about an assigned booking.',
-          category: 'booking',
-          link: `/guide?bookingId=${encodeURIComponent(bookingId)}`,
-          bookingId,
-        }).catch(() => null)),
-        ...adminIds.map((id) => notifyUser(id, {
-          title: 'New hiker booking message',
-          body: 'A hiker sent a message about a booking in your trailhead.',
-          category: 'booking',
-          link: `/admin?tab=requests&bookingId=${encodeURIComponent(bookingId)}`,
-          bookingId,
-        }).catch(() => null)),
-      ]);
-    }
+    // A database trigger creates the durable bell notification for the
+    // message recipient. Keeping delivery beside the insert avoids a client
+    // refresh or RLS difference silently losing a booking-chat alert.
     if (!content) setText('');
     return true;
   };
@@ -170,16 +130,12 @@ export default function BookingChat({
     const target = booking?.requested_new_date;
     if (!target && approved) { toast.error('No requested date on file'); return; }
     if (!approved && decisionReason.trim().length < 5) { toast.error('Add a reason for declining the request.'); return; }
-    const { data, error } = await supabase.rpc('admin_approve_booking_reschedule' as any, {
+    const { error } = await supabase.rpc('admin_approve_booking_reschedule' as any, {
       p_booking_id: bookingId,
       p_approved: approved,
       p_reason: decisionReason.trim() || null,
     });
     if (error) { toast.error(error.code === 'PGRST202' ? 'Apply the latest reschedule migration first.' : error.message); return; }
-    const result = data as { hikerUserId?: string; guideUserIds?: string[] } | null;
-    const message = approved ? `Reschedule approved — new date: ${target}.` : `Reschedule declined. Reason: ${decisionReason.trim()}`;
-    if (result?.hikerUserId) await notifyUser(result.hikerUserId, { title: approved ? 'Reschedule approved' : 'Reschedule declined', body: message, category: 'booking', bookingId: booking.id }).catch(() => null);
-    await Promise.all((result?.guideUserIds || []).map((id) => notifyUser(id, { title: 'Booking date updated', body: message, category: 'booking', bookingId: booking.id }).catch(() => null)));
     toast.success(approved ? 'Reschedule approved' : 'Reschedule declined');
     setDecisionReason('');
     onAfterReschedule?.();

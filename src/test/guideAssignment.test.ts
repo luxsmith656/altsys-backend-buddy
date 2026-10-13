@@ -97,7 +97,7 @@ describe('Guide Assignment & Confirmation Service', () => {
     expect(ids).toContain('capacity');
   });
 
-  it('accepts a guide assignment, persists booking metadata, and notifies the hiker', async () => {
+  it('accepts a guide assignment, persists booking metadata, and lets the lifecycle trigger notify confirmation', async () => {
     const result = await acceptGuideAssignment({
       assignmentId: 'assign-1', bookingId: 'booking-123', guideId: 'guide-1', guideName: 'Juan Dela Cruz',
       guideUserId: 'user-guide-1', hikerUserId: 'user-hiker-1', bookingDate: '2026-08-25',
@@ -110,7 +110,7 @@ describe('Guide Assignment & Confirmation Service', () => {
     const bookingUpdate = mockState.operations.find((operation) => operation.table === 'bookings' && operation.method === 'update');
     expect(bookingUpdate).toBeDefined();
     expect(parseMeta((bookingUpdate?.payload as { notes: string }).notes)).toMatchObject({ assignedGuideId: 'guide-1', guideStatus: 'accepted' });
-    expect(mockState.notifyUser).toHaveBeenCalledWith('user-hiker-1', expect.objectContaining({ category: 'booking' }));
+    expect(mockState.notifyUser).not.toHaveBeenCalled();
     expect(mockState.confirmReservation).toHaveBeenCalledExactlyOnceWith({ id: 'booking-123' });
   });
 
