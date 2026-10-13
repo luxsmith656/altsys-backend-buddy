@@ -246,9 +246,9 @@ export default function CentralDashboard() {
       <div className="max-w-7xl mx-auto space-y-6">
         {/* Executive Command Header */}
         <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} className="space-y-4">
-          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-4 border-b border-border/30">
-            <div>
-              <div className="flex items-center gap-2 mb-1">
+          <div className="flex flex-col justify-between gap-4 border-b border-border/30 pb-4 lg:flex-row lg:items-center">
+            <div className="min-w-0">
+              <div className="mb-1 flex flex-wrap items-center gap-2">
                 <Badge variant="outline" className="text-[10px] uppercase font-bold tracking-wider bg-primary/10 text-primary border-primary/20">
                   Municipal Command
                 </Badge>
@@ -262,14 +262,14 @@ export default function CentralDashboard() {
               </p>
             </div>
 
-            <div className="flex items-center gap-3">
+            <div className="flex min-w-0 flex-col gap-2 min-[380px]:flex-row min-[380px]:items-center sm:gap-3">
               <LocationSwitcher allowAll />
               <Button
                 variant="outline"
                 size="sm"
                 onClick={loadStats}
                 disabled={loading}
-                className="gap-1.5 text-xs h-9 font-semibold"
+                className="w-full gap-1.5 text-xs font-semibold min-[380px]:w-auto"
               >
                 <RefreshCw className={`h-3.5 w-3.5 ${loading ? 'animate-spin' : ''}`} />
                 {loading ? 'Syncing...' : 'Refresh'}
@@ -355,7 +355,7 @@ export default function CentralDashboard() {
           className="flex w-full flex-col gap-6 md:flex-row"
         >
           {/* Sidebar Nav */}
-          <div className="w-full md:w-64 shrink-0 md:sticky md:top-24 h-max">
+          <div className="hidden h-max w-full shrink-0 md:sticky md:top-24 md:block md:w-64">
             <TabsList className="glass-card flex flex-row md:flex-col p-2 gap-1 h-auto w-full items-stretch justify-start overflow-x-auto md:overflow-visible border border-border/30">
               <TabsTrigger
                 value="overview"
@@ -405,8 +405,8 @@ export default function CentralDashboard() {
             <TabsContent value="overview" className="space-y-6 mt-0">
               {/* Trailhead Station Cards Grid */}
               <div>
-                <div className="flex items-center justify-between mb-3">
-                  <h3 className="text-sm font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+                <div className="mb-3 flex flex-col gap-1.5 sm:flex-row sm:items-center sm:justify-between">
+                  <h3 className="flex items-start gap-1.5 text-sm font-bold uppercase tracking-wider text-muted-foreground sm:items-center">
                     <Building2 className="h-4 w-4 text-primary" /> Official Jump-Off Stations (Mt. Kalisungan)
                   </h3>
                   <span className="text-xs text-muted-foreground">3 Official Active Stations</span>
@@ -446,7 +446,7 @@ export default function CentralDashboard() {
                             </div>
                           </CardHeader>
 
-                          <CardContent className={activeLocationId ? 'grid grid-cols-2 gap-x-8 gap-y-1 py-3 text-xs md:grid-cols-4' : 'py-3 text-xs space-y-2'}>
+                          <CardContent className={activeLocationId ? 'grid grid-cols-1 gap-x-8 gap-y-1 py-3 text-xs min-[420px]:grid-cols-2 md:grid-cols-4' : 'py-3 text-xs space-y-2'}>
                             <Row label="Total Bookings (All Time)" value={s.bookingsTotal} />
                             <Row label="Current Month Ascents" value={s.bookingsMonth} />
                             <Row label="Scheduled Today" value={s.bookingsToday} />
@@ -491,18 +491,18 @@ export default function CentralDashboard() {
                     </div>
 
                     {/* Search and Status filter controls */}
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <div className="relative">
+                    <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
+                      <div className="relative w-full sm:w-auto">
                         <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-muted-foreground" />
                         <Input
                           placeholder="Search hiker, ID, date..."
                           value={ledgerSearch}
                           onChange={(e) => setLedgerSearch(e.target.value)}
-                          className="pl-8 text-xs h-8 w-44 lg:w-56"
+                          className="h-8 w-full pl-8 text-xs sm:w-44 lg:w-56"
                         />
                       </div>
 
-                      <div className="flex items-center gap-1 bg-background/80 p-0.5 rounded-lg border border-border/30">
+                      <div className="flex max-w-full items-center gap-1 overflow-x-auto rounded-lg border border-border/30 bg-background/80 p-0.5">
                         {(['all', 'confirmed', 'active', 'completed', 'cancelled'] as const).map((st) => (
                           <button
                             key={st}
@@ -640,9 +640,9 @@ export default function CentralDashboard() {
           { value: 'pricing', label: 'Capacity', icon: DollarSign },
           { value: 'announcements', label: 'Alerts', icon: Megaphone },
         ].map(({ value, label, icon: Icon }) => (
-          <button key={value} type="button" onClick={() => setActiveTab(value)} className={`flex min-w-0 flex-col items-center gap-1 rounded-xl px-1 py-2 text-[10px] font-semibold transition-colors ${activeTab === value ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-secondary'}`}>
+          <button key={value} type="button" onClick={() => setActiveTab(value)} className={`flex min-w-0 flex-col items-center gap-1 rounded-xl px-0.5 py-2 text-[9px] font-semibold leading-tight transition-colors min-[390px]:px-1 min-[390px]:text-[10px] ${activeTab === value ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-secondary'}`}>
             <Icon className="h-4 w-4" />
-            <span className="truncate">{label}</span>
+            <span className="w-full truncate text-center">{label}</span>
           </button>
         ))}
       </nav>
@@ -652,9 +652,9 @@ export default function CentralDashboard() {
 
 function Row({ label, value }: { label: string; value: React.ReactNode }) {
   return (
-    <div className="flex items-center justify-between border-b border-border/20 last:border-0 py-1.5">
-      <span className="text-xs text-muted-foreground">{label}</span>
-      <span className="font-semibold text-foreground">{value}</span>
+    <div className="flex min-w-0 items-start justify-between gap-3 border-b border-border/20 py-1.5 last:border-0">
+      <span className="min-w-0 text-xs text-muted-foreground">{label}</span>
+      <span className="shrink-0 text-right font-semibold text-foreground">{value}</span>
     </div>
   );
 }

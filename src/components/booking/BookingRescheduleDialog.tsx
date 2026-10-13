@@ -84,7 +84,7 @@ export default function BookingRescheduleDialog({ bookingId, bookingDate, open, 
           <DialogDescription>Current booking date: <strong>{format(new Date(`${bookingDate}T00:00:00`), 'MMM d, yyyy')}</strong>. The local admin must approve the new date.</DialogDescription>
         </DialogHeader>
         <div className="space-y-3">
-          <div className="flex gap-2">
+          <div className="grid grid-cols-1 gap-2 min-[380px]:grid-cols-[minmax(0,1fr)_auto]">
             <Input aria-label="Requested hike date" type="date" value={newDate} min={new Date().toISOString().slice(0, 10)} onChange={(event) => setNewDate(event.target.value)} />
             <Button disabled={sending} onClick={() => void submit()}>{sending ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Send request'}</Button>
           </div>

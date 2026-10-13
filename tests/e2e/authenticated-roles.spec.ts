@@ -10,6 +10,21 @@ const ROLE_CASES = [
   { role: 'hiker', email: process.env.E2E_HIKER_EMAIL, password: process.env.E2E_HIKER_PASSWORD, path: '/hiker', pageKey: 'hiker' },
 ] as const;
 
+async function expectNoHorizontalOverflow(page: import('@playwright/test').Page, label: string) {
+  const result = await page.evaluate(() => ({
+    overflow: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+    viewport: document.documentElement.clientWidth,
+    widest: Array.from(document.querySelectorAll<HTMLElement>('button, [role="dialog"], main, nav'))
+      .map((element) => ({
+        text: element.textContent?.trim().slice(0, 80) || element.tagName,
+        right: Math.round(element.getBoundingClientRect().right),
+      }))
+      .filter((item) => item.right > document.documentElement.clientWidth + 2)
+      .slice(0, 5),
+  }));
+  expect(result.overflow, `${label} overflowed by ${result.overflow}px: ${JSON.stringify(result.widest)}`).toBeLessThanOrEqual(2);
+}
+
 for (const account of ROLE_CASES) {
   test(`authenticated ${account.role} can load its dashboard and survive reload`, async ({ page }) => {
     const missing = [account.email ? '' : 'email', account.password ? '' : 'password'].filter(Boolean);
@@ -39,10 +54,15 @@ for (const account of ROLE_CASES) {
     }
     await monitor.waitForRequests();
 
+    await page.setViewportSize({ width: 390, height: 844 });
+    await expectNoHorizontalOverflow(page, `${account.role} dashboard`);
+    await expect(page.getByTestId('fatal-error-boundary')).toHaveCount(0);
+
     await page.reload({ waitUntil: 'domcontentloaded' });
     await expect(page).toHaveURL(new RegExp(`${account.path.replace('/', '\\/')}(?:\\?.*)?$`), { timeout: 15_000 });
     await expectRenderedPage(page, account.pageKey, /Dashboard|Hike|Checkpoint|Duty|Central|Emergency/i);
     if (account.role === 'guide') await expect(page.getByRole('tab', { name: /Earnings/i })).toBeVisible();
+    await expectNoHorizontalOverflow(page, `${account.role} dashboard after mobile reload`);
     await monitor.waitForRequests();
     monitor.assertClean();
   });

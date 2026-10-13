@@ -143,7 +143,7 @@ export default function BookingChat({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg">
+      <DialogContent className="max-w-lg overflow-x-hidden">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Bell className="h-4 w-4 text-primary" /> Booking conversation
@@ -177,7 +177,7 @@ export default function BookingChat({
           )}
         </div>
 
-        <div className="flex gap-2">
+        <div className="flex min-w-0 gap-2">
           <Input value={text} onChange={(e) => setText(e.target.value)} placeholder="Type a message…"
             onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); void send(); } }} />
           <Button onClick={() => void send()} disabled={sending || !text.trim()}>
@@ -205,12 +205,12 @@ function AdminRescheduleControls({ bookingId, decisionReason, onReasonChange, on
   }, [bookingId]);
   if (!b?.requested_new_date || b.status !== 'adjustment_pending') return null;
   return (
-    <div className="border-t pt-3 space-y-2 bg-sky-50 dark:bg-sky-950/30 -mx-6 px-6 py-3">
+    <div className="-mx-4 space-y-2 border-t bg-sky-50 px-4 py-3 dark:bg-sky-950/30 sm:-mx-6 sm:px-6">
       <p className="text-sm font-medium">Reschedule request pending</p>
       <p className="text-xs text-muted-foreground">From {b.booking_date} → <strong>{b.requested_new_date}</strong></p>
       {hikerReason && <p className="rounded-md bg-background/70 p-2 text-sm"><strong>Hiker's reason:</strong> {hikerReason}</p>}
       <Textarea aria-label="Admin reschedule decision reason" value={decisionReason} onChange={(event) => onReasonChange(event.target.value)} rows={2} placeholder="Reason if declining or note for the hiker" />
-      <div className="flex gap-2">
+      <div className="grid grid-cols-1 gap-2 min-[380px]:grid-cols-2">
         <Button size="sm" onClick={() => onDecide(b, true)}>Approve new date</Button>
         <Button size="sm" variant="destructive" onClick={() => onDecide(b, false)}>Decline</Button>
       </div>

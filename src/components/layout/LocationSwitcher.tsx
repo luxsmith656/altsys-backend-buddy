@@ -17,13 +17,13 @@ export default function LocationSwitcher({ allowAll = false, scope = 'all', clas
     .filter((loc) => !loc.name.toLowerCase().includes('mount kalisungan') && loc.slug !== 'mt-kalisungan');
 
   return (
-    <div className={`flex items-center gap-2 ${className || ''}`}>
-      <MapPin className="h-4 w-4 text-primary" />
+    <div className={`flex min-w-0 max-w-full flex-1 items-center gap-2 sm:flex-initial ${className || ''}`}>
+      <MapPin className="h-4 w-4 shrink-0 text-primary" />
       <Select
         value={activeLocationId ?? '__all__'}
         onValueChange={(v) => setActiveLocationId(v === '__all__' ? null : v)}
       >
-        <SelectTrigger className="w-[220px] h-9">
+        <SelectTrigger className="h-9 min-w-0 flex-1 sm:w-[220px] sm:flex-none">
           <SelectValue placeholder="Select location" />
         </SelectTrigger>
         <SelectContent className="z-[3100]">

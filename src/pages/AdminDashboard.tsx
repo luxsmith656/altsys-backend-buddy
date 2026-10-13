@@ -1883,7 +1883,7 @@ export default function AdminDashboard() {
                 value={activeLocationId ?? 'all'}
                 onValueChange={(val) => setActiveLocationId(val === 'all' ? null : val)}
               >
-                <SelectTrigger className="h-8 text-xs font-semibold w-auto min-w-[200px] bg-background/80 border-border/40">
+                <SelectTrigger className="h-8 min-w-0 w-full max-w-[280px] bg-background/80 text-xs font-semibold border-border/40 min-[420px]:w-auto min-[420px]:min-w-[200px]">
                   <SelectValue placeholder="All Locations & Trails" />
                 </SelectTrigger>
                 <SelectContent>
@@ -2091,7 +2091,7 @@ export default function AdminDashboard() {
                         'border-destructive/10 opacity-80'
                       }`}
                     >
-                      <CardContent className="p-5">
+                      <CardContent className="p-3 sm:p-5">
                         <div className="flex flex-wrap items-start justify-between gap-4">
                           <div className="space-y-2 flex-1 min-w-0">
                             <div className="flex items-center gap-2 flex-wrap">
@@ -2101,7 +2101,7 @@ export default function AdminDashboard() {
                               {meta.isWalkIn && <Badge variant="outline" className="border-amber-500/40 text-amber-600 dark:text-amber-400">Walk-in</Badge>}
                               <span className="text-xs text-muted-foreground font-mono">{b.id.slice(0, 8)}…</span>
                             </div>
-                            <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-6 gap-y-1.5 text-sm">
+                            <div className="grid grid-cols-1 gap-x-6 gap-y-1.5 text-sm min-[380px]:grid-cols-2 sm:grid-cols-3">
                               <div>
                                 <p className="text-xs text-muted-foreground">Hiker Name</p>
                                 <p className="font-semibold truncate">{meta.fullName || b.emergency_contact_name || '—'}</p>

@@ -533,12 +533,12 @@ export default function HikerDashboard() {
             animate={{ opacity: 1, y: 0 }}
             className="mb-6 p-4 rounded-2xl bg-emerald-500/15 border border-emerald-500/30 backdrop-blur-md flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-lg"
           >
-            <div className="flex items-center gap-3">
+            <div className="flex min-w-0 items-start gap-3 sm:items-center">
               <div className="h-10 w-10 rounded-xl bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 grid place-items-center shrink-0">
                 <Radio className="h-5 w-5 animate-pulse text-emerald-500" />
               </div>
               <div>
-                <p className="font-semibold text-sm text-foreground flex items-center gap-1.5">
+                <p className="flex flex-wrap items-center gap-1.5 text-sm font-semibold text-foreground">
                   Live Hike Session Active
                   <Badge className="bg-emerald-500 text-white text-[10px] py-0">GPS Tracking On</Badge>
                 </p>
@@ -547,10 +547,10 @@ export default function HikerDashboard() {
                 </p>
               </div>
             </div>
-            <div className="flex items-center gap-2 shrink-0">
+            <div className="flex w-full items-center gap-2 sm:w-auto sm:shrink-0">
               <Button
                 size="sm"
-                className="gap-1.5 text-xs bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm"
+                className="w-full gap-1.5 bg-emerald-600 text-xs text-white shadow-sm hover:bg-emerald-700 sm:w-auto"
                 onClick={() => navigate('/map?auto=1')}
               >
                 <Mountain className="h-3.5 w-3.5" />
@@ -619,7 +619,7 @@ export default function HikerDashboard() {
                           </div>
                         )}
                       </div>
-                      <div className="flex gap-2 pt-1">
+                      <div className="grid grid-cols-1 gap-2 pt-1 min-[420px]:grid-cols-2">
                         <Button
                           size="sm"
                           className="gap-1.5 flex-1"
@@ -793,7 +793,7 @@ export default function HikerDashboard() {
                           <p className="text-xs text-primary font-medium mt-0.5">Assigned Guide: {hikeItem.assignedGuide}</p>
                         )}
                       </div>
-                      <div className="flex items-center gap-2">
+                      <div className="grid w-full grid-cols-1 gap-2 min-[420px]:w-auto min-[420px]:grid-cols-2 sm:flex sm:flex-wrap sm:items-center">
                         {reviewBookingId && (
                           <Button
                             size="sm"
@@ -945,7 +945,7 @@ export default function HikerDashboard() {
                 </Button>
               </div>
             ) : (
-              <div className="grid grid-cols-2 gap-3 sm:grid-cols-2 lg:grid-cols-3 lg:gap-4">
+              <div className="grid grid-cols-1 gap-3 min-[420px]:grid-cols-2 lg:grid-cols-3 lg:gap-4">
                 {visibleBookings.map((b) => {
                   const meta = parseMeta(b.notes);
                   const receipt = bookingReceipt(b);
@@ -1133,7 +1133,7 @@ export default function HikerDashboard() {
                       </Button>
                       {/* Only unstarted bookings can request a different date. */}
                       {canChange(b) && (
-                      <div className="grid grid-cols-2 gap-2">
+                      <div className="grid grid-cols-1 gap-2 min-[360px]:grid-cols-2">
                         <Button size="sm" variant="outline" className={`relative w-full gap-1 px-2 text-[11px] ${bookingMessageAlerts.hasUnread(b.id) ? 'border-primary text-primary shadow-[0_0_14px_hsl(var(--primary)/0.45)] animate-pulse' : ''}`} onClick={() => setChatBooking({ id: b.id, date: b.booking_date })}>
                           <MessageCircle className="h-3.5 w-3.5" /> Chat
                           {bookingMessageAlerts.hasUnread(b.id) && <span className="absolute -right-1 -top-1 min-w-4 rounded-full bg-destructive px-1 text-[9px] leading-4 text-destructive-foreground">{bookingMessageAlerts.unreadCount(b.id) > 9 ? '9+' : bookingMessageAlerts.unreadCount(b.id)}</span>}
@@ -1175,7 +1175,7 @@ export default function HikerDashboard() {
                 Booking Ref: {companionQrBooking?.id?.slice(0, 8)}
               </p>
             </div>
-            <div className="flex gap-2">
+            <div className="grid grid-cols-1 gap-2 min-[360px]:grid-cols-2">
               <Button
                 variant="outline"
                 className="w-full text-xs"
