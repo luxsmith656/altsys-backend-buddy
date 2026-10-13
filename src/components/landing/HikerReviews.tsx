@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { Quote, Star } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
+import { officialPublicTrailName } from '@/lib/mapTrailheads';
 
 interface Review {
   id: string;
@@ -19,7 +20,7 @@ const fallbackReviews: Review[] = [
     id: '1',
     reviewer_name: 'Maria Santos',
     rating: 5,
-    trail_name: 'Summit Trail',
+    trail_name: 'Lamot 2 Trail',
     review_text: 'The trail was absolutely breathtaking! The AI assistant helped us prepare perfectly — it even warned us about the slippery section near the summit.',
     created_at: '2026-02-15',
   },
@@ -27,7 +28,7 @@ const fallbackReviews: Review[] = [
     id: '2',
     reviewer_name: 'Juan Dela Cruz',
     rating: 5,
-    trail_name: 'Ridge Route',
+    trail_name: 'Lamot 1 Trail',
     review_text: 'As a first-time hiker, the offline AI guide was a lifesaver. Even without signal on the mountain, I could ask questions and get accurate answers.',
     created_at: '2026-01-20',
   },
@@ -35,7 +36,7 @@ const fallbackReviews: Review[] = [
     id: '3',
     reviewer_name: 'Angela Reyes',
     rating: 4,
-    trail_name: 'Scenic Loop',
+    trail_name: 'Sto. Tomas Trail',
     review_text: 'Beautiful sunrise hike! The booking system was smooth and the QR code made check-in super fast. My family felt safe knowing the ranger tracking was active.',
     created_at: '2025-12-10',
   },
@@ -43,7 +44,7 @@ const fallbackReviews: Review[] = [
     id: '4',
     reviewer_name: 'Carlos Mendoza',
     rating: 5,
-    trail_name: 'Summit Trail',
+    trail_name: 'Lamot 2 Trail',
     review_text: "I've hiked Kalisungan many times but this tracking system changed everything. Real-time elevation profile and AI chatbot with offline mode — like a personal guide!",
     created_at: '2026-01-05',
   },
@@ -51,7 +52,7 @@ const fallbackReviews: Review[] = [
     id: '5',
     reviewer_name: 'Patricia Villanueva',
     rating: 5,
-    trail_name: 'Ridge Route',
+    trail_name: 'Lamot 1 Trail',
     review_text: 'Brought a group of 8 friends and the group booking feature was perfect. The system even reminded us what to bring based on the weather forecast.',
     created_at: '2026-02-01',
   },
@@ -59,7 +60,7 @@ const fallbackReviews: Review[] = [
     id: '6',
     reviewer_name: 'Roberto Aquino',
     rating: 4,
-    trail_name: 'Scenic Loop',
+    trail_name: 'Sto. Tomas Trail',
     review_text: 'Great trail conditions info from ranger reports. The AI assistant gave me detailed info about nearby food spots even when offline. Very impressed.',
     created_at: '2025-11-25',
   },
@@ -75,7 +76,7 @@ function formatDate(dateStr: string): string {
 function TrailBadge({ trail }: { trail: string }) {
   return (
     <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border border-primary/40 text-primary bg-primary/5 whitespace-nowrap">
-      {trail}
+      {officialPublicTrailName(trail)}
     </span>
   );
 }

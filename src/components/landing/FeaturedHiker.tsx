@@ -3,6 +3,7 @@ import { motion } from 'framer-motion';
 import { Mountain, Quote, Star } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import hikerImage from '@/assets/gallery-hikers.jpg';
+import { officialPublicTrailName } from '@/lib/mapTrailheads';
 
 type FeaturedReview = {
   user_id?: string;
@@ -17,7 +18,7 @@ type FeaturedReview = {
 const fallback: FeaturedReview = {
   reviewer_name: 'A fellow Kalisungan hiker',
   review_text: 'A memorable climb with clear trail guidance from the jump-off to the summit.',
-  trail_name: 'Summit Trail',
+  trail_name: 'Lamot 2 Trail',
   rating: 5,
   photo_url: null,
 };
@@ -77,7 +78,7 @@ export default function FeaturedHiker() {
             <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border/50 pt-4 text-sm">
               <div>
                 <p className="font-semibold">{review.reviewer_name}</p>
-                <p className="text-xs text-muted-foreground">{review.trail_name}</p>
+                <p className="text-xs text-muted-foreground">{officialPublicTrailName(review.trail_name)}</p>
               </div>
               <span className="inline-flex items-center gap-1 text-amber-500" aria-label={`${review.rating} out of 5 stars`}>
                 {Array.from({ length: 5 }).map((_, index) => <Star key={index} className={`h-4 w-4 ${index < review.rating ? 'fill-current' : 'text-border'}`} />)}

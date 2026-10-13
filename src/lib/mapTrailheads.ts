@@ -5,6 +5,14 @@ export interface TrailheadIdentity {
 
 export type OfficialTrailName = 'Lamot 2 Trail' | 'Lamot 1 Trail' | 'Sto. Tomas Trail';
 
+/** Keep legacy public review labels inside the three official route names. */
+export function officialPublicTrailName(routeName = ''): OfficialTrailName {
+  const value = routeName.toLowerCase().replace(/[._-]/g, ' ');
+  if (/lamot\s*1|ridge/.test(value)) return 'Lamot 1 Trail';
+  if (/sto\s*tomas|santo tomas|scenic|plantation/.test(value)) return 'Sto. Tomas Trail';
+  return 'Lamot 2 Trail';
+}
+
 export function getTrailheadIdentity(slug = '', name = ''): TrailheadIdentity | null {
   const value = `${slug} ${name}`.toLowerCase().replace(/[._]/g, ' ');
   if (/lamot[\s-]*1/.test(value)) return { code: 'L1', label: 'Lamot 1' };

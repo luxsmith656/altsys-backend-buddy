@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { filterByTrailhead, getTrailheadIdentity, officialTrailName, officialTrailNameFromLocation, trailheadLabel, trailheadLabelFromLocation } from '@/lib/mapTrailheads';
+import { filterByTrailhead, getTrailheadIdentity, officialPublicTrailName, officialTrailName, officialTrailNameFromLocation, trailheadLabel, trailheadLabelFromLocation } from '@/lib/mapTrailheads';
 
 describe('central map trailhead identity and scope', () => {
   it.each([
@@ -31,6 +31,12 @@ describe('central map trailhead identity and scope', () => {
     expect(officialTrailName('lamot-1', 'Sitio Lamot 1', 'Lamot 1 Classic Summit Trail')).toBe('Lamot 1 Trail');
     expect(officialTrailName('', 'Brgy. Sto. Tomas', 'Sto. Tomas Southern Traverse Trail')).toBe('Sto. Tomas Trail');
     expect(officialTrailName('', '', 'Unknown route', 'Assigned trail')).toBe('Assigned trail');
+  });
+
+  it('keeps legacy landing-page review labels within the official route set', () => {
+    expect(officialPublicTrailName('Summit Trail')).toBe('Lamot 2 Trail');
+    expect(officialPublicTrailName('Ridge Route')).toBe('Lamot 1 Trail');
+    expect(officialPublicTrailName('Scenic Loop')).toBe('Sto. Tomas Trail');
   });
 
   it('shows all station records or only records assigned to the selected station', () => {
