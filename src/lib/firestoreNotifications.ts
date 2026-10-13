@@ -95,12 +95,13 @@ export async function notifyUser(
     link?: string | null;
   },
 ): Promise<string | null> {
-  const db = getFirebaseDb();
-  if (!db) return null;
   // Firestore notifications are best-effort. Booking, chat, SOS, and hike
   // operations already have their primary Supabase record and must continue
   // normally when this secondary channel is unavailable.
   try {
+    const db = getFirebaseDb();
+    if (!db) return null;
+
     const ref = await addDoc(collection(db, COLLECTION), {
       userId,
       title: payload.title,

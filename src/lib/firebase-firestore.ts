@@ -70,14 +70,14 @@ export async function createUserNotification(
   userId: string,
   notification: Omit<FirebaseNotification, 'id' | 'userId' | 'createdAt'>,
 ): Promise<string | null> {
-  if (!isFirebaseConfigured()) return null;
-  const db = getFirebaseDb();
-  if (!db) return null;
-
   // Notifications are an optional delivery channel. A Firestore outage,
   // rules mismatch, or offline session must never turn a saved booking into
   // an error shown to the user.
   try {
+    if (!isFirebaseConfigured()) return null;
+    const db = getFirebaseDb();
+    if (!db) return null;
+
     const docRef = await addDoc(collection(db, 'notifications'), {
       userId,
       title: notification.title,
