@@ -29,7 +29,7 @@ export function createGuideFixture() {
     system_settings: [],
     trail_zones: [],
     guide_reviews: [{ id: 'review-1', reviewer_name: 'Robin Cruz', rating: 5, comment: 'Kept a comfortable pace and checked on everyone at each station.', created_at: '2026-09-01T00:00:00Z' }],
-    guide_off_duty_requests: [], profiles: [],
+    guide_off_duty_requests: [], profiles: [], app_notifications: [],
   };
   return { user, rows };
 }

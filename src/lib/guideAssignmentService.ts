@@ -152,6 +152,7 @@ export async function acceptGuideAssignment({
           : `${guideName} accepted your hike booking for ${effectiveDate}. Dispatch is still confirming the remaining guide assignment.`,
         category: 'booking',
         link: `/hiker?booking=${encodeURIComponent(bookingId)}`,
+        bookingId,
       });
     }
 
@@ -188,6 +189,7 @@ export async function addAdditionalGuideToBooking({ bookingId, guideId, guideUse
       title: 'Additional Hike Guide Assignment',
       body: `You have been assigned as an additional guide for Booking #${bookingId.slice(0, 8)} on ${date}. Please review and accept.`,
       category: 'booking',
+      bookingId,
     });
     return warnings.length ? { success: true, warnings } : { success: true };
   } catch (error: any) {
@@ -227,6 +229,7 @@ export async function declineAndReassignGuide({
         title: 'New Hike Assignment Handover',
         body: `You were reassigned to Booking #${bookingId.slice(0, 8)} on ${date} by ${result.oldGuideName}. Please review and accept.`,
         category: 'booking',
+        bookingId,
       }).catch((error) => console.warn('Guide handoff committed, but replacement notification failed:', error));
     }
     if (result.hikerUserId) {
@@ -248,6 +251,7 @@ export async function declineAndReassignGuide({
           : `Your assigned guide was unable to take your hike on ${date} (${cleanReason}). The LGU dispatch is assigning a replacement.`,
         category: 'booking',
         link: `/hiker?booking=${encodeURIComponent(bookingId)}`,
+        bookingId,
       }).catch((error) => console.warn('Guide handoff committed, but hiker notification failed:', error));
     }
 
@@ -279,6 +283,7 @@ export async function declineAndReassignGuide({
             body: `${result.oldGuideName} returned Booking #${bookingId.slice(0, 8)} to dispatch. Reason: ${cleanReason}`,
             category: 'booking',
             link: '/admin?tab=requests',
+            bookingId,
           }).catch((error) => console.warn('Guide handoff committed, but admin notification failed:', error)),
         ));
       }
@@ -341,6 +346,7 @@ export async function reassignGuideByAdmin({
         title: 'ℹ️ Booking Reassignment Notice',
         body: `Your assignment for Booking #${bookingId.slice(0, 8)} on ${effectiveDate} was reassigned to ${result.guideName} by the admin (Reason: ${cleanReason}).`,
         category: 'booking',
+        bookingId,
       }).catch((error) => console.warn('Guide reassigned, but previous-guide notification failed:', error));
     }
 
@@ -350,6 +356,7 @@ export async function reassignGuideByAdmin({
         title: '📋 New Hike Booking Assignment',
         body: `You have been assigned to lead Booking #${bookingId.slice(0, 8)} on ${effectiveDate}. Please review and accept.`,
         category: 'booking',
+        bookingId,
       }).catch((error) => console.warn('Guide reassigned, but replacement notification failed:', error));
     }
 
@@ -359,6 +366,7 @@ export async function reassignGuideByAdmin({
         title: '🔄 Mountain Guide Changed',
         body: `Your mountain guide for ${effectiveDate} is now ${result.guideName}${result.guidePhone ? ` (${result.guidePhone})` : newGuidePhone ? ` (${newGuidePhone})` : ''}. Reason: ${cleanReason}.`,
         category: 'booking',
+        bookingId,
       }).catch((error) => console.warn('Guide reassigned, but hiker notification failed:', error));
     }
 
@@ -413,6 +421,7 @@ export async function assignGuideToBooking({
       title: 'New Hike Booking Assignment',
       body: `You have been assigned to Booking #${bookingId.slice(0, 8)} on ${data.bookingDate}. Please review and accept.`,
       category: 'booking',
+      bookingId,
     });
     return warnings.length ? { success: true, warnings } : { success: true };
   } catch (error: unknown) {

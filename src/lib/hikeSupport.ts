@@ -91,6 +91,7 @@ export async function requestHorseHelpForBooking(params: {
       title: 'Horse help requested',
       body: `${params.guideName} requested horse help from ${option.label}. Added fee: ${formatPeso(option.fee)}.`,
       category: 'alert',
+      bookingId: params.bookingId,
     }).catch(() => null);
   }
   const { data: admins } = await supabase.from('user_locations').select('user_id').eq('location_id', params.locationId);
@@ -104,6 +105,7 @@ export async function requestHorseHelpForBooking(params: {
     body: `${params.guideName} requested ${option.label}. Collect ${formatPeso(option.fee)} from the group.`,
     category: 'alert',
     link: '/admin?tab=live-map',
+    bookingId: params.bookingId,
   }).catch(() => null)));
   return updatedMeta;
 }

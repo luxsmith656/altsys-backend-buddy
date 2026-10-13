@@ -1,64 +1,43 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
-  addDoc: vi.fn(),
-  collection: vi.fn(() => ({ path: 'notifications' })),
-  getFirebaseDb: vi.fn(() => ({ name: 'test-db' })),
-  isFirebaseConfigured: vi.fn(() => true),
+  create: vi.fn(),
 }));
 
-vi.mock('firebase/firestore', () => ({
-  addDoc: mocks.addDoc,
-  collection: mocks.collection,
-  onSnapshot: vi.fn(),
-  orderBy: vi.fn(),
-  query: vi.fn(),
-  serverTimestamp: vi.fn(() => 'server-timestamp'),
-  where: vi.fn(),
-  deleteDoc: vi.fn(),
-  doc: vi.fn(),
-  updateDoc: vi.fn(),
-  Timestamp: class Timestamp {},
+vi.mock('@/lib/appNotifications', () => ({
+  createAppNotification: mocks.create,
+  subscribeAppNotifications: vi.fn(() => vi.fn()),
+  markAppNotificationRead: vi.fn(),
+  deleteAppNotification: vi.fn(),
 }));
 
-vi.mock('@/lib/firebase', () => ({
-  getFirebaseDb: mocks.getFirebaseDb,
-  isFirebaseConfigured: mocks.isFirebaseConfigured,
-}));
-
-import { createUserNotification } from '@/lib/firebase-firestore';
 import { notifyUser } from '@/lib/firestoreNotifications';
 
-describe('optional notification delivery', () => {
+describe('durable notification delivery', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mocks.addDoc.mockResolvedValue({ id: 'notification-1' });
+    mocks.create.mockResolvedValue('notification-1');
   });
 
-  it('does not reject a booking when the Firebase notification write fails', async () => {
-    mocks.addDoc.mockRejectedValueOnce(new Error('Firestore unavailable'));
-
-    await expect(createUserNotification('hiker-1', {
-      title: 'Booking submitted',
-      body: 'Pending approval',
-      category: 'booking',
-    })).resolves.toBeNull();
-  });
-
-  it('keeps shared notification callers non-blocking when Firebase is unavailable', async () => {
-    mocks.addDoc.mockRejectedValueOnce(new Error('permission denied'));
-
-    await expect(notifyUser('admin-1', {
-      title: 'New booking',
-      body: 'Review the booking',
-      category: 'booking',
-    })).resolves.toBeNull();
-  });
-
-  it('still returns the notification id when delivery succeeds', async () => {
+  it('writes through the Supabase notification adapter with booking scope', async () => {
     await expect(notifyUser('hiker-1', {
       title: 'Booking submitted',
       body: 'Pending approval',
+      category: 'booking',
+      bookingId: 'booking-1',
     })).resolves.toBe('notification-1');
+    expect(mocks.create).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({
+      bookingId: 'booking-1',
+    }));
+  });
+
+  it('keeps the saved booking flow non-blocking when notification delivery fails', async () => {
+    mocks.create.mockResolvedValueOnce(null);
+    await expect(notifyUser('hiker-1', {
+      title: 'Booking submitted',
+      body: 'Pending approval',
+      category: 'booking',
+      bookingId: 'booking-1',
+    })).resolves.toBeNull();
   });
 });

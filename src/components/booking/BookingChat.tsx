@@ -129,6 +129,7 @@ export default function BookingChat({
         body: 'An administrator sent you a message about your booking.',
         category: 'booking',
         link: `/hiker?bookingId=${encodeURIComponent(bookingId)}`,
+        bookingId,
       }).catch(() => null);
     } else if (role === 'guide' && booking?.user_id) {
       await notifyUser(booking.user_id, {
@@ -136,6 +137,7 @@ export default function BookingChat({
         body: 'Your assigned guide sent a message about your booking.',
         category: 'booking',
         link: `/hiker?bookingId=${encodeURIComponent(bookingId)}`,
+        bookingId,
       }).catch(() => null);
     } else if (role === 'hiker') {
       const { data: assignments } = await supabase.from('booking_assignments' as any).select('guide_id, guides(user_id)').eq('booking_id', bookingId).in('status', ['pending', 'accepted']);
@@ -149,12 +151,14 @@ export default function BookingChat({
           body: 'A hiker sent a message about an assigned booking.',
           category: 'booking',
           link: `/guide?bookingId=${encodeURIComponent(bookingId)}`,
+          bookingId,
         }).catch(() => null)),
         ...adminIds.map((id) => notifyUser(id, {
           title: 'New hiker booking message',
           body: 'A hiker sent a message about a booking in your trailhead.',
           category: 'booking',
           link: `/admin?tab=requests&bookingId=${encodeURIComponent(bookingId)}`,
+          bookingId,
         }).catch(() => null)),
       ]);
     }
@@ -174,8 +178,8 @@ export default function BookingChat({
     if (error) { toast.error(error.code === 'PGRST202' ? 'Apply the latest reschedule migration first.' : error.message); return; }
     const result = data as { hikerUserId?: string; guideUserIds?: string[] } | null;
     const message = approved ? `Reschedule approved — new date: ${target}.` : `Reschedule declined. Reason: ${decisionReason.trim()}`;
-    if (result?.hikerUserId) await notifyUser(result.hikerUserId, { title: approved ? 'Reschedule approved' : 'Reschedule declined', body: message, category: 'booking' }).catch(() => null);
-    await Promise.all((result?.guideUserIds || []).map((id) => notifyUser(id, { title: 'Booking date updated', body: message, category: 'booking' }).catch(() => null)));
+    if (result?.hikerUserId) await notifyUser(result.hikerUserId, { title: approved ? 'Reschedule approved' : 'Reschedule declined', body: message, category: 'booking', bookingId: booking.id }).catch(() => null);
+    await Promise.all((result?.guideUserIds || []).map((id) => notifyUser(id, { title: 'Booking date updated', body: message, category: 'booking', bookingId: booking.id }).catch(() => null)));
     toast.success(approved ? 'Reschedule approved' : 'Reschedule declined');
     setDecisionReason('');
     onAfterReschedule?.();

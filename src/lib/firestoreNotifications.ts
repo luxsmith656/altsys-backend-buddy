@@ -1,91 +1,25 @@
 import {
-  addDoc,
-  collection,
-  deleteDoc,
-  doc,
-  onSnapshot,
-  orderBy,
-  query,
-  serverTimestamp,
-  Timestamp,
-  updateDoc,
-  where,
-} from 'firebase/firestore';
-import { getFirebaseDb } from './firebase';
+  createAppNotification,
+  deleteAppNotification,
+  markAppNotificationRead,
+  subscribeAppNotifications,
+  type AppNotification,
+  type AppNotificationCategory,
+} from './appNotifications';
 
-export type FsNotificationCategory = 'announcement' | 'booking' | 'system' | 'alert';
+// Compatibility names for existing callers. Delivery now uses Supabase so it
+// works without a Firestore database or Firestore security rules.
+export type FsNotificationCategory = AppNotificationCategory;
+export type FsNotification = AppNotification;
 
-export type FsNotification = {
-  id: string;
-  userId: string;
-  title: string;
-  body: string;
-  category: FsNotificationCategory;
-  link?: string | null;
-  read: boolean;
-  createdAt: string; // ISO
-};
-
-const COLLECTION = 'notifications';
-
-type RawDoc = {
-  userId: string;
-  title: string;
-  body: string;
-  category?: FsNotificationCategory;
-  link?: string | null;
-  read?: boolean;
-  createdAt?: Timestamp | null;
-};
-
-function toIso(ts?: Timestamp | null): string {
-  return ts ? ts.toDate().toISOString() : new Date().toISOString();
-}
-
-/**
- * Subscribe to a user's notifications. Returns an unsubscribe function.
- * Safe no-op if Firebase isn't configured.
- */
 export function subscribeUserNotifications(
   userId: string,
   cb: (items: FsNotification[]) => void,
-  onError?: (err: Error) => void,
+  onError?: (error: Error) => void,
 ): () => void {
-  const db = getFirebaseDb();
-  if (!db) return () => {};
-
-  const q = query(
-    collection(db, COLLECTION),
-    where('userId', '==', userId),
-    orderBy('createdAt', 'desc'),
-  );
-
-  return onSnapshot(
-    q,
-    (snap) => {
-      const items: FsNotification[] = snap.docs.map((d) => {
-        const data = d.data() as RawDoc;
-        return {
-          id: d.id,
-          userId: data.userId,
-          title: data.title,
-          body: data.body,
-          category: data.category ?? 'system',
-          link: data.link ?? null,
-          read: Boolean(data.read),
-          createdAt: toIso(data.createdAt ?? null),
-        };
-      });
-      cb(items);
-    },
-    (err) => onError?.(err),
-  );
+  return subscribeAppNotifications(userId, cb, onError);
 }
 
-/**
- * Create a notification for a user. Returns the new doc id, or null if Firebase
- * isn't configured.
- */
 export async function notifyUser(
   userId: string,
   payload: {
@@ -93,38 +27,16 @@ export async function notifyUser(
     body: string;
     category?: FsNotificationCategory;
     link?: string | null;
+    bookingId?: string | null;
   },
 ): Promise<string | null> {
-  // Firestore notifications are best-effort. Booking, chat, SOS, and hike
-  // operations already have their primary Supabase record and must continue
-  // normally when this secondary channel is unavailable.
-  try {
-    const db = getFirebaseDb();
-    if (!db) return null;
-
-    const ref = await addDoc(collection(db, COLLECTION), {
-      userId,
-      title: payload.title,
-      body: payload.body,
-      category: payload.category ?? 'system',
-      link: payload.link ?? null,
-      read: false,
-      createdAt: serverTimestamp(),
-    });
-    return ref.id;
-  } catch {
-    return null;
-  }
+  return createAppNotification(userId, payload);
 }
 
 export async function markFsNotificationRead(id: string): Promise<void> {
-  const db = getFirebaseDb();
-  if (!db) return;
-  await updateDoc(doc(db, COLLECTION, id), { read: true });
+  await markAppNotificationRead(id);
 }
 
 export async function deleteFsNotification(id: string): Promise<void> {
-  const db = getFirebaseDb();
-  if (!db) return;
-  await deleteDoc(doc(db, COLLECTION, id));
+  await deleteAppNotification(id);
 }

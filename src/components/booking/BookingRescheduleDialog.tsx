@@ -67,7 +67,7 @@ export default function BookingRescheduleDialog({ bookingId, bookingDate, open, 
         content: `Hiker requested to reschedule from ${bookingDate} to ${newDate}. Reason: ${reason.trim()}`,
       } as any);
       if (messageError) console.warn('Reschedule chat notice failed:', messageError.message);
-      await notifyUser(user.id, { title: 'Reschedule request sent', body: `Your request from ${bookingDate} to ${newDate} is pending local admin approval.`, category: 'booking', link: '/hiker' }).catch(() => null);
+      await notifyUser(user.id, { title: 'Reschedule request sent', body: `Your request from ${bookingDate} to ${newDate} is pending local admin approval.`, category: 'booking', link: '/hiker', bookingId }).catch(() => null);
       toast.success('Reschedule request sent to admin');
       onOpenChange(false);
       onAfterReschedule?.();

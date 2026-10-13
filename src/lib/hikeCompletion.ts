@@ -42,6 +42,7 @@ export async function completeHike({
       title: 'Hike completed',
       body: `Your Mt. Kalisungan hike has been completed${guideName ? ` with guide ${guideName}` : ''}. Your final receipt is ready to review.`,
       link: '/hiker',
+      bookingId,
     }).catch(() => undefined);
   }
 

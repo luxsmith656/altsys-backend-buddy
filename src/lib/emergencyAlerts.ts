@@ -52,6 +52,7 @@ export async function createEmergencyAlert(input: EmergencyAlertInput) {
     body: `${input.reporterRole === 'guide' ? 'A guide' : 'A hiker'} requested emergency assistance${input.locationId ? ' at the assigned trailhead' : ''}. Open the live map now.`,
     category: 'alert',
     link: '/admin?tab=live-map',
+    bookingId: input.bookingId,
   }).catch(() => null)));
 
   return data as unknown as { id: string; created_at: string };

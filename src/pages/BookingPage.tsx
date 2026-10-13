@@ -60,7 +60,7 @@ import BookingAIChat, { type GroupComposition, type PublishedRouteContext } from
 import { cn } from '@/lib/utils';
 import { getPHLocationOptions, COMMON_NATIONALITIES } from '@/lib/ph-locations';
 import { uploadPaymentScreenshot, isFirebaseConfigured } from '@/lib/firebase-storage';
-import { createUserNotification } from '@/lib/firebase-firestore';
+import { notifyUser } from '@/lib/firestoreNotifications';
 import type { CompanionDetail } from '@/types';
 import { useLocations } from '@/hooks/useLocations';
 import LocationPreview from '@/components/booking/LocationPreview';
@@ -1280,12 +1280,13 @@ export default function BookingPage() {
       // Clear saved draft on successful booking
       try { localStorage.removeItem(DRAFT_KEY); } catch { /* ignore */ }
       toast.success('Booking submitted! Awaiting admin approval.');
-      if (isFirebaseConfigured() && user?.id) {
-        void createUserNotification(user.id, {
+      if (user?.id) {
+        void notifyUser(user.id, {
           title: 'Booking submitted',
           body: `Your booking for ${dateStr} is now pending admin approval.`,
           category: 'booking',
-        });
+          bookingId: data.id,
+        }).catch(() => null);
       }
       try { localStorage.setItem(`${LAST_BOOKING_AGE_PREFIX}${user.id}`, age); } catch { /* storage unavailable */ }
       try {
