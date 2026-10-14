@@ -69,8 +69,13 @@ export default function Navbar() {
     if (typeof (supabase as any).channel !== 'function') return;
     const channel = supabase.channel(`navbar-booking-message-alerts-${user.id}`)
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'booking_messages' }, (payload) => {
-        const message = payload.new as { id?: string; sender_id?: string | null; recipient_role?: string | null; booking_id?: string; created_at?: string };
-        if (!message.id || message.sender_id === user.id || message.recipient_role !== recipient) return;
+        const message = payload.new as { id?: string; sender_id?: string | null; sender_role?: string | null; recipient_role?: string | null; booking_id?: string; created_at?: string };
+        const legacyRecipientMatch = !message.recipient_role && (
+          recipient === 'hiker' ? ['admin', 'guide', 'system'].includes(message.sender_role || '') :
+          recipient === 'admin' ? ['hiker', 'guide'].includes(message.sender_role || '') :
+          recipient === 'guide' ? ['hiker', 'admin'].includes(message.sender_role || '') : false
+        );
+        if (!message.id || message.sender_id === user.id || (message.recipient_role !== recipient && !legacyRecipientMatch)) return;
         const href = role === 'admin' || role === 'super_admin'
           ? `/admin?tab=requests&bookingId=${encodeURIComponent(message.booking_id || '')}`
           : role === 'guide'

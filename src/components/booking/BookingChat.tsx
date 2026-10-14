@@ -4,7 +4,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
-import { Bell, Loader2, Send } from 'lucide-react';
+import { Bell, Loader2, Send, UserRound } from 'lucide-react';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 import { containsProfanity, PROFANITY_NOTICE } from '@/lib/contentModeration';
@@ -143,16 +143,22 @@ export default function BookingChat({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg overflow-x-hidden">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <Bell className="h-4 w-4 text-primary" /> Booking conversation
-            {unreadCount > 0 && <span className="rounded-full bg-destructive px-1.5 py-0.5 text-[10px] text-destructive-foreground">{unreadCount}</span>}
+      <DialogContent className="max-w-lg gap-0 overflow-hidden p-0 sm:max-w-xl">
+        <DialogHeader className="border-b bg-background px-4 py-3 pr-12 sm:px-5">
+          <DialogTitle className="flex items-center gap-2 text-base">
+            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary/15 text-primary">
+              <UserRound className="h-4 w-4" />
+            </span>
+            <span className="min-w-0">
+              <span className="block truncate">Booking conversation</span>
+              <span className="mt-0.5 block text-xs font-normal text-muted-foreground">{format(new Date(`${bookingDate}T00:00:00`), 'MMM d, yyyy')}</span>
+            </span>
+            {unreadCount > 0 && <span className="ml-auto rounded-full bg-destructive px-1.5 py-0.5 text-[10px] text-destructive-foreground">{unreadCount}</span>}
           </DialogTitle>
-        <DialogDescription>Messages about your booking on {format(new Date(`${bookingDate}T00:00:00`), 'MMM d, yyyy')}.</DialogDescription>
+          <DialogDescription className="sr-only">Messages about your booking.</DialogDescription>
         </DialogHeader>
 
-        <div ref={scroller} className="h-72 overflow-y-auto border rounded-md p-3 space-y-2 bg-muted/30">
+        <div ref={scroller} className="h-[min(55vh,28rem)] space-y-2 overflow-y-auto bg-muted/20 px-3 py-4 sm:px-5">
           {loading ? (
             <div className="flex items-center justify-center py-10"><Loader2 className="h-5 w-5 animate-spin" /></div>
           ) : msgs.length === 0 ? (
@@ -163,13 +169,13 @@ export default function BookingChat({
               const system = m.kind !== 'chat';
               return (
                 <div key={m.id} className={`flex ${system ? 'justify-center' : mine ? 'justify-end' : 'justify-start'}`}>
-                  <div className={`max-w-[80%] rounded-2xl px-3 py-2 text-sm ${
+                  <div className={`max-w-[88%] rounded-2xl px-3 py-2.5 text-sm shadow-sm sm:max-w-[78%] ${
                     system ? 'bg-amber-100 text-amber-900 dark:bg-amber-900/30 dark:text-amber-100 italic' :
                     mine ? 'bg-primary text-primary-foreground' : 'bg-card border'
                   }`}>
-                    {!system && <div className="text-[10px] opacity-70 mb-0.5 uppercase">{m.sender_role}</div>}
-                    {m.content}
-                    <div className="text-[10px] opacity-60 mt-1">{format(new Date(m.created_at), 'MMM d, HH:mm')}</div>
+                    {!system && <div className="mb-0.5 text-[10px] font-medium uppercase opacity-70">{m.sender_role}</div>}
+                    <p className="whitespace-pre-wrap break-words">{m.content}</p>
+                    <div className="mt-1 text-right text-[10px] opacity-60">{format(new Date(m.created_at), 'MMM d, HH:mm')}</div>
                   </div>
                 </div>
               );
@@ -177,10 +183,10 @@ export default function BookingChat({
           )}
         </div>
 
-        <div className="flex min-w-0 gap-2">
-          <Input value={text} onChange={(e) => setText(e.target.value)} placeholder="Type a message…"
+        <div className="flex min-w-0 gap-2 border-t bg-background p-3 sm:p-4">
+          <Input className="rounded-full bg-muted/30 px-4" value={text} onChange={(e) => setText(e.target.value)} placeholder="Type a message…"
             onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); void send(); } }} />
-          <Button onClick={() => void send()} disabled={sending || !text.trim()}>
+          <Button className="shrink-0 rounded-full" size="icon" aria-label="Send message" onClick={() => void send()} disabled={sending || !text.trim()}>
             {sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
           </Button>
         </div>
