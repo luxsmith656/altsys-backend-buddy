@@ -1652,6 +1652,66 @@ export default function BookingPage() {
                       <p className="text-[11px] text-muted-foreground">Start times use one-hour intervals. A reserved time is blocked, and no more than 5 groups may share the same summit arrival window across all entry points.</p>
                     </div>
 
+                    {/* Start Location (Lamot 1 / Lamot 2 / Main)  -  REQUIRED */}
+                    <div className="space-y-2">
+                      <Label htmlFor="startLocation" className="flex items-center gap-1.5">
+                        <MapPin className="h-3.5 w-3.5 text-primary" />
+                        Starting Location <span className="text-destructive">*</span>
+                      </Label>
+                      <Select
+                        value={startLocationId}
+                        onValueChange={(v) => { explicitStartLocation.current = true; appliedReferralId.current = null; setStartLocationId(v); setPreferredGuideId(''); setPreferredGuide(''); }}
+                      >
+                        <SelectTrigger id="startLocation">
+                          <SelectValue placeholder="Choose where you'll start hiking" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {(jumpOffLocations.length > 0 ? jumpOffLocations : allLocations.filter(l => l.slug.includes("lamot") || l.slug.includes("tomas"))).map((loc) => (
+                            <SelectItem key={loc.id} value={loc.id}>
+                              {loc.name}{loc.lgu ? `  -  ${loc.lgu}` : ''}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <p className="text-xs text-muted-foreground">
+                        This is the exact jump-off point where your hike starts and the matching route will appear on the map. Choose carefully between Lamot 1, Lamot 2, and Sto. Tomas based on the closest or most convenient entry point; each has its own admin and team.
+                      </p>
+                    </div>
+
+                    {/* Map preview  -  shown BEFORE booking is confirmed so hikers see exactly where to go */}
+                    {selectedLocation && (
+                      <div>
+                        <LocationPreview
+                          name={selectedLocation.name}
+                          lgu={selectedLocation.lgu}
+                          lat={Number(selectedLocation.center_lat)}
+                          lng={Number(selectedLocation.center_lng)}
+                          description={selectedLocation.description}
+                        />
+                        <div className={cn(
+                          'mt-2 rounded-lg border px-3 py-2 text-xs',
+                          publishedRoute ? 'border-primary/25 bg-primary/5 text-foreground' : 'border-amber-400/30 bg-amber-500/5 text-muted-foreground',
+                        )}>
+                          {publishedRoute ? (
+                            <>
+                              <strong>Official route for this jump-off:</strong> {officialTrailNameFromLocation(
+                                selectedLocation.id,
+                                selectedLocation.slug,
+                                selectedLocation.name,
+                                publishedRoute.name,
+                                'Assigned trail',
+                              )}
+                              {publishedRoute.distanceKm ? ` Â· ${publishedRoute.distanceKm.toFixed(1)} km` : ''}
+                              {publishedRoute.elevationMeters ? ` Â· ${publishedRoute.elevationMeters}m` : ''}
+                              <span className="block text-[11px] text-muted-foreground">Synced from the approved trail map.</span>
+                            </>
+                          ) : (
+                            'No approved route is published for this entry point yet. Staff will confirm the route before the hike.'
+                          )}
+                        </div>
+                      </div>
+                    )}
+
                   </div>
                 )}
 
