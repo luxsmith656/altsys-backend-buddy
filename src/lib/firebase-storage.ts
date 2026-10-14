@@ -16,6 +16,38 @@ export { isFirebaseConfigured } from './firebase';
 
 let storage: ReturnType<typeof getStorage> | null = null;
 
+const MAX_REVIEW_IMAGE_BYTES = 25 * 1024 * 1024;
+const IMAGE_EXTENSION_PATTERN = /\.(avif|bmp|gif|heic|heif|jpe?g|png|svg|tiff?|webp)$/i;
+
+export type ImageValidationResult = {
+  valid: boolean;
+  message?: string;
+};
+
+/**
+ * Validate the input before decoding it. `accept="image/*"` is only a browser
+ * hint, so this check also protects the upload path from videos and documents.
+ * MIME-less files from some mobile browsers are accepted when their extension
+ * is a known image type; the decoder remains the final validity check.
+ */
+export function validateImageFile(file: File | null | undefined): ImageValidationResult {
+  if (!file) {
+    return { valid: false, message: 'Please choose an image.' };
+  }
+
+  const hasImageMime = file.type.toLowerCase().startsWith('image/');
+  const hasImageExtension = !file.type && IMAGE_EXTENSION_PATTERN.test(file.name);
+  if (!hasImageMime && !hasImageExtension) {
+    return { valid: false, message: 'Please choose an image file. Videos and documents are not accepted.' };
+  }
+
+  if (file.size > MAX_REVIEW_IMAGE_BYTES) {
+    return { valid: false, message: 'That image is larger than 25 MB. Please choose a smaller image.' };
+  }
+
+  return { valid: true };
+}
+
 function getFirebaseStorage() {
   const app = getFirebaseApp();
   if (!app) {
@@ -28,31 +60,69 @@ function getFirebaseStorage() {
 
 /**
  * Compress an image file using canvas to reduce storage costs.
- * Target: ≤ 80% quality JPEG, max 1200px width.
+ * The browser may provide any supported image format; all successful uploads
+ * are normalized to a broadly displayable JPEG with a bounded dimension.
  */
 export async function compressImage(file: File, maxWidthPx = 1200, quality = 0.75): Promise<Blob> {
+  const validation = validateImageFile(file);
+  if (!validation.valid) throw new Error(validation.message || 'Invalid image file.');
+
+  let source: CanvasImageSource;
+  let closeSource: (() => void) | undefined;
+
+  if (typeof createImageBitmap === 'function') {
+    try {
+      const bitmap = await createImageBitmap(file, { imageOrientation: 'from-image' });
+      source = bitmap;
+      closeSource = () => bitmap.close();
+    } catch {
+      source = await loadImageElement(file);
+    }
+  } else {
+    source = await loadImageElement(file);
+  }
+
+  const sourceWidth = 'naturalWidth' in source ? source.naturalWidth : source.width;
+  const sourceHeight = 'naturalHeight' in source ? source.naturalHeight : source.height;
+  if (!sourceWidth || !sourceHeight) {
+    closeSource?.();
+    throw new Error('This image format could not be decoded by the browser.');
+  }
+
+  const scale = Math.min(1, maxWidthPx / sourceWidth);
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.max(1, Math.round(sourceWidth * scale));
+  canvas.height = Math.max(1, Math.round(sourceHeight * scale));
+  const ctx = canvas.getContext('2d');
+  if (!ctx) {
+    closeSource?.();
+    throw new Error('Canvas context unavailable.');
+  }
+
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = 'high';
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.drawImage(source, 0, 0, canvas.width, canvas.height);
+  closeSource?.();
+
+  return new Promise((resolve, reject) => {
+    canvas.toBlob(
+      (blob) => blob ? resolve(blob) : reject(new Error('Image compression failed.')),
+      'image/jpeg',
+      Math.min(1, Math.max(0.1, quality)),
+    );
+  });
+}
+
+function loadImageElement(file: File): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
     const img = new Image();
     const url = URL.createObjectURL(file);
-    img.onload = () => {
-      URL.revokeObjectURL(url);
-      const scale = Math.min(1, maxWidthPx / img.width);
-      const canvas = document.createElement('canvas');
-      canvas.width = Math.round(img.width * scale);
-      canvas.height = Math.round(img.height * scale);
-      const ctx = canvas.getContext('2d');
-      if (!ctx) { reject(new Error('Canvas context unavailable')); return; }
-      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-      canvas.toBlob(
-        (blob) => {
-          if (blob) resolve(blob);
-          else reject(new Error('Compression failed'));
-        },
-        'image/jpeg',
-        quality,
-      );
-    };
-    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('Image load failed')); };
+    const cleanup = () => URL.revokeObjectURL(url);
+    img.decoding = 'async';
+    img.onload = () => { cleanup(); resolve(img); };
+    img.onerror = () => { cleanup(); reject(new Error('This image format could not be decoded by the browser.')); };
     img.src = url;
   });
 }

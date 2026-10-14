@@ -75,7 +75,7 @@ import KaliContextPanel from '@/components/kali/KaliContextPanel';
 import { useKaliContext } from '@/hooks/useKaliContext';
 import { containsProfanity, PROFANITY_NOTICE } from '@/lib/contentModeration';
 import { useBookingMessageAlerts } from '@/hooks/useBookingMessageAlerts';
-import { isFirebaseConfigured, uploadTrailReviewPhoto } from '@/lib/firebase-storage';
+import { uploadTrailReviewPhoto, validateImageFile } from '@/lib/firebase-storage';
 
 const STATUS_STYLES: Record<string, string> = {
   confirmed: 'bg-primary/20 text-primary',
@@ -442,19 +442,13 @@ export default function HikerDashboard() {
     setSubmittingReview(true);
     let trailPhotoUrl: string | null = null;
     if (trailPhoto) {
-      if (!isFirebaseConfigured()) {
-        toast.error('Photo storage is not configured. Submit the feedback without a photo or ask the administrator to enable storage.');
-        setSubmittingReview(false);
-        return;
-      }
       try {
         const uploaded = await uploadTrailReviewPhoto(trailPhoto, hikeItem.bookingId);
         trailPhotoUrl = uploaded?.url ?? null;
       } catch (error) {
         console.error('Trail feedback photo upload failed:', error);
-        toast.error('The trail photo could not be uploaded. Check your connection or submit without the photo.');
-        setSubmittingReview(false);
-        return;
+        // A photo must never prevent the text review from being recorded.
+        toast.warning('The photo could not be uploaded, so the review will be saved without it.');
       }
     }
     const { error: trailReviewError } = await supabase.from('reviews' as any).insert({
@@ -959,7 +953,25 @@ export default function HikerDashboard() {
                               <label className="flex h-9 cursor-pointer items-center gap-2 self-end rounded-md border border-dashed border-primary/30 px-3 text-xs text-muted-foreground">
                                 <ImageUp className="h-4 w-4 text-primary" />
                                 <span className="truncate">{trailPhoto?.name || 'Add trail photo'}</span>
-                                <input type="file" accept="image/jpeg,image/png,image/webp" className="sr-only" onChange={(event) => setTrailPhoto(event.target.files?.[0] ?? null)} />
+                                <input
+                                  type="file"
+                                  accept="image/*"
+                                  className="sr-only"
+                                  onChange={(event) => {
+                                    const file = event.target.files?.[0] ?? null;
+                                    event.target.value = '';
+                                    if (!file) {
+                                      setTrailPhoto(null);
+                                      return;
+                                    }
+                                    const validation = validateImageFile(file);
+                                    if (!validation.valid) {
+                                      toast.error(validation.message || 'Please choose an image.');
+                                      return;
+                                    }
+                                    setTrailPhoto(file);
+                                  }}
+                                />
                               </label>
                             </div>
                             <Textarea value={trailReviewText} onChange={(event) => setTrailReviewText(event.target.value)} placeholder="How was the trail, difficulty, and summit experience?" rows={2} />
