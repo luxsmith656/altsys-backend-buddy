@@ -4,11 +4,10 @@ import { useAuth } from '@/hooks/useAuth';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
-import { Bell, Loader2, Send, UserRound } from 'lucide-react';
+import { Loader2, Send, UserRound } from 'lucide-react';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 import { containsProfanity, PROFANITY_NOTICE } from '@/lib/contentModeration';
-import { Textarea } from '@/components/ui/textarea';
 
 interface Msg {
   id: string;
@@ -26,9 +25,6 @@ interface Props {
   bookingDate: string;
   open: boolean;
   onOpenChange: (o: boolean) => void;
-  /** admin actions (approve/reject reschedule) */
-  isAdmin?: boolean;
-  onAfterReschedule?: () => void;
   recipientRole?: 'hiker' | 'guide' | 'admin' | 'ranger';
 }
 
@@ -41,14 +37,13 @@ function bookingMessageError(message: string) {
 
 export default function BookingChat({
   bookingId, bookingDate, open, onOpenChange,
-  isAdmin, onAfterReschedule, recipientRole,
+  recipientRole,
 }: Props) {
   const { user, role } = useAuth();
   const [msgs, setMsgs] = useState<Msg[]>([]);
   const [text, setText] = useState('');
   const [loading, setLoading] = useState(false);
   const [sending, setSending] = useState(false);
-  const [decisionReason, setDecisionReason] = useState('');
   const [unreadCount, setUnreadCount] = useState(0);
   const scroller = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
@@ -147,21 +142,6 @@ export default function BookingChat({
     return true;
   };
 
-  const adminDecideReschedule = async (booking: any, approved: boolean) => {
-    const target = booking?.requested_new_date;
-    if (!target && approved) { toast.error('No requested date on file'); return; }
-    if (!approved && decisionReason.trim().length < 5) { toast.error('Add a reason for declining the request.'); return; }
-    const { error } = await supabase.rpc('admin_approve_booking_reschedule' as any, {
-      p_booking_id: bookingId,
-      p_approved: approved,
-      p_reason: decisionReason.trim() || null,
-    });
-    if (error) { toast.error(error.code === 'PGRST202' ? 'Apply the latest reschedule migration first.' : error.message); return; }
-    toast.success(approved ? 'Reschedule approved' : 'Reschedule declined');
-    setDecisionReason('');
-    onAfterReschedule?.();
-  };
-
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
@@ -216,35 +196,7 @@ export default function BookingChat({
           </Button>
         </div>
 
-        {isAdmin && (
-          <AdminRescheduleControls bookingId={bookingId} decisionReason={decisionReason} onReasonChange={setDecisionReason} onDecide={adminDecideReschedule} />
-        )}
       </DialogContent>
     </Dialog>
-  );
-}
-
-function AdminRescheduleControls({ bookingId, decisionReason, onReasonChange, onDecide }: { bookingId: string; decisionReason: string; onReasonChange: (value: string) => void; onDecide: (booking: any, approved: boolean) => void }) {
-  const [b, setB] = useState<any>(null);
-  const [hikerReason, setHikerReason] = useState('');
-  useEffect(() => {
-    supabase.from('bookings').select('id,booking_date,status,requested_new_date,notes').eq('id', bookingId).maybeSingle()
-      .then(({ data }) => {
-        setB(data);
-        try { setHikerReason(data?.notes ? JSON.parse(data.notes).requestedRescheduleReason || '' : ''); } catch { setHikerReason(''); }
-      });
-  }, [bookingId]);
-  if (!b?.requested_new_date || b.status !== 'adjustment_pending') return null;
-  return (
-    <div className="-mx-4 space-y-2 border-t bg-sky-50 px-4 py-3 dark:bg-sky-950/30 sm:-mx-6 sm:px-6">
-      <p className="text-sm font-medium">Reschedule request pending</p>
-      <p className="text-xs text-muted-foreground">From {b.booking_date} → <strong>{b.requested_new_date}</strong></p>
-      {hikerReason && <p className="rounded-md bg-background/70 p-2 text-sm"><strong>Hiker's reason:</strong> {hikerReason}</p>}
-      <Textarea aria-label="Admin reschedule decision reason" value={decisionReason} onChange={(event) => onReasonChange(event.target.value)} rows={2} placeholder="Reason if declining or note for the hiker" />
-      <div className="grid grid-cols-1 gap-2 min-[380px]:grid-cols-2">
-        <Button size="sm" onClick={() => onDecide(b, true)}>Approve new date</Button>
-        <Button size="sm" variant="destructive" onClick={() => onDecide(b, false)}>Decline</Button>
-      </div>
-    </div>
   );
 }

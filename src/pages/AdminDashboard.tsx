@@ -1290,6 +1290,27 @@ export default function AdminDashboard() {
     if (adjustReason.trim().length < 5) { toast.error('Please provide a reschedule reason (at least 5 characters).'); return; }
     setAdjustSaving(true);
     const booking = allTabBookings.find((b) => b.id === adjustDialogId);
+    // A pending requested_new_date is a hiker-initiated request. Review it
+    // through the decision RPC instead of creating a second admin proposal.
+    if (booking?.status === 'adjustment_pending' && booking.requested_new_date) {
+      const { error } = await supabase.rpc('admin_approve_booking_reschedule' as any, {
+        p_booking_id: adjustDialogId,
+        p_approved: true,
+        p_reason: adjustReason.trim(),
+      });
+      if (error) {
+        toast.error(error.message || 'Could not approve the reschedule request.');
+      } else {
+        toast.success('Reschedule approved and booking updated.');
+        void writeActivityLog({ action: 'booking_adjusted', entity_type: 'booking', entity_id: adjustDialogId, after_state: { bookingDate: booking.requested_new_date, decision: 'approved' } });
+        setAdjustDialogId(null);
+        setAdjustDate('');
+        setAdjustReason('');
+        void loadAllTabBookings();
+      }
+      setAdjustSaving(false);
+      return;
+    }
     const meta = parseMeta(booking?.notes);
     const updatedMeta = encodeMeta({ ...meta, adjustedDate: adjustDate, adjustedTime: adjustTime, adjustedReason: adjustReason.trim(), adjustedBy: 'Local Admin' });
     const { error } = await supabase
@@ -1320,6 +1341,28 @@ export default function AdminDashboard() {
       setAdjustDate('');
       setAdjustReason('');
       loadAllTabBookings();
+    }
+    setAdjustSaving(false);
+  };
+
+  const handleDeclineReschedule = async () => {
+    if (!adjustDialogId) return;
+    if (adjustReason.trim().length < 5) { toast.error('Please provide a reason for declining the request.'); return; }
+    setAdjustSaving(true);
+    const { error } = await supabase.rpc('admin_approve_booking_reschedule' as any, {
+      p_booking_id: adjustDialogId,
+      p_approved: false,
+      p_reason: adjustReason.trim(),
+    });
+    if (error) {
+      toast.error(error.message || 'Could not decline the reschedule request.');
+    } else {
+      toast.success('Reschedule declined and hiker notified.');
+      void writeActivityLog({ action: 'booking_adjusted', entity_type: 'booking', entity_id: adjustDialogId, after_state: { decision: 'declined', reason: adjustReason.trim() } });
+      setAdjustDialogId(null);
+      setAdjustDate('');
+      setAdjustReason('');
+      void loadAllTabBookings();
     }
     setAdjustSaving(false);
   };
@@ -1853,6 +1896,9 @@ export default function AdminDashboard() {
   const { pullDistance, isRefreshing: isPullRefreshing } = usePullToRefresh({
     onRefresh: handlePageRefresh,
   });
+
+  const activeAdjustmentBooking = adjustDialogId ? allTabBookings.find((b) => b.id === adjustDialogId) : null;
+  const reviewingHikerReschedule = activeAdjustmentBooking?.status === 'adjustment_pending' && Boolean(activeAdjustmentBooking.requested_new_date);
 
   return (
     <div className="min-h-screen px-3 pb-24 md:pb-12 pt-20 sm:px-4">
@@ -2461,13 +2507,17 @@ export default function AdminDashboard() {
                     </CardTitle>
                   </CardHeader>
                   <CardContent className="space-y-4 mt-0">
-                    <p className="text-sm text-muted-foreground">Propose a new schedule. The hiker will be asked to confirm or decline.</p>
+                    <p className="text-sm text-muted-foreground">
+                      {reviewingHikerReschedule
+                        ? 'Review the hiker’s requested date. This request was created by the hiker; no second admin request will be created.'
+                        : 'Propose a new schedule. The hiker will be asked to confirm or decline.'}
+                    </p>
                     <div className="space-y-2">
-                      <Label htmlFor="adjustDate">New Date</Label>
-                      <Input id="adjustDate" type="date" value={adjustDate} onChange={(e) => setAdjustDate(e.target.value)} min={new Date().toISOString().split('T')[0]} />
+                      <Label htmlFor="adjustDate">{reviewingHikerReschedule ? 'Requested date' : 'New date'}</Label>
+                      <Input id="adjustDate" type="date" value={adjustDate} onChange={(e) => setAdjustDate(e.target.value)} min={new Date().toISOString().split('T')[0]} readOnly={reviewingHikerReschedule} />
                     </div>
                     <div className="space-y-2">
-                      <Label>New Start Time</Label>
+                      <Label>Start time</Label>
                       <Select value={adjustTime} onValueChange={setAdjustTime}>
                         <SelectTrigger><SelectValue /></SelectTrigger>
                         <SelectContent>
@@ -2478,15 +2528,27 @@ export default function AdminDashboard() {
                       </Select>
                     </div>
                     <div className="space-y-2">
-                      <Label htmlFor="adjustReason">Reason for rescheduling</Label>
-                      <Textarea id="adjustReason" value={adjustReason} onChange={(event) => setAdjustReason(event.target.value)} maxLength={500} rows={3} placeholder="Explain why the schedule needs to change" />
+                      <Label htmlFor="adjustReason">{reviewingHikerReschedule ? 'Admin response note' : 'Reason for rescheduling'}</Label>
+                      <Textarea id="adjustReason" value={adjustReason} onChange={(event) => setAdjustReason(event.target.value)} maxLength={500} rows={3} placeholder={reviewingHikerReschedule ? 'Add a note for the hiker' : 'Explain why the schedule needs to change'} />
                     </div>
                     <div className="flex gap-2 pt-2">
                       <Button variant="outline" className="flex-1" onClick={() => setAdjustDialogId(null)} disabled={adjustSaving}>Cancel</Button>
-                      <Button className="flex-1 gap-2" onClick={handleAdjustBooking} disabled={!adjustDate || adjustReason.trim().length < 5 || adjustSaving}>
-                        {adjustSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <CalendarClock className="h-4 w-4" />}
-                        Send to Hiker for Confirmation
-                      </Button>
+                      {reviewingHikerReschedule ? (
+                        <>
+                          <Button variant="destructive" className="flex-1" onClick={() => void handleDeclineReschedule()} disabled={adjustReason.trim().length < 5 || adjustSaving}>
+                            Decline request
+                          </Button>
+                          <Button className="flex-1 gap-2" onClick={() => void handleAdjustBooking()} disabled={!adjustDate || adjustReason.trim().length < 5 || adjustSaving}>
+                            {adjustSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <CalendarClock className="h-4 w-4" />}
+                            Approve date
+                          </Button>
+                        </>
+                      ) : (
+                        <Button className="flex-1 gap-2" onClick={() => void handleAdjustBooking()} disabled={!adjustDate || adjustReason.trim().length < 5 || adjustSaving}>
+                          {adjustSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <CalendarClock className="h-4 w-4" />}
+                          Send to Hiker for Confirmation
+                        </Button>
+                      )}
                     </div>
                   </CardContent>
                 </Card>
@@ -3597,8 +3659,6 @@ export default function AdminDashboard() {
           bookingDate={chatBooking.date}
           open={!!chatBooking}
           onOpenChange={(o) => !o && setChatBooking(null)}
-          isAdmin
-          onAfterReschedule={() => { setChatBooking(null); void loadAllTabBookings(); }}
         />
       )}
 

@@ -9,7 +9,6 @@ import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { canChangeBooking } from '@/lib/bookingReceipt';
-import { parseMeta } from '@/lib/bookingMeta';
 import { containsProfanity, PROFANITY_NOTICE } from '@/lib/contentModeration';
 
 type Props = {
@@ -21,7 +20,7 @@ type Props = {
 };
 
 export default function BookingRescheduleDialog({ bookingId, bookingDate, open, onOpenChange, onAfterReschedule }: Props) {
-  const { user, role } = useAuth();
+  const { user } = useAuth();
   const [newDate, setNewDate] = useState('');
   const [reason, setReason] = useState('');
   const [sending, setSending] = useState(false);
@@ -47,25 +46,12 @@ export default function BookingRescheduleDialog({ bookingId, bookingDate, open, 
       if (bookingError || sessionError || !booking || !canChangeBooking(booking, sessions ?? [])) {
         throw new Error(bookingError?.message || sessionError?.message || 'This hike has started or ended and cannot be rescheduled.');
       }
-      const currentMeta = parseMeta(booking.notes);
-      const nextNotes = JSON.stringify({ ...currentMeta, requestedRescheduleReason: reason.trim() });
-      const { data: changed, error: updateError } = await supabase.from('bookings').update({
-        status: 'adjustment_pending',
-        requested_new_date: newDate,
-        requested_at: new Date().toISOString(),
-        notes: nextNotes,
-      } as any).eq('id', bookingId).eq('user_id', user.id).eq('status', booking.status).select('id').maybeSingle();
-      if (updateError || !changed) throw new Error(updateError?.message || 'Booking changed. Reload before requesting a new date.');
-
-      const { error: messageError } = await supabase.from('booking_messages' as any).insert({
-        booking_id: bookingId,
-        sender_id: user.id,
-        sender_role: role || 'hiker',
-        recipient_role: 'admin',
-        kind: 'reschedule_request',
-        content: `Hiker requested to reschedule from ${bookingDate} to ${newDate}. Reason: ${reason.trim()}`,
-      } as any);
-      if (messageError) console.warn('Reschedule chat notice failed:', messageError.message);
+      const { error: requestError } = await supabase.rpc('request_booking_reschedule' as any, {
+        p_booking_id: bookingId,
+        p_new_date: newDate,
+        p_reason: reason.trim(),
+      });
+      if (requestError) throw new Error(requestError.message || 'Could not send the reschedule request.');
       toast.success('Reschedule request sent to admin');
       onOpenChange(false);
       onAfterReschedule?.();
