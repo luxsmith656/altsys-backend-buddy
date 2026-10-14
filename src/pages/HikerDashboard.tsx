@@ -1,6 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '@/hooks/useAuth';
-import { useLocations } from '@/hooks/useLocations';
 import ProfileAvatar from '@/components/common/ProfileAvatar';
 import ImportantAnnouncements from '@/components/common/ImportantAnnouncements';
 import { supabase } from '@/integrations/supabase/client';
@@ -71,8 +70,6 @@ import { formatPeso } from '@/lib/payments';
 import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import KaliContextPanel from '@/components/kali/KaliContextPanel';
-import { useKaliContext } from '@/hooks/useKaliContext';
 import { containsProfanity, PROFANITY_NOTICE } from '@/lib/contentModeration';
 import { useBookingMessageAlerts } from '@/hooks/useBookingMessageAlerts';
 import { uploadTrailReviewPhoto, validateImageFile } from '@/lib/firebase-storage';
@@ -93,7 +90,6 @@ const STATUS_LABELS: Record<string, string> = {
 
 export default function HikerDashboard() {
   const { user } = useAuth();
-  const { locations } = useLocations();
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
   const [bookings, setBookings] = useState<any[]>([]);
@@ -261,28 +257,6 @@ export default function HikerDashboard() {
   };
 
   const totalDistance = sessions.reduce((sum, s) => sum + Number(s.total_distance_km || 0), 0);
-  const upcomingConfirmedBooking = useMemo(
-    () => bookings
-      .filter((booking) => booking.status === 'confirmed' && booking.booking_date >= new Date().toISOString().slice(0, 10))
-      .sort((a, b) => a.booking_date.localeCompare(b.booking_date))[0],
-    [bookings],
-  );
-  const upcomingBookingLocation = useMemo(
-    () => upcomingConfirmedBooking ? locations.find((location) => location.id === upcomingConfirmedBooking.location_id)?.name : undefined,
-    [locations, upcomingConfirmedBooking],
-  );
-  const { insights: kaliInsights } = useKaliContext({
-    role: 'hiker',
-    booking: upcomingConfirmedBooking
-      ? {
-          status: upcomingConfirmedBooking.status,
-          date: upcomingConfirmedBooking.booking_date,
-          qrCode: upcomingConfirmedBooking.qr_code_data || upcomingConfirmedBooking.id,
-          jumpOff: upcomingBookingLocation,
-        }
-      : null,
-  });
-
   /* ── Cancel booking ── */
   const handleCancelBooking = async (booking: any) => {
     if (!canChange(booking)) { toast.error('This hike can no longer be changed.'); return; }
@@ -349,14 +323,24 @@ export default function HikerDashboard() {
   /* ── Decline admin-adjusted date ── */
   const handleDeclineAdjustment = async (bookingId: string) => {
     setDecliningId(bookingId);
+    const booking = bookings.find((item) => item.id === bookingId);
+    const meta = parseMeta(booking?.notes);
+    const { adjustedDate: _adjustedDate, adjustedTime: _adjustedTime, adjustedReason: _adjustedReason, ...originalMeta } = meta;
     const { error } = await supabase
       .from('bookings')
-      .update({ status: 'cancelled' })
+      .update({
+        status: 'confirmed',
+        notes: encodeMeta({
+          ...originalMeta,
+          bookingChangeRejectedAt: new Date().toISOString(),
+          bookingChangeRejectionReason: 'Hiker rejected the admin-proposed schedule.',
+        }),
+      })
       .eq('id', bookingId);
-    if (error) toast.error('Failed to decline');
+    if (error) toast.error('Failed to reject the proposed schedule');
     else {
-      toast.success('Adjustment declined. Booking cancelled.');
-      setBookings((prev) => prev.map((b) => (b.id === bookingId ? { ...b, status: 'cancelled' } : b)));
+      toast.success('Schedule rejected. Your original booking remains confirmed.');
+      setBookings((prev) => prev.map((b) => (b.id === bookingId ? { ...b, status: 'confirmed', notes: encodeMeta({ ...originalMeta, bookingChangeRejectedAt: new Date().toISOString(), bookingChangeRejectionReason: 'Hiker rejected the admin-proposed schedule.' }) } : b)));
     }
     setDecliningId(null);
   };
@@ -478,7 +462,13 @@ export default function HikerDashboard() {
   };
 
   /* ── Derived data ── */
-  const adjustmentPending = bookings.filter((b) => b.status === 'adjustment_pending');
+  const adjustmentPending = bookings.filter((b) => {
+    if (b.status !== 'adjustment_pending') return false;
+    const meta = parseMeta(b.notes);
+    // Only an explicit admin proposal needs hiker confirmation. A row with
+    // requested_new_date is the hiker's own request awaiting admin review.
+    return Boolean(meta.adjustedDate || meta.bookingChange) && !b.requested_new_date;
+  });
   const visibleBookings = useMemo(
     () => bookings
       .filter((booking) => {
@@ -700,14 +690,14 @@ export default function HikerDashboard() {
                               ) : (
                                 <XCircle className="h-3.5 w-3.5" />
                               )}
-                              Decline & Cancel
+                              Reject New Schedule
                             </Button>
                           </AlertDialogTrigger>
                           <AlertDialogContent>
                             <AlertDialogHeader>
                               <AlertDialogTitle>Decline the adjusted schedule?</AlertDialogTitle>
                               <AlertDialogDescription>
-                                This will cancel your booking entirely. The slot will be released.
+                                This rejects the admin-proposed schedule and keeps your original booking date confirmed.
                               </AlertDialogDescription>
                             </AlertDialogHeader>
                             <AlertDialogFooter>
@@ -716,7 +706,7 @@ export default function HikerDashboard() {
                                 className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
                                 onClick={() => handleDeclineAdjustment(b.id)}
                               >
-                                Yes, Cancel Booking
+                                Yes, Reject Schedule
                               </AlertDialogAction>
                             </AlertDialogFooter>
                           </AlertDialogContent>
@@ -1099,7 +1089,7 @@ export default function HikerDashboard() {
                         <span
                           className={`inline-block mt-1 px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_STYLES[b.status] ?? 'bg-secondary text-secondary-foreground'}`}
                         >
-                          {STATUS_LABELS[b.status] ?? b.status}
+                          {b.status === 'adjustment_pending' && b.requested_new_date ? 'Reschedule request pending' : (STATUS_LABELS[b.status] ?? b.status)}
                         </span>
 
                         <div className="pt-1 text-center">
@@ -1135,7 +1125,7 @@ export default function HikerDashboard() {
                       </div>
 
                       {/* Adjustment action buttons — inline mini version */}
-                      {b.status === 'adjustment_pending' && (
+                      {b.status === 'adjustment_pending' && !b.requested_new_date && Boolean(meta.adjustedDate || meta.bookingChange) && (
                         <div className="flex gap-2">
                           <Button
                             size="sm"
@@ -1316,7 +1306,6 @@ export default function HikerDashboard() {
           onAfterReschedule={() => { setRescheduleBooking(null); void loadData(); }}
         />
       )}
-      <KaliContextPanel role="hiker" insights={kaliInsights} />
     </div>
   );
 }

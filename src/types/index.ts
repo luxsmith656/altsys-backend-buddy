@@ -34,6 +34,8 @@ export interface BookingMeta {
     after: { groupSize: number; leadName: string; companions: string[] };
   };
   bookingChangeAcknowledgedAt?: string;
+  bookingChangeRejectedAt?: string;
+  bookingChangeRejectionReason?: string;
   assignedTrailZoneId?: string; // Official route assigned by admin or auto-assigned
   assignedTrailName?: string;
   assignedTrail?: string;

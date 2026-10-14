@@ -4,10 +4,11 @@ import { useAuth } from '@/hooks/useAuth';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
-import { Loader2, Send, UserRound } from 'lucide-react';
+import { Loader2, Send } from 'lucide-react';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 import { containsProfanity, PROFANITY_NOTICE } from '@/lib/contentModeration';
+import KaliAvatar from '@/components/kali/KaliAvatar';
 
 interface Msg {
   id: string;
@@ -96,7 +97,7 @@ export default function BookingChat({
           const visibleToRole = role === 'admin' || role === 'super_admin' || role === 'ranger' ||
             (role === 'guide' && (message.sender_id === user?.id || message.recipient_role === 'guide')) ||
             (role === 'hiker' && (message.sender_id === user?.id || message.recipient_role === 'hiker'));
-          if (!visibleToRole) return;
+          if (!visibleToRole || message.kind !== 'chat') return;
           setMsgs((current) => current.some((item) => item.id === message.id) ? current : [...current, message]);
           if (message.sender_id !== user?.id && message.sender_role === 'admin') {
             window.dispatchEvent(new CustomEvent('booking-admin-message', { detail: { bookingId } }));
@@ -108,7 +109,7 @@ export default function BookingChat({
     return () => { supabase.removeChannel(ch); };
   }, [open, bookingId, role, user?.id]);
 
-  const send = async (kind: string = 'chat', content?: string): Promise<boolean> => {
+  const send = async (content?: string): Promise<boolean> => {
     const body = (content ?? text).trim();
     if (!body) return false;
     if (containsProfanity(body)) { toast.error(PROFANITY_NOTICE); return false; }
@@ -117,8 +118,8 @@ export default function BookingChat({
       booking_id: bookingId,
       sender_id: user?.id,
       sender_role: role || 'user',
-      recipient_role: kind === 'reschedule_request' ? 'admin' : recipientRole || (role === 'hiker' ? 'guide' : 'hiker'),
-      kind,
+      recipient_role: recipientRole || (role === 'hiker' ? 'guide' : 'hiker'),
+      kind: 'chat',
       content: body,
     }).select('*').single();
     setSending(false);
@@ -146,38 +147,33 @@ export default function BookingChat({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
         style={{ '--booking-chat-vh': viewportHeight ? `${viewportHeight}px` : '100dvh' } as React.CSSProperties}
-        className="flex h-[var(--booking-chat-vh)] w-screen max-w-none flex-col gap-0 overflow-hidden rounded-none border-0 p-0 md:bottom-4 md:left-auto md:right-4 md:top-auto md:h-[min(720px,calc(100dvh-2rem))] md:max-h-[calc(100dvh-2rem)] md:w-[min(420px,calc(100vw-2rem))] md:max-w-[420px] md:translate-x-0 md:translate-y-0 md:rounded-2xl md:border"
+        className="fixed left-0 top-0 flex h-[var(--booking-chat-vh)] w-screen max-w-none translate-x-0 translate-y-0 flex-col gap-0 overflow-hidden rounded-none border-0 bg-card p-0 md:bottom-0 md:left-0 md:right-auto md:top-16 md:h-[calc(100dvh-4rem)] md:max-h-none md:w-[360px] md:max-w-[360px] md:rounded-none md:border-b-0 md:border-l-0 md:border-r md:border-t-0"
       >
-        <DialogHeader className="border-b bg-background px-4 py-3 pr-12 sm:px-5">
+        <DialogHeader className="border-b border-border/30 bg-primary/5 px-4 py-4 pr-12 sm:px-5">
           <DialogTitle className="flex items-center gap-2 text-base">
-            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary/15 text-primary">
-              <UserRound className="h-4 w-4" />
-            </span>
+            <KaliAvatar expression="happy" size="sm" className="h-11 w-11 shrink-0 rounded-full" />
             <span className="min-w-0">
               <span className="block truncate">Booking conversation</span>
-              <span className="mt-0.5 block text-xs font-normal text-muted-foreground">{format(new Date(`${bookingDate}T00:00:00`), 'MMM d, yyyy')}</span>
+              <span className="mt-0.5 flex items-center gap-1.5 text-xs font-normal text-muted-foreground"><span className="h-1.5 w-1.5 rounded-full bg-emerald-400" /> {format(new Date(`${bookingDate}T00:00:00`), 'MMM d, yyyy')}</span>
             </span>
             {unreadCount > 0 && <span className="ml-auto rounded-full bg-destructive px-1.5 py-0.5 text-[10px] text-destructive-foreground">{unreadCount}</span>}
           </DialogTitle>
           <DialogDescription className="sr-only">Messages about your booking.</DialogDescription>
         </DialogHeader>
 
-        <div ref={scroller} className="min-h-0 flex-1 space-y-2 overflow-y-auto bg-muted/20 px-3 py-4 sm:px-[max(1.25rem,calc((100vw-42rem)/2))]">
+        <div ref={scroller} className="min-h-0 flex-1 space-y-3 overflow-y-auto bg-background/20 px-3 py-4">
           {loading ? (
             <div className="flex items-center justify-center py-10"><Loader2 className="h-5 w-5 animate-spin" /></div>
           ) : msgs.length === 0 ? (
             <p className="text-center text-sm text-muted-foreground py-8">No messages yet. Say hi 👋</p>
           ) : (
-            msgs.map((m) => {
+            msgs.filter((m) => m.kind === 'chat').map((m) => {
               const mine = m.sender_id === user?.id;
-              const system = m.kind !== 'chat';
               return (
-                <div key={m.id} className={`flex ${system ? 'justify-center' : mine ? 'justify-end' : 'justify-start'}`}>
-                  <div className={`max-w-[88%] rounded-2xl px-3 py-2.5 text-sm shadow-sm sm:max-w-[78%] ${
-                    system ? 'bg-amber-100 text-amber-900 dark:bg-amber-900/30 dark:text-amber-100 italic' :
-                    mine ? 'bg-primary text-primary-foreground' : 'bg-card border'
-                  }`}>
-                    {!system && <div className="mb-0.5 text-[10px] font-medium uppercase opacity-70">{m.sender_role}</div>}
+                <div key={m.id} className={`flex gap-2 ${mine ? 'justify-end' : 'justify-start'}`}>
+                  {!mine && <KaliAvatar expression="reassuring" size="sm" className="mt-0.5 h-7 w-7 shrink-0 rounded-full" />}
+                  <div className={`max-w-[82%] rounded-2xl px-3 py-2.5 text-xs leading-relaxed shadow-sm ${mine ? 'rounded-tr-sm bg-primary text-primary-foreground' : 'rounded-tl-sm bg-secondary/60 text-foreground'}`}>
+                    {!mine && <div className="mb-0.5 text-[10px] font-medium uppercase opacity-70">{m.sender_role}</div>}
                     <p className="whitespace-pre-wrap break-words">{m.content}</p>
                     <div className="mt-1 text-right text-[10px] opacity-60">{format(new Date(m.created_at), 'MMM d, HH:mm')}</div>
                   </div>
@@ -187,11 +183,11 @@ export default function BookingChat({
           )}
         </div>
 
-        <div className="flex min-w-0 shrink-0 gap-2 border-t bg-background p-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] sm:p-4 sm:pb-4">
-          <Input ref={inputRef} className="rounded-full bg-muted/30 px-4" value={text} onChange={(e) => setText(e.target.value)} placeholder="Type a message…"
+        <div className="flex min-w-0 shrink-0 gap-2 border-t border-border/30 bg-background/60 p-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] sm:p-4 sm:pb-4">
+          <Input ref={inputRef} className="rounded-xl border-border/30 bg-secondary/40 px-3 text-xs" value={text} onChange={(e) => setText(e.target.value)} placeholder="Type a message…"
             onFocus={() => window.setTimeout(() => inputRef.current?.scrollIntoView({ block: 'nearest' }), 50)}
             onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); void send(); } }} />
-          <Button className="shrink-0 rounded-full" size="icon" aria-label="Send message" onClick={() => void send()} disabled={sending || !text.trim()}>
+          <Button className="h-9 w-9 shrink-0 rounded-xl" size="icon" aria-label="Send message" onClick={() => void send()} disabled={sending || !text.trim()}>
             {sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
           </Button>
         </div>
