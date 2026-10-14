@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
-import { motion } from 'framer-motion';
-import { Quote, Star } from 'lucide-react';
+import { AnimatePresence, motion } from 'framer-motion';
+import { ChevronLeft, ChevronRight, Quote, Star } from 'lucide-react';
+import { Button } from '@/components/ui/button';
 import { supabase } from '@/integrations/supabase/client';
 import { officialPublicTrailName } from '@/lib/mapTrailheads';
 
@@ -82,34 +83,39 @@ function TrailBadge({ trail }: { trail: string }) {
 }
 
 
-function ReviewCard({ review, index }: { review: Review; index: number }) {
+function ReviewCard({ review }: { review: Review }) {
   return (
     <motion.div
-      initial={{ opacity: 0 }}
-      whileInView={{ opacity: 1 }}
-      viewport={{ once: true, amount: 0.1 }}
-      transition={{ duration: 0.35, delay: index * 0.04 }}
-      className="cinematic-card flex flex-col p-6 gap-3.5 relative overflow-hidden"
+      initial={{ opacity: 0, x: 16 }}
+      animate={{ opacity: 1, x: 0 }}
+      exit={{ opacity: 0, x: -16 }}
+      transition={{ duration: 0.22 }}
+      className="cinematic-card grid overflow-hidden md:grid-cols-[minmax(0,1fr)_minmax(14rem,0.72fr)]"
     >
-      {/* Quote icon */}
-      <Quote className="h-6 w-6 text-primary/20 rotate-180 mb-1" />
-
-      {/* Review text */}
-      <p className="text-sm text-muted-foreground leading-relaxed flex-1 italic">
-        &ldquo;{review.review_text}&rdquo;
-      </p>
-      {review.photo_url && (
-        <img src={review.photo_url} alt="Hiker trail feedback" loading="lazy" className="h-28 w-full rounded-xl object-cover" />
-      )}
-      {review.difficulty && <p className="text-xs font-medium text-primary">Trail difficulty: {review.difficulty}</p>}
-
-      {/* Footer: name/date + trail badge */}
-      <div className="flex items-center justify-between pt-3 border-t border-border/10 mt-1">
-        <div className="min-w-0">
-          <p className="text-sm font-bold text-foreground tracking-tight">{review.reviewer_name}</p>
-          <p className="text-[11px] text-muted-foreground/70 font-medium">{formatDate(review.created_at)}</p>
+      <div className="flex min-w-0 flex-col gap-4 p-6">
+        <Quote className="h-6 w-6 rotate-180 text-primary/30" />
+        <p className="flex-1 text-base italic leading-relaxed text-muted-foreground">
+          &ldquo;{review.review_text}&rdquo;
+        </p>
+        <div className="flex flex-wrap items-end justify-between gap-3 border-t border-border/10 pt-4">
+          <div className="min-w-0">
+            <p className="truncate text-sm font-bold text-foreground">{review.reviewer_name}</p>
+            <p className="text-[11px] font-medium text-muted-foreground/70">{formatDate(review.created_at)}</p>
+          </div>
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            {review.difficulty && <span className="text-xs font-medium capitalize text-primary">{review.difficulty}</span>}
+            <TrailBadge trail={review.trail_name} />
+          </div>
         </div>
-        <TrailBadge trail={review.trail_name} />
+      </div>
+      <div className="min-h-48 border-t border-border/10 bg-secondary/25 md:min-h-full md:border-l md:border-t-0">
+        {review.photo_url ? (
+          <img src={review.photo_url} alt={`Trail experience shared by ${review.reviewer_name}`} loading="lazy" decoding="async" className="h-full w-full object-cover" />
+        ) : (
+          <div className="flex h-full min-h-48 items-center justify-center p-8 text-center text-sm text-muted-foreground">
+            Mt. Kalisungan trail experience
+          </div>
+        )}
       </div>
     </motion.div>
   );
@@ -117,6 +123,7 @@ function ReviewCard({ review, index }: { review: Review; index: number }) {
 
 export default function HikerReviews() {
   const [reviews, setReviews] = useState<Review[]>(fallbackReviews);
+  const [reviewIndex, setReviewIndex] = useState(0);
 
   const fetchReviews = async () => {
     const { data, error } = await supabase
@@ -135,6 +142,11 @@ export default function HikerReviews() {
   };
 
   useEffect(() => { fetchReviews(); }, []);
+  useEffect(() => { setReviewIndex((index) => Math.min(index, Math.max(reviews.length - 1, 0))); }, [reviews.length]);
+
+  const activeReview = reviews[reviewIndex] || fallbackReviews[0];
+  const showPrevious = () => setReviewIndex((index) => (index - 1 + reviews.length) % reviews.length);
+  const showNext = () => setReviewIndex((index) => (index + 1) % reviews.length);
 
   return (
     <section className="py-24 px-4 relative overflow-hidden section-warm-overlay">
@@ -184,11 +196,20 @@ export default function HikerReviews() {
           })()}
         </motion.div>
 
-        {/* Review grid */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5 mb-12">
-          {reviews.map((review, i) => (
-            <ReviewCard key={review.id} review={review} index={i} />
-          ))}
+        {/* One approved trail story at a time keeps the landing page easy to scan. */}
+        <div className="mx-auto max-w-4xl">
+          <AnimatePresence mode="wait">
+            <ReviewCard key={activeReview.id} review={activeReview} />
+          </AnimatePresence>
+          <div className="mt-5 flex items-center justify-center gap-3">
+            <Button type="button" variant="outline" size="sm" onClick={showPrevious} disabled={reviews.length < 2} className="gap-1.5" aria-label="Previous trail review">
+              <ChevronLeft className="h-4 w-4" /> Previous
+            </Button>
+            <span className="min-w-16 text-center text-xs text-muted-foreground" aria-live="polite">{reviewIndex + 1} of {reviews.length}</span>
+            <Button type="button" variant="outline" size="sm" onClick={showNext} disabled={reviews.length < 2} className="gap-1.5" aria-label="Next trail review">
+              Next <ChevronRight className="h-4 w-4" />
+            </Button>
+          </div>
         </div>
 
       </div>

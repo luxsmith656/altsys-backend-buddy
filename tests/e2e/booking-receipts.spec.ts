@@ -15,6 +15,7 @@ for (const role of ['hiker', 'guide'] as const) {
         horseHelpRequests: [{ stationLabel: 'Stations 5-3', fee: 1000, status: 'completed' }], amountPaid: 2210, paymentSettledAt: '2026-09-09T06:00:00Z', groupPhase: 'completed' }) }];
     rows.booking_assignments = [{ id: 'receipt-assignment', booking_id: 'receipt-booking', guide_id: 'guide-preview', location_id: 'lamot2', status: 'completed' }];
     rows.hiker_sessions = []; rows.booking_messages = []; rows.app_notifications = [];
+    rows.guide_reviews = []; rows.reviews = [];
     await page.route('https://firestore.googleapis.com/**', route => route.abort('internetdisconnected'));
     await page.routeWebSocket(/supabase\.co\/realtime\//, () => {});
     await page.route(`${origin}/**`, async route => {

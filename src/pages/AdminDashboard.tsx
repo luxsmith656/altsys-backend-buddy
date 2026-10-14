@@ -99,6 +99,7 @@ import { addAdditionalGuideToBooking, assignGuideToBooking } from '@/lib/guideAs
 import EditBookingDialog from '@/components/booking/EditBookingDialog';
 import { AdminOffDutyApprovals } from '@/components/booking/OffDutyManager';
 import AdminUserManagement from '@/components/admin/AdminUserManagement';
+import TrailReviewModeration from '@/components/admin/TrailReviewModeration';
 import ImportantAnnouncements from '@/components/common/ImportantAnnouncements';
 import { useAuth } from '@/hooks/useAuth';
 import { parseMeta, encodeMeta } from '@/lib/bookingMeta';
@@ -176,7 +177,7 @@ const ANNOUNCEMENT_TYPE_STYLES: Record<string, string> = {
 const getMappedTab = (tab: string) => {
   if (['overview', 'demographics'].includes(tab)) return 'overview';
   if (['operations', 'requests', 'scan', 'live-map', 'sessions'].includes(tab)) return 'operations';
-  if (['management', 'users', 'guides', 'announcements', 'accounts', 'pricing', 'reports'].includes(tab)) return 'management';
+  if (['management', 'users', 'guides', 'reviews', 'announcements', 'accounts', 'pricing', 'reports'].includes(tab)) return 'management';
   if (['finance', 'payment-summary'].includes(tab)) return 'finance';
   return 'overview';
 };
@@ -207,7 +208,7 @@ export default function AdminDashboard() {
   });
   const [managementTab, setManagementTab] = useState<string>(() => {
     const initialTab = searchParams.get('tab');
-    return ['users', 'guides', 'announcements', 'accounts', 'pricing', 'reports'].includes(initialTab || '')
+    return ['users', 'guides', 'reviews', 'announcements', 'accounts', 'pricing', 'reports'].includes(initialTab || '')
       ? initialTab!
       : 'guides';
   });
@@ -366,7 +367,7 @@ export default function AdminDashboard() {
     if (tab === 'requests' || tab === 'scan' || tab === 'live-map' || tab === 'sessions') {
       if (tab !== operationsTab) setOperationsTab(tab);
     }
-    if (['users', 'guides', 'announcements', 'accounts', 'pricing', 'reports'].includes(tab || '')) {
+    if (['users', 'guides', 'reviews', 'announcements', 'accounts', 'pricing', 'reports'].includes(tab || '')) {
       if (tab !== managementTab) setManagementTab(tab!);
     }
   }, [activeTab, operationsTab, managementTab, searchParams, navigate]);
@@ -3189,6 +3190,7 @@ export default function AdminDashboard() {
                 <TabsList className="glass-card">
                   <TabsTrigger value="users">Manage Users</TabsTrigger>
                   <TabsTrigger value="guides">Guide Roster</TabsTrigger>
+                  <TabsTrigger value="reviews">Trail Reviews</TabsTrigger>
                   <TabsTrigger value="announcements">Announcements</TabsTrigger>
                   {isSuperAdmin && <TabsTrigger value="accounts">Accounts</TabsTrigger>}
                   {isSuperAdmin && <TabsTrigger value="pricing">Pricing & Capacity</TabsTrigger>}
@@ -3204,6 +3206,9 @@ export default function AdminDashboard() {
                   locationId={activeLocationId}
                   locationName={activeLocation?.name || 'Current Trailhead'}
                 />
+              </TabsContent>
+              <TabsContent value="reviews" className="space-y-6 mt-0">
+                <TrailReviewModeration locationId={activeLocationId} isCentralAdmin={isSuperAdmin} />
               </TabsContent>
               <TabsContent value="guides" className="space-y-6 mt-0">
             <div className="flex flex-wrap items-center justify-between gap-3 mb-2">
