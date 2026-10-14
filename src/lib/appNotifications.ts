@@ -8,6 +8,8 @@ export type AppNotification = {
   senderId?: string | null;
   type?: string | null;
   referenceId?: string | null;
+  targetType?: string | null;
+  targetId?: string | null;
   title: string;
   body: string;
   category: AppNotificationCategory;
@@ -22,11 +24,15 @@ type NotificationRow = {
   sender_id?: string | null;
   type?: string | null;
   reference_id?: string | null;
+  target_type?: string | null;
+  target_id?: string | null;
+  route?: string | null;
   title: string;
   body: string;
   category: AppNotificationCategory;
   link: string | null;
   read: boolean;
+  is_read?: boolean | null;
   created_at: string;
 };
 
@@ -36,11 +42,13 @@ const toNotification = (row: NotificationRow): AppNotification => ({
   senderId: row.sender_id,
   type: row.type,
   referenceId: row.reference_id,
+  targetType: row.target_type || row.type,
+  targetId: row.target_id || row.reference_id,
   title: row.title,
   body: row.body,
   category: row.category || 'system',
-  link: row.link,
-  read: Boolean(row.read),
+  link: row.link || row.route,
+  read: Boolean(row.read ?? row.is_read),
   createdAt: row.created_at,
 });
 
@@ -95,7 +103,7 @@ export function subscribeAppNotifications(
   void (async () => {
     const { data, error } = await (supabase as any)
       .from('app_notifications')
-      .select('id,user_id,title,body,category,link,read,created_at')
+      .select('id,user_id,sender_id,type,reference_id,target_type,target_id,title,body,category,link,route,read,is_read,created_at')
       .eq('user_id', userId)
       .order('created_at', { ascending: false })
       .limit(100);

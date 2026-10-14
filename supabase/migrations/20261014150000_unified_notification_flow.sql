@@ -5,12 +5,54 @@
 ALTER TABLE public.app_notifications
   ADD COLUMN IF NOT EXISTS sender_id uuid REFERENCES auth.users(id) ON DELETE SET NULL,
   ADD COLUMN IF NOT EXISTS type text NOT NULL DEFAULT 'system',
-  ADD COLUMN IF NOT EXISTS reference_id uuid;
+  ADD COLUMN IF NOT EXISTS reference_id uuid,
+  ADD COLUMN IF NOT EXISTS target_type text,
+  ADD COLUMN IF NOT EXISTS target_id uuid,
+  ADD COLUMN IF NOT EXISTS route text,
+  ADD COLUMN IF NOT EXISTS is_read boolean NOT NULL DEFAULT false;
+
+-- Keep the original app columns and the explicit notification contract in
+-- lockstep so older clients and new clients observe the same state.
+UPDATE public.app_notifications
+SET target_type = COALESCE(target_type, type),
+    target_id = COALESCE(target_id, reference_id),
+    route = COALESCE(route, link),
+    is_read = read;
 
 CREATE INDEX IF NOT EXISTS app_notifications_user_read_created_idx
   ON public.app_notifications(user_id, read, created_at DESC);
 CREATE INDEX IF NOT EXISTS app_notifications_reference_idx
   ON public.app_notifications(reference_id);
+CREATE INDEX IF NOT EXISTS app_notifications_user_is_read_created_idx
+  ON public.app_notifications(user_id, is_read, created_at DESC);
+
+CREATE OR REPLACE FUNCTION public.sync_app_notification_contract()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $$
+BEGIN
+  IF TG_OP = 'UPDATE' THEN
+    IF NEW.read IS DISTINCT FROM OLD.read THEN
+      NEW.is_read := NEW.read;
+    ELSIF NEW.is_read IS DISTINCT FROM OLD.is_read THEN
+      NEW.read := NEW.is_read;
+    END IF;
+  ELSE
+    NEW.is_read := COALESCE(NEW.is_read, NEW.read, false);
+    NEW.read := COALESCE(NEW.read, NEW.is_read, false);
+  END IF;
+  NEW.target_type := COALESCE(NEW.target_type, NEW.type, NEW.category);
+  NEW.target_id := COALESCE(NEW.target_id, NEW.reference_id);
+  NEW.route := COALESCE(NEW.route, NEW.link);
+  NEW.link := COALESCE(NEW.link, NEW.route);
+  RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS app_notifications_sync_contract ON public.app_notifications;
+CREATE TRIGGER app_notifications_sync_contract
+  BEFORE INSERT OR UPDATE ON public.app_notifications
+  FOR EACH ROW EXECUTE FUNCTION public.sync_app_notification_contract();
 
 CREATE OR REPLACE FUNCTION public.normalize_app_notification_type()
 RETURNS trigger

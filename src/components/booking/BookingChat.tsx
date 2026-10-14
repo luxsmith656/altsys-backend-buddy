@@ -29,6 +29,7 @@ interface Props {
   /** admin actions (approve/reject reschedule) */
   isAdmin?: boolean;
   onAfterReschedule?: () => void;
+  recipientRole?: 'hiker' | 'guide' | 'admin' | 'ranger';
 }
 
 function bookingMessageError(message: string) {
@@ -40,7 +41,7 @@ function bookingMessageError(message: string) {
 
 export default function BookingChat({
   bookingId, bookingDate, open, onOpenChange,
-  isAdmin, onAfterReschedule,
+  isAdmin, onAfterReschedule, recipientRole,
 }: Props) {
   const { user, role } = useAuth();
   const [msgs, setMsgs] = useState<Msg[]>([]);
@@ -50,6 +51,26 @@ export default function BookingChat({
   const [decisionReason, setDecisionReason] = useState('');
   const [unreadCount, setUnreadCount] = useState(0);
   const scroller = useRef<HTMLDivElement | null>(null);
+  const inputRef = useRef<HTMLInputElement | null>(null);
+  const [viewportHeight, setViewportHeight] = useState<number | null>(null);
+
+  // Mobile browsers resize the visual viewport when the keyboard opens, but
+  // do not always resize the layout viewport used by 100dvh. Track the visual
+  // viewport so the composer stays above the keyboard on iOS and Android.
+  useEffect(() => {
+    if (!open || typeof window === 'undefined') return;
+    const visualViewport = window.visualViewport;
+    const updateViewport = () => setViewportHeight(Math.round(visualViewport?.height ?? window.innerHeight));
+    updateViewport();
+    visualViewport?.addEventListener('resize', updateViewport);
+    visualViewport?.addEventListener('scroll', updateViewport);
+    window.addEventListener('resize', updateViewport);
+    return () => {
+      visualViewport?.removeEventListener('resize', updateViewport);
+      visualViewport?.removeEventListener('scroll', updateViewport);
+      window.removeEventListener('resize', updateViewport);
+    };
+  }, [open]);
 
   const load = async () => {
     setLoading(true);
@@ -101,7 +122,7 @@ export default function BookingChat({
       booking_id: bookingId,
       sender_id: user?.id,
       sender_role: role || 'user',
-      recipient_role: kind === 'reschedule_request' ? 'admin' : role === 'hiker' ? 'guide' : 'hiker',
+      recipient_role: kind === 'reschedule_request' ? 'admin' : recipientRole || (role === 'hiker' ? 'guide' : 'hiker'),
       kind,
       content: body,
     }).select('*').single();
@@ -143,7 +164,10 @@ export default function BookingChat({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="flex h-[100dvh] w-screen max-w-none flex-col gap-0 overflow-hidden rounded-none border-0 p-0">
+      <DialogContent
+        style={{ '--booking-chat-vh': viewportHeight ? `${viewportHeight}px` : '100dvh' } as React.CSSProperties}
+        className="flex h-[var(--booking-chat-vh)] w-screen max-w-none flex-col gap-0 overflow-hidden rounded-none border-0 p-0 md:bottom-4 md:left-auto md:right-4 md:top-auto md:h-[min(720px,calc(100dvh-2rem))] md:max-h-[calc(100dvh-2rem)] md:w-[min(420px,calc(100vw-2rem))] md:max-w-[420px] md:translate-x-0 md:translate-y-0 md:rounded-2xl md:border"
+      >
         <DialogHeader className="border-b bg-background px-4 py-3 pr-12 sm:px-5">
           <DialogTitle className="flex items-center gap-2 text-base">
             <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary/15 text-primary">
@@ -183,8 +207,9 @@ export default function BookingChat({
           )}
         </div>
 
-        <div className="flex min-w-0 gap-2 border-t bg-background p-3 sm:p-4">
-          <Input className="rounded-full bg-muted/30 px-4" value={text} onChange={(e) => setText(e.target.value)} placeholder="Type a message…"
+        <div className="flex min-w-0 shrink-0 gap-2 border-t bg-background p-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] sm:p-4 sm:pb-4">
+          <Input ref={inputRef} className="rounded-full bg-muted/30 px-4" value={text} onChange={(e) => setText(e.target.value)} placeholder="Type a message…"
+            onFocus={() => window.setTimeout(() => inputRef.current?.scrollIntoView({ block: 'nearest' }), 50)}
             onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); void send(); } }} />
           <Button className="shrink-0 rounded-full" size="icon" aria-label="Send message" onClick={() => void send()} disabled={sending || !text.trim()}>
             {sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
