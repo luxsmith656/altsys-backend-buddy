@@ -5,6 +5,7 @@ import { Mountain, Activity, TrendingUp, TrendingDown, Timer, PauseCircle, MapPi
 import type { OfflineSession } from '@/lib/offlineDb';
 import { getSessionPoints } from '@/lib/offlineDb';
 import Replay3D from './Replay3D';
+import { formatDistanceM } from '@/lib/tracking/display';
 
 function fmtTime(sec: number) {
   const h = Math.floor(sec / 3600);
@@ -31,7 +32,6 @@ export default function HikeSummary({ session, open, onClose }: Props) {
   }, [showReplay, session]);
 
   if (!session) return null;
-  const km = (session.distanceM / 1000).toFixed(2);
   const totalTimeSec = session.movingSec + session.restingSec;
   const pace = session.distanceM > 0 ? (session.movingSec / 60) / (session.distanceM / 1000) : 0;
 
@@ -59,7 +59,7 @@ export default function HikeSummary({ session, open, onClose }: Props) {
         )}
 
         <div className="grid grid-cols-2 gap-2">
-          {stat(<MapPin className="h-3.5 w-3.5" />, 'Distance', `${km} km`)}
+          {stat(<MapPin className="h-3.5 w-3.5" />, 'Distance', formatDistanceM(session.distanceM))}
           {stat(<Timer className="h-3.5 w-3.5" />, 'Moving time', fmtTime(session.movingSec))}
           {stat(<PauseCircle className="h-3.5 w-3.5" />, 'Resting time', fmtTime(session.restingSec))}
           {stat(<Activity className="h-3.5 w-3.5" />, 'Avg pace', pace > 0 ? `${pace.toFixed(1)} min/km` : '—')}

@@ -6,6 +6,7 @@ import { Activity, Clock3, MapPin, Mountain, Timer, TrendingDown, TrendingUp } f
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { supabase } from '@/integrations/supabase/client';
 import { getSessionPoints, listSessions, type OfflinePoint, type OfflineSession } from '@/lib/offlineDb';
+import { formatDistanceM } from '@/lib/tracking/display';
 import 'leaflet/dist/leaflet.css';
 
 type TrackPoint = { lat: number; lng: number; alt?: number | null; ts?: number | null };
@@ -169,7 +170,7 @@ export default function HikerTrailResult({ open, onClose, userId, sessionId, boo
         ) : (
           <div className="space-y-4">
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-              <Stat icon={<MapPin className="h-4 w-4" />} label="Distance" value={`${distanceKm.toFixed(2)} km`} />
+              <Stat icon={<MapPin className="h-4 w-4" />} label="Distance" value={formatDistanceM(distanceKm * 1000)} />
               <Stat icon={<Timer className="h-4 w-4" />} label="Moving time" value={formatDuration(movingSeconds)} />
               <Stat icon={<Clock3 className="h-4 w-4" />} label="Total time" value={formatDuration(elapsedSeconds)} />
               <Stat icon={<Activity className="h-4 w-4" />} label="Avg pace" value={formatPace(movingSeconds, distanceKm)} />

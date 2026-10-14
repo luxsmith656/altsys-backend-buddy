@@ -2,6 +2,7 @@ import { Button } from '@/components/ui/button';
 import { Pause, Play, AlertTriangle, Download, CheckCircle2 } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { TRAILS } from '@/lib/map-data';
+import { formatDistanceM } from '@/lib/tracking/display';
 
 interface TrailStatsProps {
   distance: number;
@@ -16,7 +17,6 @@ interface TrailStatsProps {
   trailColor?: string;
   phase?: 'ascent' | 'peak' | 'descent' | 'completed';
   remainingKm?: number;
-  etaMinutes?: number | null;
   wrongDirection?: boolean;
   onMarkPeak?: () => void;
   onStartDescent?: () => void;
@@ -38,7 +38,6 @@ export default function TrailStats({
   trailColor,
   phase = 'ascent',
   remainingKm = 0,
-  etaMinutes,
   wrongDirection = false,
   onMarkPeak,
   onStartDescent,
@@ -96,7 +95,7 @@ export default function TrailStats({
             <div className="flex items-baseline gap-3 text-xs text-muted-foreground">
               <GpsIndicator />
               <span className="whitespace-nowrap">
-                <span className="text-foreground font-semibold">{distance.toFixed(2)}</span> km
+                <span className="text-foreground font-semibold">{formatDistanceM(distance * 1000)}</span>
               </span>
               <span className="whitespace-nowrap">
                 <span className="text-foreground font-semibold">{formatTime(elapsed)}</span>
@@ -105,10 +104,7 @@ export default function TrailStats({
                 <span className="text-foreground font-semibold">{displayPace > 0 ? displayPace.toFixed(1) : '--'}</span> min/km
               </span>
               <span className="whitespace-nowrap">
-                <span className="text-foreground font-semibold">{remainingKm.toFixed(2)}</span> km left
-              </span>
-              <span className="whitespace-nowrap">
-                ETA <span className="text-foreground font-semibold">{etaMinutes == null ? '--' : `${etaMinutes}m`}</span>
+                <span className="text-foreground font-semibold">{formatDistanceM(remainingKm * 1000)}</span> left
               </span>
               <span className="capitalize text-primary font-semibold">{phase}</span>
 

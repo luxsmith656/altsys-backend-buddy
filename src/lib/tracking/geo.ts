@@ -90,16 +90,3 @@ export function simplify(points: { lat: number; lng: number }[], epsilonM = 5): 
   }
   return points.filter((_, i) => keep[i]);
 }
-
-/** Naismith + Tobler-flavored ETA estimator. */
-export function estimateEtaSec(
-  distRemainM: number,
-  elevRemainM: number,
-  observedPaceSecPerKm: number | null,
-): number {
-  // Base: 12 min / km flat, +10 min per 100 m ascent (Naismith)
-  const flatPaceSecPerKm = observedPaceSecPerKm && observedPaceSecPerKm > 0 ? observedPaceSecPerKm : 12 * 60;
-  const baseSec = (distRemainM / 1000) * flatPaceSecPerKm;
-  const climbSec = Math.max(0, elevRemainM) * 6; // 6s per meter ascent ≈ 600s/100m
-  return Math.round(baseSec + climbSec);
-}

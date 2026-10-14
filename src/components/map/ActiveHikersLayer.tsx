@@ -18,7 +18,6 @@ import {
   Phone, 
   Heart, 
   Compass, 
-  Clock, 
   Activity,
   ArrowDown
 } from 'lucide-react';
@@ -426,34 +425,6 @@ export default function ActiveHikersLayer({
     });
   };
 
-  // Calculate ETA dynamically
-  const calculateETA = (h: SimulatedHiker) => {
-    if (h.phase === 'completed') return 'Safely Checked Out';
-    if (h.phase === 'sos') return 'EMERGENCY - STALLED';
-
-    const baseAscentPaceMinPerSegment = 10 / h.speedMultiplier; // ~90 mins total
-    const baseDescentPaceMinPerSegment = 5.5 / h.speedMultiplier; // ~50 mins total
-
-    if (h.phase === 'ascent') {
-      const remainingSegments = 9.0 - h.progress;
-      const etaMin = Math.round((remainingSegments * baseAscentPaceMinPerSegment) / (simSpeed === 1 ? 1 : simSpeed * 0.5));
-      return etaMin <= 1 ? 'Under a minute' : `${etaMin} mins to Peak`;
-    }
-
-    if (h.phase === 'peak') {
-      const simulatedMinsLeft = Math.round(h.peakTimerLeft / 60);
-      return `At Peak - Rest: ${simulatedMinsLeft}m left`;
-    }
-
-    if (h.phase === 'descent') {
-      const remainingSegments = h.progress;
-      const etaMin = Math.round((remainingSegments * baseDescentPaceMinPerSegment) / (simSpeed === 1 ? 1 : simSpeed * 0.5));
-      return etaMin <= 1 ? 'Arriving Basecamp' : `${etaMin} mins to Basecamp`;
-    }
-
-    return 'Unknown';
-  };
-
   // Station leaflet icons (green circular badge)
   const stationIcon = (index: number, isPeak: boolean) => {
     const label = index === 1 ? 'J' : index === 7 ? 'P' : String(index - 1);
@@ -594,7 +565,6 @@ export default function ActiveHikersLayer({
         const hikerRoute = routeForHiker(h);
         const hikerStations = stationsForHiker(h);
         const latLng = interpolatePosition(h.progress, hikerRoute?.path ?? simulationPath);
-        const etaText = calculateETA(h);
         
         return (
           <Marker 
@@ -630,10 +600,6 @@ export default function ActiveHikersLayer({
                     <span className="font-medium text-foreground text-right">{getProgressDescription(h.progress, hikerStations)}</span>
                   </div>
 
-                  <div className="flex items-center justify-between text-muted-foreground">
-                    <span className="flex items-center gap-1"><Clock className="h-3.5 w-3.5" /> Est. ETA:</span>
-                    <span className="font-semibold text-emerald-600 text-right">{etaText}</span>
-                  </div>
 
                   {h.phase === 'peak' && (
                     <div className="mt-1 p-2 bg-amber-50 rounded border border-amber-200 text-amber-900">
@@ -866,7 +832,6 @@ export default function ActiveHikersLayer({
             </h4>
             
             {hikers.map((h) => {
-              const etaText = calculateETA(h);
               const isSos = h.phase === 'sos';
               
               return (
@@ -903,7 +868,6 @@ export default function ActiveHikersLayer({
 
                   <div className="flex items-center justify-between text-[10px] text-muted-foreground mt-0.5">
                     <span className="truncate max-w-[130px]">📍 {getProgressDescription(h.progress, simulationStations)}</span>
-                    <span className="font-semibold text-emerald-600 truncate max-w-[140px]">{etaText}</span>
                   </div>
 
                   {/* Immediate actions */}

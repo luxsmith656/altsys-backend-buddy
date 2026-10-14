@@ -48,6 +48,22 @@ type Props = {
   onSelfLocationChange?: (location: { lat: number; lng: number; timestamp?: string } | null) => void;
 };
 
+function mergeLocationPoints(...collections: LocationPoint[][]): LocationPoint[] {
+  const byFix = new Map<string, LocationPoint>();
+  collections.flat().forEach((point) => {
+    const latitude = Number(point.latitude);
+    const longitude = Number(point.longitude);
+    const timestamp = new Date(point.timestamp).getTime();
+    if (!Number.isFinite(latitude) || !Number.isFinite(longitude) || !Number.isFinite(timestamp)) return;
+    // A timestamp plus coordinates is the client-owned point identity. This
+    // prevents reconnect retries from drawing duplicate trail segments.
+    byFix.set(String(timestamp), {
+      ...point, latitude, longitude,
+    });
+  });
+  return Array.from(byFix.values()).sort((a, b) => Date.parse(a.timestamp) - Date.parse(b.timestamp));
+}
+
 const roleColor: Record<string, string> = {
   hiker: '#16a34a',
   guide: '#2563eb',
@@ -126,14 +142,15 @@ export default function LiveSessionsLayer({
   }, [mode, userId]);
 
   const load = useCallback(async () => {
+    const localSelf = mode === 'self' ? await loadLocalSelfSession() : null;
+    if (localSelf) {
+      if (navigator.onLine === false) setSessions([localSelf.session]);
+      setPaths({ [localSelf.session.id]: localSelf.points });
+      const latest = localSelf.points[localSelf.points.length - 1];
+      onSelfLocationChange?.(latest ? { lat: latest.latitude, lng: latest.longitude, timestamp: latest.timestamp } : null);
+    }
     if (mode === 'self' && navigator.onLine === false) {
-      const local = await loadLocalSelfSession();
-      if (local) {
-        setSessions([local.session]);
-        setPaths({ [local.session.id]: local.points });
-        const latest = local.points[local.points.length - 1];
-        onSelfLocationChange?.(latest ? { lat: latest.latitude, lng: latest.longitude, timestamp: latest.timestamp } : null);
-      }
+      // IndexedDB is the source of truth until the connection returns.
       return;
     }
     let sessionQuery = supabase
@@ -222,6 +239,11 @@ export default function LiveSessionsLayer({
         longitude: Number(point.longitude),
       });
     });
+    if (mode === 'self' && localSelf && visibleSessions[0]) {
+      const serverId = visibleSessions[0].id;
+      const localPoints = localSelf.points.map((point) => ({ ...point, session_id: serverId }));
+      nextPaths[serverId] = mergeLocationPoints(nextPaths[serverId] ?? [], localPoints);
+    }
     setPaths(nextPaths);
     const { data: reports } = await supabase.from('hike_station_reports')
       .select('session_id,station,reported_at').in('session_id', ids)

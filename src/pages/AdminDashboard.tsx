@@ -2778,7 +2778,7 @@ export default function AdminDashboard() {
                             </span>
                           </div>
 
-                          {/* Position & Estimated ETA */}
+                          {/* Position */}
                           <div className="space-y-1.5 pt-0.5">
                             <div className="flex items-center justify-between text-muted-foreground">
                               <span className="flex items-center gap-1.5"><Compass className="h-3.5 w-3.5 text-primary" /> Position:</span>
@@ -2789,14 +2789,6 @@ export default function AdminDashboard() {
                               </span>
                             </div>
 
-                            <div className="flex items-center justify-between text-muted-foreground">
-                              <span className="flex items-center gap-1.5"><Clock className="h-3.5 w-3.5 text-primary" /> Est. ETA:</span>
-                              <span className="font-semibold text-emerald-600 dark:text-emerald-400 text-right">
-                                {meta.groupPhase === 'peak' ? 'At Peak - Rest: Summit Stay Active' :
-                                 meta.groupPhase === 'descent' ? '~40 mins to Base Camp' :
-                                 '~35 mins to Summit'}
-                              </span>
-                            </div>
                           </div>
 
                           {/* Summit Limit Timer Box (when at Peak) */}

@@ -2,7 +2,7 @@
  * Offline-first hike tracker.
  * - GPS smoothing (accuracy filter + EMA on altitude)
  * - Adaptive sampling
- * - Live stats: distance, moving/resting time, elevation gain/loss, pace, ETA
+ * - Live stats: distance, moving/resting time, elevation gain/loss, and pace
  * - Persists to IndexedDB; survives offline; sync handled separately.
  */
 import polyline from '@mapbox/polyline';
