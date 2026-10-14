@@ -5,6 +5,9 @@ export type AppNotificationCategory = 'announcement' | 'booking' | 'system' | 'a
 export type AppNotification = {
   id: string;
   userId: string;
+  senderId?: string | null;
+  type?: string | null;
+  referenceId?: string | null;
   title: string;
   body: string;
   category: AppNotificationCategory;
@@ -16,6 +19,9 @@ export type AppNotification = {
 type NotificationRow = {
   id: string;
   user_id: string;
+  sender_id?: string | null;
+  type?: string | null;
+  reference_id?: string | null;
   title: string;
   body: string;
   category: AppNotificationCategory;
@@ -27,6 +33,9 @@ type NotificationRow = {
 const toNotification = (row: NotificationRow): AppNotification => ({
   id: row.id,
   userId: row.user_id,
+  senderId: row.sender_id,
+  type: row.type,
+  referenceId: row.reference_id,
   title: row.title,
   body: row.body,
   category: row.category || 'system',
@@ -95,7 +104,15 @@ export function subscribeAppNotifications(
       onError?.(new Error(error.message));
       return;
     }
-    items = ((data || []) as NotificationRow[]).map(toNotification);
+    const hydrated = ((data || []) as NotificationRow[]).map(toNotification);
+    // An INSERT/UPDATE can arrive while the initial SELECT is in flight.
+    // Merge instead of replacing so realtime events cannot be lost on mount.
+    items = [...items, ...hydrated].reduce<AppNotification[]>((all, item) => {
+      const existing = all.findIndex((candidate) => candidate.id === item.id);
+      if (existing >= 0) all[existing] = item;
+      else all.push(item);
+      return all;
+    }, []);
     emit();
   })();
 

@@ -1,207 +1,46 @@
-import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
-import { supabase } from '@/integrations/supabase/client';
+import { useAppNotifications } from '@/hooks/useAppNotifications';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Bell, Megaphone, CalendarCheck, AlertTriangle, CheckCheck, X } from 'lucide-react';
-import { fetchAnnouncementsFromDb, visibleAnnouncements } from '@/lib/announcements';
-import { loadRemovedNotificationIds, loadSeenNotificationIds, markNotificationRemoved, saveSeenNotificationIds } from '@/lib/notifications';
-import { subscribeUserNotifications, markFsNotificationRead, deleteFsNotification, type FsNotification } from '@/lib/firestoreNotifications';
-
-type AppNotification = {
-  id: string;
-  title: string;
-  body: string;
-  createdAt: string;
-  category: 'announcement' | 'booking' | 'system' | 'alert';
-  link?: string | null;
-};
+import { Bell, CalendarCheck, CheckCheck, X } from 'lucide-react';
 
 export default function NotificationsPage() {
-  const { user, role } = useAuth();
+  const { user } = useAuth();
   const navigate = useNavigate();
-  const [items, setItems] = useState<AppNotification[]>([]);
-  const [seen, setSeen] = useState<string[]>([]);
-  const [removed, setRemoved] = useState<string[]>([]);
+  const { items, unreadCount, markRead, markAllRead, remove } = useAppNotifications();
 
-  const [fsNotifs, setFsNotifs] = useState<FsNotification[]>([]);
-  const userId = user?.id;
-
-  // Realtime Firestore subscription
-  useEffect(() => {
-    if (!userId) {
-      setFsNotifs([]);
-      return;
-    }
-    const unsub = subscribeUserNotifications(userId, setFsNotifs);
-    return () => unsub();
-  }, [userId]);
-
-  useEffect(() => {
-    if (!user) return;
-    setSeen(loadSeenNotificationIds(user.id));
-    setRemoved(loadRemovedNotificationIds(user.id));
-
-    const loadAll = async () => {
-      const removedIds = new Set(loadRemovedNotificationIds(user.id));
-      const announcements = await fetchAnnouncementsFromDb();
-      const anns = visibleAnnouncements(announcements, role).map((a) => ({
-        id: `ann:${a.id}`,
-        title: a.title,
-        body: a.body,
-        createdAt: a.created_at,
-        category: 'announcement' as const,
-        link: '/notifications',
-      }));
-
-      let bookingData: Array<{ id: string; status: string; booking_date: string; created_at: string }> = [];
-      try {
-        const { data } = await supabase
-          .from('bookings')
-          .select('id,status,booking_date,created_at')
-          .eq('user_id', user.id)
-          .order('created_at', { ascending: false })
-          .limit(50);
-        bookingData = (data || []) as Array<{ id: string; status: string; booking_date: string; created_at: string }>;
-      } catch {
-        // Firestore notifications still render when the optional Supabase status feed is unavailable.
-      }
-
-      const bookingNotifs = bookingData.map((b) => ({
-        id: `booking:${b.id}:${b.status}`,
-        title: `Booking ${b.status}`,
-        body: `Your hike booking for ${b.booking_date} is now marked as ${b.status}.`,
-        createdAt: b.created_at,
-        category: 'booking' as const,
-        link: `/hiker?bookingId=${encodeURIComponent(b.id)}`,
-      }));
-
-      const fsItems: AppNotification[] = fsNotifs.map((n) => ({
-        id: `fs:${n.id}`,
-        title: n.title,
-        body: n.body,
-        createdAt: n.createdAt,
-        category: n.category,
-        link: n.link,
-      }));
-
-      setItems(
-        [...anns, ...bookingNotifs, ...fsItems]
-          .filter((item, index, all) => all.findIndex((other) => other.id === item.id) === index)
-          .filter((item) => !removedIds.has(item.id))
-          .sort((a, b) => +new Date(b.createdAt) - +new Date(a.createdAt)),
-      );
-      setSeen([...new Set([
-        ...loadSeenNotificationIds(user.id),
-        ...fsNotifs.filter((item) => item.read).map((item) => `fs:${item.id}`),
-      ])]);
-    };
-
-    void loadAll();
-  }, [user, role, fsNotifs]);
-
-  const unread = useMemo(
-    () => items.filter((i) => !seen.includes(i.id) && !removed.includes(i.id)).length,
-    [items, seen, removed],
-  );
-
-  const markAllSeen = () => {
-    if (!user) return;
-    const ids = items.map((i) => i.id);
-    setSeen(ids);
-    saveSeenNotificationIds(user.id, ids);
-    void Promise.all(fsNotifs.filter((item) => !item.read).map((item) => markFsNotificationRead(item.id).catch(() => null)));
+  const openNotification = async (id: string, link?: string | null) => {
+    try { await markRead(id); } catch { /* keep the item visible when the server is unavailable */ }
+    if (link) navigate(link);
   };
 
   return (
-    <div className="min-h-screen pt-20 pb-12 px-4">
-      <div className="container max-w-4xl mx-auto space-y-6">
+    <div className="min-h-screen px-4 pb-12 pt-20">
+      <div className="container mx-auto max-w-4xl space-y-6">
         <div className="flex flex-col items-start gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div className="min-w-0">
-            <h1 className="text-2xl font-bold sm:text-3xl">All Notifications</h1>
-            <p className="text-muted-foreground text-sm mt-1">Announcements, booking updates, and important alerts.</p>
-          </div>
-          <Button variant="outline" onClick={markAllSeen} className="w-full gap-2 sm:w-auto">
-            <CheckCheck className="h-4 w-4" />
-            Mark all as seen
-          </Button>
+          <div className="min-w-0"><h1 className="text-2xl font-bold sm:text-3xl">All Notifications</h1><p className="mt-1 text-sm text-muted-foreground">Messages, booking updates, and important alerts.</p></div>
+          <Button variant="outline" onClick={() => void markAllRead().catch(() => null)} disabled={!unreadCount} className="w-full gap-2 sm:w-auto"><CheckCheck className="h-4 w-4" /> Mark all as read</Button>
         </div>
-
         <Card className="glass-card">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Bell className="h-5 w-5 text-primary" />
-              Notifications ({unread} unread)
-            </CardTitle>
-          </CardHeader>
+          <CardHeader><CardTitle className="flex items-center gap-2"><Bell className="h-5 w-5 text-primary" /> Notifications ({unreadCount} unread)</CardTitle></CardHeader>
           <CardContent>
-            {items.length === 0 ? (
-              <p className="text-sm text-muted-foreground py-10 text-center">No notifications yet.</p>
-            ) : (
+            {!items.length ? <p className="py-10 text-center text-sm text-muted-foreground">No notifications yet.</p> : (
               <div className="space-y-3">
-                {items.map((n) => {
-                  const isUnread = !seen.includes(n.id);
-                  return (
-                    <div
-                      key={n.id}
-                      className={`rounded-xl border p-4 ${isUnread ? 'border-primary/40 bg-primary/5' : 'border-border/20 bg-secondary/20'} ${n.link ? 'cursor-pointer hover:border-primary/50' : ''}`}
-                      onClick={() => n.link && navigate(n.link)}
-                    >
-                      <div className="flex items-start gap-2 mb-1">
-                        {n.category === 'announcement' ? (
-                          <Megaphone className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
-                        ) : (
-                          <CalendarCheck className="mt-0.5 h-4 w-4 shrink-0 text-sky-500" />
-                        )}
-                        <p className="min-w-0 break-words font-semibold text-sm">{n.title}</p>
-                        {isUnread && (
-                          <span className="ml-auto shrink-0 text-[10px] px-2 py-0.5 rounded-full bg-destructive/15 text-destructive border border-destructive/30">
-                            New
-                          </span>
-                        )}
-                      </div>
-                      <p className="text-sm text-muted-foreground">{n.body}</p>
-                      <p className="text-xs text-muted-foreground/80 mt-2">{new Date(n.createdAt).toLocaleString()}</p>
-                      <div className="mt-2 flex items-center gap-2">
-                        {isUnread && user && (
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="h-7 px-2 text-xs"
-                            onClick={(event) => {
-                              event.stopPropagation();
-                              const next = [...seen, n.id];
-                              setSeen(next);
-                              saveSeenNotificationIds(user.id, next);
-                              if (n.id.startsWith('fs:')) {
-                                void markFsNotificationRead(n.id.slice(3));
-                              }
-                            }}
-                          >
-                            Mark as seen
-                          </Button>
-                        )}
-                        {user && <Button aria-label="Delete notification" title="Delete notification" variant="ghost" size="icon" className="ml-auto h-7 w-7 text-destructive hover:text-destructive" onClick={(event) => {
-                          event.stopPropagation();
-                          setItems((prev) => prev.filter((x) => x.id !== n.id));
-                          setRemoved((prev) => (prev.includes(n.id) ? prev : [...prev, n.id]));
-                          markNotificationRemoved(user.id, n.id);
-                          if (n.id.startsWith('fs:')) void deleteFsNotification(n.id.slice(3));
-                        }}><X className="h-3.5 w-3.5" /></Button>}
-                      </div>
+                {items.map((item) => (
+                  <div key={item.id} className={`rounded-xl border p-4 transition-colors ${item.read ? 'border-border/20 bg-secondary/20' : 'border-primary/40 bg-primary/10'} ${item.link ? 'cursor-pointer hover:border-primary/60' : ''}`} onClick={() => void openNotification(item.id, item.link)}>
+                    <div className="flex items-start gap-2">
+                      <CalendarCheck className={`mt-0.5 h-4 w-4 shrink-0 ${item.read ? 'text-sky-500' : 'text-primary'}`} />
+                      <div className="min-w-0 flex-1"><p className={`break-words text-sm ${item.read ? 'font-medium' : 'font-bold'}`}>{item.title}</p><p className="mt-1 break-words text-sm text-muted-foreground">{item.body}</p><p className="mt-2 text-xs text-muted-foreground/80">{new Date(item.createdAt).toLocaleString()}</p>{!item.read && <Button variant="ghost" size="sm" className="mt-2 h-7 px-2 text-xs" onClick={(event) => { event.stopPropagation(); void markRead(item.id).catch(() => null); }}>Mark as seen</Button>}</div>
+                      {!item.read && <span className="mt-1 h-2.5 w-2.5 shrink-0 rounded-full bg-destructive" aria-label="Unread" />}
+                      {user && <Button aria-label="Delete notification" title="Delete notification" variant="ghost" size="icon" className="h-7 w-7 shrink-0 text-destructive hover:text-destructive" onClick={(event) => { event.stopPropagation(); void remove(item.id).catch(() => null); }}><X className="h-3.5 w-3.5" /></Button>}
                     </div>
-                  );
-                })}
+                  </div>
+                ))}
               </div>
             )}
           </CardContent>
         </Card>
-
-        <div className="text-xs text-muted-foreground flex items-start gap-2">
-          <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-          Important weather or closure announcements are highlighted and also surfaced on dashboards.
-        </div>
       </div>
     </div>
   );

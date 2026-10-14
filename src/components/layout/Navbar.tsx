@@ -3,15 +3,11 @@ import { useAuth } from '@/hooks/useAuth';
 import { useTheme } from '@/hooks/useTheme';
 import { Button } from '@/components/ui/button';
 import { Mountain, Map, CalendarCheck, LayoutDashboard, LogOut, Menu, X, Moon, Sun, Bell, User } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import logo from '@/assets/logo.png';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
-import { fetchAnnouncementsFromDb, visibleAnnouncements } from '@/lib/announcements';
-import { loadRemovedNotificationIds, loadSeenNotificationIds, markNotificationSeen } from '@/lib/notifications';
-import { isFirebaseConfigured } from '@/lib/firebase';
-import { subscribeUserNotifications, type FsNotification } from '@/lib/firestoreNotifications';
-import { supabase } from '@/integrations/supabase/client';
+import { useAppNotifications } from '@/hooks/useAppNotifications';
 import { getRoleHomePath } from '@/lib/authRoles';
 import ProfileAvatar from '@/components/common/ProfileAvatar';
 
@@ -21,20 +17,12 @@ export default function Navbar() {
   const navigate = useNavigate();
   const location = useLocation();
   const [mobileOpen, setMobileOpen] = useState(false);
-  const [notifCount, setNotifCount] = useState(0);
-  const [notifPreview, setNotifPreview] = useState<Array<{ id: string; title: string; createdAt: string; href?: string }>>([]);
-  const [chatAlerts, setChatAlerts] = useState<Array<{ id: string; title: string; createdAt: string; href: string }>>([]);
+  const { items: notifications, unreadCount: notifCount, markRead } = useAppNotifications();
+  const notifPreview = notifications.slice(0, 4);
 
   const dashboardPath = role ? getRoleHomePath(role) : '/dashboard';
 
-  const markPreviewSeen = (id: string) => {
-    if (!user) return;
-    markNotificationSeen(user.id, id);
-    if (id.startsWith('fs:')) void import('@/lib/firestoreNotifications').then(({ markFsNotificationRead }) => markFsNotificationRead(id.slice(3)).catch(() => null));
-    setNotifCount((count) => Math.max(0, count - 1));
-    setNotifPreview((current) => current.filter((item) => item.id !== id));
-    if (id.startsWith('chat:')) setChatAlerts((current) => current.filter((item) => item.id !== id));
-  };
+  const markPreviewRead = (id: string) => void markRead(id).catch(() => null);
 
   const navLinks = user
     ? [
@@ -46,105 +34,6 @@ export default function Navbar() {
         { to: '/map', label: 'Map', icon: Map },
         { to: '/booking', label: 'Book Hike', icon: CalendarCheck },
       ];
-
-  const [fsNotifs, setFsNotifs] = useState<FsNotification[]>([]);
-  const userId = user?.id;
-
-  // Subscribe to Firestore notifications for this user (realtime).
-  useEffect(() => {
-    if (!userId) {
-      setFsNotifs([]);
-      return;
-    }
-    const unsub = subscribeUserNotifications(userId, setFsNotifs);
-    return () => unsub();
-  }, [userId]);
-
-  useEffect(() => {
-    if (!user || !['admin', 'super_admin', 'hiker', 'guide'].includes(role || '')) {
-      setChatAlerts([]);
-      return;
-    }
-    const recipient = role === 'admin' || role === 'super_admin' ? 'admin' : role;
-    if (typeof (supabase as any).channel !== 'function') return;
-    const channel = supabase.channel(`navbar-booking-message-alerts-${user.id}`)
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'booking_messages' }, (payload) => {
-        const message = payload.new as { id?: string; sender_id?: string | null; sender_role?: string | null; recipient_role?: string | null; booking_id?: string; created_at?: string };
-        const legacyRecipientMatch = !message.recipient_role && (
-          recipient === 'hiker' ? ['admin', 'guide', 'system'].includes(message.sender_role || '') :
-          recipient === 'admin' ? ['hiker', 'guide'].includes(message.sender_role || '') :
-          recipient === 'guide' ? ['hiker', 'admin'].includes(message.sender_role || '') : false
-        );
-        if (!message.id || message.sender_id === user.id || (message.recipient_role !== recipient && !legacyRecipientMatch)) return;
-        const href = role === 'admin' || role === 'super_admin'
-          ? `/admin?tab=requests&bookingId=${encodeURIComponent(message.booking_id || '')}`
-          : role === 'guide'
-            ? `/guide?bookingId=${encodeURIComponent(message.booking_id || '')}`
-            : `/hiker?bookingId=${encodeURIComponent(message.booking_id || '')}`;
-        setChatAlerts((current) => [{ id: `chat:${message.id}`, title: 'New booking chat message', createdAt: message.created_at || new Date().toISOString(), href }, ...current].slice(0, 8));
-        window.dispatchEvent(new CustomEvent('booking-message-alert', {
-          detail: { bookingId: message.booking_id, messageId: message.id },
-        }));
-      }).subscribe();
-    return () => { supabase.removeChannel(channel); };
-  }, [user, role]);
-
-  useEffect(() => {
-    if (!user) {
-      setNotifCount(0);
-      setNotifPreview([]);
-      return;
-    }
-
-    const loadNotifData = async () => {
-      const seen = new Set(loadSeenNotificationIds(user.id));
-      const removed = new Set(loadRemovedNotificationIds(user.id));
-      const announcements = await fetchAnnouncementsFromDb();
-      const anns = visibleAnnouncements(announcements, role).map((a) => ({
-        id: `ann:${a.id}`,
-        title: a.title,
-        createdAt: a.created_at,
-        href: '/notifications',
-      }));
-      const { data } = isFirebaseConfigured() ? { data: [] } : await supabase
-        .from('bookings')
-        .select('id,status,created_at')
-        .eq('user_id', user.id)
-        .order('created_at', { ascending: false })
-        .limit(50);
-      const bookingItems = (data || []).map((b) => ({
-        id: `booking:${b.id}:${b.status}`,
-        title: `Booking ${b.status}`,
-        createdAt: b.created_at,
-      }));
-      const fsItems = fsNotifs.map((n) => ({
-        id: `fs:${n.id}`,
-        title: n.title,
-        createdAt: n.createdAt,
-        href: n.link || '/notifications',
-        read: n.read,
-      }));
-      const all = [...anns, ...bookingItems, ...fsItems, ...chatAlerts].filter((n) => {
-        if (removed.has(n.id) || seen.has(n.id)) return false;
-        if ('read' in n && n.read) return false;
-        return true;
-      });
-      const unseen = all.filter((n) => {
-        // Firebase read state and the legacy local read ledger must agree. A
-        // stale Firestore snapshot must never resurrect a notification the
-        // user already marked as seen.
-        if ('read' in n) return !n.read;
-        return true;
-      }).length;
-      setNotifCount(unseen);
-      setNotifPreview(
-      all
-          .sort((a, b) => +new Date(b.createdAt) - +new Date(a.createdAt))
-          .slice(0, 4),
-      );
-    };
-    void loadNotifData();
-  }, [user, role, location.pathname, fsNotifs, chatAlerts]);
 
   const isActive = (path: string) => location.pathname === path;
 
@@ -200,13 +89,13 @@ export default function Navbar() {
                   <Button
                     variant="ghost"
                     size="icon"
-                    className={`relative ${chatAlerts.length > 0 ? 'text-primary ring-2 ring-primary/40 shadow-[0_0_16px_hsl(var(--primary)/0.45)] animate-pulse' : ''}`}
+                    className={`relative ${notifCount > 0 ? 'text-primary ring-2 ring-primary/40 shadow-[0_0_16px_hsl(var(--primary)/0.45)] animate-pulse' : ''}`}
                     aria-label="Notifications"
                   >
                     <Bell className="h-4 w-4" />
                     {notifCount > 0 && (
                       <span className="absolute -top-1 -right-1 min-w-4 h-4 px-1 rounded-full bg-destructive text-white text-[10px] leading-4 text-center">
-                        {notifCount > 9 ? '9+' : notifCount}
+                        {notifCount > 99 ? '99+' : notifCount}
                       </span>
                     )}
                   </Button>
@@ -218,11 +107,13 @@ export default function Navbar() {
                     <DropdownMenuItem disabled>No notifications yet</DropdownMenuItem>
                   ) : (
                     notifPreview.map((n) => (
-                    <DropdownMenuItem key={n.id} onClick={() => { markPreviewSeen(n.id); navigate(n.href || '/notifications'); }}>
+                      <DropdownMenuItem key={n.id} onClick={() => { markPreviewRead(n.id); navigate(n.link || '/notifications'); }}>
                         <div className="min-w-0">
-                          <p className="text-xs font-medium truncate">{n.title}</p>
+                          <p className={`truncate text-xs ${n.read ? 'font-medium' : 'font-bold'}`}>{n.title}</p>
+                          <p className="truncate text-[10px] text-muted-foreground">{n.body}</p>
                           <p className="text-[10px] text-muted-foreground">{new Date(n.createdAt).toLocaleString()}</p>
                         </div>
+                        {!n.read && <span className="ml-auto h-2 w-2 shrink-0 rounded-full bg-destructive" aria-label="Unread" />}
                       </DropdownMenuItem>
                     ))
                   )}
@@ -266,7 +157,7 @@ export default function Navbar() {
               onClick={() => navigate('/notifications')}
             >
               <Bell className="h-5 w-5" />
-              {notifCount > 0 && <span className="absolute -right-0.5 -top-0.5 min-w-4 rounded-full bg-destructive px-1 text-[10px] leading-4 text-white">{notifCount > 9 ? '9+' : notifCount}</span>}
+              {notifCount > 0 && <span className="absolute -right-0.5 -top-0.5 min-w-4 rounded-full bg-destructive px-1 text-[10px] leading-4 text-white">{notifCount > 99 ? '99+' : notifCount}</span>}
             </button>
           )}
           <button

@@ -77,7 +77,7 @@ export default function BookingChat({
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'booking_messages', filter: `booking_id=eq.${bookingId}` },
         (p) => {
           const message = p.new as Msg;
-          const visibleToRole = role === 'admin' || role === 'super_admin' ||
+          const visibleToRole = role === 'admin' || role === 'super_admin' || role === 'ranger' ||
             (role === 'guide' && (message.sender_id === user?.id || message.recipient_role === 'guide')) ||
             (role === 'hiker' && (message.sender_id === user?.id || message.recipient_role === 'hiker'));
           if (!visibleToRole) return;
