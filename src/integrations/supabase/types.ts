@@ -900,6 +900,41 @@ export type Database = {
           },
         ]
       }
+      hike_station_reports: {
+        Row: {
+          created_at: string
+          id: string
+          reported_at: string
+          session_id: string
+          station: number
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id: string
+          reported_at: string
+          session_id: string
+          station: number
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          reported_at?: string
+          session_id?: string
+          station?: number
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "hike_station_reports_session_id_fkey"
+            columns: ["session_id"]
+            isOneToOne: false
+            referencedRelation: "hiker_sessions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       hiker_locations: {
         Row: {
           accuracy: number | null
