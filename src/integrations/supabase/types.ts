@@ -14,12 +14,6 @@ export type Database = {
   }
   public: {
     Tables: {
-      hike_station_reports: {
-        Row: { id: string; session_id: string; user_id: string; station: number; reported_at: string; created_at: string }
-        Insert: { id: string; session_id: string; user_id: string; station: number; reported_at: string; created_at?: string }
-        Update: { id?: string; station?: number }
-        Relationships: []
-      }
       admin_logs: {
         Row: {
           action: string
@@ -135,13 +129,20 @@ export type Database = {
       }
       announcements: {
         Row: {
+          approval_status: string
+          approved_at: string | null
+          approved_by: string | null
+          archived_at: string | null
           body: string
           created_at: string
           created_by: string | null
+          deleted_at: string | null
           expires_at: string | null
           id: string
           is_important: boolean
+          lifecycle_status: string
           location_id: string | null
+          rejection_reason: string | null
           source: string | null
           starts_at: string | null
           target: string
@@ -149,13 +150,20 @@ export type Database = {
           type: string
         }
         Insert: {
+          approval_status?: string
+          approved_at?: string | null
+          approved_by?: string | null
+          archived_at?: string | null
           body: string
           created_at?: string
           created_by?: string | null
+          deleted_at?: string | null
           expires_at?: string | null
           id: string
           is_important?: boolean
+          lifecycle_status?: string
           location_id?: string | null
+          rejection_reason?: string | null
           source?: string | null
           starts_at?: string | null
           target?: string
@@ -163,13 +171,20 @@ export type Database = {
           type?: string
         }
         Update: {
+          approval_status?: string
+          approved_at?: string | null
+          approved_by?: string | null
+          archived_at?: string | null
           body?: string
           created_at?: string
           created_by?: string | null
+          deleted_at?: string | null
           expires_at?: string | null
           id?: string
           is_important?: boolean
+          lifecycle_status?: string
           location_id?: string | null
+          rejection_reason?: string | null
           source?: string | null
           starts_at?: string | null
           target?: string
@@ -185,6 +200,102 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      app_notifications: {
+        Row: {
+          body: string
+          category: string
+          created_at: string
+          id: string
+          is_read: boolean
+          link: string | null
+          read: boolean
+          reference_id: string | null
+          route: string | null
+          sender_id: string | null
+          target_id: string | null
+          target_type: string | null
+          title: string
+          type: string
+          user_id: string
+        }
+        Insert: {
+          body?: string
+          category?: string
+          created_at?: string
+          id?: string
+          is_read?: boolean
+          link?: string | null
+          read?: boolean
+          reference_id?: string | null
+          route?: string | null
+          sender_id?: string | null
+          target_id?: string | null
+          target_type?: string | null
+          title: string
+          type?: string
+          user_id: string
+        }
+        Update: {
+          body?: string
+          category?: string
+          created_at?: string
+          id?: string
+          is_read?: boolean
+          link?: string | null
+          read?: boolean
+          reference_id?: string | null
+          route?: string | null
+          sender_id?: string | null
+          target_id?: string | null
+          target_type?: string | null
+          title?: string
+          type?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      backup_snapshots: {
+        Row: {
+          created_at: string
+          exported_at: string
+          fingerprint: string
+          id: string
+          location_ids: string[]
+          owner_id: string
+          payload: Json
+          payload_bytes: number
+          payload_encoding: string
+          scope_role: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          exported_at?: string
+          fingerprint: string
+          id?: string
+          location_ids?: string[]
+          owner_id: string
+          payload: Json
+          payload_bytes?: number
+          payload_encoding?: string
+          scope_role: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          exported_at?: string
+          fingerprint?: string
+          id?: string
+          location_ids?: string[]
+          owner_id?: string
+          payload?: Json
+          payload_bytes?: number
+          payload_encoding?: string
+          scope_role?: string
+          updated_at?: string
+        }
+        Relationships: []
       }
       booking_assignments: {
         Row: {
@@ -347,6 +458,7 @@ export type Database = {
           requested_at: string | null
           requested_new_date: string | null
           status: string
+          total_amount: number | null
           user_id: string
         }
         Insert: {
@@ -365,6 +477,7 @@ export type Database = {
           requested_at?: string | null
           requested_new_date?: string | null
           status?: string
+          total_amount?: number | null
           user_id: string
         }
         Update: {
@@ -383,6 +496,7 @@ export type Database = {
           requested_at?: string | null
           requested_new_date?: string | null
           status?: string
+          total_amount?: number | null
           user_id?: string
         }
         Relationships: [
@@ -786,6 +900,41 @@ export type Database = {
           },
         ]
       }
+      hike_station_reports: {
+        Row: {
+          created_at: string
+          id: string
+          reported_at: string
+          session_id: string
+          station: number
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id: string
+          reported_at: string
+          session_id: string
+          station: number
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          reported_at?: string
+          session_id?: string
+          station?: number
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "hike_station_reports_session_id_fkey"
+            columns: ["session_id"]
+            isOneToOne: false
+            referencedRelation: "hiker_sessions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       hiker_locations: {
         Row: {
           accuracy: number | null
@@ -1168,10 +1317,13 @@ export type Database = {
         Row: {
           booking_id: string | null
           created_at: string
+          difficulty: string | null
           id: string
           is_approved: boolean
+          photo_url: string | null
           rating: number
           review_text: string
+          review_type: string
           reviewer_name: string
           trail_name: string
           user_id: string
@@ -1179,10 +1331,13 @@ export type Database = {
         Insert: {
           booking_id?: string | null
           created_at?: string
+          difficulty?: string | null
           id?: string
           is_approved?: boolean
+          photo_url?: string | null
           rating?: number
           review_text?: string
+          review_type?: string
           reviewer_name?: string
           trail_name?: string
           user_id: string
@@ -1190,10 +1345,13 @@ export type Database = {
         Update: {
           booking_id?: string | null
           created_at?: string
+          difficulty?: string | null
           id?: string
           is_approved?: boolean
+          photo_url?: string | null
           rating?: number
           review_text?: string
+          review_type?: string
           reviewer_name?: string
           trail_name?: string
           user_id?: string
@@ -1466,6 +1624,10 @@ export type Database = {
         }
         Returns: undefined
       }
+      admin_add_hike_guide: {
+        Args: { p_booking_id: string; p_guide_id: string }
+        Returns: Json
+      }
       admin_approve_booking_reschedule: {
         Args: { p_approved: boolean; p_booking_id: string; p_reason?: string }
         Returns: Json
@@ -1474,9 +1636,23 @@ export type Database = {
         Args: { p_booking_id: string; p_guide_id: string; p_trail_id?: string }
         Returns: Json
       }
+      admin_available_guide_ids_for_slot: {
+        Args: {
+          p_booking_date: string
+          p_exclude_booking_id?: string
+          p_hike_time: string
+          p_hike_type: string
+          p_location_id: string
+        }
+        Returns: string[]
+      }
       admin_can_access_location: {
         Args: { _location_id: string }
         Returns: boolean
+      }
+      admin_reassign_hike_guide: {
+        Args: { p_booking_id: string; p_guide_id: string; p_reason: string }
+        Returns: Json
       }
       ai_attendance_summary: {
         Args: {
@@ -1494,7 +1670,15 @@ export type Database = {
         }
         Returns: Json
       }
+      booking_schedule_range: {
+        Args: { p_booking_id: string }
+        Returns: unknown
+      }
       can_moderate_guide_review: {
+        Args: { _booking_id: string }
+        Returns: boolean
+      }
+      can_moderate_trail_review: {
         Args: { _booking_id: string }
         Returns: boolean
       }
@@ -1528,6 +1712,17 @@ export type Database = {
         Args: { p_booking_id: string; p_notes: string }
         Returns: Json
       }
+      create_app_notification: {
+        Args: {
+          p_body?: string
+          p_booking_id?: string
+          p_category?: string
+          p_link?: string
+          p_title: string
+          p_user_id: string
+        }
+        Returns: string
+      }
       get_booking_slot_capacity: {
         Args: { p_end_date: string; p_start_date: string }
         Returns: {
@@ -1554,6 +1749,30 @@ export type Database = {
         Args: { _booking_id: string }
         Returns: boolean
       }
+      guide_has_schedule_conflict: {
+        Args: {
+          p_booking_id: string
+          p_exclude_assignment_id?: string
+          p_guide_id: string
+        }
+        Returns: boolean
+      }
+      guide_reassign_hike_assignment: {
+        Args: {
+          p_assignment_id: string
+          p_reason: string
+          p_replacement_guide_id: string
+        }
+        Returns: Json
+      }
+      guide_slot_range: {
+        Args: {
+          p_booking_date: string
+          p_hike_time: string
+          p_hike_type: string
+        }
+        Returns: unknown
+      }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
@@ -1561,6 +1780,7 @@ export type Database = {
         }
         Returns: boolean
       }
+      is_admin_account: { Args: { _user_id: string }; Returns: boolean }
       match_kb_chunks: {
         Args: {
           match_count?: number
@@ -1598,6 +1818,10 @@ export type Database = {
       refresh_guide_duty_status: {
         Args: { p_guide_id: string }
         Returns: string
+      }
+      request_booking_reschedule: {
+        Args: { p_booking_id: string; p_new_date: string; p_reason: string }
+        Returns: Json
       }
       safe_booking_meta: { Args: { _notes: string }; Returns: Json }
       session_location_id: { Args: { _session_id: string }; Returns: string }
