@@ -37,7 +37,7 @@ export default function MapWorkspace({ children, panel, routes, tools, title = '
         <button type="button" disabled={panel == null} aria-expanded={activePanel === 'groups'} aria-controls={id}
           aria-label={`${activePanel === 'groups' ? 'Collapse' : 'Expand'} ${title.toLowerCase()}`} title={title}
           onClick={() => { setExtraPanel(null); setOpen(!open); }}><Users size={19} /><span>{title === 'My hike' ? 'My hike' : 'Groups'}</span></button>
-        <button type="button" aria-expanded={activePanel === 'routes'} aria-controls={id} title="Routes" onClick={() => toggleExtra('routes')}><Route size={19} /><span>Routes</span></button>
+        {routes !== null && <button type="button" aria-expanded={activePanel === 'routes'} aria-controls={id} title="Routes" onClick={() => toggleExtra('routes')}><Route size={19} /><span>Routes</span></button>}
         <button type="button" aria-expanded={activePanel === 'tools'} aria-controls={id} title="Tools" onClick={() => toggleExtra('tools')}><SlidersHorizontal size={19} /><span>Tools</span></button>
       </nav>
     </div>

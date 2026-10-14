@@ -625,6 +625,14 @@ function ScopedMonitorMap({ locationId, canAddCheckpoints = false, tools, routeA
       }).addTo(checkpointLayer.current!);
     });
 
+    // Give each booking a stable, collision-free color in this visible map
+    // snapshot. Every participant in the booking uses that same color.
+    const visibleBookingIds = Array.from(new Set(rawSessions.map((session) => session.booking_id).filter(Boolean) as string[])).sort();
+    const groupColorByBooking = new Map(visibleBookingIds.map((bookingId, index) => [
+      bookingId,
+      `hsl(${Math.round((index * 137.508) % 360)} 68% 42%)`,
+    ]));
+
     // hikers / groups
     visibleSessions.forEach((s) => {
       if (s.lastLat == null || s.lastLng == null || !gpsPresentation({ lat: s.lastLat, lng: s.lastLng, timestamp: s.lastTs }, clock).hasFix) return;
@@ -634,9 +642,10 @@ function ScopedMonitorMap({ locationId, canAddCheckpoints = false, tools, routeA
       const isCluster = viewMode === 'cluster' && (s.groupSize ?? 1) > 1;
 
       // Color coding
-      const groupColors = ['#059669', '#2563eb', '#7c3aed', '#db2777', '#d97706', '#0891b2'];
-      const groupColor = groupColors[Math.abs(Array.from(String(s.booking_id || s.id)).reduce((sum, char) => sum + char.charCodeAt(0), 0)) % groupColors.length];
-      const markerColor = isOffline ? '#f97316' : groupColor;
+      const groupColor = s.booking_id ? (groupColorByBooking.get(s.booking_id) ?? '#059669') : '#059669';
+      // Stale/offline state is shown with a dashed group ring; the participant
+      // color itself must remain stable across all members and filters.
+      const markerColor = groupColor;
 
       const pathSegments = splitTrackAtGaps((s.pathPoints ?? (s.path ?? []).map(([lat, lng], index) => ({ lat, lng, ts: String(index) })))).map((segment) =>
         segment.map((point) => [point.lat, point.lng] as [number, number]));
@@ -662,15 +671,16 @@ function ScopedMonitorMap({ locationId, canAddCheckpoints = false, tools, routeA
         ? `<img src="${esc(s.avatarUrl)}" alt="" style="width:32px;height:32px;object-fit:cover;border-radius:inherit" />`
         : `<span>${esc(label)}</span>`;
       const iconHtml = `<span style="position:relative;--marker-color:${markerColor};display:flex;align-items:center;justify-content:center;width:44px;height:44px;background:${markerColor};border:3px solid ${markerColor};${shape};box-shadow:0 2px 9px rgba(0,0,0,.45);color:#fff;font-weight:800;font-size:11px;overflow:hidden">${avatar}${s.avatarUrl && isCluster ? `<b style="position:absolute;right:-2px;top:-2px;background:#111;color:#fff;border-radius:10px;padding:1px 4px;font-size:9px">${esc(label)}</b>` : ''}</span>`;
+      const markerName = role === 'guide' ? (s.guideName || 'Mountain guide') : (s.hiker_name || 'Hiker Lead');
       const m = L.marker([s.lastLat!, s.lastLng!], {
-        title: `${s.hiker_name ?? 'Hiker Lead'} - select group`,
-        alt: `${s.hiker_name ?? 'Hiker Lead'} - select group`,
+        title: `${markerName} - select group`,
+        alt: `${markerName} - select group`,
         zIndexOffset: 2000,
         icon: L.divIcon({ className: 'live-map-marker', html: iconHtml, iconSize: [44, 44], iconAnchor: [22, 22] }),
       }).on('click', () => { setSelectedId(s.id); setPanelOpen(true); });
       hikerLayer.current!.addLayer(m);
     });
-  }, [visibleSessions, visibleCheckpoints, progress, visibleRoutes, lamot2ReferencePath, viewMode, clock, locations]);
+  }, [rawSessions, visibleSessions, visibleCheckpoints, progress, visibleRoutes, lamot2ReferencePath, viewMode, clock, locations]);
 
   /* ── Inactivity alert: warn admin when a hiker hasn't pinged in 20+ min ── */
   const alertedRef = useRef<Set<string>>(new Set());

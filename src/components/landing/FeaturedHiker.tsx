@@ -44,10 +44,9 @@ export default function FeaturedHiker() {
           : data;
         if (!row) return;
         const review = row as unknown as FeaturedReview;
-        const { data: profile } = review.user_id
-          ? await supabase.from('profiles').select('avatar_url').eq('user_id', review.user_id).maybeSingle()
-          : { data: null };
-        if (active) setReview({ ...review, photo_url: review.photo_url || profile?.avatar_url || null });
+        // A trail story photo is the only image shown here. Never substitute a
+        // hiker's profile avatar for a trail-review image.
+        if (active) setReview(review);
       });
     return () => { active = false; };
   }, []);

@@ -7,7 +7,6 @@ import MountainMist from '@/components/landing/MountainMist';
 import heroImage from '@/assets/mt-kalisungan-hero.jpg';
 import logo from '@/assets/logo.png';
 import TrailGallery from '@/components/landing/TrailGallery';
-import HikerReviews from '@/components/landing/HikerReviews';
 import GuideRatings from '@/components/landing/GuideRatings';
 import TrailOverview from '@/components/landing/TrailOverview';
 import ReservingGuide from '@/components/landing/ReservingGuide';
@@ -491,9 +490,6 @@ export default function Index() {
       {/* About / Gallery */}
       <TrailGallery />
 
-      {/* Featured hiker story */}
-      <FeaturedHiker />
-
       {/* Divider: Gallery → Overview */}
       <WaveDivider />
 
@@ -512,11 +508,11 @@ export default function Index() {
       {/* Top 3 Guide Ratings */}
       <GuideRatings />
 
-      {/* Divider: Guide Ratings → Hiker Reviews */}
+      {/* Divider: Guide Ratings → Featured Hiker */}
       <MountainDivider />
 
-      {/* Hiker Experience Reviews */}
-      <HikerReviews />
+      {/* Featured hiker story replaces the generic review heading. */}
+      <FeaturedHiker />
 
       {/* CTA */}
       <section className="py-20 px-4 relative">

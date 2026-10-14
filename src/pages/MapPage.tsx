@@ -261,7 +261,7 @@ export default function MapPage() {
 
   // Tracker routes and editor routes intentionally use different visibility rules.
   const fetchTrails = useCallback(async () => {
-    const restrictToAssignedTrail = (role === 'hiker' || role === 'guide') && !!assignedTrailZoneId;
+    const restrictToAssignedTrail = (role === 'hiker' || role === 'guide') && !!assignedTrailZoneId && !!activeSelfSession;
     let trackerQuery = supabase
       .from('trail_zones')
       .select('id,location_id,name,difficulty,elevation_meters,coordinates_json,status,is_official,review_status,recording_metadata')
@@ -271,9 +271,9 @@ export default function MapPage() {
       .order('created_at', { ascending: true });
     if (restrictToAssignedTrail) {
       trackerQuery = trackerQuery.eq('id', assignedTrailZoneId) as typeof trackerQuery;
-    } else if (user && role === 'hiker' && bookedLocationId) {
+    } else if (user && role === 'hiker' && bookedLocationId && activeSelfSession) {
       trackerQuery = trackerQuery.eq('location_id', bookedLocationId) as typeof trackerQuery;
-    } else if (user && activeLocationId && role !== 'super_admin' && role !== 'mdrrmo') {
+    } else if (user && activeLocationId && role !== 'super_admin' && role !== 'mdrrmo' && !(role === 'hiker' && !activeSelfSession)) {
       trackerQuery = trackerQuery.eq('location_id', activeLocationId) as typeof trackerQuery;
     }
 
@@ -314,7 +314,7 @@ export default function MapPage() {
       : undefined;
     const loaded = officialRoutesForLocation(
       trackerRows,
-      restrictToAssignedTrail || role === 'super_admin' || role === 'mdrrmo' || !user
+      restrictToAssignedTrail || role === 'super_admin' || role === 'mdrrmo' || !user || (role === 'hiker' && !activeSelfSession)
         ? undefined
         : role === 'hiker' && bookedLocationId ? bookedLocationId : activeLocationId,
     )
@@ -416,7 +416,7 @@ export default function MapPage() {
     } else {
       setRawTrailZones([]);
     }
-  }, [role, assignedTrailZoneId, bookedLocationId, activeLocationId, isTrailRecorder, locations, barangayLocations, user]);
+  }, [role, assignedTrailZoneId, bookedLocationId, activeLocationId, activeSelfSession, isTrailRecorder, locations, barangayLocations, user]);
 
   useEffect(() => {
     let active = true;

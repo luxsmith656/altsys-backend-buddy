@@ -357,7 +357,11 @@ export class HikeTracker {
     if (this.lastFix) {
       const d = haversineM(this.lastFix, { lat, lng });
       const dt = (ts - this.lastFix.ts) / 1000;
-      const noiseRadius = Math.max(2, Math.min(12, (accuracy + this.lastFix.accuracy) * 0.18));
+      // GPS receivers can wander several metres while a hiker is standing
+      // still. Require a larger displacement when speed is zero so idle
+      // sessions do not draw a false trail.
+      const noiseRadius = Math.max(5, Math.min(12, (accuracy + this.lastFix.accuracy) * 0.18));
+      const stationaryRadius = Math.max(8, Math.min(22, accuracy * 0.45));
       const impliedSpeed = dt > 0 ? d / Math.max(1, dt) : 0;
       if (dt < 120 && accuracy > 25 && (d > 90 || impliedSpeed > Math.max(4.5, speed + 2.5))) return;
       if (d < noiseRadius && speed < 0.5) {
@@ -365,7 +369,7 @@ export class HikeTracker {
         this.emit();
         return;
       }
-      const isMoving = speed > 0.5 || d > 3;
+      const isMoving = speed > 0.5 || d > stationaryRadius;
       if (!isMoving && dt < 30) return;
 
       // Update stats

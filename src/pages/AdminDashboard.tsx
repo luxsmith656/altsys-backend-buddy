@@ -193,6 +193,7 @@ const getBookingDisplayStatus = (booking: any) => {
   if (
     ['confirmed', 'approved'].includes(booking.status) &&
     !meta.assignedGuideId &&
+    Boolean(meta.guideChangedAt) &&
     ['declined', 'reassigned_pending'].includes(String(meta.guideStatus || ''))
   ) return 'pending';
   return booking.status as string;
@@ -512,19 +513,10 @@ export default function AdminDashboard() {
   /* ── Computed: Derived lists ── */
   const filteredTabBookings = useMemo(() => {
     let list = allTabBookings;
-    const queuePriority = (booking: any) => {
-      const meta = parseMeta(booking.notes);
-      const completed = booking.status === 'completed' || meta.groupPhase === 'completed' || Boolean(meta.hikeCompletedAt);
-      if (completed) return 3;
-      if (booking.status === 'pending' || booking.status === 'adjustment_pending' || (booking.status === 'confirmed' && !meta.assignedGuide)) return 0;
-      if (booking.status === 'confirmed') return 1;
-      if (meta.onsiteStartConfirmed) return 2;
-      return 4;
-    };
     if (bookingTabFilter === 'all') {
       list = list.filter((b) => {
         const m = parseMeta(b.notes);
-        return b.status !== 'completed' && m.groupPhase !== 'completed' && !m.hikeCompletedAt;
+        return !['completed', 'cancelled', 'deleted'].includes(String(b.status)) && m.groupPhase !== 'completed' && !m.hikeCompletedAt;
       });
     }
     if (bookingTabFilter === 'started') {
@@ -544,8 +536,8 @@ export default function AdminDashboard() {
         const m = parseMeta(b.notes);
         return b.status === 'confirmed' && !m.onsiteStartConfirmed && b.status !== 'completed' && m.groupPhase !== 'completed';
       });
-    } else if (bookingTabFilter === 'cancelled') {
-      list = list.filter((b) => b.status === 'cancelled');
+    } else if (bookingTabFilter === 'deleted') {
+      list = list.filter((b) => ['cancelled', 'deleted'].includes(String(b.status)));
     }
     if (bookingSearch.trim()) {
       const q = bookingSearch.toLowerCase();
@@ -560,7 +552,11 @@ export default function AdminDashboard() {
         );
       });
     }
-    return [...list].sort((a, b) => queuePriority(a) - queuePriority(b) || String(a.booking_date).localeCompare(String(b.booking_date)));
+    return [...list].sort((a, b) => {
+      const createdDiff = new Date(String(b.created_at || 0)).getTime() - new Date(String(a.created_at || 0)).getTime();
+      if (Number.isFinite(createdDiff) && createdDiff !== 0) return createdDiff;
+      return String(b.booking_date || '').localeCompare(String(a.booking_date || ''));
+    });
   }, [allTabBookings, bookingTabFilter, bookingSearch]);
 
   const pendingCount = useMemo(
@@ -2034,7 +2030,7 @@ export default function AdminDashboard() {
                 { value: 'confirmed', label: 'Confirmed' },
                 { value: 'started', label: 'Check-in / In Progress' },
                 { value: 'completed', label: 'Completed & Settled', count: completedCount },
-                { value: 'cancelled', label: 'Cancelled' },
+                { value: 'deleted', label: 'Deleted / Cancelled' },
               ].map(({ value, label, count }) => (
                 <button
                   key={value}
@@ -2125,7 +2121,7 @@ export default function AdminDashboard() {
                                   <p className="font-semibold">{meta.assignedGuide}</p>
                                 </div>
                               )}
-                              {guideNeedsDispatch && (
+                              {guideNeedsDispatch && Boolean(meta.guideChangedAt) && (
                                 <div className="col-span-full rounded-md border border-amber-500/30 bg-amber-500/5 p-3">
                                   <p className="text-xs font-semibold text-amber-700 dark:text-amber-300">
                                     Guide reassignment requested
