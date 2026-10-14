@@ -27,11 +27,19 @@ export default function FeaturedHiker() {
 
   useEffect(() => {
     let active = true;
-    void supabase.from('reviews' as any)
+    const loadPublishedStories = () => supabase.from('reviews' as any)
       .select('id,reviewer_name,review_text,trail_name,rating,difficulty,photo_url,review_type,is_approved,created_at')
       .eq('is_approved', true).eq('review_type', 'trail').order('created_at', { ascending: false }).limit(12)
-      .then(({ data }) => { if (active && Array.isArray(data) && data.length) setReviews(data as unknown as FeaturedReview[]); });
-    return () => { active = false; };
+      .then(({ data }) => {
+        if (!active) return;
+        setReviews(Array.isArray(data) && data.length ? data as unknown as FeaturedReview[] : [fallback]);
+        setIndex(0);
+      });
+    void loadPublishedStories();
+    const channel = supabase.channel('published-trail-stories')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'reviews' }, () => void loadPublishedStories())
+      .subscribe();
+    return () => { active = false; void supabase.removeChannel(channel); };
   }, []);
 
   const review = reviews[index] || fallback;

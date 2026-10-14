@@ -3,6 +3,7 @@ import { supabase } from '@/integrations/supabase/client';
 export type AnnouncementType = 'info' | 'warning' | 'closure';
 export type AnnouncementTarget = 'all' | 'admins' | 'hikers' | 'guides';
 export type AnnouncementApprovalStatus = 'pending' | 'approved' | 'rejected';
+export type AnnouncementLifecycle = 'active' | 'archived' | 'deleted';
 
 export interface AdminAnnouncement {
   id: string;
@@ -20,6 +21,9 @@ export interface AdminAnnouncement {
   approved_by?: string | null;
   approved_at?: string | null;
   rejection_reason?: string | null;
+  lifecycle_status?: AnnouncementLifecycle;
+  archived_at?: string | null;
+  deleted_at?: string | null;
 }
 
 const KEY = 'mtk_admin_announcements_v1';
@@ -34,6 +38,7 @@ export function loadAnnouncements(roleFilter?: string | null): AdminAnnouncement
     const now = Date.now();
     return parsed
       .filter((a) => {
+        if ((a.lifecycle_status || 'active') === 'deleted') return false;
         const startsAt = a.starts_at ? new Date(a.starts_at).getTime() : null;
         const expiresAt = a.expires_at ? new Date(a.expires_at).getTime() : null;
         if (startsAt !== null && now < startsAt) return false;
@@ -66,6 +71,7 @@ export function visibleAnnouncements(items: AdminAnnouncement[], role?: string |
   const normalizedRole = role === 'super_admin' ? 'admin' : role;
   const now = Date.now();
   return items.filter((item) => {
+    if ((item.lifecycle_status || 'active') === 'deleted') return false;
     if ((item.approval_status || 'approved') !== 'approved') return false;
     const startsAt = item.starts_at ? new Date(item.starts_at).getTime() : null;
     const expiresAt = item.expires_at ? new Date(item.expires_at).getTime() : null;
@@ -126,6 +132,9 @@ export async function fetchAnnouncementsFromDb(): Promise<AdminAnnouncement[]> {
         approved_by: d.approved_by ? String(d.approved_by) : null,
         approved_at: d.approved_at || null,
         rejection_reason: d.rejection_reason ? String(d.rejection_reason) : null,
+        lifecycle_status: (d.lifecycle_status as AnnouncementLifecycle) || 'active',
+        archived_at: d.archived_at || null,
+        deleted_at: d.deleted_at || null,
       }));
       saveAnnouncements(mapped);
       return mapped;
@@ -164,6 +173,9 @@ export async function addAnnouncement(item: AdminAnnouncement): Promise<AdminAnn
         approved_by: item.approved_by || null,
         approved_at: item.approved_at || null,
         rejection_reason: item.rejection_reason || null,
+        lifecycle_status: item.lifecycle_status || 'active',
+        archived_at: item.archived_at || null,
+        deleted_at: item.deleted_at || null,
       }) as any);
   if (error) {
     saveAnnouncements(all);
@@ -199,7 +211,10 @@ export async function removeAnnouncement(id: string): Promise<AdminAnnouncement[
   const next = all.filter((a) => a.id !== id);
   saveAnnouncements(next);
 
-  const { error } = await (supabase.from('announcements' as any).delete().eq('id', id) as any);
+  const { error } = await (supabase.from('announcements' as any).update({
+    lifecycle_status: 'deleted',
+    deleted_at: new Date().toISOString(),
+  }).eq('id', id) as any);
   if (error) {
     saveAnnouncements(all);
     throw explainAnnouncementSchemaError(error);
