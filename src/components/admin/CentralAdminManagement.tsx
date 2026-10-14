@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import PasswordInput from '@/components/auth/PasswordInput';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import {
@@ -351,9 +352,8 @@ export default function CentralAdminManagement() {
                 <Label htmlFor="newAdminPass" className="text-xs font-semibold">
                   New Password (min 6 characters)
                 </Label>
-                <Input
+                <PasswordInput
                   id="newAdminPass"
-                  type="password"
                   placeholder="••••••••"
                   value={newPassword}
                   onChange={(e) => setNewPassword(e.target.value)}
@@ -366,9 +366,8 @@ export default function CentralAdminManagement() {
                 <Label htmlFor="confirmAdminPass" className="text-xs font-semibold">
                   Confirm New Password
                 </Label>
-                <Input
+                <PasswordInput
                   id="confirmAdminPass"
-                  type="password"
                   placeholder="••••••••"
                   value={confirmPassword}
                   onChange={(e) => setConfirmPassword(e.target.value)}
@@ -553,9 +552,8 @@ export default function CentralAdminManagement() {
                 <Label htmlFor="addAdminPassword" className="text-xs font-semibold">
                   Temporary Initial Password
                 </Label>
-                <Input
+                <PasswordInput
                   id="addAdminPassword"
-                  type="password"
                   placeholder="Defaults to kalisungan2026 (min 6 chars)"
                   value={addPassword}
                   onChange={(e) => setAddPassword(e.target.value)}

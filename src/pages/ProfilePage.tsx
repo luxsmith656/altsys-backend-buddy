@@ -28,6 +28,7 @@ import { Camera } from 'lucide-react';
 import { profileChanged } from '@/components/common/ProfileAvatar';
 import { changeAccountPassword, emailPasswordReset } from '@/lib/accountSecurity';
 import { ResetPasswordDialog } from '@/components/auth/ResetPasswordDialog';
+import PasswordInput from '@/components/auth/PasswordInput';
 
 interface Profile {
   full_name: string;
@@ -372,15 +373,15 @@ export default function ProfilePage() {
                 <p className="text-sm text-muted-foreground">Change your password using your current password.</p>
                 <div className="space-y-2">
                   <Label htmlFor="current-password">Current password</Label>
-                  <Input id="current-password" type="password" autoComplete="current-password" value={currentPassword} onChange={(event) => setCurrentPassword(event.target.value)} required />
+                  <PasswordInput id="current-password" autoComplete="current-password" value={currentPassword} onChange={(event) => setCurrentPassword(event.target.value)} required />
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="new-password">New password</Label>
-                  <Input id="new-password" type="password" autoComplete="new-password" minLength={8} value={newPassword} onChange={(event) => setNewPassword(event.target.value)} required />
+                  <PasswordInput id="new-password" autoComplete="new-password" minLength={8} value={newPassword} onChange={(event) => setNewPassword(event.target.value)} required />
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="confirm-new-password">Confirm new password</Label>
-                  <Input id="confirm-new-password" type="password" autoComplete="new-password" minLength={8} value={confirmNewPassword} onChange={(event) => setConfirmNewPassword(event.target.value)} required />
+                  <PasswordInput id="confirm-new-password" autoComplete="new-password" minLength={8} value={confirmNewPassword} onChange={(event) => setConfirmNewPassword(event.target.value)} required />
                 </div>
                 <Button type="submit" disabled={passwordSaving || !currentPassword || !newPassword || !confirmNewPassword}>
                   {passwordSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <KeyRound className="mr-2 h-4 w-4" />}

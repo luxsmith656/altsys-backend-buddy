@@ -155,11 +155,12 @@ export default function HikerDashboard() {
     const channel = supabase
       .channel(`hiker-booking-message-alerts-${user.id}`)
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'booking_messages' }, (payload) => {
-        const message = payload.new as { booking_id?: string; sender_id?: string | null; sender_role?: string | null; recipient_role?: string | null };
+        const message = payload.new as { id?: string; booking_id?: string; sender_id?: string | null; sender_role?: string | null; recipient_role?: string | null };
         const isHikerAudience = message.recipient_role === 'hiker'
           || (!message.recipient_role && ['admin', 'system'].includes(message.sender_role || ''));
         if (message.booking_id && bookingIds.has(message.booking_id) && message.sender_id !== user.id && isHikerAudience) {
           window.dispatchEvent(new CustomEvent('booking-admin-message', { detail: { bookingId: message.booking_id } }));
+          window.dispatchEvent(new CustomEvent('booking-message-alert', { detail: { bookingId: message.booking_id, messageId: message.id } }));
         }
       })
       .subscribe();

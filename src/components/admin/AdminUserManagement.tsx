@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import PasswordInput from '@/components/auth/PasswordInput';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import {
@@ -404,9 +405,8 @@ export default function AdminUserManagement({
                 <Label htmlFor="newUserPass" className="text-xs font-semibold">
                   New Password (min 6 characters)
                 </Label>
-                <Input
+                <PasswordInput
                   id="newUserPass"
-                  type="password"
                   placeholder="••••••••"
                   value={newPassword}
                   onChange={(e) => setNewPassword(e.target.value)}
@@ -419,9 +419,8 @@ export default function AdminUserManagement({
                 <Label htmlFor="confirmUserPass" className="text-xs font-semibold">
                   Confirm Password
                 </Label>
-                <Input
+                <PasswordInput
                   id="confirmUserPass"
-                  type="password"
                   placeholder="••••••••"
                   value={confirmPassword}
                   onChange={(e) => setConfirmPassword(e.target.value)}

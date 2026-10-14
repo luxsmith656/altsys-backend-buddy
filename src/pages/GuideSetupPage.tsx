@@ -12,6 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { isFirebaseConfigured, uploadGuideProfilePhoto } from '@/lib/firebase-storage';
 import logo from '@/assets/logo.png';
 import { validatePhone } from '@/lib/inputValidation';
+import PasswordInput from '@/components/auth/PasswordInput';
 
 const schema = z.object({
   name: z.string().trim().min(2, 'Enter the name provided by the admin.'),
@@ -86,7 +87,7 @@ export default function GuideSetupPage() {
       <div className="text-center"><img src={logo} alt="Mt. Kalisungan logo" className="mx-auto mb-3 h-14 w-14 rounded-full object-cover" /><h1 className="text-2xl font-bold">Finish your guide account</h1><p className="mt-1 text-sm text-muted-foreground">Confirm your identity, secure your password, and add the details hikers will see.</p></div>
       <div className="rounded-lg border border-primary/20 bg-primary/5 p-3 text-sm flex gap-2"><ShieldCheck className="h-5 w-5 shrink-0 text-primary" /><span>Use the name provided by the admin. Your photo is optimized and stored in secure file storage; only its URL is saved with your guide profile.</span></div>
       <div className="grid gap-2"><Label htmlFor="guide-name">Full name</Label><Input id="guide-name" value={name} onChange={(e) => setName(e.target.value)} required /></div>
-      <div className="grid gap-2"><Label htmlFor="guide-password">New password</Label><Input id="guide-password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="At least 8 characters" required /></div>
+      <div className="grid gap-2"><Label htmlFor="guide-password">New password</Label><PasswordInput id="guide-password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="At least 8 characters" required /></div>
       <div className="grid grid-cols-2 gap-3"><div className="grid gap-2"><Label>Sex</Label><Select value={sex} onValueChange={(v) => setSex(v as 'male' | 'female')}><SelectTrigger><SelectValue placeholder="Choose" /></SelectTrigger><SelectContent><SelectItem value="male">Male</SelectItem><SelectItem value="female">Female</SelectItem></SelectContent></Select></div><div className="grid gap-2"><Label htmlFor="guide-age">Age</Label><Input id="guide-age" type="number" min="18" max="120" value={age} onChange={(e) => setAge(e.target.value)} required /></div></div>
       <div className="grid gap-2"><Label htmlFor="guide-phone">Contact number</Label><Input id="guide-phone" type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} required /></div>
       <label className="flex cursor-pointer items-center gap-3 rounded-lg border border-dashed border-primary/30 p-3"><ImageUp className="h-5 w-5 text-primary" /><span className="flex-1 text-sm">{photo?.name || (guide.photo_url ? 'Replace profile photo' : 'Upload profile photo')}</span><input className="sr-only" type="file" accept="image/jpeg,image/png,image/webp" onChange={(e) => setPhoto(e.target.files?.[0] || null)} /></label>

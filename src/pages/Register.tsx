@@ -14,6 +14,7 @@ import { resolvePostLoginPath } from '@/lib/post-login';
 import { validatePasswordConfirmation } from '@/lib/authValidation';
 import { validateEmail, validatePhone } from '@/lib/inputValidation';
 import TermsAgreement from '@/components/auth/TermsAgreement';
+import PasswordInput from '@/components/auth/PasswordInput';
 
 export default function Register() {
   const [fullName, setFullName] = useState('');
@@ -100,8 +101,8 @@ export default function Register() {
             <div className="space-y-2"><Label htmlFor="name">Full Name</Label><Input id="name" autoComplete="name" value={fullName} onChange={(e) => setFullName(e.target.value)} required /></div>
             <div className="space-y-2"><Label htmlFor="email">Email</Label><Input id="email" type="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} required /></div>
             <div className="space-y-2"><Label htmlFor="phone">Mobile Number</Label><Input id="phone" type="tel" autoComplete="tel" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="09123456789" required /></div>
-            <div className="space-y-2"><Label htmlFor="password">Password</Label><Input id="password" type="password" autoComplete="new-password" minLength={6} value={password} onChange={(e) => setPassword(e.target.value)} required /></div>
-            <div className="space-y-2"><Label htmlFor="confirmPassword">Confirm Password</Label><Input id="confirmPassword" type="password" autoComplete="new-password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} required /></div>
+            <div className="space-y-2"><Label htmlFor="password">Password</Label><PasswordInput id="password" autoComplete="new-password" minLength={6} value={password} onChange={(e) => setPassword(e.target.value)} required /></div>
+            <div className="space-y-2"><Label htmlFor="confirmPassword">Confirm Password</Label><PasswordInput id="confirmPassword" autoComplete="new-password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} required /></div>
             <TermsAgreement agreed={agreed} onAgreedChange={setAgreed} />
             {formError && <p role="alert" className="text-sm text-destructive">{formError}</p>}
             <Button type="submit" className="w-full min-h-11" disabled={loading || googleLoading}>

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -14,10 +15,12 @@ type AppNotification = {
   body: string;
   createdAt: string;
   category: 'announcement' | 'booking' | 'system' | 'alert';
+  link?: string | null;
 };
 
 export default function NotificationsPage() {
   const { user, role } = useAuth();
+  const navigate = useNavigate();
   const [items, setItems] = useState<AppNotification[]>([]);
   const [seen, setSeen] = useState<string[]>([]);
   const [removed, setRemoved] = useState<string[]>([]);
@@ -49,6 +52,7 @@ export default function NotificationsPage() {
         body: a.body,
         createdAt: a.created_at,
         category: 'announcement' as const,
+        link: '/notifications',
       }));
 
       let bookingData: Array<{ id: string; status: string; booking_date: string; created_at: string }> = [];
@@ -70,6 +74,7 @@ export default function NotificationsPage() {
         body: `Your hike booking for ${b.booking_date} is now marked as ${b.status}.`,
         createdAt: b.created_at,
         category: 'booking' as const,
+        link: `/hiker?bookingId=${encodeURIComponent(b.id)}`,
       }));
 
       const fsItems: AppNotification[] = fsNotifs.map((n) => ({
@@ -78,6 +83,7 @@ export default function NotificationsPage() {
         body: n.body,
         createdAt: n.createdAt,
         category: n.category,
+        link: n.link,
       }));
 
       setItems(
@@ -139,7 +145,8 @@ export default function NotificationsPage() {
                   return (
                     <div
                       key={n.id}
-                      className={`rounded-xl border p-4 ${isUnread ? 'border-primary/40 bg-primary/5' : 'border-border/20 bg-secondary/20'}`}
+                      className={`rounded-xl border p-4 ${isUnread ? 'border-primary/40 bg-primary/5' : 'border-border/20 bg-secondary/20'} ${n.link ? 'cursor-pointer hover:border-primary/50' : ''}`}
+                      onClick={() => n.link && navigate(n.link)}
                     >
                       <div className="flex items-start gap-2 mb-1">
                         {n.category === 'announcement' ? (
@@ -162,7 +169,8 @@ export default function NotificationsPage() {
                             variant="ghost"
                             size="sm"
                             className="h-7 px-2 text-xs"
-                            onClick={() => {
+                            onClick={(event) => {
+                              event.stopPropagation();
                               const next = [...seen, n.id];
                               setSeen(next);
                               saveSeenNotificationIds(user.id, next);
@@ -174,7 +182,8 @@ export default function NotificationsPage() {
                             Mark as seen
                           </Button>
                         )}
-                        {user && <Button aria-label="Delete notification" title="Delete notification" variant="ghost" size="icon" className="ml-auto h-7 w-7 text-destructive hover:text-destructive" onClick={() => {
+                        {user && <Button aria-label="Delete notification" title="Delete notification" variant="ghost" size="icon" className="ml-auto h-7 w-7 text-destructive hover:text-destructive" onClick={(event) => {
+                          event.stopPropagation();
                           setItems((prev) => prev.filter((x) => x.id !== n.id));
                           setRemoved((prev) => (prev.includes(n.id) ? prev : [...prev, n.id]));
                           markNotificationRemoved(user.id, n.id);

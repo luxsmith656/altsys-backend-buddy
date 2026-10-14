@@ -13,6 +13,7 @@ import { signInWithFirebaseGoogle } from '@/lib/firebase-auth';
 import { isFirebaseConfigured } from '@/lib/firebase';
 import { resolvePostLoginPath } from '@/lib/post-login';
 import { ResetPasswordDialog } from '@/components/auth/ResetPasswordDialog';
+import PasswordInput from '@/components/auth/PasswordInput';
 
 export default function Login() {
   const [email, setEmail] = useState('');
@@ -92,7 +93,7 @@ export default function Login() {
                   Forgot password?
                 </button>
               </div>
-              <Input id="password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="••••••••" required />
+              <PasswordInput id="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="••••••••" required />
             </div>
             <Button type="submit" className="w-full" disabled={loading}>
               {loading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}

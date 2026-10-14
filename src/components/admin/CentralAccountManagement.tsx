@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import PasswordInput from '@/components/auth/PasswordInput';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import {
@@ -713,8 +714,7 @@ export default function CentralAccountManagement() {
 
             <div className="space-y-1">
               <Label className="text-xs font-semibold">Initial Password</Label>
-              <Input
-                type="password"
+              <PasswordInput
                 placeholder="Minimum 6 characters (default: Trail@2026)"
                 value={addPassword}
                 onChange={(e) => setAddPassword(e.target.value)}
@@ -835,8 +835,7 @@ export default function CentralAccountManagement() {
           <form onSubmit={handleSavePassword} className="space-y-3.5 text-xs">
             <div className="space-y-1">
               <Label className="text-xs font-semibold">New Password</Label>
-              <Input
-                type="password"
+              <PasswordInput
                 placeholder="••••••••"
                 value={newPassword}
                 onChange={(e) => setNewPassword(e.target.value)}
@@ -848,8 +847,7 @@ export default function CentralAccountManagement() {
 
             <div className="space-y-1">
               <Label className="text-xs font-semibold">Confirm Password</Label>
-              <Input
-                type="password"
+              <PasswordInput
                 placeholder="••••••••"
                 value={confirmPassword}
                 onChange={(e) => setConfirmPassword(e.target.value)}

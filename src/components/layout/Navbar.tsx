@@ -82,6 +82,9 @@ export default function Navbar() {
             ? `/guide?bookingId=${encodeURIComponent(message.booking_id || '')}`
             : `/hiker?bookingId=${encodeURIComponent(message.booking_id || '')}`;
         setChatAlerts((current) => [{ id: `chat:${message.id}`, title: 'New booking chat message', createdAt: message.created_at || new Date().toISOString(), href }, ...current].slice(0, 8));
+        window.dispatchEvent(new CustomEvent('booking-message-alert', {
+          detail: { bookingId: message.booking_id, messageId: message.id },
+        }));
       }).subscribe();
     return () => { supabase.removeChannel(channel); };
   }, [user, role]);
@@ -118,6 +121,7 @@ export default function Navbar() {
         id: `fs:${n.id}`,
         title: n.title,
         createdAt: n.createdAt,
+        href: n.link || '/notifications',
         read: n.read,
       }));
       const all = [...anns, ...bookingItems, ...fsItems, ...chatAlerts].filter((n) => {
@@ -255,6 +259,16 @@ export default function Navbar() {
 
         {/* Mobile toggle + theme */}
         <div className="ml-2 flex shrink-0 items-center gap-1 md:hidden">
+          {user && (
+            <button
+              className={`relative inline-flex h-10 w-10 items-center justify-center rounded-md text-foreground transition-colors hover:bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${notifCount > 0 ? 'text-primary ring-2 ring-primary/40 shadow-[0_0_14px_hsl(var(--primary)/0.4)] animate-pulse' : ''}`}
+              aria-label={`Notifications${notifCount > 0 ? ` (${notifCount} unread)` : ''}`}
+              onClick={() => navigate('/notifications')}
+            >
+              <Bell className="h-5 w-5" />
+              {notifCount > 0 && <span className="absolute -right-0.5 -top-0.5 min-w-4 rounded-full bg-destructive px-1 text-[10px] leading-4 text-white">{notifCount > 9 ? '9+' : notifCount}</span>}
+            </button>
+          )}
           <button
             className="inline-flex h-10 w-10 items-center justify-center rounded-md text-foreground transition-colors hover:bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
             aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}

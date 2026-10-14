@@ -143,7 +143,7 @@ export default function BookingChat({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg gap-0 overflow-hidden p-0 sm:max-w-xl">
+      <DialogContent className="flex h-[100dvh] w-screen max-w-none flex-col gap-0 overflow-hidden rounded-none border-0 p-0">
         <DialogHeader className="border-b bg-background px-4 py-3 pr-12 sm:px-5">
           <DialogTitle className="flex items-center gap-2 text-base">
             <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary/15 text-primary">
@@ -158,7 +158,7 @@ export default function BookingChat({
           <DialogDescription className="sr-only">Messages about your booking.</DialogDescription>
         </DialogHeader>
 
-        <div ref={scroller} className="h-[min(55vh,28rem)] space-y-2 overflow-y-auto bg-muted/20 px-3 py-4 sm:px-5">
+        <div ref={scroller} className="min-h-0 flex-1 space-y-2 overflow-y-auto bg-muted/20 px-3 py-4 sm:px-[max(1.25rem,calc((100vw-42rem)/2))]">
           {loading ? (
             <div className="flex items-center justify-center py-10"><Loader2 className="h-5 w-5 animate-spin" /></div>
           ) : msgs.length === 0 ? (

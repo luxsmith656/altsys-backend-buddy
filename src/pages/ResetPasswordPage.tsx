@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import logo from '@/assets/logo.png';
+import PasswordInput from '@/components/auth/PasswordInput';
 
 export default function ResetPasswordPage() {
   const navigate = useNavigate();
@@ -69,11 +70,11 @@ export default function ResetPasswordPage() {
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="reset-new-password">New password</Label>
-              <Input id="reset-new-password" type="password" autoComplete="new-password" minLength={8} value={newPassword} onChange={(event) => setNewPassword(event.target.value)} required />
+              <PasswordInput id="reset-new-password" autoComplete="new-password" minLength={8} value={newPassword} onChange={(event) => setNewPassword(event.target.value)} required />
             </div>
             <div className="space-y-2">
               <Label htmlFor="reset-confirm-password">Confirm new password</Label>
-              <Input id="reset-confirm-password" type="password" autoComplete="new-password" minLength={8} value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} required />
+              <PasswordInput id="reset-confirm-password" autoComplete="new-password" minLength={8} value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} required />
             </div>
             <Button type="submit" className="w-full" disabled={saving}>
               {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <KeyRound className="mr-2 h-4 w-4" />}
