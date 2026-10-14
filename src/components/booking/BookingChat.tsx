@@ -4,11 +4,10 @@ import { useAuth } from '@/hooks/useAuth';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
-import { Loader2, Send } from 'lucide-react';
+import { CalendarDays, Loader2, MessageCircle, Send } from 'lucide-react';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 import { containsProfanity, PROFANITY_NOTICE } from '@/lib/contentModeration';
-import KaliAvatar from '@/components/kali/KaliAvatar';
 
 interface Msg {
   id: string;
@@ -147,21 +146,27 @@ export default function BookingChat({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
         style={{ '--booking-chat-vh': viewportHeight ? `${viewportHeight}px` : '100dvh' } as React.CSSProperties}
-        className="fixed left-0 top-0 flex h-[var(--booking-chat-vh)] w-screen max-w-none translate-x-0 translate-y-0 flex-col gap-0 overflow-hidden rounded-none border-0 bg-card p-0 md:bottom-0 md:left-0 md:right-auto md:top-16 md:h-[calc(100dvh-4rem)] md:max-h-none md:w-[360px] md:max-w-[360px] md:rounded-none md:border-b-0 md:border-l-0 md:border-r md:border-t-0"
+        className="fixed inset-0 flex h-[var(--booking-chat-vh)] w-screen max-w-none translate-x-0 translate-y-0 flex-col gap-0 overflow-hidden rounded-none border-0 bg-card p-0"
       >
-        <DialogHeader className="border-b border-border/30 bg-primary/5 px-4 py-4 pr-12 sm:px-5">
+        <DialogHeader className="border-b border-border/30 bg-card px-4 py-4 pr-12 sm:px-8">
           <DialogTitle className="flex items-center gap-2 text-base">
-            <KaliAvatar expression="happy" size="sm" className="h-11 w-11 shrink-0 rounded-full" />
+            <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-primary/10 text-primary">
+              <MessageCircle className="h-5 w-5" />
+            </span>
             <span className="min-w-0">
               <span className="block truncate">Booking conversation</span>
-              <span className="mt-0.5 flex items-center gap-1.5 text-xs font-normal text-muted-foreground"><span className="h-1.5 w-1.5 rounded-full bg-emerald-400" /> {format(new Date(`${bookingDate}T00:00:00`), 'MMM d, yyyy')}</span>
+              <span className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs font-normal text-muted-foreground">
+                <span className="inline-flex items-center gap-1"><CalendarDays className="h-3 w-3" /> {format(new Date(`${bookingDate}T00:00:00`), 'MMM d, yyyy')}</span>
+                <span>•</span>
+                <span>{recipientRole === 'guide' ? 'Talking to your guide' : recipientRole === 'admin' ? 'Talking to admin' : 'Booking support'}</span>
+              </span>
             </span>
             {unreadCount > 0 && <span className="ml-auto rounded-full bg-destructive px-1.5 py-0.5 text-[10px] text-destructive-foreground">{unreadCount}</span>}
           </DialogTitle>
           <DialogDescription className="sr-only">Messages about your booking.</DialogDescription>
         </DialogHeader>
 
-        <div ref={scroller} className="min-h-0 flex-1 space-y-3 overflow-y-auto bg-background/20 px-3 py-4">
+        <div ref={scroller} className="min-h-0 flex-1 space-y-3 overflow-y-auto bg-background/20 px-4 py-5 sm:px-8">
           {loading ? (
             <div className="flex items-center justify-center py-10"><Loader2 className="h-5 w-5 animate-spin" /></div>
           ) : msgs.length === 0 ? (
@@ -170,10 +175,9 @@ export default function BookingChat({
             msgs.filter((m) => m.kind === 'chat').map((m) => {
               const mine = m.sender_id === user?.id;
               return (
-                <div key={m.id} className={`flex gap-2 ${mine ? 'justify-end' : 'justify-start'}`}>
-                  {!mine && <KaliAvatar expression="reassuring" size="sm" className="mt-0.5 h-7 w-7 shrink-0 rounded-full" />}
-                  <div className={`max-w-[82%] rounded-2xl px-3 py-2.5 text-xs leading-relaxed shadow-sm ${mine ? 'rounded-tr-sm bg-primary text-primary-foreground' : 'rounded-tl-sm bg-secondary/60 text-foreground'}`}>
-                    {!mine && <div className="mb-0.5 text-[10px] font-medium uppercase opacity-70">{m.sender_role}</div>}
+                <div key={m.id} className={`flex ${mine ? 'justify-end' : 'justify-start'}`}>
+                  <div className={`max-w-[min(36rem,82%)] rounded-2xl px-3 py-2.5 text-sm leading-relaxed shadow-sm ${mine ? 'rounded-tr-sm bg-primary text-primary-foreground' : 'rounded-tl-sm bg-secondary/60 text-foreground'}`}>
+                    <div className="mb-0.5 text-[10px] font-medium uppercase opacity-70">{mine ? 'You' : m.sender_role}</div>
                     <p className="whitespace-pre-wrap break-words">{m.content}</p>
                     <div className="mt-1 text-right text-[10px] opacity-60">{format(new Date(m.created_at), 'MMM d, HH:mm')}</div>
                   </div>

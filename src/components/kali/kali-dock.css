@@ -19,6 +19,7 @@
   .kali-movable-dock {
     bottom: calc(env(safe-area-inset-bottom, 0px) + 76px);
     left: calc(env(safe-area-inset-left, 0px) + 12px);
+    right: auto;
   }
   .kali-movable-dock[data-above-navigation="true"] {
     bottom: calc(env(safe-area-inset-bottom, 0px) + 84px);

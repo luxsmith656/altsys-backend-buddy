@@ -868,7 +868,7 @@ export default function BookingAIChat({
               if (startX - endX > 70) setIsOpen(false);
               touchStartX.current = null;
             }}
-            className="fixed inset-0 z-[2100] w-screen transform-gpu overscroll-contain sm:w-[360px] sm:left-0 sm:right-auto sm:top-16 sm:bottom-0 flex flex-col bg-card sm:border-r border-border/50 shadow-2xl"
+            className="fixed inset-0 z-[2100] w-screen transform-gpu overscroll-contain sm:left-auto sm:right-0 sm:top-16 sm:bottom-0 sm:w-[360px] flex flex-col bg-card sm:border-l border-border/50 shadow-2xl"
           >
             {/* Header */}
             <div className="flex items-center gap-3 p-4 border-b border-border/30 bg-primary/5">
