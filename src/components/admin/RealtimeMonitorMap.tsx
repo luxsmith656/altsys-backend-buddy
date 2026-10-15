@@ -28,6 +28,8 @@ interface Props {
   canAddCheckpoints?: boolean;
   tools?: ReactNode;
   routeActions?: ReactNode;
+  /** Local admins monitor only; route browsing/editing belongs to Central Admin. */
+  showRoutePanel?: boolean;
 }
 
 interface ActiveSession {
@@ -98,7 +100,7 @@ export default function RealtimeMonitorMap(props: Props) {
   return <ScopedMonitorMap key={props.locationId ?? 'all'} {...props} />;
 }
 
-function ScopedMonitorMap({ locationId, canAddCheckpoints = false, tools, routeActions }: Props) {
+function ScopedMonitorMap({ locationId, canAddCheckpoints = false, tools, routeActions, showRoutePanel = !locationId }: Props) {
   const { locations } = useLocations();
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<L.Map | null>(null);
@@ -751,36 +753,33 @@ function ScopedMonitorMap({ locationId, canAddCheckpoints = false, tools, routeA
   const locate = (group: LiveMapGroup) => {
     if (gpsPresentation(group, clock).hasFix) mapRef.current?.setView([group.lat!, group.lng!], 17);
   };
+  const stationOptions = [{ id: 'all', label: 'All stations' }, ...trailheadOptions.map(({ location, identity }) => ({ id: location.id, label: identity.label }))];
+  const handleStationFilter = (nextId: string) => {
+    setStationFilterId(nextId);
+    setSelectedId(null);
+    if (nextId === 'all') {
+      mapRef.current?.setView(DEFAULT_CENTER, 14);
+      return;
+    }
+    const station = trailheadOptions.find(({ location }) => location.id === nextId)?.location;
+    const selectedRoute = officialRoutes.find((route) => route.location_id === nextId);
+    const rawPath = Array.isArray(selectedRoute?.coordinates_json)
+      ? (selectedRoute.coordinates_json as { lat: number; lng: number }[])
+        .map(({ lat, lng }) => [Number(lat), Number(lng)] as [number, number])
+        .filter(([lat, lng]) => Number.isFinite(lat) && Number.isFinite(lng))
+      : [];
+    if (rawPath.length > 1) mapRef.current?.fitBounds(rawPath, { padding: [32, 32], maxZoom: 16, animate: false });
+    else if (station) mapRef.current?.setView([Number(station.center_lat), Number(station.center_lng)], 15);
+  };
 
   return (
     <section className="live-map-monitor" aria-label="Live hiking map">
       <MapWorkspace open={panelOpen} onOpenChange={setPanelOpen}
-        routes={<>
-          {!locationId && trailheadOptions.length > 0 && <div className="space-y-1 border-b border-border p-3">
-            <Label htmlFor="central-map-station-filter" className="text-xs text-muted-foreground">Show station</Label>
-            <select id="central-map-station-filter" aria-label="Filter central map by station"
-              className="h-10 w-full rounded border border-input bg-background px-3 text-sm"
-              value={stationFilterId}
-              onChange={(event) => {
-                const nextId = event.target.value;
-                setStationFilterId(nextId);
-                setSelectedId(null);
-                if (nextId === 'all') {
-                  mapRef.current?.setView(DEFAULT_CENTER, 14);
-                  return;
-                }
-                const station = trailheadOptions.find(({ location }) => location.id === nextId)?.location;
-                const selectedRoute = officialRoutes.find((route) => route.location_id === nextId);
-                const rawPath = Array.isArray(selectedRoute?.coordinates_json)
-                  ? (selectedRoute.coordinates_json as { lat: number; lng: number }[])
-                    .map(({ lat, lng }) => [Number(lat), Number(lng)] as [number, number])
-                    .filter(([lat, lng]) => Number.isFinite(lat) && Number.isFinite(lng))
-                  : [];
-                if (rawPath.length > 1) mapRef.current?.fitBounds(rawPath, { padding: [32, 32], maxZoom: 16, animate: false });
-                else if (station) mapRef.current?.setView([Number(station.center_lat), Number(station.center_lng)], 15);
-              }}>
-              <option value="all">All stations</option>
-              {trailheadOptions.map(({ location, identity }) => <option key={location.id} value={location.id}>{identity.label}</option>)}
+        routes={showRoutePanel ? <>
+          {!locationId && trailheadOptions.length > 0 && <div className="space-y-2 border-b border-border p-3">
+            <span className="text-xs text-muted-foreground">Show station</span>
+            <select aria-label="Filter central map by station" value={stationFilterId} onChange={(event) => handleStationFilter(event.target.value)} className="min-h-10 w-full rounded border border-border bg-background px-3 text-sm">
+              {stationOptions.map((option) => <option key={option.id} value={option.id}>{option.label}</option>)}
             </select>
           </div>}
           <ul className="live-map-route-list">
@@ -811,7 +810,7 @@ function ScopedMonitorMap({ locationId, canAddCheckpoints = false, tools, routeA
           </ul>
           {!visibleRoutes.length && <p className="live-map-empty">No published routes available for this station.</p>}
           {routeActions}
-        </>}
+        </> : null}
         tools={<>
       <header className="live-map-toolbar">
         <h2 className="sr-only">Live hiking map</h2>

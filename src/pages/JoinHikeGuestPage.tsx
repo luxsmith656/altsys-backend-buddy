@@ -4,7 +4,6 @@ import { supabase } from '@/integrations/supabase/client';
 import { parseMeta } from '@/lib/bookingMeta';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import {
@@ -12,12 +11,10 @@ import {
   Users,
   Calendar,
   Clock,
-  Compass,
   CheckCircle2,
   AlertTriangle,
   Loader2,
   Navigation,
-  Sparkles,
   ShieldCheck,
   UserCheck,
 } from 'lucide-react';
@@ -27,29 +24,29 @@ export default function JoinHikeGuestPage() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const bookingId = searchParams.get('bookingId') || searchParams.get('b');
+  const requestedCode = searchParams.get('code') || searchParams.get('c');
 
   const [loading, setLoading] = useState(true);
   const [booking, setBooking] = useState<any | null>(null);
-  const [guestName, setGuestName] = useState('');
+  const [selectedCompanion, setSelectedCompanion] = useState<number | null>(null);
+  const [companionOptions, setCompanionOptions] = useState<Array<{ companion_index: number; companion_name: string; claimed: boolean }>>([]);
   const [joining, setJoining] = useState(false);
   const [existingGuest, setExistingGuest] = useState<string | null>(null);
+  const [joinCode, setJoinCode] = useState(requestedCode || '');
 
   useEffect(() => {
     // Check if device already has a guest session for this booking
-    const saved = localStorage.getItem(`guest_session_${bookingId}`);
+    const saved = localStorage.getItem(`guest_session_${requestedCode || bookingId}`);
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
-        if (parsed?.guestName) {
-          setExistingGuest(parsed.guestName);
-          setGuestName(parsed.guestName);
-        }
+        if (parsed?.guestName) setExistingGuest(parsed.guestName);
       } catch {
         localStorage.removeItem(`guest_session_${bookingId}`);
       }
     }
 
-    if (!bookingId) {
+    if (!requestedCode && !bookingId) {
       setLoading(false);
       return;
     }
@@ -57,11 +54,28 @@ export default function JoinHikeGuestPage() {
     const fetchBooking = async () => {
       try {
         setLoading(true);
-        const { data, error } = await supabase
-          .from('bookings')
-          .select('*')
-          .eq('id', bookingId)
-          .maybeSingle();
+        let data: any = null;
+        let error: any = null;
+        if (requestedCode) {
+          const options = await (supabase as any).rpc('get_booking_companion_options', { p_join_code: requestedCode });
+          error = options.error;
+          const rows = (options.data || []) as Array<{ booking_id: string; booking_date: string; group_size: number; companion_index: number; companion_name: string; claimed: boolean }>;
+          setCompanionOptions(rows.map(({ companion_index, companion_name, claimed }) => ({ companion_index, companion_name, claimed })));
+          if (rows[0]) {
+            const bookingResult = await supabase.from('bookings').select('*').eq('id', rows[0].booking_id).maybeSingle();
+            data = bookingResult.data;
+            error = error || bookingResult.error;
+          }
+        } else {
+          const bookingResult = await supabase.from('bookings').select('*').eq('id', bookingId).maybeSingle();
+          data = bookingResult.data;
+          error = bookingResult.error;
+          if (data?.companion_join_code) {
+            setJoinCode(data.companion_join_code);
+            const options = await (supabase as any).rpc('get_booking_companion_options', { p_join_code: data.companion_join_code });
+            if (!options.error) setCompanionOptions((options.data || []).map((row: any) => ({ companion_index: row.companion_index, companion_name: row.companion_name, claimed: row.claimed })));
+          }
+        }
 
         if (error || !data) {
           toast.error('Booking not found or invalid QR link.');
@@ -76,12 +90,12 @@ export default function JoinHikeGuestPage() {
     };
 
     void fetchBooking();
-  }, [bookingId]);
+  }, [bookingId, requestedCode]);
 
   const handleJoinHike = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!guestName.trim()) {
-      toast.error('Please enter your full name to join the hike.');
+    if (selectedCompanion === null || !joinCode) {
+      toast.error('Select your name from the booking before joining.');
       return;
     }
 
@@ -90,13 +104,23 @@ export default function JoinHikeGuestPage() {
     setJoining(true);
     try {
       const guestSessionId = 'guest_' + crypto.randomUUID();
+      const deviceKey = 'kalisungan-companion-device';
+      const savedDeviceId = localStorage.getItem(deviceKey) || crypto.randomUUID();
+      localStorage.setItem(deviceKey, savedDeviceId);
+      const claim = await (supabase as any).rpc('claim_booking_companion', {
+        p_join_code: joinCode,
+        p_companion_index: selectedCompanion,
+        p_device_id: savedDeviceId,
+      });
+      if (claim.error) throw new Error(claim.error.message);
+      const guestName = String((claim.data as { companionName?: string })?.companionName || 'Companion');
       const meta = parseMeta(booking.notes);
 
       // Store guest session in localStorage
       const sessionData = {
         guestSessionId,
         bookingId: booking.id,
-        guestName: guestName.trim(),
+        guestName,
         leadHikerName: meta.fullName || booking.emergency_contact_name || 'Group Lead',
         hikeDate: booking.booking_date,
         assignedGuide: meta.assignedGuide,
@@ -104,7 +128,6 @@ export default function JoinHikeGuestPage() {
         joinedAt: new Date().toISOString(),
       };
 
-      localStorage.setItem(`guest_session_${booking.id}`, JSON.stringify(sessionData));
       localStorage.setItem('active_guest_session', JSON.stringify(sessionData));
 
       // Attempt to get device GPS and post initial beacon point
@@ -119,7 +142,7 @@ export default function JoinHikeGuestPage() {
                 entity_id: booking.id,
                 user_id: null,
                 metadata: {
-                  guestName: guestName.trim(),
+                  guestName,
                   bookingId: booking.id,
                   lat: pos.coords.latitude,
                   lng: pos.coords.longitude,
@@ -135,7 +158,8 @@ export default function JoinHikeGuestPage() {
         );
       }
 
-      toast.success(`Welcome, ${guestName.trim()}! You are connected to the live trail tracker.`);
+      localStorage.setItem(`guest_session_${joinCode}`, JSON.stringify(sessionData));
+      toast.success(`Welcome, ${guestName}! You are connected to the live trail tracker.`);
       navigate(`/map?bookingId=${booking.id}&guest=1`);
     } catch (err: any) {
       toast.error('Error connecting to hike: ' + err.message);
@@ -153,7 +177,7 @@ export default function JoinHikeGuestPage() {
     );
   }
 
-  if (!bookingId || !booking) {
+  if ((!bookingId && !joinCode) || !booking || !companionOptions.length) {
     return (
       <div className="min-h-[80vh] flex flex-col items-center justify-center p-4">
         <Card className="glass-card max-w-md w-full text-center p-6 space-y-4">
@@ -171,8 +195,6 @@ export default function JoinHikeGuestPage() {
   }
 
   const meta = parseMeta(booking.notes);
-  const companionsList: string[] = (meta.companions || []).filter(Boolean);
-
   return (
     <div className="min-h-screen bg-background/50 px-4 py-8 flex flex-col items-center justify-center">
       <Card className="glass-card max-w-md w-full shadow-2xl border-primary/30 rounded-3xl overflow-hidden animate-in fade-in">
@@ -221,49 +243,25 @@ export default function JoinHikeGuestPage() {
             </div>
           </div>
 
-          {/* Frictionless Guest Name Form */}
+          {/* Companion selection is intentionally constrained to names already on the booking. */}
           <form onSubmit={handleJoinHike} className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="guestName" className="text-xs font-bold text-foreground">
-                Enter Your Full Name to Join Group GPS
-              </Label>
-              <Input
-                id="guestName"
-                value={guestName}
-                onChange={(e) => setGuestName(e.target.value)}
-                placeholder="e.g. Maria Santos"
-                className="h-11 rounded-xl text-sm font-semibold bg-background"
-                autoFocus
-              />
+              <Label className="text-xs font-bold text-foreground">Select your name to join group GPS</Label>
+              <div className="grid gap-2">
+                {companionOptions.map((option) => (
+                  <Button key={option.companion_index} type="button" variant="outline" disabled={option.claimed}
+                    onClick={() => setSelectedCompanion(option.companion_index)}
+                    className={`h-11 justify-start rounded-xl text-sm ${selectedCompanion === option.companion_index ? 'border-primary bg-primary/10 text-primary font-bold' : ''}`}>
+                    <UserCheck className="mr-2 h-4 w-4" />
+                    {option.companion_name}
+                    {option.claimed && <span className="ml-auto text-[10px] text-muted-foreground">Already claimed</span>}
+                  </Button>
+                ))}
+              </div>
               <p className="text-[11px] text-muted-foreground">
-                No password required! This creates a temporary guest permit so your location appears on the group map.
+                Choose the existing companion record. A name cannot be claimed twice.
               </p>
             </div>
-
-            {/* Quick-Select from companion list if provided */}
-            {companionsList.length > 0 && (
-              <div className="space-y-1.5 pt-1">
-                <span className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider">
-                  Quick Select Name:
-                </span>
-                <div className="flex flex-wrap gap-1.5">
-                  {companionsList.map((c) => (
-                    <Button
-                      key={c}
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setGuestName(c)}
-                      className={`h-7 px-2.5 text-xs rounded-lg transition-all ${
-                        guestName === c ? 'border-primary bg-primary/10 text-primary font-bold' : ''
-                      }`}
-                    >
-                      {c}
-                    </Button>
-                  ))}
-                </div>
-              </div>
-            )}
 
             {/* Safety & Location Permissions Banner */}
             <div className="rounded-2xl border border-primary/20 bg-primary/5 p-3.5 text-xs flex items-start gap-2.5 text-muted-foreground">
@@ -275,7 +273,7 @@ export default function JoinHikeGuestPage() {
 
             <Button
               type="submit"
-              disabled={joining || !guestName.trim()}
+              disabled={joining || selectedCompanion === null}
               className="w-full h-12 text-sm font-bold gap-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white rounded-2xl shadow-lg"
             >
               {joining ? <Loader2 className="h-4 w-4 animate-spin" /> : <Navigation className="h-4 w-4" />}

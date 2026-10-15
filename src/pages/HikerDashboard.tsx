@@ -1035,6 +1035,9 @@ export default function HikerDashboard() {
                 {visibleBookings.map((b) => {
                   const meta = parseMeta(b.notes);
                   const receipt = bookingReceipt(b);
+                  const companionNames = Array.isArray(meta.companionDetails)
+                    ? meta.companionDetails.map((companion: any) => String(companion?.name ?? '')).filter(Boolean)
+                    : Array.isArray(meta.companions) ? meta.companions.filter(Boolean) : [];
                   return (
                     <div
                       key={b.id}
@@ -1203,7 +1206,7 @@ export default function HikerDashboard() {
                         )}
 
                       {/* Share Companion Join QR (if group size > 1) */}
-                      {b.group_size > 1 && b.status === 'confirmed' && (
+                      {companionNames.length > 0 && b.status === 'confirmed' && b.companion_join_code && (
                         <Button
                           size="sm"
                           variant="outline"
@@ -1245,20 +1248,20 @@ export default function HikerDashboard() {
                 <Users className="h-5 w-5 text-primary" /> Group Companion QR
               </DialogTitle>
               <p className="text-xs text-muted-foreground">
-                Let your {companionQrBooking?.group_size || 8} companions scan this QR on their phones. They only need to type their name to get live GPS tracking!
+                Your companions can scan this code and select their assigned name to join live GPS tracking. Names are taken from this booking and cannot be edited.
               </p>
             </DialogHeader>
             <div className="flex flex-col items-center justify-center p-6 bg-white rounded-2xl border border-border/40 shadow-inner my-2">
               {companionQrBooking && (
                 <QRCodeSVG
-                  value={`${window.location.origin}/join-hike?bookingId=${companionQrBooking.id}`}
+                  value={`${window.location.origin}/join-hike?code=${companionQrBooking.companion_join_code}`}
                   size={200}
                   level="H"
                   includeMargin
                 />
               )}
               <p className="text-[11px] text-muted-foreground font-mono mt-3">
-                Booking Ref: {companionQrBooking?.id?.slice(0, 8)}
+                Join code: {companionQrBooking?.companion_join_code || 'Preparing…'}
               </p>
             </div>
             <div className="grid grid-cols-1 gap-2 min-[360px]:grid-cols-2">
@@ -1267,7 +1270,7 @@ export default function HikerDashboard() {
                 className="w-full text-xs"
                 onClick={() => {
                   if (companionQrBooking) {
-                    const url = `${window.location.origin}/join-hike?bookingId=${companionQrBooking.id}`;
+                    const url = `${window.location.origin}/join-hike?code=${companionQrBooking.companion_join_code}`;
                     navigator.clipboard.writeText(url);
                     toast.success('Companion invite link copied to clipboard!');
                   }

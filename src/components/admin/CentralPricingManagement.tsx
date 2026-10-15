@@ -111,6 +111,38 @@ export default function CentralPricingManagement() {
   const [capSaving, setCapSaving] = useState(false);
   const [upcomingCapacities, setUpcomingCapacities] = useState<any[]>([]);
   const [selectedCapacityDates, setSelectedCapacityDates] = useState<Date[]>([]);
+  const [slotCapacities, setSlotCapacities] = useState<Record<string, number>>({});
+  const [slotCapacityDraft, setSlotCapacityDraft] = useState<Record<string, number>>({});
+  const [slotCapacitySaving, setSlotCapacitySaving] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    void (async () => {
+      const { data, error } = await (supabase as any).from('trailhead_slot_capacity_settings').select('location_id,max_groups');
+      if (!active || error) return;
+      const next = Object.fromEntries(((data || []) as Array<{ location_id: string; max_groups: number }>).map((row) => [row.location_id, row.max_groups]));
+      setSlotCapacities(next);
+      setSlotCapacityDraft(next);
+    })();
+    return () => { active = false; };
+  }, []);
+
+  const saveSlotCapacities = async () => {
+    setSlotCapacitySaving(true);
+    try {
+      for (const location of jumpOffLocations) {
+        const value = Math.max(1, Math.min(50, Math.floor(Number(slotCapacityDraft[location.id] ?? 1))));
+        const { error } = await (supabase as any).rpc('set_trailhead_slot_capacity', { p_location_id: location.id, p_max_groups: value });
+        if (error) throw error;
+      }
+      setSlotCapacities({ ...slotCapacityDraft });
+      toast.success('Trailhead time-slot capacity saved. New notifications were sent to affected staff.');
+    } catch (error: any) {
+      toast.error(error?.message || 'Could not save trailhead slot capacity.');
+    } finally {
+      setSlotCapacitySaving(false);
+    }
+  };
 
   const bookedCountsFor = (date: string, locationId: string | null) => {
     const rows = upcomingCapacities.filter((row) => row.date === date &&
@@ -323,6 +355,28 @@ export default function CentralPricingManagement() {
           </Button>
         </div>
       </div>
+
+      <Card className="glass-card border-border/30">
+        <CardHeader className="pb-3">
+          <CardTitle className="flex items-center gap-2 text-base"><CalendarCheck className="h-4 w-4 text-primary" /> Trailhead time-slot capacity</CardTitle>
+          <CardDescription className="text-xs">Central Admin controls how many groups may use the same date and start time at each local trailhead. The database enforces this atomically.</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <div className="grid gap-3 sm:grid-cols-3">
+            {jumpOffLocations.map((location) => (
+              <label key={location.id} className="space-y-1.5 text-xs font-semibold">
+                <span>{location.name}</span>
+                <Input type="number" min="1" max="50" step="1" value={slotCapacityDraft[location.id] ?? slotCapacities[location.id] ?? 1}
+                  onChange={(event) => setSlotCapacityDraft((current) => ({ ...current, [location.id]: Number(event.target.value) }))} />
+                <span className="font-normal text-muted-foreground">groups per one-hour slot</span>
+              </label>
+            ))}
+          </div>
+          <Button size="sm" onClick={() => void saveSlotCapacities()} disabled={slotCapacitySaving || !jumpOffLocations.length} className="gap-1.5">
+            {slotCapacitySaving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />} Save slot capacity
+          </Button>
+        </CardContent>
+      </Card>
 
       {/* ──────────────── SECTION 1: FARE RATES & GUIDE CAPACITY ──────────────── */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">

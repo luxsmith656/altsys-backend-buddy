@@ -43,11 +43,11 @@ export default function LocationPingControl({ tracker }: { tracker: HikeTracker 
       disabled={!tracker || saving}
       onClick={() => void ping()}
       aria-label="Send current location to admin"
-      title="Send current location to admin"
-      className="flex items-center gap-1.5 rounded-md border bg-background px-3 py-2 text-sm text-foreground shadow-md disabled:cursor-not-allowed disabled:opacity-50"
+      title="Locate me and send this GPS fix"
+      className="flex min-h-11 items-center gap-1.5 rounded-md border bg-background px-3 py-2 text-sm text-foreground shadow-md disabled:cursor-not-allowed disabled:opacity-50"
     >
       <LocateFixed className="h-4 w-4" />
-      {saving ? 'Sending…' : 'Ping location'}
+      {saving ? 'Locating…' : 'Locate me'}
     </button>,
     container,
   );

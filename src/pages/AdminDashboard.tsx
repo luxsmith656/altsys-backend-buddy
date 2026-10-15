@@ -2580,6 +2580,9 @@ export default function AdminDashboard() {
 
                 {scannedBooking && (() => {
                   const meta = parseMeta(scannedBooking.notes);
+                  const companionNames = Array.isArray(meta.companionDetails)
+                    ? meta.companionDetails.map((companion: any) => String(companion?.name ?? '')).filter(Boolean)
+                    : Array.isArray(meta.companions) ? meta.companions.filter(Boolean) : [];
                   const { totalFee: baseTotalFee } = calculateFees(scannedBooking.group_size, { hikeType: meta.hikeType });
                   const peakExtensionFee = calculatePeakExtensionFee(meta.peakExtensionHours);
                   const totalFee = bookingReceipt(scannedBooking).total;
@@ -2957,7 +2960,7 @@ export default function AdminDashboard() {
                                 <MapPin className="h-3.5 w-3.5 text-emerald-600" />
                                 View Map
                               </Button>
-                              <Button
+                              {companionNames.length > 0 && scannedBooking.companion_join_code && <Button
                                 size="sm"
                                 variant="ghost"
                                 onClick={() => setCompanionQROpen(true)}
@@ -2965,7 +2968,7 @@ export default function AdminDashboard() {
                               >
                                 <Users className="h-3.5 w-3.5" />
                                 Companion QR
-                              </Button>
+                              </Button>}
                             </div>
                           </div>
                         </div>
@@ -3745,14 +3748,14 @@ export default function AdminDashboard() {
           <div className="flex flex-col items-center justify-center p-6 bg-white rounded-2xl border border-border/40 shadow-inner my-2">
             {scannedBooking && (
               <QRCodeSVG
-                value={`${window.location.origin}/join-hike?bookingId=${scannedBooking.id}`}
+                value={`${window.location.origin}/join-hike?code=${scannedBooking.companion_join_code}`}
                 size={220}
                 level="H"
                 includeMargin
               />
             )}
             <p className="text-[11px] text-muted-foreground font-mono mt-3">
-              Permit ID: {scannedBooking?.id?.slice(0, 12)}…
+              Join code: {scannedBooking?.companion_join_code || 'Preparing…'}
             </p>
           </div>
           <div className="flex gap-2">
@@ -3761,7 +3764,7 @@ export default function AdminDashboard() {
               className="w-full text-xs"
               onClick={() => {
                 if (scannedBooking) {
-                  const url = `${window.location.origin}/join-hike?bookingId=${scannedBooking.id}`;
+                  const url = `${window.location.origin}/join-hike?code=${scannedBooking.companion_join_code}`;
                   navigator.clipboard.writeText(url);
                   toast.success('Join link copied to clipboard!');
                 }

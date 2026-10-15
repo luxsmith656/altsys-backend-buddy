@@ -80,12 +80,11 @@ describe('Supabase app notifications', () => {
     expect(state.removeChannel).toHaveBeenCalled();
   });
 
-  it('uses separate channel instances for concurrent notification listeners', () => {
+  it('shares one channel instance for concurrent notification listeners', () => {
     const stopFirst = subscribeAppNotifications('hiker-1', vi.fn());
     const stopSecond = subscribeAppNotifications('hiker-1', vi.fn());
 
-    expect(state.channelNames).toHaveLength(2);
-    expect(state.channelNames[0]).not.toBe(state.channelNames[1]);
+    expect(state.channelNames).toHaveLength(1);
 
     stopFirst();
     stopSecond();

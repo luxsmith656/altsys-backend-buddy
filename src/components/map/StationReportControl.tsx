@@ -36,11 +36,11 @@ export default function StationReportControl({ sessionId, userId }: { sessionId:
       toast.error('Could not save your station report. Please try again.');
     } finally { setSaving(false); }
   };
-  return createPortal(<div className="flex max-w-[calc(100vw-32px)] items-center gap-2 rounded-md border bg-background p-2 text-foreground shadow-md">
-    <select aria-label="Current station" className="min-w-0 rounded border bg-background p-2 text-sm" value={station} onChange={e => setStation(e.target.value)}>
+  return createPortal(<div className="flex max-w-[calc(100vw-32px)] flex-col items-stretch gap-2 rounded-md border bg-background p-2 text-foreground shadow-md sm:flex-row sm:items-center">
+    <select aria-label="Current station" className="min-h-10 min-w-0 rounded border bg-background p-2 text-sm" value={station} onChange={e => setStation(e.target.value)}>
       {[1, 2, 3, 4, 5, 6].map(value => <option key={value} value={value}>{value === 6 ? 'Peak' : `Station ${value}`}</option>)}
     </select>
-    <button type="button" disabled={saving} onClick={() => void report()} className="flex items-center gap-1 rounded bg-primary px-3 py-2 text-sm text-primary-foreground disabled:opacity-50">
+    <button type="button" disabled={saving} onClick={() => void report()} className="flex min-h-10 items-center justify-center gap-1 rounded bg-primary px-3 py-2 text-sm text-primary-foreground disabled:opacity-50">
       <MapPin className="h-4 w-4" />I'm here
     </button>
   </div>, container);

@@ -273,7 +273,7 @@ export default function MapPage() {
       trackerQuery = trackerQuery.eq('id', assignedTrailZoneId) as typeof trackerQuery;
     } else if (user && role === 'hiker' && bookedLocationId && activeSelfSession) {
       trackerQuery = trackerQuery.eq('location_id', bookedLocationId) as typeof trackerQuery;
-    } else if (user && activeLocationId && role !== 'super_admin' && role !== 'mdrrmo' && !(role === 'hiker' && !activeSelfSession)) {
+    } else if (user && activeLocationId && role !== 'super_admin' && role !== 'mdrrmo' && !(role === 'hiker' && !activeSelfSession && !bookedLocationId)) {
       trackerQuery = trackerQuery.eq('location_id', activeLocationId) as typeof trackerQuery;
     }
 
@@ -314,7 +314,7 @@ export default function MapPage() {
       : undefined;
     const loaded = officialRoutesForLocation(
       trackerRows,
-      restrictToAssignedTrail || role === 'super_admin' || role === 'mdrrmo' || !user || (role === 'hiker' && !activeSelfSession)
+      restrictToAssignedTrail || role === 'super_admin' || role === 'mdrrmo' || !user || (role === 'hiker' && !activeSelfSession && !bookedLocationId)
         ? undefined
         : role === 'hiker' && bookedLocationId ? bookedLocationId : activeLocationId,
     )
@@ -717,7 +717,7 @@ export default function MapPage() {
       simulated: true }} now={mapClock} onLocate={() => handleLocateHiker(simulated)} />}
   </>;
 
-  const routeActions = isTrailRecorder ? <div className="live-map-menu">
+  const routeActions = role === 'super_admin' ? <div className="live-map-menu">
     <Button variant="ghost" onClick={() => setActiveMapTab(activeMapTab === 'editor' ? 'tracker' : 'editor')}>
       <Layers size={18} />{activeMapTab === 'editor' ? 'Back to live map' : 'Open route editor'}
     </Button>
@@ -787,11 +787,11 @@ export default function MapPage() {
       {canMonitorAll && activeMapTab === 'tracker' && !simulationMode ? (
         locationsLoading || (!isSuperAdmin && !activeLocationId)
           ? <p className="live-map-empty" role="status">Loading your assigned location...</p>
-          : <RealtimeMonitorMap locationId={isSuperAdmin ? null : activeLocationId} canAddCheckpoints={role === 'admin' || role === 'super_admin'} tools={mapTools} routeActions={routeActions} />
+          : <RealtimeMonitorMap locationId={isSuperAdmin ? null : activeLocationId} canAddCheckpoints={role === 'admin' || role === 'super_admin'} tools={mapTools} routeActions={routeActions} showRoutePanel={role === 'super_admin'} />
       ) : (
         <div className="live-map-page-body">
           <MapWorkspace title={simulationMode ? 'Simulation groups' : 'My hike'} open={workspacePanelOpen} onOpenChange={setWorkspacePanelOpen}
-            routes={routePanel} tools={mapTools}
+            routes={role === 'super_admin' || (role === 'hiker' && !activeSelfSession && !bookedLocationId) ? routePanel : null} tools={mapTools}
             panel={activeMapTab === 'editor' ? null : simulationMode ? simulationPanel : selfPanel}>
             <MapContainer center={MT_KALISUNGAN_CENTER} zoom={DEFAULT_ZOOM} minZoom={3} maxZoom={20}
               zoomAnimation={false} zoomSnap={0.5} zoomDelta={0.5} wheelPxPerZoomLevel={80}
