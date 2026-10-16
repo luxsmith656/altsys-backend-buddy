@@ -3,8 +3,8 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
-import { CalendarDays, Loader2, MessageCircle, Send } from 'lucide-react';
+import { AnimatePresence, motion } from 'framer-motion';
+import { CalendarDays, Loader2, MessageCircle, Send, Users, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 import { containsProfanity, PROFANITY_NOTICE } from '@/lib/contentModeration';
@@ -143,31 +143,49 @@ export default function BookingChat({
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent
-        style={{ '--booking-chat-vh': viewportHeight ? `${viewportHeight}px` : '100dvh' } as React.CSSProperties}
-        aria-label="Booking conversation panel"
-        className="!bottom-0 !left-0 !right-auto !top-0 !translate-x-0 !translate-y-0 fixed flex h-[var(--booking-chat-vh)] w-screen max-w-none flex-col gap-0 overflow-hidden rounded-none border-0 bg-card p-0 shadow-2xl sm:w-[min(100vw,25rem)] sm:max-w-[25rem] sm:rounded-r-2xl sm:border-r sm:border-border/40 md:w-[min(40vw,28rem)] md:max-w-[28rem] lg:w-[min(34vw,30rem)] lg:max-w-[30rem] xl:w-[min(30vw,32rem)] xl:max-w-[32rem]"
-      >
-        <DialogHeader className="border-b border-border/30 bg-card px-4 py-4 pr-12 sm:px-8">
-          <DialogTitle className="flex items-center gap-2 text-base">
-            <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-primary/10 text-primary">
+    <AnimatePresence>
+      {open && (
+        <motion.aside
+          role="dialog"
+          aria-modal="true"
+          aria-label="Booking conversation panel"
+          tabIndex={-1}
+          initial={{ opacity: 0, x: -360 }}
+          animate={{ opacity: 1, x: 0 }}
+          exit={{ opacity: 0, x: -360 }}
+          transition={{ type: 'spring', damping: 28, stiffness: 220 }}
+          style={{ '--booking-chat-vh': viewportHeight ? `${viewportHeight}px` : '100dvh' } as React.CSSProperties}
+          className="fixed inset-0 z-[2100] flex h-[var(--booking-chat-vh)] w-screen flex-col overflow-hidden bg-card shadow-2xl sm:bottom-0 sm:left-0 sm:right-auto sm:top-16 sm:h-auto sm:w-[min(100vw,25rem)] sm:rounded-r-2xl sm:border-r sm:border-border/50 md:w-[min(40vw,28rem)] lg:w-[min(34vw,30rem)] xl:w-[min(30vw,32rem)]"
+          onKeyDown={(event) => { if (event.key === 'Escape') onOpenChange(false); }}
+        >
+          <header className="flex items-center gap-3 border-b border-border/30 bg-primary/5 p-4">
+            <span className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-primary/10 text-primary">
               <MessageCircle className="h-5 w-5" />
             </span>
-            <span className="min-w-0">
-              <span className="block truncate">Booking conversation</span>
-              <span className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs font-normal text-muted-foreground">
-                <span className="inline-flex items-center gap-1"><CalendarDays className="h-3 w-3" /> {format(new Date(`${bookingDate}T00:00:00`), 'MMM d, yyyy')}</span>
-                <span>•</span>
-                <span>{recipientRole === 'guide' ? 'Talking to your guide' : recipientRole === 'admin' ? 'Talking to admin' : 'Booking support'}</span>
-              </span>
-            </span>
-            {unreadCount > 0 && <span className="ml-auto rounded-full bg-destructive px-1.5 py-0.5 text-[10px] text-destructive-foreground">{unreadCount}</span>}
-          </DialogTitle>
-          <DialogDescription className="sr-only">Messages about your booking.</DialogDescription>
-        </DialogHeader>
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-sm font-bold">Booking conversation</p>
+              <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                <span className="inline-block h-1.5 w-1.5 rounded-full bg-emerald-400" />
+                {recipientRole === 'guide' ? 'Talking to your guide' : recipientRole === 'admin' ? 'Talking to admin' : 'Booking support'}
+              </p>
+            </div>
+            {unreadCount > 0 && <span className="rounded-full bg-destructive px-1.5 py-0.5 text-[10px] text-destructive-foreground">{unreadCount}</span>}
+            <Button type="button" size="icon" variant="secondary" className="h-8 w-8 shrink-0 border border-border/40" onClick={() => onOpenChange(false)} aria-label="Close booking chat">
+              <X className="h-4 w-4" />
+            </Button>
+          </header>
 
-        <div ref={scroller} className="min-h-0 flex-1 space-y-3 overflow-y-auto bg-background/20 px-4 py-5 sm:px-8">
+          <div className="flex flex-wrap gap-1.5 border-b border-border/20 bg-background/30 px-3 py-2">
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-secondary/50 px-2.5 py-1 text-[11px] text-muted-foreground">
+              <CalendarDays className="h-3 w-3" />
+              {format(new Date(`${bookingDate}T00:00:00`), 'MMM d, yyyy')}
+            </span>
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-secondary/50 px-2.5 py-1 text-[11px] text-muted-foreground">
+              <Users className="h-3 w-3" /> Booking support
+            </span>
+          </div>
+
+          <div ref={scroller} className="min-h-0 flex-1 space-y-3 overscroll-contain overflow-y-auto px-3 py-4">
           {loading ? (
             <div className="flex items-center justify-center py-10"><Loader2 className="h-5 w-5 animate-spin" /></div>
           ) : msgs.length === 0 ? (
@@ -176,8 +194,9 @@ export default function BookingChat({
             msgs.filter((m) => m.kind === 'chat').map((m) => {
               const mine = m.sender_id === user?.id;
               return (
-                <div key={m.id} className={`flex ${mine ? 'justify-end' : 'justify-start'}`}>
-                  <div className={`max-w-[min(36rem,82%)] rounded-2xl px-3 py-2.5 text-sm leading-relaxed shadow-sm ${mine ? 'rounded-tr-sm bg-primary text-primary-foreground' : 'rounded-tl-sm bg-secondary/60 text-foreground'}`}>
+                <div key={m.id} className={`flex items-end gap-2 ${mine ? 'justify-end' : 'justify-start'}`}>
+                  {!mine && <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-primary/10 text-primary"><MessageCircle className="h-3.5 w-3.5" /></span>}
+                  <div className={`max-w-[82%] rounded-2xl px-3 py-2.5 text-xs leading-relaxed shadow-sm ${mine ? 'rounded-tr-sm bg-primary text-primary-foreground' : 'rounded-tl-sm bg-secondary/60 text-foreground'}`}>
                     <div className="mb-0.5 text-[10px] font-medium uppercase opacity-70">{mine ? 'You' : m.sender_role}</div>
                     <p className="whitespace-pre-wrap break-words">{m.content}</p>
                     <div className="mt-1 text-right text-[10px] opacity-60">{format(new Date(m.created_at), 'MMM d, HH:mm')}</div>
@@ -186,18 +205,18 @@ export default function BookingChat({
               );
             })
           )}
-        </div>
+          </div>
 
-        <div className="flex min-w-0 shrink-0 gap-2 border-t border-border/30 bg-background/60 p-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] sm:p-4 sm:pb-4">
-          <Input ref={inputRef} className="rounded-xl border-border/30 bg-secondary/40 px-3 text-xs" value={text} onChange={(e) => setText(e.target.value)} placeholder="Type a message…"
-            onFocus={() => window.setTimeout(() => inputRef.current?.scrollIntoView({ block: 'nearest' }), 50)}
-            onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); void send(); } }} />
-          <Button className="h-9 w-9 shrink-0 rounded-xl" size="icon" aria-label="Send message" onClick={() => void send()} disabled={sending || !text.trim()}>
-            {sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-          </Button>
-        </div>
+          <form className="flex min-w-0 shrink-0 gap-2 border-t border-border/30 bg-background/60 p-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] sm:pb-4" onSubmit={(event) => { event.preventDefault(); void send(); }}>
+            <Input ref={inputRef} className="flex-1 rounded-xl border-border/30 bg-secondary/40 px-3 text-xs" value={text} onChange={(e) => setText(e.target.value)} placeholder="Type a message…"
+              onFocus={() => window.setTimeout(() => inputRef.current?.scrollIntoView({ block: 'nearest' }), 50)} />
+            <Button type="submit" className="h-9 w-9 shrink-0 rounded-xl" size="icon" aria-label="Send message" disabled={sending || !text.trim()}>
+              {sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+            </Button>
+          </form>
 
-      </DialogContent>
-    </Dialog>
+        </motion.aside>
+      )}
+    </AnimatePresence>
   );
 }
