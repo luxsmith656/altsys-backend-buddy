@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
-import { Loader2 } from 'lucide-react';
+import { Loader2, Mail } from 'lucide-react';
 import { toast } from 'sonner';
 import logo from '@/assets/logo.png';
 import { signInWithFirebaseGoogle } from '@/lib/firebase-auth';
@@ -14,6 +14,7 @@ import { isFirebaseConfigured } from '@/lib/firebase';
 import { resolvePostLoginPath } from '@/lib/post-login';
 import { ResetPasswordDialog } from '@/components/auth/ResetPasswordDialog';
 import PasswordInput from '@/components/auth/PasswordInput';
+import { isEmailConfirmationRequired, resendSignupVerification } from '@/lib/authEmail';
 
 export default function Login() {
   const [email, setEmail] = useState('');
@@ -24,13 +25,43 @@ export default function Login() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const [resetOpen, setResetOpen] = useState(false);
+  const [unverified, setUnverified] = useState(false);
+  const [resendBusy, setResendBusy] = useState(false);
+  const [resendCooldown, setResendCooldown] = useState(0);
+
+  useEffect(() => {
+    if (!resendCooldown) return;
+    const timer = window.setInterval(() => setResendCooldown((value) => Math.max(0, value - 1)), 1000);
+    return () => window.clearInterval(timer);
+  }, [resendCooldown]);
+
+  const resendVerification = async () => {
+    if (resendBusy || resendCooldown) return;
+    setResendBusy(true);
+    try {
+      await resendSignupVerification(email, window.location.origin);
+      setResendCooldown(60);
+      toast.success('If that account can receive email, a new verification link is on its way.');
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Could not resend the verification email.');
+    } finally {
+      setResendBusy(false);
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setUnverified(false);
     setLoading(true);
     const { error } = await signIn(email, password);
     setLoading(false);
     if (error) {
-      toast.error(error.message);
+      if (isEmailConfirmationRequired(error)) {
+        setUnverified(true);
+        toast.error('Please verify your email before signing in.');
+      } else {
+        toast.error(error.message);
+      }
     } else {
       const redirectPath = searchParams.get('redirect');
       navigate(redirectPath || '/dashboard');
@@ -99,6 +130,16 @@ export default function Login() {
               {loading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
               Sign In
             </Button>
+            {unverified && (
+              <div className="rounded-md border border-primary/30 bg-primary/10 p-3 text-sm" role="alert">
+                <p className="font-medium">Your email is not verified yet.</p>
+                <p className="mt-1 text-muted-foreground">Check your inbox or request a fresh verification link.</p>
+                <Button type="button" variant="outline" className="mt-3 w-full" onClick={() => void resendVerification()} disabled={resendBusy || Boolean(resendCooldown)}>
+                  {resendBusy ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Mail className="mr-2 h-4 w-4" />}
+                  {resendCooldown ? `Resend available in ${resendCooldown}s` : 'Resend confirmation email'}
+                </Button>
+              </div>
+            )}
           </form>
 
           <div className="my-4 flex items-center gap-3">

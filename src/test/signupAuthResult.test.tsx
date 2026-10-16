@@ -19,5 +19,6 @@ it.each([null, { user: { id: 'user-1' }, access_token: 'test-session' }])('expos
   });
   expect(state.signUp).toHaveBeenCalledWith({ email: 'juan@example.com', password: 'secret123', options: {
     data: { full_name: 'Juan Cruz', referral_guide_id: 'guide-1' },
+    emailRedirectTo: 'http://localhost:3000/auth/callback',
   } });
 });

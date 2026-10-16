@@ -12,11 +12,13 @@
 
 import { getStorage, ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
 import { getFirebaseApp, isFirebaseConfigured } from './firebase';
+import { supabase } from '@/integrations/supabase/client';
 export { isFirebaseConfigured } from './firebase';
 
 let storage: ReturnType<typeof getStorage> | null = null;
 
 const MAX_REVIEW_IMAGE_BYTES = 25 * 1024 * 1024;
+const MAX_COMPRESSED_IMAGE_BYTES = 2 * 1024 * 1024;
 const IMAGE_EXTENSION_PATTERN = /\.(avif|bmp|gif|heic|heif|jpe?g|png|svg|tiff?|webp)$/i;
 
 export type ImageValidationResult = {
@@ -63,7 +65,12 @@ function getFirebaseStorage() {
  * The browser may provide any supported image format; all successful uploads
  * are normalized to a broadly displayable JPEG with a bounded dimension.
  */
-export async function compressImage(file: File, maxWidthPx = 1200, quality = 0.75): Promise<Blob> {
+export async function compressImage(
+  file: File,
+  maxWidthPx = 1200,
+  quality = 0.75,
+  targetBytes = MAX_COMPRESSED_IMAGE_BYTES,
+): Promise<Blob> {
   const validation = validateImageFile(file);
   if (!validation.valid) throw new Error(validation.message || 'Invalid image file.');
 
@@ -106,13 +113,21 @@ export async function compressImage(file: File, maxWidthPx = 1200, quality = 0.7
   ctx.drawImage(source, 0, 0, canvas.width, canvas.height);
   closeSource?.();
 
-  return new Promise((resolve, reject) => {
+  const encode = (jpegQuality: number) => new Promise<Blob>((resolve, reject) => {
     canvas.toBlob(
       (blob) => blob ? resolve(blob) : reject(new Error('Image compression failed.')),
       'image/jpeg',
-      Math.min(1, Math.max(0.1, quality)),
+      Math.min(1, Math.max(0.1, jpegQuality)),
     );
   });
+
+  // Keep review uploads small enough to send quickly on mountain/mobile
+  // connections. Re-encode only when needed so normal photos take one pass.
+  let compressed = await encode(quality);
+  for (let attempt = 1; attempt < 4 && compressed.size > targetBytes; attempt += 1) {
+    compressed = await encode(Math.max(0.42, quality - attempt * 0.1));
+  }
+  return compressed;
 }
 
 function loadImageElement(file: File): Promise<HTMLImageElement> {
@@ -178,21 +193,28 @@ export async function uploadGuideProfilePhoto(
   return { url: await getDownloadURL(storageRef), path };
 }
 
-/** Upload a compressed post-hike trail photo. The URL is stored in Supabase; the binary stays in Storage. */
+/**
+ * Upload a compressed post-hike trail photo to Supabase Storage.
+ * Keeping this asset beside the review database avoids Firebase bucket/CORS
+ * failures on the public Vercel origin. The binary is still stored outside
+ * the database; only its public URL is saved on the review row.
+ */
 export async function uploadTrailReviewPhoto(
   file: File,
   bookingId: string,
 ): Promise<{ url: string; path: string } | null> {
-  const store = getFirebaseStorage();
-  if (!store) return null;
-  const compressed = await compressImage(file, 1200, 0.78);
-  const path = `trail-reviews/${bookingId}_${Date.now()}.jpg`;
-  const storageRef = ref(store, path);
-  await uploadBytes(storageRef, compressed, {
+  const compressed = await compressImage(file, 960, 0.7, 1.5 * 1024 * 1024);
+  const id = globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  const path = `${bookingId}/${id}.jpg`;
+  const { data, error } = await supabase.storage.from('trail-reviews').upload(path, compressed, {
+    cacheControl: '31536000',
     contentType: 'image/jpeg',
-    customMetadata: { bookingId, originalName: file.name },
+    upsert: false,
   });
-  return { url: await getDownloadURL(storageRef), path };
+  if (error) throw error;
+  const { data: publicUrl } = supabase.storage.from('trail-reviews').getPublicUrl(data.path);
+  if (!publicUrl.publicUrl) throw new Error('Trail photo URL could not be created.');
+  return { url: publicUrl.publicUrl, path: data.path };
 }
 
 /**

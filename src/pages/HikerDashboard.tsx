@@ -88,6 +88,18 @@ const STATUS_LABELS: Record<string, string> = {
   adjustment_pending: 'Date Adjusted — Action Required',
 };
 
+const TRAIL_REVIEW_REQUEST_TIMEOUT_MS = 25_000;
+
+function withReviewTimeout<T>(promise: PromiseLike<T>, message: string, timeoutMs = TRAIL_REVIEW_REQUEST_TIMEOUT_MS): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new Error(message)), timeoutMs);
+  });
+  return Promise.race([Promise.resolve(promise), timeout]).finally(() => {
+    if (timer) clearTimeout(timer);
+  });
+}
+
 export default function HikerDashboard() {
   const { user } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -116,6 +128,7 @@ export default function HikerDashboard() {
     try { return new Set(JSON.parse(localStorage.getItem('trail_reviewed_bookings') || '[]')); } catch { return new Set(); }
   });
   const [submittingReview, setSubmittingReview] = useState(false);
+  const [uploadingTrailPhoto, setUploadingTrailPhoto] = useState(false);
   const [chatBooking, setChatBooking] = useState<{ id: string; date: string } | null>(null);
   const [rescheduleBooking, setRescheduleBooking] = useState<{ id: string; date: string } | null>(null);
   const bookingMessageAlerts = useBookingMessageAlerts(bookings.map((booking) => booking.id), chatBooking?.id);
@@ -426,39 +439,48 @@ export default function HikerDashboard() {
     }
     setSubmittingReview(true);
     let trailPhotoUrl: string | null = null;
-    if (trailPhoto) {
-      try {
-        const uploaded = await uploadTrailReviewPhoto(trailPhoto, hikeItem.bookingId);
-        trailPhotoUrl = uploaded?.url ?? null;
-      } catch (error) {
-        console.error('Trail feedback photo upload failed:', error);
-        // A photo must never prevent the text review from being recorded.
-        toast.warning('The photo could not be uploaded, so the review will be saved without it.');
+    try {
+      if (trailPhoto) {
+        setUploadingTrailPhoto(true);
+        const uploaded = await withReviewTimeout(
+          uploadTrailReviewPhoto(trailPhoto, hikeItem.bookingId),
+          'Photo upload timed out. Check your connection and try again.',
+        );
+        if (!uploaded?.url) {
+          throw new Error('Trail photo storage is not configured.');
+        }
+        trailPhotoUrl = uploaded.url;
       }
-    }
-    const { error: trailReviewError } = await supabase.from('reviews' as any).insert({
-      user_id: user.id,
-      booking_id: hikeItem.bookingId,
-      reviewer_name: hikeItem.fullName || user.email || 'Hiker',
-      rating: trailRating,
-      trail_name: hikeItem.trailName || 'Mt. Kalisungan Trail',
-      review_text: trailReviewText.trim(),
-      review_type: 'trail',
-      difficulty: trailDifficulty,
-      photo_url: trailPhotoUrl,
-      is_approved: false,
-    } as any);
-    if (trailReviewError) {
-      toast.error(`Trail feedback could not be saved: ${trailReviewError.message}`);
+
+      const { error: trailReviewError } = await withReviewTimeout(
+        supabase.from('reviews' as any).insert({
+          user_id: user.id,
+          booking_id: hikeItem.bookingId,
+          reviewer_name: hikeItem.fullName || user.email || 'Hiker',
+          rating: trailRating,
+          trail_name: hikeItem.trailName || 'Mt. Kalisungan Trail',
+          review_text: trailReviewText.trim(),
+          review_type: 'trail',
+          difficulty: trailDifficulty,
+          photo_url: trailPhotoUrl,
+          is_approved: false,
+        } as any),
+        'Trail review save timed out. Check your connection and try again.',
+      );
+      if (trailReviewError) throw new Error(`Trail feedback could not be saved: ${trailReviewError.message}`);
+
+      rememberTrailReview(hikeItem);
+      setReviewSessionId(null);
+      setTrailReviewText('');
+      setTrailPhoto(null);
+      toast.success('Trail experience submitted for local-admin review. Thank you!');
+    } catch (error) {
+      console.error('Trail feedback submission failed:', error);
+      toast.error(error instanceof Error ? error.message : 'Trail feedback could not be saved. Please try again.');
+    } finally {
+      setUploadingTrailPhoto(false);
       setSubmittingReview(false);
-      return;
     }
-    rememberTrailReview(hikeItem);
-    setReviewSessionId(null);
-    setTrailReviewText('');
-    setTrailPhoto(null);
-    toast.success('Trail experience submitted for local-admin review. Thank you!');
-    setSubmittingReview(false);
   };
 
   /* ── Derived data ── */
@@ -975,7 +997,7 @@ export default function HikerDashboard() {
                             disabled={submittingReview}
                           >
                             {submittingReview ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-                            {reviewStep === 'guide' ? 'Save Guide Review' : 'Submit Trail Experience'}
+                            {uploadingTrailPhoto ? 'Optimizing and uploading photo…' : reviewStep === 'guide' ? 'Save Guide Review' : 'Submit Trail Experience'}
                           </Button>
                         </motion.div>
                       )}

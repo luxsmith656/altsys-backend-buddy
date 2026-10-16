@@ -11,6 +11,16 @@ service firebase.storage {
       allow update, delete: if false;
     }
 
+    // Published trail stories are uploaded by the hiker and reviewed in the
+    // admin dashboard. The client stores only the resulting download URL in
+    // Supabase, so published thumbnails must remain readable on the landing page.
+    match /trail-reviews/{imageFile} {
+      allow read: if true;
+      allow create: if request.resource.size < 2 * 1024 * 1024
+        && request.resource.contentType.matches('image/.*');
+      allow update, delete: if false;
+    }
+
     // Deny everything else by default.
     match /{allPaths=**} {
       allow read, write: if false;

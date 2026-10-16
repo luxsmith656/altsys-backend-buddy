@@ -6,7 +6,7 @@ const state = vi.hoisted(() => ({ signUp: vi.fn(), signIn: vi.fn(), google: vi.f
 vi.mock('@/hooks/useAuth', () => ({ useAuth: () => ({ signUp: state.signUp, signIn: state.signIn }) }));
 vi.mock('@/lib/firebase-auth', () => ({ signInWithFirebaseGoogle: state.google }));
 vi.mock('@/lib/firebase', () => ({ isFirebaseConfigured: () => true }));
-vi.mock('@/integrations/supabase/client', () => ({ supabase: { auth: { getUser: vi.fn() } } }));
+vi.mock('@/integrations/supabase/client', () => ({ supabase: { auth: { getUser: vi.fn(), resend: vi.fn().mockResolvedValue({ error: null }) } } }));
 vi.mock('sonner', () => ({ toast: { success: state.success, error: state.error } }));
 import Register from '@/pages/Register';
 import Login from '@/pages/Login';
@@ -48,12 +48,13 @@ describe('signup without application OTP', () => {
     expect(fetch).not.toHaveBeenCalled();
   });
 
-  it('fails clearly when hosted signup confirmation is still enabled', async () => {
+  it('shows the verification state when hosted signup confirmation is enabled', async () => {
     state.signUp.mockResolvedValue({ error: null, session: null });
     showRegister(); fillForm(); acceptAgreement();
     fireEvent.submit(screen.getByLabelText('Email').closest('form')!);
-    await waitFor(() => expect(state.error).toHaveBeenCalledWith(expect.stringMatching(/Confirm email.*disabled/i)));
-    expect(screen.getByRole('alert')).toHaveTextContent(/immediate sign-in is unavailable/i);
+    expect(await screen.findByRole('heading', { name: 'Check your email' })).toBeInTheDocument();
+    expect(state.error).not.toHaveBeenCalled();
+    expect(screen.getByRole('button', { name: /Resend verification email/i })).toBeInTheDocument();
     expect(screen.queryByText('Login destination')).not.toBeInTheDocument();
   });
 
@@ -92,13 +93,13 @@ describe('signup without application OTP', () => {
     expect(state.signUp).not.toHaveBeenCalled();
   });
 
-  it('does not offer a signup-confirmation resend after a hosted auth rejection', async () => {
+  it('offers a signup-confirmation resend after a hosted auth rejection', async () => {
     state.signIn.mockResolvedValue({ error: new Error('Email not confirmed') });
     render(<MemoryRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}><Login /></MemoryRouter>);
     fireEvent.change(screen.getByLabelText('Email'), { target: { value: 'juan@example.com' } });
     fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'secret123' } });
     fireEvent.click(screen.getByRole('button', { name: 'Sign In' }));
-    await waitFor(() => expect(state.error).toHaveBeenCalledWith('Email not confirmed'));
-    expect(screen.queryByRole('button', { name: /Resend confirmation email/ })).not.toBeInTheDocument();
+    await waitFor(() => expect(state.error).toHaveBeenCalledWith('Please verify your email before signing in.'));
+    expect(screen.getByRole('button', { name: /Resend confirmation email/ })).toBeInTheDocument();
   });
 });

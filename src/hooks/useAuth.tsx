@@ -4,6 +4,7 @@ import { User, type Session } from '@supabase/supabase-js';
 import type { AppRole } from '@/types';
 import { resolveAccountRole, resolveKnownAccountRole } from '@/lib/authRoles';
 import { isAccountDeactivated } from '@/lib/adminManagementService';
+import { authCallbackUrl } from '@/lib/authEmail';
 
 interface AuthContextType {
   user: User | null;
@@ -195,6 +196,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           ...(referralGuideId ? { referral_guide_id: referralGuideId } : {}),
           ...(agreementAcceptedAt ? { terms_agreed_at: agreementAcceptedAt } : {}),
         },
+        emailRedirectTo: authCallbackUrl(),
       },
     });
     return { error: error as Error | null, session: data.session };

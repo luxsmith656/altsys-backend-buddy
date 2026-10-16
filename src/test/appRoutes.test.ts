@@ -11,6 +11,7 @@ describe('authoritative application routes', () => {
       '/about',
       '/login',
       '/reset-password',
+      '/auth/callback',
       '/register',
       '/map',
       '/chat',

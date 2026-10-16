@@ -1,10 +1,10 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Loader2 } from 'lucide-react';
+import { CheckCircle2, Loader2, Mail } from 'lucide-react';
 import { toast } from 'sonner';
 import logo from '@/assets/logo.png';
 import { signInWithFirebaseGoogle } from '@/lib/firebase-auth';
@@ -15,6 +15,7 @@ import { validatePasswordConfirmation } from '@/lib/authValidation';
 import { validateEmail, validatePhone } from '@/lib/inputValidation';
 import TermsAgreement from '@/components/auth/TermsAgreement';
 import PasswordInput from '@/components/auth/PasswordInput';
+import { resendSignupVerification } from '@/lib/authEmail';
 
 export default function Register() {
   const [fullName, setFullName] = useState('');
@@ -26,12 +27,35 @@ export default function Register() {
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
   const [formError, setFormError] = useState('');
+  const [verificationSent, setVerificationSent] = useState(false);
+  const [resendBusy, setResendBusy] = useState(false);
+  const [resendCooldown, setResendCooldown] = useState(0);
   const submitting = useRef(false);
   const { signUp } = useAuth();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const redirect = searchParams.get('redirect');
   const onboarding = redirect ? `/onboarding?redirect=${encodeURIComponent(redirect)}` : '/onboarding';
+
+  useEffect(() => {
+    if (!resendCooldown) return;
+    const timer = window.setInterval(() => setResendCooldown((value) => Math.max(0, value - 1)), 1000);
+    return () => window.clearInterval(timer);
+  }, [resendCooldown]);
+
+  const resendVerification = async () => {
+    if (resendBusy || resendCooldown) return;
+    setResendBusy(true);
+    try {
+      await resendSignupVerification(email, window.location.origin);
+      setResendCooldown(60);
+      toast.success('If that account can receive email, a new verification link is on its way.');
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Could not resend the verification email.');
+    } finally {
+      setResendBusy(false);
+    }
+  };
 
   const handleGoogle = async () => {
     if (googleLoading || submitting.current) return;
@@ -64,9 +88,8 @@ export default function Register() {
       const { error, session } = await signUp(email.trim().toLowerCase(), password, fullName.trim(), searchParams.get('guide'), new Date().toISOString());
       if (error) throw error;
       if (!session) {
-        const message = 'Account created, but immediate sign-in is unavailable. The project must have Supabase Auth "Confirm email" disabled for signup.';
-        setFormError(message);
-        toast.error(message);
+        setVerificationSent(true);
+        toast.success('Account created. Check your email to verify it before signing in.');
         return;
       }
       navigate(onboarding);
@@ -89,6 +112,20 @@ export default function Register() {
           <p className="text-muted-foreground text-sm mt-1">Join Mt. Kalisungan System</p>
         </div>
         <div className="glass-card rounded-lg p-5 sm:p-6">
+          {verificationSent ? (
+            <div className="space-y-5 text-center" role="status">
+              <CheckCircle2 className="mx-auto h-12 w-12 text-primary" />
+              <div>
+                <h2 className="text-xl font-semibold">Check your email</h2>
+                <p className="mt-2 text-sm text-muted-foreground">We sent a verification link to <strong className="text-foreground">{email}</strong>. Verify it, then sign in to continue.</p>
+              </div>
+              <Button type="button" variant="outline" className="w-full min-h-11" onClick={() => void resendVerification()} disabled={resendBusy || Boolean(resendCooldown)}>
+                {resendBusy ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Mail className="mr-2 h-4 w-4" />}
+                {resendCooldown ? `Resend available in ${resendCooldown}s` : 'Resend verification email'}
+              </Button>
+              <p className="text-sm text-muted-foreground">Already verified? <Link to="/login" className="text-primary hover:underline">Sign in</Link></p>
+            </div>
+          ) : <>
           <Button type="button" variant="outline" className="w-full min-h-11" onClick={handleGoogle}
             disabled={googleLoading || loading || !isFirebaseConfigured()}>
             {googleLoading && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
@@ -112,6 +149,7 @@ export default function Register() {
           <p className="mt-4 text-center text-sm text-muted-foreground">Already have an account?{' '}
             <Link to={redirect ? `/login?redirect=${encodeURIComponent(redirect)}` : '/login'} className="text-primary hover:underline">Sign In</Link>
           </p>
+          </>}
         </div>
       </div>
     </main>

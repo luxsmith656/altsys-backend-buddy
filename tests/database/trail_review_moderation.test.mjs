@@ -38,6 +38,7 @@ before(async () => {
     SET test.actor = '${id(1)}';
   `);
   await db.exec(await readFile('supabase/migrations/20261014143000_trail_review_local_moderation.sql', 'utf8'));
+  await db.exec(await readFile('supabase/migrations/20261016120000_trail_review_central_moderation.sql', 'utf8'));
 }, { timeout: 30000 });
 
 after(async () => { await db?.close(); });
@@ -64,4 +65,6 @@ test('migration records the trail review fields and removes historical global-ad
   assert.equal(namesByPolicy.includes('Admins can manage reviews'), false);
   assert.equal(namesByPolicy.includes('rv_admin_all'), false);
   assert.ok(namesByPolicy.includes('trail_reviews_local_admin_update'));
+  assert.ok(namesByPolicy.includes('trail_reviews_central_admin_select'));
+  assert.ok(namesByPolicy.includes('trail_reviews_central_admin_update'));
 });

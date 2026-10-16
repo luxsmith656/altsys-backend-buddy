@@ -37,7 +37,6 @@ import {
   RefreshCw,
   Search,
   MapPin,
-  Calendar,
   CheckCircle2,
   AlertCircle,
   Clock,
@@ -58,7 +57,6 @@ import {
   startOfYear,
   isWithinInterval,
   parseISO,
-  getDay,
 } from 'date-fns';
 import { toast } from 'sonner';
 
@@ -438,29 +436,6 @@ export default function CentralAnalyticsReporting({ locationIds }: { locationIds
       };
     });
   }, [filteredBookings, jumpOffStations]);
-
-  // Day-of-week volume distribution (Peak Saturday/Sunday analysis)
-  const dayOfWeekData = useMemo(() => {
-    const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-    const counts = [0, 0, 0, 0, 0, 0, 0];
-    const revenueByDay = [0, 0, 0, 0, 0, 0, 0];
-
-    filteredBookings
-      .filter((b) => b.status !== 'cancelled')
-      .forEach((b) => {
-        const d = parseISO(b.bookingDate);
-        if (Number.isNaN(d.getTime())) return;
-        const dayIndex = getDay(d);
-        counts[dayIndex] += b.groupSize;
-        revenueByDay[dayIndex] += b.amountPaid;
-      });
-
-    return days.map((day, idx) => ({
-      day,
-      hikers: counts[idx],
-      revenue: revenueByDay[idx],
-    }));
-  }, [filteredBookings]);
 
   // Mountain Guides Ledger & Earnings Aggregation
   const mountainGuidesLedger = useMemo(() => {
@@ -1157,42 +1132,6 @@ export default function CentralAnalyticsReporting({ locationIds }: { locationIds
           </CardContent>
         </Card>
       </div>
-
-      {/* ──────────────── PEAK SURGE & DAY-OF-WEEK DISTRIBUTION ──────────────── */}
-      <Card className="glass-card border-border/30 overflow-hidden">
-        <CardHeader className="pb-2 border-b border-border/20 bg-secondary/10">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-            <div>
-              <CardTitle className="text-sm font-bold flex items-center gap-2">
-                <Calendar className="h-4 w-4 text-sky-500" /> Day-of-Week Influx &amp; Carrying Capacity
-              </CardTitle>
-              <CardDescription className="text-xs">
-                Identify weekend surges to roster on-duty mountain guides and checkpoint rangers.
-              </CardDescription>
-            </div>
-            <div className="text-xs text-muted-foreground flex items-center gap-2">
-              <span className="inline-block w-2.5 h-2.5 rounded-full bg-emerald-500" /> Safe Days
-              <span className="inline-block w-2.5 h-2.5 rounded-full bg-amber-500 ml-2" /> Weekend Surge
-            </div>
-          </div>
-        </CardHeader>
-        <CardContent className="p-4">
-          <div className="h-56 w-full">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={dayOfWeekData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#88888820" />
-                <XAxis dataKey="day" stroke="#888888" fontSize={11} tickLine={false} />
-                <YAxis stroke="#888888" fontSize={11} tickLine={false} />
-                <Tooltip
-                  formatter={(val: number) => [`${val} hikers`, 'Volume']}
-                  contentStyle={{ backgroundColor: 'hsl(var(--card))', borderRadius: '12px', border: '1px solid hsl(var(--border))' }}
-                />
-                <Bar dataKey="hikers" name="Hiker Traffic" fill="#0284c7" radius={[6, 6, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        </CardContent>
-      </Card>
 
       {/* ──────────────── VISITOR DEMOGRAPHICS & GEOGRAPHIC ORIGINS ──────────────── */}
       <Card className="glass-card border-border/30 overflow-hidden">

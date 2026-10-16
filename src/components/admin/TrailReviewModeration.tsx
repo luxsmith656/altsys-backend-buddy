@@ -4,6 +4,7 @@ import { toast } from 'sonner';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { supabase } from '@/integrations/supabase/client';
 import { officialPublicTrailName } from '@/lib/mapTrailheads';
 
@@ -40,9 +41,17 @@ export default function TrailReviewModeration({ locationId, isCentralAdmin = fal
   const [filter, setFilter] = useState<ReviewFilter>('pending');
   const [loading, setLoading] = useState(true);
   const [updatingId, setUpdatingId] = useState<string | null>(null);
+  const [selectedPhoto, setSelectedPhoto] = useState<TrailReview | null>(null);
 
   const loadReviews = useCallback(async () => {
     setLoading(true);
+    if (!isCentralAdmin && !locationId) {
+      // Do not briefly load another trailhead's queue while the local admin
+      // scope is still being resolved.
+      setReviews([]);
+      setLoading(false);
+      return;
+    }
     try {
       let query = supabase
         .from('reviews' as any)
@@ -151,7 +160,15 @@ export default function TrailReviewModeration({ locationId, isCentralAdmin = fal
                 <CardContent className="space-y-4">
                   <p className="whitespace-pre-wrap text-sm leading-relaxed text-muted-foreground">{review.review_text}</p>
                   {review.photo_url && (
-                    <img src={review.photo_url} alt="Submitted trail experience" loading="lazy" decoding="async" className="h-48 w-full rounded-md border border-border/30 object-cover" />
+                    <button
+                      type="button"
+                      className="group relative block w-full overflow-hidden rounded-md border border-border/30 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                      onClick={() => setSelectedPhoto(review)}
+                      aria-label={`View full trail photo from ${review.reviewer_name || 'hiker'}`}
+                    >
+                      <img src={review.photo_url} alt="Submitted trail experience" loading="lazy" decoding="async" className="h-48 w-full object-cover transition-transform duration-200 group-hover:scale-[1.02]" />
+                      <span className="absolute inset-x-0 bottom-0 bg-black/60 px-3 py-2 text-xs font-medium text-white opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100">Click to view full photo</span>
+                    </button>
                   )}
                   <div className="flex flex-wrap justify-end gap-2 border-t border-border/20 pt-3">
                     {review.photo_url && <Badge variant="outline" className="mr-auto gap-1"><ImageIcon className="h-3 w-3" /> Photo attached</Badge>}
@@ -171,6 +188,24 @@ export default function TrailReviewModeration({ locationId, isCentralAdmin = fal
           })}
         </div>
       )}
+
+      <Dialog open={Boolean(selectedPhoto)} onOpenChange={(open) => { if (!open) setSelectedPhoto(null); }}>
+        <DialogContent className="max-w-5xl p-3 sm:p-5">
+          <DialogHeader>
+            <DialogTitle>Trail photo</DialogTitle>
+            <DialogDescription>
+              {selectedPhoto?.reviewer_name || 'Hiker'} · {selectedPhoto ? formatReviewDate(selectedPhoto.created_at) : ''}
+            </DialogDescription>
+          </DialogHeader>
+          {selectedPhoto?.photo_url && (
+            <img
+              src={selectedPhoto.photo_url}
+              alt="Full submitted trail experience"
+              className="max-h-[75vh] w-full rounded-lg object-contain"
+            />
+          )}
+        </DialogContent>
+      </Dialog>
     </section>
   );
 }

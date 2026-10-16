@@ -14,5 +14,8 @@ export const supabase = createClient<Database>(SUPABASE_URL, SUPABASE_PUBLISHABL
     storage: brokeredPreviewStorage(),
     persistSession: true,
     autoRefreshToken: true,
+    // Avoid the immediate-failure branch when another tab is refreshing the
+    // shared session token. Supabase will wait and recover stale locks.
+    lockAcquireTimeout: 10000,
   }
 });

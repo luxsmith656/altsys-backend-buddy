@@ -1,4 +1,5 @@
 import { supabase } from '@/integrations/supabase/client';
+import { resolveAuthOrigin } from '@/lib/authEmail';
 
 export async function changeAccountPassword(email: string, currentPassword: string, newPassword: string) {
   if (!email.trim() || !currentPassword) throw new Error('Enter your current password.');
@@ -14,18 +15,9 @@ export async function changeAccountPassword(email: string, currentPassword: stri
   if (error) throw error;
 }
 
-const PUBLIC_SITE_URL = 'https://mtkali.vercel.app';
-
 /** Reset links must open the real site, never a preview/editor host. */
 export function resolveResetOrigin(origin: string) {
-  try {
-    const host = new URL(origin).hostname;
-    if (host === 'localhost' || host === '127.0.0.1') return origin;
-    if (/lovable\.(app|dev)$|lovableproject\.com$/.test(host)) return PUBLIC_SITE_URL;
-    return origin;
-  } catch {
-    return PUBLIC_SITE_URL;
-  }
+  return resolveAuthOrigin(origin);
 }
 
 export async function emailPasswordReset(email: string, origin: string) {

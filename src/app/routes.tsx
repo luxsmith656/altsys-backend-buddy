@@ -17,6 +17,7 @@ const Index = lazy(() => import('@/pages/Index'));
 const AboutPage = lazy(() => import('@/pages/AboutPage'));
 const Login = lazy(() => import('@/pages/Login'));
 const ResetPasswordPage = lazy(() => import('@/pages/ResetPasswordPage'));
+const AuthCallbackPage = lazy(() => import('@/pages/AuthCallbackPage'));
 const Register = lazy(() => import('@/pages/Register'));
 const MapPage = lazy(() => import('@/pages/MapPage'));
 const ChatPage = lazy(() => import('@/pages/ChatPage'));
@@ -44,6 +45,7 @@ export const APP_ROUTES: AppRouteDefinition[] = [
   { path: '/about', pageKey: 'about', name: 'About Mt. Kalisungan', access: 'public', showInNavigation: true, component: AboutPage },
   { path: '/login', pageKey: 'login', name: 'Login Page', access: 'public', showInNavigation: false, component: Login },
   { path: '/reset-password', pageKey: 'reset-password', name: 'Reset Password', access: 'public', showInNavigation: false, component: ResetPasswordPage },
+  { path: '/auth/callback', pageKey: 'auth-callback', name: 'Email Verification Callback', access: 'public', showInNavigation: false, component: AuthCallbackPage },
   { path: '/register', pageKey: 'register', name: 'Register Page', access: 'public', showInNavigation: false, component: Register },
   { path: '/map', pageKey: 'map', name: 'Interactive Trail Map', access: 'public', showInNavigation: true, component: MapPage },
   { path: '/chat', pageKey: 'chat', name: 'AI Trail Assistant', access: 'public', showInNavigation: false, component: ChatPage },
