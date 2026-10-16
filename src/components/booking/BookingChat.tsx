@@ -146,7 +146,8 @@ export default function BookingChat({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
         style={{ '--booking-chat-vh': viewportHeight ? `${viewportHeight}px` : '100dvh' } as React.CSSProperties}
-        className="fixed inset-0 flex h-[var(--booking-chat-vh)] w-screen max-w-none translate-x-0 translate-y-0 flex-col gap-0 overflow-hidden rounded-none border-0 bg-card p-0"
+        aria-label="Booking conversation panel"
+        className="!bottom-0 !left-auto !right-0 !top-0 !translate-x-0 !translate-y-0 fixed flex h-[var(--booking-chat-vh)] w-screen max-w-none flex-col gap-0 overflow-hidden rounded-none border-0 bg-card p-0 shadow-2xl sm:w-[min(100vw,25rem)] sm:max-w-[25rem] sm:rounded-l-2xl sm:border-l sm:border-border/40"
       >
         <DialogHeader className="border-b border-border/30 bg-card px-4 py-4 pr-12 sm:px-8">
           <DialogTitle className="flex items-center gap-2 text-base">

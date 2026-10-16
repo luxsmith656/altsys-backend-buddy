@@ -31,6 +31,8 @@ describe('HikerReviews carousel', () => {
 
     expect(await screen.findByText('1 of 6')).toBeInTheDocument();
     expect(screen.getByText('Maria Santos')).toBeInTheDocument();
+    expect(screen.getByText(/The trail was absolutely breathtaking/)).toBeInTheDocument();
+    expect(screen.queryByText(/no photo|no uploaded/i)).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: /next trail review/i }));
 

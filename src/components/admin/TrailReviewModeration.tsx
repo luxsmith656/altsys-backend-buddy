@@ -190,7 +190,7 @@ export default function TrailReviewModeration({ locationId, isCentralAdmin = fal
       )}
 
       <Dialog open={Boolean(selectedPhoto)} onOpenChange={(open) => { if (!open) setSelectedPhoto(null); }}>
-        <DialogContent className="max-w-5xl p-3 sm:p-5">
+        <DialogContent className="max-h-[96dvh] max-w-[min(96vw,1400px)] gap-3 overflow-hidden p-3 sm:p-5">
           <DialogHeader>
             <DialogTitle>Trail photo</DialogTitle>
             <DialogDescription>
@@ -201,7 +201,7 @@ export default function TrailReviewModeration({ locationId, isCentralAdmin = fal
             <img
               src={selectedPhoto.photo_url}
               alt="Full submitted trail experience"
-              className="max-h-[75vh] w-full rounded-lg object-contain"
+              className="max-h-[calc(96dvh-7rem)] w-full rounded-lg object-contain"
             />
           )}
         </DialogContent>

@@ -90,7 +90,7 @@ function ReviewCard({ review }: { review: Review }) {
       animate={{ opacity: 1, x: 0 }}
       exit={{ opacity: 0, x: -16 }}
       transition={{ duration: 0.22 }}
-      className="cinematic-card grid overflow-hidden md:grid-cols-[minmax(0,1fr)_minmax(14rem,0.72fr)]"
+      className={`cinematic-card overflow-hidden ${review.photo_url ? 'grid md:grid-cols-[minmax(0,1fr)_minmax(14rem,0.72fr)]' : ''}`}
     >
       <div className="flex min-w-0 flex-col gap-4 p-6">
         <Quote className="h-6 w-6 rotate-180 text-primary/30" />
@@ -108,15 +108,11 @@ function ReviewCard({ review }: { review: Review }) {
           </div>
         </div>
       </div>
-      <div className="min-h-48 border-t border-border/10 bg-secondary/25 md:min-h-full md:border-l md:border-t-0">
-        {review.photo_url ? (
-          <img src={review.photo_url} alt={`Trail experience shared by ${review.reviewer_name}`} loading="lazy" decoding="async" className="h-full w-full object-cover" />
-        ) : (
-          <div className="flex h-full min-h-48 items-center justify-center p-8 text-center text-sm text-muted-foreground">
-            Mt. Kalisungan trail experience
-          </div>
-        )}
-      </div>
+      {review.photo_url && (
+        <div className="flex min-h-48 items-center justify-center border-t border-border/10 bg-secondary/25 p-3 md:min-h-full md:border-l md:border-t-0">
+          <img src={review.photo_url} alt={`Trail experience shared by ${review.reviewer_name}`} loading="lazy" decoding="async" className="max-h-64 w-full object-contain md:max-h-80" />
+        </div>
+      )}
     </motion.div>
   );
 }
