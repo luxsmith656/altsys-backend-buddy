@@ -48,6 +48,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { useLocations } from '@/hooks/useLocations';
 import { supabase } from '@/integrations/supabase/client';
 import { getActiveSession } from '@/lib/offlineDb';
+import { downloadArea } from '@/lib/tracking/tileCache';
 import { officialRoutesForLocation } from '@/lib/officialRoutes';
 import { officialTrailNameFromLocation } from '@/lib/mapTrailheads';
 import { ADMIN_CHECKIN_TOKEN_PREFIX } from '@/lib/tracking/sessionAuthorization';
@@ -204,6 +205,24 @@ export default function MapPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [mapFilterMode, setMapFilterMode] = useState<MapHikerFilterMode>('group');
   const [onlyActiveSessions, setOnlyActiveSessions] = useState(true);
+
+  // Warm a bounded mountain-area tile cache as soon as the map opens. The
+  // visible Leaflet tiles are still cached on demand; this prefetch keeps the
+  // whole trail vicinity usable after signal drops or a page reload.
+  useEffect(() => {
+    if (typeof window === 'undefined' || navigator.onLine === false) return;
+    const connection = (navigator as Navigator & { connection?: { saveData?: boolean } }).connection;
+    if (connection?.saveData) return;
+    void downloadArea({
+      centerLat: MT_KALISUNGAN_CENTER[0],
+      centerLng: MT_KALISUNGAN_CENTER[1],
+      zMin: 12,
+      zMax: 16,
+      radiusTiles: 2,
+      template: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+    }).catch(() => undefined);
+  }, []);
+
   useEffect(() => { const id = window.setInterval(() => setMapClock(Date.now()), 30000); return () => window.clearInterval(id); }, []);
   useEffect(() => {
     setSelfGroup(null);
@@ -384,7 +403,24 @@ export default function MapPage() {
       })
       .filter(Boolean) as MapTrail[];
 
-    setDbTrails(loaded);
+    const staticFallback = TRAILS
+      .filter((trail) => {
+        if (restrictToAssignedTrail || (activeSelfSession && bookedLocationId)) {
+          const key = bookedLocationId ?? activeLocationId ?? '';
+          return getDefaultTrailForLocation(key).name === trail.name;
+        }
+        return true;
+      })
+      .map((trail) => ({
+        ...trail,
+        id: `offline-${trail.name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`,
+        locationId: barangayLocations.find((location) => location.slug.includes(trail.name.toLowerCase().startsWith('lamot 1') ? 'lamot-1' : trail.name.toLowerCase().startsWith('sto') ? 'sto-tomas' : 'lamot-2'))?.id ?? null,
+        locationName: trail.name.replace(/ Trail$/, ''),
+        stations: buildRouteStations(trail.path),
+      }));
+    // Published database routes win online. Static official routes keep the
+    // map and its station markers available when a fresh load is offline.
+    setDbTrails(loaded.length ? loaded : staticFallback);
 
     if (isTrailRecorder) {
       let editorQuery = supabase

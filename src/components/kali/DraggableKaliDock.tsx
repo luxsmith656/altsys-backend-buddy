@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type ReactNode } from 'react';
 
 type Position = { x: number; y: number };
 
-export default function DraggableKaliDock({ children, aboveNavigation = false }: { children: ReactNode; aboveNavigation?: boolean }) {
+export default function DraggableKaliDock({ children, aboveNavigation = false, bookingChatOpen = false }: { children: ReactNode; aboveNavigation?: boolean; bookingChatOpen?: boolean }) {
   const dock = useRef<HTMLDivElement>(null);
   const drag = useRef<{ pointer: number; start: Position; origin: Position } | null>(null);
   const suppressClick = useRef(false);
@@ -22,7 +22,7 @@ export default function DraggableKaliDock({ children, aboveNavigation = false }:
   }, []);
   const right = position !== null ? position.x > viewport.width / 2 : false;
   const down = position !== null && position.y < viewport.height / 2;
-  return <div ref={dock} className="kali-movable-dock" data-right={right} data-down={down} data-above-navigation={aboveNavigation}
+  return <div ref={dock} className="kali-movable-dock" data-right={right} data-down={down} data-above-navigation={aboveNavigation} data-booking-chat-open={bookingChatOpen}
     style={position ? { left: position.x, top: position.y, bottom: 'auto' } : undefined}
     onPointerDown={event => {
       if (event.button !== 0 || !(event.target as HTMLElement).closest('[data-kali-drag-handle]')) return;

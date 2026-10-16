@@ -10,24 +10,37 @@ export type EmergencyAlertInput = {
   latitude?: number | null;
   longitude?: number | null;
   message?: string;
+  clientAlertId?: string | null;
 };
 
 export async function createEmergencyAlert(input: EmergencyAlertInput) {
-  const { data, error } = await supabase
+  const payload = {
+    user_id: input.userId,
+    reporter_role: input.reporterRole || 'hiker',
+    booking_id: input.bookingId || null,
+    session_id: input.sessionId || null,
+    location_id: input.locationId || null,
+    latitude: Number.isFinite(input.latitude) ? input.latitude : null,
+    longitude: Number.isFinite(input.longitude) ? input.longitude : null,
+    message: input.message?.trim() || 'Emergency assistance requested',
+    status: 'open',
+    ...(input.clientAlertId ? { client_alert_id: input.clientAlertId } : {}),
+  };
+  let { data, error } = await supabase
     .from('emergency_alerts' as any)
-    .insert({
-      user_id: input.userId,
-      reporter_role: input.reporterRole || 'hiker',
-      booking_id: input.bookingId || null,
-      session_id: input.sessionId || null,
-      location_id: input.locationId || null,
-      latitude: Number.isFinite(input.latitude) ? input.latitude : null,
-      longitude: Number.isFinite(input.longitude) ? input.longitude : null,
-      message: input.message?.trim() || 'Emergency assistance requested',
-      status: 'open',
-    })
+    .insert(payload)
     .select('id,created_at')
     .single();
+
+  // Older deployments may not have the client id column yet. Preserve SOS
+  // delivery while the migration is being applied.
+  if (error && input.clientAlertId && String(error.message).toLowerCase().includes('schema cache')) {
+    const { client_alert_id: _clientAlertId, ...legacyPayload } = payload;
+    const fallback = await supabase.from('emergency_alerts' as any).insert(legacyPayload)
+      .select('id,created_at').single();
+    data = fallback.data;
+    error = fallback.error;
+  }
 
   if (error) throw new Error(`Emergency alert could not be saved: ${error.message}`);
 
@@ -56,6 +69,19 @@ export async function createEmergencyAlert(input: EmergencyAlertInput) {
   }).catch(() => null)));
 
   return data as unknown as { id: string; created_at: string };
+}
+
+export async function updateEmergencyAlertLocation(alertId: string, coords: { latitude: number; longitude: number }) {
+  const { error } = await supabase.from('emergency_alerts' as any).update({
+    latitude: coords.latitude,
+    longitude: coords.longitude,
+  }).eq('id', alertId).eq('status', 'open');
+  if (error) throw error;
+}
+
+export async function cancelEmergencyAlert(alertId: string) {
+  const { error } = await supabase.from('emergency_alerts' as any).update({ status: 'cancelled' }).eq('id', alertId);
+  if (error) throw error;
 }
 
 export async function loadEmergencyAlerts(locationId?: string | null) {

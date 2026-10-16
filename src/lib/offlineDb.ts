@@ -48,7 +48,7 @@ export interface TileRecord {
 
 export interface QueueItem {
   id?: number;
-  kind: 'session' | 'points' | 'ping' | 'station';
+  kind: 'session' | 'points' | 'ping' | 'station' | 'sos';
   payload: any;
   createdAt: number;
   attempts: number;
@@ -149,6 +149,14 @@ export async function drainQueue(): Promise<QueueItem[]> {
 export async function removeQueueItem(id: number) {
   const db = await getDb();
   await db.delete('queue', id);
+}
+
+export async function removeQueuedSos(clientAlertId: string) {
+  const db = await getDb();
+  const items = (await db.getAll('queue')) as QueueItem[];
+  await Promise.all(items
+    .filter((item) => item.kind === 'sos' && item.payload?.clientAlertId === clientAlertId && item.id != null)
+    .map((item) => db.delete('queue', item.id!)));
 }
 
 export async function bumpQueueAttempt(id: number) {

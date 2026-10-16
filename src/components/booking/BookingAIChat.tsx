@@ -826,12 +826,27 @@ export default function BookingAIChat({
     return () => window.removeEventListener('open-global-ai-assistant', openAssistant as EventListener);
   }, [sendMessage]);
 
+  // Booking conversations and Kali share one screen slot. Keep their panels
+  // mutually exclusive even when one is opened from a notification.
+  useEffect(() => {
+    const closeForBookingChat = () => setIsOpen(false);
+    window.addEventListener('booking-chat-opened', closeForBookingChat);
+    return () => window.removeEventListener('booking-chat-opened', closeForBookingChat);
+  }, []);
+
+  useEffect(() => {
+    window.dispatchEvent(new Event(isOpen ? 'global-ai-opened' : 'global-ai-closed'));
+  }, [isOpen]);
+
   return (
     <>
       {/* Toggle button */}
       {showLauncher && !isOpen && (
         <motion.button
-          onClick={() => setIsOpen(true)}
+          onClick={() => {
+            window.dispatchEvent(new Event('global-ai-opened'));
+            setIsOpen(true);
+          }}
           className={cn(
             'fixed bottom-6 left-6 z-50 md:hidden flex items-center gap-2 rounded-2xl px-4 py-3 text-sm font-semibold shadow-2xl transition-colors duration-200',
             'bg-primary text-primary-foreground hover:bg-primary/90',
@@ -868,7 +883,7 @@ export default function BookingAIChat({
               if (startX - endX > 70) setIsOpen(false);
               touchStartX.current = null;
             }}
-            className="fixed inset-0 z-[2100] w-screen transform-gpu overscroll-contain sm:left-auto sm:right-0 sm:top-16 sm:bottom-0 sm:w-[360px] flex flex-col bg-card sm:border-l border-border/50 shadow-2xl"
+            className="fixed inset-0 z-[2100] w-screen transform-gpu overscroll-contain sm:left-0 sm:right-auto sm:top-16 sm:bottom-0 sm:w-[360px] flex flex-col bg-card sm:border-r border-border/50 shadow-2xl"
           >
             {/* Header */}
             <div className="flex items-center gap-3 p-4 border-b border-border/30 bg-primary/5">

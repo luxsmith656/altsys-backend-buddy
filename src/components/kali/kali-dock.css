@@ -50,3 +50,13 @@
   top: 64px;
   flex-direction: column;
 }
+@media (min-width: 768px) {
+  .kali-movable-dock[data-booking-chat-open="true"] {
+    left: min(390px, calc(30vw + 28px));
+  }
+}
+@media (max-width: 767px) {
+  .kali-movable-dock[data-booking-chat-open="true"] {
+    display: none;
+  }
+}

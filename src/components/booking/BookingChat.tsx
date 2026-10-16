@@ -67,6 +67,24 @@ export default function BookingChat({
     };
   }, [open]);
 
+  useEffect(() => {
+    const closeForKali = () => {
+      if (open) onOpenChange(false);
+    };
+    window.addEventListener('open-global-ai-assistant', closeForKali);
+    window.addEventListener('global-ai-opened', closeForKali);
+    return () => {
+      window.removeEventListener('open-global-ai-assistant', closeForKali);
+      window.removeEventListener('global-ai-opened', closeForKali);
+    };
+  }, [open, onOpenChange]);
+
+  useEffect(() => {
+    if (!open) return;
+    window.dispatchEvent(new CustomEvent('booking-chat-opened', { detail: { bookingId } }));
+    return () => { window.dispatchEvent(new CustomEvent('booking-chat-closed', { detail: { bookingId } })); };
+  }, [open, bookingId]);
+
   const load = async () => {
     setLoading(true);
     const { data, error } = await supabase
@@ -155,7 +173,7 @@ export default function BookingChat({
           exit={{ opacity: 0, x: -360 }}
           transition={{ type: 'spring', damping: 28, stiffness: 220 }}
           style={{ '--booking-chat-vh': viewportHeight ? `${viewportHeight}px` : '100dvh' } as React.CSSProperties}
-          className="fixed inset-0 z-[2100] flex h-[var(--booking-chat-vh)] w-screen flex-col overflow-hidden bg-card shadow-2xl sm:bottom-0 sm:left-0 sm:right-auto sm:top-16 sm:h-auto sm:w-[min(100vw,25rem)] sm:rounded-r-2xl sm:border-r sm:border-border/50 md:w-[min(40vw,28rem)] lg:w-[min(34vw,30rem)] xl:w-[min(30vw,32rem)]"
+          className="fixed inset-0 z-[2100] flex h-[var(--booking-chat-vh)] w-screen flex-col overflow-hidden bg-card shadow-2xl sm:bottom-0 sm:left-0 sm:right-auto sm:top-16 sm:h-auto sm:w-[360px] sm:rounded-r-2xl sm:border-r sm:border-border/50"
           onKeyDown={(event) => { if (event.key === 'Escape') onOpenChange(false); }}
         >
           <header className="flex items-center gap-3 border-b border-border/30 bg-primary/5 p-4">

@@ -11,6 +11,45 @@ function isSchemaCacheError(error: unknown) {
 }
 
 async function pushOne(item: any) {
+  if (item.kind === 'sos') {
+    const p = item.payload;
+    let latest = { latitude: p.latitude, longitude: p.longitude };
+    try {
+      const saved = localStorage.getItem(`mtk-active-sos:${p.userId}`);
+      const local = saved ? JSON.parse(saved) as { clientAlertId?: string; lastLocation?: { lat?: number; lng?: number } } : null;
+      if (local?.clientAlertId === p.clientAlertId && Number.isFinite(local.lastLocation?.lat) && Number.isFinite(local.lastLocation?.lng)) {
+        latest = { latitude: local.lastLocation!.lat, longitude: local.lastLocation!.lng };
+      }
+    } catch { /* local SOS state is optional during background sync */ }
+    const row = {
+      user_id: p.userId,
+      reporter_role: p.reporterRole ?? 'hiker',
+      booking_id: p.bookingId ?? null,
+      session_id: p.sessionId ?? null,
+      location_id: p.locationId ?? null,
+      latitude: Number.isFinite(latest.latitude) ? latest.latitude : null,
+      longitude: Number.isFinite(latest.longitude) ? latest.longitude : null,
+      message: p.message ?? 'Emergency assistance requested',
+      status: 'open',
+      created_at: p.createdAt ?? new Date().toISOString(),
+      client_alert_id: p.clientAlertId ?? null,
+    };
+    let { data, error } = await supabase.from('emergency_alerts' as any)
+      .upsert(row, { onConflict: 'client_alert_id' }).select('id').single();
+    if (error && isSchemaCacheError(error)) {
+      const { client_alert_id: _clientAlertId, ...legacyRow } = row;
+      const fallback = await supabase.from('emergency_alerts' as any).insert(legacyRow).select('id').single();
+      data = fallback.data;
+      error = fallback.error;
+    }
+    if (error) throw error;
+    const synced = data as { id?: string } | null;
+    window.dispatchEvent(new CustomEvent('sos-synced', {
+      detail: { clientAlertId: p.clientAlertId, alertId: synced?.id ?? null },
+    }));
+    return;
+  }
+
   if (item.kind === 'station') {
     const { error } = await supabase.from('hike_station_reports').upsert(item.payload, { onConflict: 'id', ignoreDuplicates: true });
     if (error) throw error;

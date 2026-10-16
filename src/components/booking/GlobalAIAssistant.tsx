@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import BookingAIChat, { type BookingSuggestion } from '@/components/booking/BookingAIChat';
@@ -34,6 +34,25 @@ export default function GlobalAIAssistant() {
   const navigate = useNavigate();
   const { role } = useAuth();
   const [actionsOpen, setActionsOpen] = useState(false);
+  const [bookingChatOpen, setBookingChatOpen] = useState(false);
+  const [aiOpen, setAiOpen] = useState(false);
+
+  useEffect(() => {
+    const onBookingOpen = () => setBookingChatOpen(true);
+    const onBookingClose = () => setBookingChatOpen(false);
+    const onAiOpen = () => setAiOpen(true);
+    const onAiClose = () => setAiOpen(false);
+    window.addEventListener('booking-chat-opened', onBookingOpen);
+    window.addEventListener('booking-chat-closed', onBookingClose);
+    window.addEventListener('global-ai-opened', onAiOpen);
+    window.addEventListener('global-ai-closed', onAiClose);
+    return () => {
+      window.removeEventListener('booking-chat-opened', onBookingOpen);
+      window.removeEventListener('booking-chat-closed', onBookingClose);
+      window.removeEventListener('global-ai-opened', onAiOpen);
+      window.removeEventListener('global-ai-closed', onAiClose);
+    };
+  }, []);
 
   const hidden = HIDDEN_ROUTES.some((r) => location.pathname === r || location.pathname.startsWith(`${r}/`));
 
@@ -68,7 +87,7 @@ export default function GlobalAIAssistant() {
 
   return (
     <>
-      <DraggableKaliDock aboveNavigation={location.pathname === '/guide'}>
+      {!aiOpen && <DraggableKaliDock aboveNavigation={location.pathname === '/guide'} bookingChatOpen={bookingChatOpen}>
         {actionsOpen && (
           <div className="kali-dock-actions">
             {/* Quick check-in is a local-station action, not a central overview action. */}
@@ -152,7 +171,7 @@ export default function GlobalAIAssistant() {
         >
           {actionsOpen ? <X className="h-6 w-6" /> : <KaliAvatar expression="happy" size="sm" className="h-10 w-10 rounded-full border-0" />}
         </button>
-      </DraggableKaliDock>
+      </DraggableKaliDock>}
     <BookingAIChat
       key={location.pathname}
       groupSize={1}

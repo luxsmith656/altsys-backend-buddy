@@ -13,7 +13,8 @@ import { toast } from 'sonner';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
-import { createEmergencyAlert } from '@/lib/emergencyAlerts';
+import { cancelEmergencyAlert, createEmergencyAlert, updateEmergencyAlertLocation } from '@/lib/emergencyAlerts';
+import { enqueue, removeQueuedSos } from '@/lib/offlineDb';
 
 interface SOSPanelProps {
   /** Compact mode renders just a single red button (for map overlay) */
@@ -26,13 +27,83 @@ const EMERGENCY_CONTACTS = [
   { label: 'Laguna PDRRMO', number: '049-832-0219' },
 ];
 
+interface ActiveSos {
+  clientAlertId: string;
+  serverAlertId?: string | null;
+  sentAt: string;
+  pendingSync?: boolean;
+  lastLocation?: { lat: number; lng: number } | null;
+  lastLocationAt?: string | null;
+}
+
+function makeClientAlertId() {
+  return typeof crypto !== 'undefined' && 'randomUUID' in crypto
+    ? crypto.randomUUID()
+    : `sos-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+}
+
+function isNetworkFailure(error: unknown) {
+  const message = String(error instanceof Error ? error.message : error ?? '').toLowerCase();
+  return !navigator.onLine || message.includes('network') || message.includes('fetch') || message.includes('offline');
+}
+
 export default function SOSPanel({ compact = false }: SOSPanelProps) {
   const { user, role } = useAuth();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [sending, setSending] = useState(false);
   const [sent, setSent] = useState(false);
   const [coords, setCoords] = useState<{ lat: number; lng: number } | null>(null);
+  const [activeSos, setActiveSos] = useState<ActiveSos | null>(null);
   const [activeSession, setActiveSession] = useState<{ id: string; booking_id: string | null; location_id: string | null } | null>(null);
+
+  const sosStorageKey = user?.id ? `mtk-active-sos:${user.id}` : null;
+
+  useEffect(() => {
+    if (!sosStorageKey) return;
+    try {
+      const saved = localStorage.getItem(sosStorageKey);
+      if (saved) {
+        const parsed = JSON.parse(saved) as ActiveSos;
+        setActiveSos(parsed);
+        setSent(true);
+      }
+    } catch {
+      localStorage.removeItem(sosStorageKey);
+    }
+  }, [sosStorageKey]);
+
+  useEffect(() => {
+    const onSynced = (event: Event) => {
+      const detail = (event as CustomEvent<{ clientAlertId?: string; alertId?: string | null }>).detail;
+      if (!detail?.clientAlertId || detail.clientAlertId !== activeSos?.clientAlertId) return;
+      const next = { ...activeSos, serverAlertId: detail.alertId, pendingSync: false };
+      setActiveSos(next);
+      if (sosStorageKey) localStorage.setItem(sosStorageKey, JSON.stringify(next));
+    };
+    window.addEventListener('sos-synced', onSynced);
+    return () => window.removeEventListener('sos-synced', onSynced);
+  }, [activeSos, sosStorageKey]);
+
+  useEffect(() => {
+    if (!sent || !user?.id || !navigator.geolocation) return;
+    const watchId = navigator.geolocation.watchPosition((position) => {
+      const nextCoords = { lat: position.coords.latitude, lng: position.coords.longitude };
+      setCoords(nextCoords);
+      setActiveSos((current) => {
+        if (!current) return current;
+        const next = { ...current, lastLocation: nextCoords, lastLocationAt: new Date().toISOString() };
+        if (sosStorageKey) localStorage.setItem(sosStorageKey, JSON.stringify(next));
+        if (current.serverAlertId) {
+          void updateEmergencyAlertLocation(current.serverAlertId, {
+            latitude: nextCoords.lat,
+            longitude: nextCoords.lng,
+          }).catch(() => undefined);
+        }
+        return next;
+      });
+    }, () => undefined, { enableHighAccuracy: true, maximumAge: 15_000, timeout: 15_000 });
+    return () => navigator.geolocation.clearWatch(watchId);
+  }, [sent, user?.id, sosStorageKey]);
 
   /* Grab GPS coords when the dialog opens */
   useEffect(() => {
@@ -61,6 +132,7 @@ export default function SOSPanel({ compact = false }: SOSPanelProps) {
       toast.error('Sign in before sending an SOS alert.');
       return;
     }
+    if (activeSos) return;
     setSending(true);
     try {
       let locationId = activeSession?.location_id || null;
@@ -68,7 +140,8 @@ export default function SOSPanel({ compact = false }: SOSPanelProps) {
         const { data } = await supabase.from('bookings').select('location_id').eq('id', activeSession.booking_id).maybeSingle();
         locationId = data?.location_id || null;
       }
-      await createEmergencyAlert({
+      const clientAlertId = makeClientAlertId();
+      const payload = {
         userId: user.id,
         reporterRole: role,
         bookingId: activeSession?.booking_id,
@@ -76,9 +149,33 @@ export default function SOSPanel({ compact = false }: SOSPanelProps) {
         locationId,
         latitude: coords?.lat,
         longitude: coords?.lng,
-      });
+        clientAlertId,
+      };
+      let next: ActiveSos;
+      try {
+        const created = await createEmergencyAlert(payload);
+        next = { clientAlertId, serverAlertId: created.id, sentAt: created.created_at, lastLocation: coords, lastLocationAt: new Date().toISOString() };
+      } catch (error) {
+        if (!isNetworkFailure(error)) throw error;
+        const createdAt = new Date().toISOString();
+        await enqueue({ kind: 'sos', payload: {
+          clientAlertId,
+          userId: user.id,
+          reporterRole: role,
+          bookingId: activeSession?.booking_id ?? null,
+          sessionId: activeSession?.id ?? null,
+          locationId,
+          latitude: coords?.lat ?? null,
+          longitude: coords?.lng ?? null,
+          message: 'Emergency assistance requested while offline',
+          createdAt,
+        } });
+        next = { clientAlertId, sentAt: createdAt, pendingSync: true, lastLocation: coords, lastLocationAt: createdAt };
+      }
+      setActiveSos(next);
+      if (sosStorageKey) localStorage.setItem(sosStorageKey, JSON.stringify(next));
       setSent(true);
-      toast.error('SOS alert sent. The assigned admin and emergency team were notified.', { duration: 8000 });
+      toast.error(next.pendingSync ? 'SOS saved offline. It will be sent automatically when connection returns.' : 'SOS alert sent. The assigned admin and emergency team were notified.', { duration: 8000 });
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Could not send SOS alert.');
     } finally {
@@ -86,9 +183,27 @@ export default function SOSPanel({ compact = false }: SOSPanelProps) {
     }
   };
 
+  const handleCancelSOS = async () => {
+    if (!activeSos) return;
+    try {
+      if (activeSos.serverAlertId && navigator.onLine) {
+        await cancelEmergencyAlert(activeSos.serverAlertId);
+      } else {
+        await removeQueuedSos(activeSos.clientAlertId);
+      }
+      if (sosStorageKey) localStorage.removeItem(sosStorageKey);
+      setActiveSos(null);
+      setSent(false);
+      setDialogOpen(false);
+      toast.success('SOS alert cancelled.');
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Could not cancel the SOS alert.');
+    }
+  };
+
   const handleClose = () => {
     setDialogOpen(false);
-    setSent(false);
+    setSent(Boolean(activeSos));
     setCoords(null);
   };
 
@@ -110,6 +225,7 @@ export default function SOSPanel({ compact = false }: SOSPanelProps) {
           sending={sending}
           sent={sent}
           onSend={handleSendSOS}
+          onCancel={handleCancelSOS}
           onClose={handleClose}
         />
       </>
@@ -162,6 +278,7 @@ export default function SOSPanel({ compact = false }: SOSPanelProps) {
         sending={sending}
         sent={sent}
         onSend={handleSendSOS}
+        onCancel={handleCancelSOS}
         onClose={handleClose}
       />
     </>
@@ -175,6 +292,7 @@ function SOSDialog({
   sending,
   sent,
   onSend,
+  onCancel,
   onClose,
 }: {
   open: boolean;
@@ -182,6 +300,7 @@ function SOSDialog({
   sending: boolean;
   sent: boolean;
   onSend: () => void;
+  onCancel: () => void;
   onClose: () => void;
 }) {
   return (
@@ -251,9 +370,12 @@ function SOSDialog({
         </AlertDialogHeader>
         <AlertDialogFooter>
           {sent ? (
-            <Button onClick={onClose} className="w-full">
-              <X className="h-4 w-4 mr-2" /> Close
-            </Button>
+            <>
+              <Button variant="outline" onClick={onCancel} className="w-full">
+                <X className="h-4 w-4 mr-2" /> Cancel SOS
+              </Button>
+              <Button onClick={onClose} className="w-full">Close</Button>
+            </>
           ) : (
             <>
               <Button variant="outline" onClick={onClose} disabled={sending}>
