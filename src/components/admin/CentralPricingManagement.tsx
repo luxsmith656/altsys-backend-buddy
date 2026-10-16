@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -6,7 +6,6 @@ import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { toast } from 'sonner';
-import { format } from 'date-fns';
 import {
   DollarSign,
   Save,
@@ -14,27 +13,19 @@ import {
   Sparkles,
   Calculator,
   Users,
-  CalendarCheck,
-  Trash2,
   Loader2,
   Building2,
   ShieldCheck,
   CheckCircle2,
-  Layers,
 } from 'lucide-react';
 import { usePricing } from '@/hooks/usePricing';
-import { useLocations } from '@/hooks/useLocations';
 import { useAuth } from '@/hooks/useAuth';
-import { supabase } from '@/integrations/supabase/client';
 import { calculateFees, formatPeso } from '@/lib/payments';
 import type { PricingConfig } from '@/types/pricing';
-import { validateCapacitySplit } from '@/lib/dailyCapacity';
-import { validateCapacityAgainstReservations } from '@/lib/dailyCapacity';
-import { Calendar } from '@/components/ui/calendar';
+import BookingCapacityScheduleControl from '@/components/admin/BookingCapacityScheduleControl';
 
 export default function CentralPricingManagement() {
   const { user } = useAuth();
-  const { locations } = useLocations();
   const { pricing, loading: pricingLoading, updatePricing, resetPricing } = usePricing();
 
   // ----------------------------------------------------
@@ -42,21 +33,6 @@ export default function CentralPricingManagement() {
   // ----------------------------------------------------
   const [form, setForm] = useState<PricingConfig>(pricing);
   const [savingFare, setSavingFare] = useState(false);
-
-  // Scrape jump-off locations to strictly Lamot 2, Lamot 1, Sto. Tomas
-  const jumpOffLocations = useMemo(() => {
-    return (locations || [])
-      .filter((loc) => {
-        const text = `${loc.slug} ${loc.name}`.toLowerCase();
-        return text.includes('lamot') || text.includes('tomas');
-      })
-      .sort((a, b) => {
-        const aText = `${a.slug} ${a.name}`.toLowerCase();
-        const bText = `${b.slug} ${b.name}`.toLowerCase();
-        const score = (t: string) => (t.includes('lamot') && t.includes('2') ? 1 : t.includes('lamot') && t.includes('1') ? 2 : 3);
-        return score(aText) - score(bText);
-      });
-  }, [locations]);
 
   useEffect(() => {
     setForm(pricing);
@@ -98,223 +74,6 @@ export default function CentralPricingManagement() {
   const simFive = calculateFees(form.maxPaxPerGuide || 5, { hikeType: 'morning', pricing: form });
   const simGroup = calculateFees((form.maxPaxPerGuide || 5) * 2 + 1, { hikeType: 'night', peakExtensionHours: 1, pricing: form });
 
-  // ----------------------------------------------------
-  // Daily Capacity Controls State
-  // ----------------------------------------------------
-  const [selectedCapLocationId, setSelectedCapLocationId] = useState<string>('all');
-  const [capDate, setCapDate] = useState('');
-  const [capMax, setCapMax] = useState(100);
-  const [capDayMax, setCapDayMax] = useState(65);
-  const [capNightMax, setCapNightMax] = useState(35);
-  const [capRangeStart, setCapRangeStart] = useState('');
-  const [capRangeEnd, setCapRangeEnd] = useState('');
-  const [capSaving, setCapSaving] = useState(false);
-  const [upcomingCapacities, setUpcomingCapacities] = useState<any[]>([]);
-  const [selectedCapacityDates, setSelectedCapacityDates] = useState<Date[]>([]);
-  const [slotCapacities, setSlotCapacities] = useState<Record<string, number>>({});
-  const [slotCapacityDraft, setSlotCapacityDraft] = useState<Record<string, number>>({});
-  const [slotCapacitySaving, setSlotCapacitySaving] = useState(false);
-
-  useEffect(() => {
-    let active = true;
-    void (async () => {
-      const { data, error } = await (supabase as any).from('trailhead_slot_capacity_settings').select('location_id,max_groups');
-      if (!active || error) return;
-      const next = Object.fromEntries(((data || []) as Array<{ location_id: string; max_groups: number }>).map((row) => [row.location_id, row.max_groups]));
-      setSlotCapacities(next);
-      setSlotCapacityDraft(next);
-    })();
-    return () => { active = false; };
-  }, []);
-
-  const saveSlotCapacities = async () => {
-    setSlotCapacitySaving(true);
-    try {
-      for (const location of jumpOffLocations) {
-        const value = Math.max(1, Math.min(50, Math.floor(Number(slotCapacityDraft[location.id] ?? 1))));
-        const { error } = await (supabase as any).rpc('set_trailhead_slot_capacity', { p_location_id: location.id, p_max_groups: value });
-        if (error) throw error;
-      }
-      setSlotCapacities({ ...slotCapacityDraft });
-      toast.success('Trailhead time-slot capacity saved. New notifications were sent to affected staff.');
-    } catch (error: any) {
-      toast.error(error?.message || 'Could not save trailhead slot capacity.');
-    } finally {
-      setSlotCapacitySaving(false);
-    }
-  };
-
-  const bookedCountsFor = (date: string, locationId: string | null) => {
-    const rows = upcomingCapacities.filter((row) => row.date === date &&
-      (locationId ? row.location_id === locationId : true));
-    const globalRow = rows.find((row) => row.location_id == null);
-    const counts = globalRow ? [globalRow] : rows;
-    return counts.reduce((total, row) => ({
-      total: total.total + Number(row.current_count ?? 0),
-      day: total.day + Number(row.day_current_count ?? 0),
-      night: total.night + Number(row.night_current_count ?? 0),
-    }), { total: 0, day: 0, night: 0 });
-  };
-
-  const selectCapacityDates = (dates: Date[] | undefined) => {
-    const next = dates ?? [];
-    setSelectedCapacityDates(next);
-    if (next.length !== 1) return;
-    const date = format(next[0], 'yyyy-MM-dd');
-    setCapDate(date);
-    const locationId = selectedCapLocationId === 'all' ? null : selectedCapLocationId;
-    const row = upcomingCapacities.find((item) => item.date === date && item.location_id === locationId);
-    if (row) {
-      setCapMax(Number(row.max_capacity));
-      setCapDayMax(Number(row.day_max_capacity ?? 65));
-      setCapNightMax(Number(row.night_max_capacity ?? 35));
-    }
-  };
-
-  const loadUpcomingCapacities = useCallback(async () => {
-    try {
-      const today = format(new Date(), 'yyyy-MM-dd');
-      let q: any = supabase.from('daily_capacity').select('*');
-      if (typeof q.gte === 'function') q = q.gte('date', today);
-      if (selectedCapLocationId !== 'all' && typeof q.eq === 'function') {
-        q = q.eq('location_id', selectedCapLocationId);
-      }
-      if (typeof q.order === 'function') q = q.order('date', { ascending: true });
-      if (typeof q.limit === 'function') q = q.limit(60);
-
-      const { data, error } = await q;
-      if (!error && data) {
-        setUpcomingCapacities(data);
-      }
-    } catch (err) {
-      console.warn('Could not load upcoming capacities:', err);
-    }
-  }, [selectedCapLocationId]);
-
-  useEffect(() => {
-    void loadUpcomingCapacities();
-  }, [loadUpcomingCapacities]);
-
-  const saveCapacity = async () => {
-    if (!capDate) {
-      toast.error('Please select a date.');
-      return;
-    }
-    const capacityError = validateCapacitySplit(capMax, capDayMax, capNightMax);
-    if (capacityError) { toast.error(capacityError); return; }
-    const counts = bookedCountsFor(capDate, selectedCapLocationId === 'all' ? null : selectedCapLocationId);
-    const conflict = validateCapacityAgainstReservations(capMax, capDayMax, capNightMax, counts.total, counts.day, counts.night);
-    if (conflict) { toast.error(conflict); return; }
-    setCapSaving(true);
-    try {
-      const locId = selectedCapLocationId === 'all' ? null : selectedCapLocationId;
-      const { error } = await supabase.from('daily_capacity').upsert(
-        {
-          location_id: locId,
-          date: capDate,
-          max_capacity: capMax,
-          day_max_capacity: capDayMax,
-          night_max_capacity: capNightMax,
-        } as any,
-        { onConflict: 'location_id,date' }
-      );
-      if (error) throw error;
-      toast.success(`Capacity for ${capDate} set to ${capMax} hikers (${capDayMax} day / ${capNightMax} night).`);
-      setCapDate('');
-      await loadUpcomingCapacities();
-    } catch (err: any) {
-      toast.error('Failed to set capacity: ' + err.message);
-    } finally {
-      setCapSaving(false);
-    }
-  };
-
-  const saveCapacityRange = async () => {
-    if (!capRangeStart || !capRangeEnd) {
-      toast.error('Please select both start and end dates.');
-      return;
-    }
-    const capacityError = validateCapacitySplit(capMax, capDayMax, capNightMax);
-    if (capacityError) { toast.error(capacityError); return; }
-    const start = new Date(`${capRangeStart}T00:00:00`);
-    const end = new Date(`${capRangeEnd}T00:00:00`);
-    if (end < start) {
-      toast.error('End date must be after start date.');
-      return;
-    }
-
-    const locId = selectedCapLocationId === 'all' ? null : selectedCapLocationId;
-    const rows: Array<{ location_id: string | null; date: string; max_capacity: number; day_max_capacity: number; night_max_capacity: number }> = [];
-    const cursor = new Date(start);
-    while (cursor <= end) {
-      const date = format(cursor, 'yyyy-MM-dd');
-      const counts = bookedCountsFor(date, locId);
-      const conflict = validateCapacityAgainstReservations(capMax, capDayMax, capNightMax, counts.total, counts.day, counts.night);
-      if (conflict) { toast.error(`${date}: ${conflict}`); return; }
-      rows.push({
-        location_id: locId,
-        date,
-        max_capacity: capMax,
-        day_max_capacity: capDayMax,
-        night_max_capacity: capNightMax,
-      });
-      cursor.setDate(cursor.getDate() + 1);
-    }
-
-    setCapSaving(true);
-    try {
-      const { error } = await supabase.from('daily_capacity').upsert(rows as any, { onConflict: 'location_id,date' });
-      if (error) throw error;
-      toast.success(`Capacity range applied to ${rows.length} days (${capMax} pax/day).`);
-      setCapRangeStart('');
-      setCapRangeEnd('');
-      await loadUpcomingCapacities();
-    } catch (err: any) {
-      toast.error('Failed bulk update: ' + err.message);
-    } finally {
-      setCapSaving(false);
-    }
-  };
-
-  const saveSelectedCapacityDates = async () => {
-    if (selectedCapacityDates.length < 2) return;
-    const capacityError = validateCapacitySplit(capMax, capDayMax, capNightMax);
-    if (capacityError) { toast.error(capacityError); return; }
-    const locationId = selectedCapLocationId === 'all' ? null : selectedCapLocationId;
-    const rows = selectedCapacityDates.map((day) => {
-      const date = format(day, 'yyyy-MM-dd');
-      const counts = bookedCountsFor(date, locationId);
-      return { date, counts, location_id: locationId, max_capacity: capMax, day_max_capacity: capDayMax, night_max_capacity: capNightMax };
-    });
-    const conflictRow = rows.find(({ max_capacity, day_max_capacity, night_max_capacity, counts }) =>
-      validateCapacityAgainstReservations(max_capacity, day_max_capacity, night_max_capacity, counts.total, counts.day, counts.night));
-    if (conflictRow) {
-      toast.error(`${conflictRow.date}: ${validateCapacityAgainstReservations(capMax, capDayMax, capNightMax, conflictRow.counts.total, conflictRow.counts.day, conflictRow.counts.night)}`);
-      return;
-    }
-    setCapSaving(true);
-    try {
-      const { error } = await supabase.from('daily_capacity').upsert(rows.map(({ counts: _counts, ...row }) => row) as any, { onConflict: 'location_id,date' });
-      if (error) throw error;
-      toast.success(`Capacity updated for ${rows.length} selected dates.`);
-      setSelectedCapacityDates([]);
-      await loadUpcomingCapacities();
-    } catch (error) {
-      toast.error(`Failed to update selected dates: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    } finally { setCapSaving(false); }
-  };
-
-  const deleteCapacityLimit = async (id: string) => {
-    try {
-      const { error } = await supabase.from('daily_capacity').delete().eq('id', id);
-      if (error) throw error;
-      toast.success('Capacity limit removed (reverts to default 100).');
-      await loadUpcomingCapacities();
-    } catch (err: any) {
-      toast.error('Failed to remove: ' + err.message);
-    }
-  };
-
   return (
     <div className="space-y-8">
       {/* Header Banner */}
@@ -331,7 +90,7 @@ export default function CentralPricingManagement() {
             Official Fare &amp; Pricing Schedule &amp; Capacity Control
           </h2>
           <p className="text-xs lg:text-sm text-muted-foreground mt-0.5">
-            Unified management of official tariff rates, mountain guide group allocations, and daily environmental quotas across Lamot 2, Lamot 1, and Sto. Tomas.
+            Unified management of official tariff rates, mountain guide group allocations, and hike start windows across Lamot 2, Lamot 1, and Sto. Tomas.
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -356,27 +115,7 @@ export default function CentralPricingManagement() {
         </div>
       </div>
 
-      <Card className="glass-card border-border/30">
-        <CardHeader className="pb-3">
-          <CardTitle className="flex items-center gap-2 text-base"><CalendarCheck className="h-4 w-4 text-primary" /> Trailhead time-slot capacity</CardTitle>
-          <CardDescription className="text-xs">Central Admin controls how many groups may use the same date and start time at each local trailhead. The database enforces this atomically.</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          <div className="grid gap-3 sm:grid-cols-3">
-            {jumpOffLocations.map((location) => (
-              <label key={location.id} className="space-y-1.5 text-xs font-semibold">
-                <span>{location.name}</span>
-                <Input type="number" min="1" max="50" step="1" value={slotCapacityDraft[location.id] ?? slotCapacities[location.id] ?? 1}
-                  onChange={(event) => setSlotCapacityDraft((current) => ({ ...current, [location.id]: Number(event.target.value) }))} />
-                <span className="font-normal text-muted-foreground">groups per one-hour slot</span>
-              </label>
-            ))}
-          </div>
-          <Button size="sm" onClick={() => void saveSlotCapacities()} disabled={slotCapacitySaving || !jumpOffLocations.length} className="gap-1.5">
-            {slotCapacitySaving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />} Save slot capacity
-          </Button>
-        </CardContent>
-      </Card>
+      <BookingCapacityScheduleControl />
 
       {/* ──────────────── SECTION 1: FARE RATES & GUIDE CAPACITY ──────────────── */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -664,223 +403,6 @@ export default function CentralPricingManagement() {
         </div>
       </div>
 
-      {/* ──────────────── SECTION 2: TRAILHEAD CAPACITY LIMITS ──────────────── */}
-      <Card className="glass-card border-border/30 overflow-hidden">
-        <CardHeader className="pb-3 border-b border-border/20 bg-secondary/10">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-            <div>
-              <CardTitle className="text-base font-bold flex items-center gap-2">
-                <CalendarCheck className="h-4 w-4 text-primary" /> Daily Trailhead Quota &amp; Carrying Capacity
-              </CardTitle>
-              <CardDescription className="text-xs">
-                Set carrying capacity limits for individual dates or bulk date ranges across stations.
-              </CardDescription>
-            </div>
-            <div className="flex items-center gap-2">
-              <span className="text-xs text-muted-foreground font-semibold">Scope:</span>
-              <Select value={selectedCapLocationId} onValueChange={setSelectedCapLocationId}>
-                <SelectTrigger className="h-8 text-xs font-semibold w-52 bg-background/80">
-                  <SelectValue placeholder="All Stations" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">🌐 All Stations (Global Default)</SelectItem>
-                  {jumpOffLocations.map((loc) => (
-                    <SelectItem key={loc.id} value={loc.id}>
-                      📍 {loc.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-        </CardHeader>
-
-        <CardContent className="p-5 space-y-6">
-          <section className="grid gap-4 rounded-lg border border-border/40 p-4 lg:grid-cols-[minmax(280px,360px)_1fr]" aria-label="Capacity calendar">
-            <div>
-              <h3 className="mb-2 text-sm font-semibold">Capacity calendar</h3>
-              <Calendar
-                mode="multiple"
-                selected={selectedCapacityDates}
-                onSelect={selectCapacityDates}
-                disabled={{ before: new Date(new Date().setHours(0, 0, 0, 0)) }}
-                modifiers={{ configured: (day) => upcomingCapacities.some((row) => row.date === format(day, 'yyyy-MM-dd') && (selectedCapLocationId === 'all' || row.location_id === selectedCapLocationId)) }}
-                modifiersClassNames={{ configured: 'font-bold underline decoration-primary decoration-2 underline-offset-2' }}
-                className="mx-auto"
-              />
-              <p className="text-xs text-muted-foreground">Select a date to load its current quota. Select multiple dates to apply one quota to those dates.</p>
-            </div>
-            <div className="flex flex-col justify-center gap-3 text-sm">
-              <p><strong>{selectedCapacityDates.length || 0}</strong> calendar date(s) selected</p>
-              {capDate && (() => {
-                const counts = bookedCountsFor(capDate, selectedCapLocationId === 'all' ? null : selectedCapLocationId);
-                return <p className="text-muted-foreground">{capDate}: {counts.total} booked ({counts.day} day / {counts.night} night). Limits cannot be reduced below these counts.</p>;
-              })()}
-              {selectedCapacityDates.length > 1 && <Button size="sm" onClick={() => void saveSelectedCapacityDates()} disabled={capSaving}>Apply quota to selected dates</Button>}
-            </div>
-          </section>
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {/* Single Date Capacity */}
-            <div className="p-4 rounded-xl bg-secondary/20 border border-border/30 space-y-4">
-              <h4 className="text-xs font-bold text-foreground flex items-center gap-1.5">
-                <CalendarCheck className="h-3.5 w-3.5 text-primary" /> Single Date Capacity Override
-              </h4>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div className="space-y-1">
-                  <Label className="text-[11px] font-semibold">Target Date</Label>
-                  <Input
-                    type="date"
-                    value={capDate}
-                    onChange={(e) => setCapDate(e.target.value)}
-                    className="text-xs h-8 bg-background/80"
-                  />
-                </div>
-                <div className="space-y-1">
-                  <Label className="text-[11px] font-semibold">Total Max Capacity (Pax)</Label>
-                  <Input
-                    type="number"
-                    min="1"
-                    value={capMax}
-                    onChange={(e) => setCapMax(parseInt(e.target.value, 10) || 100)}
-                    className="text-xs h-8 bg-background/80 font-mono"
-                  />
-                </div>
-                <div className="space-y-1">
-                  <Label className="text-[11px] font-semibold">Day Ascent Cap</Label>
-                  <Input
-                    type="number"
-                    min="0"
-                    value={capDayMax}
-                    onChange={(e) => setCapDayMax(parseInt(e.target.value, 10) || 65)}
-                    className="text-xs h-8 bg-background/80 font-mono"
-                  />
-                </div>
-                <div className="space-y-1">
-                  <Label className="text-[11px] font-semibold">Night Ascent Cap</Label>
-                  <Input
-                    type="number"
-                    min="0"
-                    value={capNightMax}
-                    onChange={(e) => setCapNightMax(parseInt(e.target.value, 10) || 35)}
-                    className="text-xs h-8 bg-background/80 font-mono"
-                  />
-                </div>
-              </div>
-              <Button
-                size="sm"
-                onClick={saveCapacity}
-                disabled={capSaving || !capDate}
-                className="w-full text-xs h-8 glow-primary"
-              >
-                {capSaving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : 'Set Date Capacity'}
-              </Button>
-            </div>
-
-            {/* Bulk Range Capacity */}
-            <div className="p-4 rounded-xl bg-secondary/20 border border-border/30 space-y-4">
-              <h4 className="text-xs font-bold text-foreground flex items-center gap-1.5">
-                <Layers className="h-3.5 w-3.5 text-primary" /> Bulk Date Range Quota (Holidays / Peak)
-              </h4>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div className="space-y-1">
-                  <Label className="text-[11px] font-semibold">Start Date</Label>
-                  <Input
-                    type="date"
-                    value={capRangeStart}
-                    onChange={(e) => setCapRangeStart(e.target.value)}
-                    className="text-xs h-8 bg-background/80"
-                  />
-                </div>
-                <div className="space-y-1">
-                  <Label className="text-[11px] font-semibold">End Date</Label>
-                  <Input
-                    type="date"
-                    value={capRangeEnd}
-                    onChange={(e) => setCapRangeEnd(e.target.value)}
-                    className="text-xs h-8 bg-background/80"
-                  />
-                </div>
-                <div className="sm:col-span-2 text-[11px] text-muted-foreground">
-                  Applies <strong className="text-foreground">{capMax} max hikers/day</strong> ({capDayMax} day / {capNightMax} night) to each calendar day in the range.
-                </div>
-              </div>
-              <Button
-                size="sm"
-                variant="secondary"
-                onClick={saveCapacityRange}
-                disabled={capSaving || !capRangeStart || !capRangeEnd}
-                className="w-full text-xs h-8 font-semibold"
-              >
-                {capSaving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : 'Apply Bulk Range Quota'}
-              </Button>
-            </div>
-          </div>
-
-          {/* Upcoming Overrides Table */}
-          <div className="space-y-2">
-            <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
-              <CalendarCheck className="h-3.5 w-3.5 text-primary" /> Active Configured Date Limits ({upcomingCapacities.length})
-            </h4>
-            <div className="rounded-xl border border-border/30 overflow-hidden bg-background/50">
-              <div className="max-h-60 overflow-y-auto">
-                <table className="w-full text-left text-xs">
-                  <thead className="bg-secondary/30 text-muted-foreground border-b border-border/20 font-semibold uppercase text-[10px] sticky top-0">
-                    <tr>
-                      <th className="px-4 py-2.5">Date</th>
-                      <th className="px-4 py-2.5">Station Scope</th>
-                      <th className="px-4 py-2.5">Total Capacity</th>
-                      <th className="px-4 py-2.5">Day Cap</th>
-                      <th className="px-4 py-2.5">Night Cap</th>
-                      <th className="px-4 py-2.5 text-right">Action</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-border/10 font-mono text-[11px]">
-                    {upcomingCapacities.map((c) => {
-                      const loc = locations.find((l) => l.id === c.location_id);
-                      return (
-                        <tr key={c.id} className="hover:bg-muted/30">
-                          <td className="px-4 py-2.5 font-bold font-sans">{c.date}</td>
-                          <td className="px-4 py-2.5 font-sans">
-                            {loc ? (
-                              <Badge variant="outline" className="text-[10px]">
-                                {loc.name}
-                              </Badge>
-                            ) : (
-                              <Badge variant="secondary" className="text-[10px]">
-                                All Stations
-                              </Badge>
-                            )}
-                          </td>
-                          <td className="px-4 py-2.5 font-bold text-foreground">{c.max_capacity} pax</td>
-                          <td className="px-4 py-2.5 text-muted-foreground">{c.day_max_capacity ?? '—'}</td>
-                          <td className="px-4 py-2.5 text-muted-foreground">{c.night_max_capacity ?? '—'}</td>
-                          <td className="px-4 py-2.5 text-right">
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => deleteCapacityLimit(c.id)}
-                              className="h-7 w-7 p-0 text-destructive hover:bg-destructive/10"
-                            >
-                              <Trash2 className="h-3.5 w-3.5" />
-                            </Button>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                    {upcomingCapacities.length === 0 && (
-                      <tr>
-                        <td colSpan={6} className="px-4 py-6 text-center text-muted-foreground font-sans">
-                          No custom date overrides active. Standard default of 100 hikers/day applies across all stations.
-                        </td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
     </div>
   );
 }

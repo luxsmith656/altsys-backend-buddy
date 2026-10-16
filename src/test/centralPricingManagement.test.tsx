@@ -76,4 +76,19 @@ describe('CentralPricingManagement Component', () => {
       expect(getPricingConfig().entryFee).toBe(30);
     });
   });
+
+  it('shows compact capacity controls with direct numeric inputs', () => {
+    render(<CentralPricingManagement />);
+
+    expect(screen.queryByLabelText(/Maximum people per slot/i)).not.toBeInTheDocument();
+    expect(screen.getByText(/Capacity per start: 15 hikers/i)).toBeInTheDocument();
+    expect(screen.getByText(/Shared pool/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/Maximum hiker per group/i)).toHaveValue(5);
+    expect(screen.getByRole('button', { name: /Review & save/i })).toBeDisabled();
+
+    fireEvent.change(screen.getByLabelText(/Groups allowed per start time/i), { target: { value: '4' } });
+
+    expect(screen.getByText(/Capacity per start: 20 hikers/i)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Review & save/i })).toBeEnabled();
+  });
 });

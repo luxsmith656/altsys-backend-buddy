@@ -72,7 +72,7 @@ import { HIKE_TIME_OPTIONS, getGuideFeePerGuide, getHikeTypeLabel, isValidHikeTi
 import { officialRoutesForLocation } from '@/lib/officialRoutes';
 import { officialTrailNameFromLocation } from '@/lib/mapTrailheads';
 import { guidePhotoForName } from '@/lib/guideDirectory';
-import { getBookingSlotStatuses, type ScheduledBooking } from '@/lib/bookingCapacity';
+import { normalizeScheduleDraft, type BookingScheduleDraft } from '@/lib/bookingControl';
 import { haversineDistance } from '@/lib/map-data';
 import { validateAge, validateEmail, validatePhone } from '@/lib/inputValidation';
 import { withBookingRequestTimeout } from '@/lib/bookingRequest';
@@ -268,7 +268,8 @@ export default function BookingPage() {
     setSearchParams(remainingParams, { replace: true });
   }, [searchParams, setSearchParams]);
   const [monthCapacity, setMonthCapacity] = useState<DayCapacityMap>({});
-  const [scheduledBookings, setScheduledBookings] = useState<ScheduledBooking[]>([]);
+  const [serverSlotRows, setServerSlotRows] = useState<Array<{ booking_date: string; hike_type: string; hike_time: string; available_groups: number; available_people: number }>>([]);
+  const [publishedSchedule, setPublishedSchedule] = useState<BookingScheduleDraft>(() => normalizeScheduleDraft());
   const [slotCapacityRequested, setSlotCapacityRequested] = useState(false);
   const [slotCapacityLoading, setSlotCapacityLoading] = useState(false);
   const slotCapacityRequestedRef = useRef(false);
@@ -607,31 +608,35 @@ export default function BookingPage() {
 
 
   /* -- Capacity fetching -- */
+  useEffect(() => {
+    if (!startLocationId || startLocationId.startsWith('loc-')) return;
+    let active = true;
+    void (async () => {
+      const { data, error } = await (supabase as any).rpc('get_booking_capacity_control');
+      if (!active || error || !data) return;
+      const override = (data.scheduleOverrides ?? []).find((row: any) => row.locationId === startLocationId);
+      setPublishedSchedule(normalizeScheduleDraft(override?.schedule ?? data.schedule));
+    })();
+    return () => { active = false; };
+  }, [startLocationId]);
+
   const fetchSlotCapacity = useCallback(async (year: number, month: number) => {
     const start = format(new Date(year, month, 1), 'yyyy-MM-dd');
     const end = format(new Date(year, month + 1, 0), 'yyyy-MM-dd');
     // The RPC returns aggregate slot counts only, so RLS never exposes another hiker's booking details.
     setSlotCapacityLoading(true);
     try {
-      const { data: slotRows, error } = await supabase.rpc('get_booking_slot_capacity' as any, { p_start_date: start, p_end_date: end });
+      const { data: slotRows, error } = await (supabase as any).rpc('get_booking_slot_availability', { p_start_date: start, p_end_date: end, p_location_id: startLocationId && !startLocationId.startsWith('loc-') ? startLocationId : null });
       if (error) throw error;
       setSlotCapacityError(null);
-      const reservations = ((slotRows as Array<{ booking_date: string; hike_time: string; hike_type: string; group_count: number }> | null) ?? [])
-        .flatMap((row) => Array.from({ length: Math.max(1, Number(row.group_count) || 1) }, (_, index) => ({
-          id: `${row.booking_date}-${row.hike_time}-${index}`,
-          booking_date: row.booking_date,
-          status: 'confirmed',
-          notes: JSON.stringify({ hikeTime: row.hike_time, hikeType: row.hike_type }),
-        })));
-      setScheduledBookings(reservations as ScheduledBooking[]);
+      setServerSlotRows(((slotRows as Array<{ booking_date: string; hike_time: string; hike_type: string; available_groups: number; available_people: number }> | null) ?? []).map((row) => ({ ...row, available_groups: Number(row.available_groups), available_people: Number(row.available_people) })));
     } catch (error) {
       console.warn('Live start-time availability check failed:', error);
-      setScheduledBookings([]);
       setSlotCapacityError('Live capacity could not be verified. Refresh the page or contact the selected trailhead before booking.');
     } finally {
       setSlotCapacityLoading(false);
     }
-  }, []);
+  }, [startLocationId]);
 
   const fetchMonthCapacity = useCallback(async (year: number, month: number) => {
     const start = format(new Date(year, month, 1), 'yyyy-MM-dd');
@@ -715,7 +720,7 @@ export default function BookingPage() {
 
   useEffect(() => {
     if (!date || !slotCapacityRequested) {
-      setScheduledBookings([]);
+      setServerSlotRows([]);
       setSlotCapacityError(null);
       setSlotCapacityLoading(false);
       return;
@@ -795,21 +800,30 @@ export default function BookingPage() {
 
   const timeSlotStatuses = useMemo(() => {
     if (!date) return [];
+    const scheduleKind = hikeType === 'day' ? 'morning' : hikeType;
+    const publishedOptions = publishedSchedule.slots[scheduleKind].map((time) => {
+      const existing = HIKE_TIME_OPTIONS[hikeType].find((option) => option.time === time);
+      return existing ?? { time, label: 'Published slot' };
+    });
     if (slotCapacityLoading) {
-      return HIKE_TIME_OPTIONS[hikeType].map((option) => ({
+      return publishedOptions.map((option) => ({
         time: option.time,
         summitSlot: '',
-        available: false,
-        reason: 'capacity_check_failed' as const,
+        available: true,
+        reason: undefined,
       }));
     }
-    // Capacity is advisory in the calendar. If the aggregate RPC is
-    // unavailable (for example on a newly opened future month), keep the
-    // date and time selectable; the database trigger remains authoritative
-    // when the booking is submitted.
-    if (slotCapacityError) return getBookingSlotStatuses(format(date, 'yyyy-MM-dd'), HIKE_TIME_OPTIONS[hikeType], hikeType, []);
-    return getBookingSlotStatuses(format(date, 'yyyy-MM-dd'), HIKE_TIME_OPTIONS[hikeType], hikeType, scheduledBookings);
-  }, [date, hikeType, scheduledBookings, slotCapacityError, slotCapacityLoading]);
+    return publishedOptions.map((option) => {
+      const row = serverSlotRows.find((item) => item.booking_date === format(date, 'yyyy-MM-dd') && item.hike_type === scheduleKind && item.hike_time === option.time.toUpperCase());
+      const available = !row || (row.available_groups > 0 && row.available_people >= groupSize);
+      return { time: option.time, summitSlot: '', available, reason: available ? undefined : 'already_booked' as const };
+    });
+  }, [date, groupSize, hikeType, publishedSchedule, serverSlotRows, slotCapacityLoading, slotCapacityError]);
+
+  const publishedTimeOptions = useMemo(() => {
+    const kind = hikeType === 'day' ? 'morning' : hikeType;
+    return publishedSchedule.slots[kind].map((time) => HIKE_TIME_OPTIONS[hikeType].find((option) => option.time === time) ?? { time, label: 'Published slot' });
+  }, [hikeType, publishedSchedule]);
 
   const selectedTimeSlot = useMemo(
     () => timeSlotStatuses.find((slot) => slot.time === hikeTime),
@@ -990,20 +1004,21 @@ export default function BookingPage() {
     setHikeType(type);
     if (date) setSlotCapacityRequested(true);
     const recommended = HIKE_TIME_OPTIONS[type].find((t) => t.recommended);
-    if (recommended) setHikeTime(recommended.time);
+    const scheduleKind = type === 'day' ? 'morning' : type;
+    setHikeTime(publishedSchedule.slots[scheduleKind][0] ?? recommended?.time ?? '06:00 AM');
   };
 
   /* -- Validation -- */
   const validateStep = () => {
     if (step === 1) {
       if (!date) return 'Please select a date on the calendar.';
-      if (slotCapacityRequested && slotCapacityLoading) return 'Checking availability for this date. Please wait a moment.';
       if (groupSize < 1 || groupSize > 30) return 'Group size must be between 1 and 30.';
       if (slotsForDate !== null && groupSize > slotsForDate) {
         return `Only ${slotsForDate} slot${slotsForDate !== 1 ? 's' : ''} available on this date. Reduce group size or choose another date.`;
       }
       if (!hikeTime) return 'Please select a start time.';
-      if (!isValidHikeTime(hikeType, hikeTime)) return `Please choose a start time within the ${getHikeTypeLabel(hikeType).toLowerCase()} hike window.`;
+      const scheduleKind = hikeType === 'day' ? 'morning' : hikeType;
+      if (!publishedSchedule.slots[scheduleKind].includes(hikeTime.toUpperCase())) return `Please choose a published start time within the ${getHikeTypeLabel(hikeType).toLowerCase()} hike window.`;
       if (selectedTimeSlot && !selectedTimeSlot.available) {
         return selectedTimeSlot.reason === 'already_booked'
           ? 'That start time is already reserved. Please choose the next available one-hour slot.'
@@ -1598,7 +1613,7 @@ export default function BookingPage() {
                         </span>
                       </Label>
                       <div className="flex flex-wrap gap-2">
-                        {HIKE_TIME_OPTIONS[hikeType].map((opt) => (
+                        {publishedTimeOptions.map((opt) => (
                           (() => {
                             const slot = timeSlotStatuses.find((candidate) => candidate.time === opt.time);
                             const unavailable = !!slot && !slot.available;
