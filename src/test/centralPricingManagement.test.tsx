@@ -13,11 +13,16 @@ vi.mock('@/hooks/useAuth', () => ({
 
 vi.mock('@/integrations/supabase/client', () => ({
   supabase: {
-    from: vi.fn().mockReturnValue({
+    from: vi.fn(function () {
+      return {
       select: vi.fn().mockReturnThis(),
       eq: vi.fn().mockReturnThis(),
       upsert: vi.fn().mockResolvedValue({ error: null }),
       maybeSingle: vi.fn().mockResolvedValue({ data: null, error: null }),
+      };
+    }),
+    rpc: vi.fn(function () {
+      return Promise.resolve({ data: null, error: null });
     }),
   },
 }));
@@ -77,11 +82,11 @@ describe('CentralPricingManagement Component', () => {
     });
   });
 
-  it('shows compact capacity controls with direct numeric inputs', () => {
+  it('shows compact capacity controls with direct numeric inputs', async () => {
     render(<CentralPricingManagement />);
 
     expect(screen.queryByLabelText(/Maximum people per slot/i)).not.toBeInTheDocument();
-    expect(screen.getByText(/Capacity per start: 15 hikers/i)).toBeInTheDocument();
+    expect(await screen.findByText(/Capacity per start: 15 hikers/i)).toBeInTheDocument();
     expect(screen.getByText(/Shared pool/i)).toBeInTheDocument();
     expect(screen.getByLabelText(/Maximum hiker per group/i)).toHaveValue(5);
     expect(screen.getByRole('button', { name: /Review & save/i })).toBeDisabled();

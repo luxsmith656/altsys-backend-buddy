@@ -183,7 +183,9 @@ export default function BookingCapacityScheduleControl({ readOnly: requestedRead
   }, [locationIds]);
 
   const loadHistory = useCallback(async () => {
-    const from = (supabase as any).from;
+    // SupabaseClient.from uses its client context internally (this.rest).
+    // Keep that context when the helper is passed around below.
+    const from = (supabase as any).from.bind(supabase);
     if (typeof from !== 'function') return;
     try {
       let query = from('booking_capacity_audit').select('id,created_at,changed_by,old_config,new_config');
@@ -204,7 +206,7 @@ export default function BookingCapacityScheduleControl({ readOnly: requestedRead
 
   useEffect(() => {
     let active = true;
-    const rpc = (supabase as any).rpc;
+    const rpc = (supabase as any).rpc.bind(supabase);
     if (typeof rpc !== 'function') {
       setLoading(false);
       return () => { active = false; };
@@ -236,7 +238,7 @@ export default function BookingCapacityScheduleControl({ readOnly: requestedRead
   }, [locationIds, loadHistory]);
 
   const loadAvailability = useCallback(async () => {
-    const rpc = (supabase as any).rpc;
+    const rpc = (supabase as any).rpc.bind(supabase);
     if (typeof rpc !== 'function') return;
     setAvailabilityLoading(true);
     try {
@@ -271,7 +273,7 @@ export default function BookingCapacityScheduleControl({ readOnly: requestedRead
   const setCustomSlots = (kind: ScheduleKind, value: string) => setDraft((current) => ({ ...current, schedule: { ...current.schedule, slots: { ...current.schedule.slots, [kind]: parseCustomSlots(value) } } }));
 
   const estimateImpact = async (next: CapacityControlDraft): Promise<Impact> => {
-    const from = (supabase as any).from;
+    const from = (supabase as any).from.bind(supabase);
     if (typeof from !== 'function') return { flaggedCount: 0, removedStartTimes: 0, error: 'The server will calculate the final impact when you save.' };
     try {
       const result = await from('bookings').select('booking_date,requested_new_date,status,group_size,location_id,notes');

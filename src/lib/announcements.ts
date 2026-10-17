@@ -1,7 +1,7 @@
 import { supabase } from '@/integrations/supabase/client';
 
 export type AnnouncementType = 'info' | 'warning' | 'closure';
-export type AnnouncementTarget = 'all' | 'admins' | 'hikers' | 'guides';
+export type AnnouncementTarget = 'all' | 'admins' | 'hikers' | 'guides' | 'staff';
 export type AnnouncementApprovalStatus = 'pending' | 'approved' | 'rejected';
 export type AnnouncementLifecycle = 'active' | 'archived' | 'deleted';
 
@@ -48,8 +48,11 @@ export function loadAnnouncements(roleFilter?: string | null): AdminAnnouncement
         if (roleFilter) {
           const target = a.target || 'all';
           if (target === 'all') return true;
-          if (roleFilter === 'super_admin' || roleFilter === 'admin') {
+          if (roleFilter === 'super_admin') {
             return target === 'admins';
+          }
+          if (roleFilter === 'admin') {
+            return target === 'admins' || target === 'staff';
           }
           if (roleFilter === 'hiker') {
             return target === 'hikers';
@@ -80,6 +83,7 @@ export function visibleAnnouncements(items: AdminAnnouncement[], role?: string |
     const target = item.target || 'all';
     if (target === 'all') return true;
     if (target === 'admins') return normalizedRole === 'admin';
+    if (target === 'staff') return role === 'admin' || role === 'guide';
     if (target === 'hikers') return role === 'hiker';
     if (target === 'guides') return role === 'guide';
     return false;

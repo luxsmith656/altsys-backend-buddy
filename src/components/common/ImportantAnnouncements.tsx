@@ -13,9 +13,10 @@ export default function ImportantAnnouncements() {
   const userId = user?.id;
   const [items, setItems] = useState<AdminAnnouncement[]>([]);
   const refresh = useCallback(async () => {
-    // Staff manage announcements; they should not receive their own broadcast
-    // as a dashboard notification. Central approval happens in its console.
-    if (role === 'admin' || role === 'super_admin') {
+    // Central Admin creates staff-only operational notices; local admins and
+    // guides should see them in their dashboard. Central approval happens in
+    // the Central Admin console and should not create a self-notification.
+    if (role === 'super_admin') {
       setItems([]);
       return;
     }
@@ -49,7 +50,7 @@ export default function ImportantAnnouncements() {
     return () => { void supabase.removeChannel(channel); };
   }, [refresh, userId]);
 
-  if (role === 'admin' || role === 'super_admin' || !items.length) return null;
+  if (role === 'super_admin' || !items.length) return null;
 
   return (
     <Card className="glass-card mb-4 border-destructive/30">

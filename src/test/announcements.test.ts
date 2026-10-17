@@ -26,6 +26,14 @@ describe('announcement audience and dismissal rules', () => {
     expect(visibleAnnouncements(items, 'guide').map((item) => item.id)).toEqual(['all', 'guide']);
   });
 
+  it('delivers staff notices only to local admins and guides', () => {
+    const items = [announcement('staff', 'staff'), announcement('all', 'all')];
+    expect(visibleAnnouncements(items, 'admin').map((item) => item.id)).toEqual(['staff', 'all']);
+    expect(visibleAnnouncements(items, 'guide').map((item) => item.id)).toEqual(['staff', 'all']);
+    expect(visibleAnnouncements(items, 'hiker').map((item) => item.id)).toEqual(['all']);
+    expect(visibleAnnouncements(items, 'super_admin').map((item) => item.id)).toEqual(['all']);
+  });
+
   it('filters notices outside their active dates and sorts newest first', () => {
     const items = [
       announcement('old', 'all'),

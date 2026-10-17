@@ -203,6 +203,7 @@ export default function CentralAnnouncements() {
                         <SelectItem value="all">🌐 All Users &amp; Staff</SelectItem>
                         <SelectItem value="admins">🛡️ Station Admins Only</SelectItem>
                         <SelectItem value="guides">🧭 Mountain Guides Only</SelectItem>
+                        <SelectItem value="staff">📋 Guides &amp; Local Admins</SelectItem>
                         <SelectItem value="hikers">🥾 Hikers Only</SelectItem>
                       </SelectContent>
                     </Select>
@@ -303,6 +304,15 @@ export default function CentralAnnouncements() {
                   </button>
                   <button
                     type="button"
+                    onClick={() => setFilterTarget('staff')}
+                    className={`px-2 py-1 rounded text-[11px] font-semibold transition-all ${
+                      filterTarget === 'staff' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground'
+                    }`}
+                  >
+                    Staff ({announcements.filter((a) => a.target === 'staff').length})
+                  </button>
+                  <button
+                    type="button"
                     onClick={() => setFilterTarget('hikers')}
                     className={`px-2 py-1 rounded text-[11px] font-semibold transition-all ${
                       filterTarget === 'hikers' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground'
@@ -344,6 +354,11 @@ export default function CentralAnnouncements() {
                         {ann.target === 'guides' && (
                           <Badge variant="outline" className="text-[10px] bg-emerald-500/15 text-emerald-600 border-emerald-500/30">
                             🧭 Mountain Guides
+                          </Badge>
+                        )}
+                        {ann.target === 'staff' && (
+                          <Badge variant="outline" className="text-[10px] bg-amber-500/15 text-amber-600 border-amber-500/30">
+                            📋 Guides &amp; Local Admins
                           </Badge>
                         )}
                         {ann.target === 'hikers' && (
