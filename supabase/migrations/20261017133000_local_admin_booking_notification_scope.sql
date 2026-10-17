@@ -254,4 +254,16 @@ END;
 $$;
 
 GRANT EXECUTE ON FUNCTION public.set_trailhead_slot_capacity(uuid, integer) TO authenticated;
+
+-- Remove legacy operational inbox rows that were incorrectly delivered to
+-- Central Admin before this audience scope was installed.
+DELETE FROM public.app_notifications notification
+USING public.user_roles role_row
+WHERE role_row.user_id = notification.user_id
+  AND role_row.role = 'super_admin'
+  AND (
+    notification.category IN ('booking', 'session')
+    OR notification.type IN ('booking', 'session')
+  );
+
 NOTIFY pgrst, 'reload schema';
