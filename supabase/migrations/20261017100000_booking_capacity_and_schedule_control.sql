@@ -504,7 +504,8 @@ BEGIN
     max_people_per_group = excluded.max_people_per_group, max_people_per_slot = excluded.max_people_per_slot,
     hold_pending = excluded.hold_pending, updated_by = actor, updated_at = now();
 
-  DELETE FROM public.booking_capacity_trailhead_overrides;
+  DELETE FROM public.booking_capacity_trailhead_overrides
+  WHERE location_id IS NOT NULL;
   INSERT INTO public.booking_capacity_trailhead_overrides(location_id, max_groups, updated_by)
   SELECT (item->>'locationId')::uuid, greatest(1, least(50, (item->>'maxGroups')::integer)), actor
   FROM jsonb_array_elements(coalesce(new_capacity->'perTrailhead', '[]'::jsonb)) item
