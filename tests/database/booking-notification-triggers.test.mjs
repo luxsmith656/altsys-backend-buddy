@@ -15,6 +15,7 @@ let db;
 before(async () => {
   db = new PGlite();
   await db.exec(`
+    CREATE ROLE authenticated;
     CREATE SCHEMA auth;
     CREATE TABLE auth.users (id uuid PRIMARY KEY);
     CREATE FUNCTION auth.uid() RETURNS uuid LANGUAGE sql STABLE AS $$
@@ -43,13 +44,22 @@ before(async () => {
     CREATE TABLE public.app_notifications (
       id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
       user_id uuid NOT NULL REFERENCES auth.users(id),
+      sender_id uuid,
+      type text NOT NULL DEFAULT 'system',
+      reference_id uuid,
+      target_type text,
+      target_id uuid,
+      route text,
       title text NOT NULL,
       body text NOT NULL,
       category text NOT NULL,
-      link text
+      link text,
+      read boolean NOT NULL DEFAULT false,
+      is_read boolean NOT NULL DEFAULT false
     );
   `);
   await db.exec(await readFile('supabase/migrations/20261013160000_booking_lifecycle_notifications.sql', 'utf8'));
+  await db.exec(await readFile('supabase/migrations/20261017133000_local_admin_booking_notification_scope.sql', 'utf8'));
 });
 
 beforeEach(async () => {
@@ -70,14 +80,13 @@ beforeEach(async () => {
 
 after(async () => { await db?.close(); });
 
-test('recipient-addressed booking messages create durable notifications for the right recipient', async () => {
+test('recipient-addressed booking messages notify only the responsible local admin', async () => {
   await db.query(`INSERT INTO public.booking_messages
     (booking_id, sender_id, sender_role, recipient_role, kind, content)
     VALUES ($1, $2, 'hiker', 'admin', 'chat', 'Can we meet earlier?')`, [bookingId, hikerId]);
   const adminNotifications = await db.query('SELECT user_id, title, link FROM public.app_notifications');
   assert.deepEqual(adminNotifications.rows, [
-    { user_id: adminId, title: 'New booking message', link: `/admin?tab=requests&bookingId=${bookingId}` },
-    { user_id: centralId, title: 'New booking message', link: `/admin?tab=requests&bookingId=${bookingId}` },
+    { user_id: adminId, title: 'New message from Hiker', link: `/admin?tab=requests&bookingId=${bookingId}` },
   ]);
 
   await db.query(`INSERT INTO public.booking_messages
@@ -86,13 +95,10 @@ test('recipient-addressed booking messages create durable notifications for the 
   assert.equal((await db.query(`SELECT count(*)::int AS n FROM public.app_notifications WHERE user_id=$1`, [guideId])).rows[0].n, 1);
 });
 
-test('booking lifecycle changes notify the hiker and alert dispatch for hiker requests', async () => {
+test('booking lifecycle changes alert only the responsible local admin for hiker requests', async () => {
   await db.query(`UPDATE public.bookings SET status = 'adjustment_pending' WHERE id = $1`, [bookingId]);
   const notifications = await db.query('SELECT user_id, title, link FROM public.app_notifications ORDER BY user_id, title');
   assert.deepEqual(notifications.rows, [
-    { user_id: hikerId, title: 'Booking schedule change pending', link: `/hiker?bookingId=${bookingId}` },
     { user_id: adminId, title: 'Hiker reschedule request', link: `/admin?tab=requests&bookingId=${bookingId}` },
-    { user_id: guideId, title: 'Booking schedule change pending', link: `/guide?bookingId=${bookingId}` },
-    { user_id: centralId, title: 'Hiker reschedule request', link: `/admin?tab=requests&bookingId=${bookingId}` },
   ]);
 });

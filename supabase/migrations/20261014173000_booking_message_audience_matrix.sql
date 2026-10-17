@@ -33,8 +33,8 @@ BEGIN
   FROM public.user_roles user_role
   LEFT JOIN public.user_locations user_location ON user_location.user_id = user_role.user_id
   WHERE user_role.user_id IS DISTINCT FROM NEW.sender_id
-    AND (user_role.role = 'super_admin'
-      OR (user_role.role = 'admin' AND user_location.location_id = booking_row.location_id))
+    AND user_role.role = 'admin'
+    AND user_location.location_id = booking_row.location_id
     AND NOT EXISTS (
       SELECT 1 FROM public.app_notifications existing
       WHERE existing.user_id = user_role.user_id

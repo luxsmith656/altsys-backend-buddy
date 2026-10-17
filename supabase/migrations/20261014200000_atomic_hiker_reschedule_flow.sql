@@ -140,7 +140,8 @@ BEGIN
     FROM public.user_roles user_role
     LEFT JOIN public.user_locations user_location ON user_location.user_id = user_role.user_id
     WHERE user_role.user_id IS DISTINCT FROM actor_id
-      AND (user_role.role = 'super_admin' OR (user_role.role = 'admin' AND user_location.location_id = NEW.location_id));
+      AND user_role.role = 'admin'
+      AND user_location.location_id = NEW.location_id;
   END IF;
 
   -- Guides receive a notification for an administrator's decision or an

@@ -551,7 +551,7 @@ BEGIN
       ),
       'system', '/admin?tab=capacity'
     FROM public.user_roles ur
-    WHERE ur.role IN ('super_admin'::public.app_role, 'admin'::public.app_role, 'guide'::public.app_role)
+    WHERE ur.role IN ('admin'::public.app_role, 'guide'::public.app_role)
       AND ur.user_id IS DISTINCT FROM actor;
   END IF;
   RETURN jsonb_build_object('changed', old_config IS DISTINCT FROM public.get_booking_capacity_control(), 'flaggedBookingCount', flagged_count, 'config', public.get_booking_capacity_control());

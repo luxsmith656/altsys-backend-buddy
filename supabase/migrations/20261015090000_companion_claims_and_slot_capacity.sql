@@ -273,9 +273,11 @@ BEGIN
       format('The trailhead slot capacity changed from %s to %s groups.', coalesce(old_value, 1), p_max_groups),
       'system', p_location_id, 'location', p_location_id, '/admin', '/admin', false, false
     FROM public.user_roles ur
-    WHERE ur.role IN ('admin'::public.app_role, 'super_admin'::public.app_role, 'guide'::public.app_role)
-      AND (ur.role IN ('super_admin'::public.app_role, 'guide'::public.app_role)
-        OR EXISTS (SELECT 1 FROM public.user_locations ul WHERE ul.user_id = ur.user_id AND ul.location_id = p_location_id));
+    WHERE ur.role IN ('admin'::public.app_role, 'guide'::public.app_role)
+      AND (
+        ur.role = 'guide'::public.app_role
+        OR EXISTS (SELECT 1 FROM public.user_locations ul WHERE ul.user_id = ur.user_id AND ul.location_id = p_location_id)
+      );
   END IF;
   RETURN jsonb_build_object('locationId', p_location_id, 'oldMaxGroups', coalesce(old_value, 1), 'maxGroups', p_max_groups);
 END;

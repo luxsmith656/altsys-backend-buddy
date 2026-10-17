@@ -141,7 +141,8 @@ BEGIN
     SELECT DISTINCT user_role.user_id, NEW.sender_id, 'chat', NEW.id, notification_title, notification_body, 'booking', '/admin?tab=requests&bookingId=' || NEW.booking_id::text
     FROM public.user_roles user_role LEFT JOIN public.user_locations user_location ON user_location.user_id = user_role.user_id
     WHERE user_role.user_id IS DISTINCT FROM NEW.sender_id
-      AND (user_role.role = 'super_admin' OR (user_role.role = 'admin' AND user_location.location_id = booking_row.location_id));
+      AND user_role.role = 'admin'
+      AND user_location.location_id = booking_row.location_id;
   ELSIF NEW.recipient_role = 'ranger' THEN
     INSERT INTO public.app_notifications(user_id, sender_id, type, reference_id, title, body, category, link)
     SELECT DISTINCT user_role.user_id, NEW.sender_id, 'chat', NEW.id, notification_title, notification_body, 'booking', '/ranger?bookingId=' || NEW.booking_id::text
@@ -178,7 +179,8 @@ BEGIN
   FROM public.user_roles user_role
   LEFT JOIN public.user_locations user_location ON user_location.user_id = user_role.user_id
   WHERE user_role.user_id IS DISTINCT FROM NEW.user_id
-    AND (user_role.role = 'super_admin' OR (user_role.role = 'admin' AND user_location.location_id = NEW.location_id));
+    AND user_role.role = 'admin'
+    AND user_location.location_id = NEW.location_id;
   RETURN NEW;
 END;
 $$;
