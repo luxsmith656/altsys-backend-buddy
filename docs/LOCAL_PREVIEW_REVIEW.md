@@ -33,7 +33,7 @@ The original landing layout and photograph remain. Different upper/lower texture
 
 ## Map and booking email
 - Shared admin/guide map workspace now uses the floating dock described above, reachable zoom/locate controls and live group details with guide, phase and last GPS update. ETA is unavailable when reliable pace is missing.
-- Booking confirmation now uses a server-side Resend function and durable confirmation outbox, not EmailJS or SMS. New HTML retains the supplied green branding and embeds the logo in sent messages. Includes confirmed Manila date/time, guide/contact, jump-off, pax and the day-before call reminder.
+- Booking confirmation now uses server-side EmailJS through the configured Reservation template and a durable confirmation outbox, with Resend retained as an optional fallback. New HTML retains the supplied green branding and includes confirmed Manila date/time, guide/contact, jump-off, pax and the day-before call reminder.
 - Preview: `email-templates/booking-confirmation-preview.html`. Editable template: `email-templates/booking-confirmation.html`. `npm run email:sync` regenerates the preview and server template; CI rejects drift.
 - Required manual SQL and setup: `docs/DATABASE_UPDATE_2026_09_08.md` and `email-templates/README.md`. No migration, function, sender or scheduled worker was deployed in this work.
 

@@ -1,5 +1,7 @@
 # Booking confirmation email
 
+The current primary transport is the server-side EmailJS integration documented in [`docs/emailjs-setup.md`](../docs/emailjs-setup.md). The Resend instructions below remain available as an optional fallback for booking confirmations.
+
 ## Preview and branding
 - Open `booking-confirmation-preview.html` for the filled-in example. It is clearly marked as a sample, not a real booking.
 - `booking-confirmation.html` is the editable source. It uses the supplied security-email template's green header and the existing Mt. Kalisungan logo, but contains no security code.
@@ -16,7 +18,7 @@
 6. Leases plus a stable Resend idempotency key prevent concurrent/repeated sends. Payloads are persisted before submission so retries are identical. Ambiguous sends beyond 23 hours or eight attempts require operator review, not another blind send.
 7. A changed date, recipient, guide/contact or group size pauses an attempted message for review. It does not send stale details or silently replace the payload under an existing provider key.
 
-The old EmailJS and SMS client send paths are removed. No automatic cross-provider fallback is configured; a timeout might mean the first provider already accepted the message, and switching providers then could duplicate it.
+Client-side EmailJS and SMS send paths are not used. Server-side EmailJS is the primary booking/reset transport; Resend is only an optional booking fallback. Provider retries are recorded through the confirmation outbox so a failed attempt can be reviewed without silently sending stale details.
 
 ## Required Lovable setup
 These are server secrets, never `VITE_` variables:

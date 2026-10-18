@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { bookingSchema, confirmationMeta, dispatchBookingEmail, type BookingEmailStore, type EmailJob } from '../_shared/booking-email.ts';
+import type { EmailJsConfig } from '../_shared/emailjs.ts';
 
 const cors = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'authorization, apikey, content-type, x-client-info', 'Access-Control-Allow-Methods': 'POST, OPTIONS' };
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { ...cors, 'Content-Type': 'application/json' } });
@@ -64,6 +65,7 @@ export function createBookingEmailStore(db: SupabaseClient): BookingEmailStore {
 
 export function bookingConfirmationHandler(deps: {
   apiKey: string; from: string; workerSecret: string; store: BookingEmailStore; fetcher: typeof fetch;
+  emailJs?: EmailJsConfig;
   userForToken: (token: string) => Promise<string | null>;
   authorize: (userId: string, bookingId: string) => Promise<boolean>;
   dueIds: () => Promise<string[]>;

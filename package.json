@@ -14,7 +14,7 @@
     "lint": "eslint .",
     "typecheck": "tsc -b --pretty false && npm run typecheck:edge",
     "typecheck:email": "deno check --node-modules-dir=none --config supabase/functions/send-booking-confirmation/deno.json supabase/functions/send-booking-confirmation/index.ts",
-    "typecheck:edge": "npm run typecheck:email && deno check --no-lock --node-modules-dir=none supabase/functions/trail-chat-rag/index.ts && deno check --no-lock --node-modules-dir=none supabase/functions/ops-ai/index.ts",
+    "typecheck:edge": "npm run typecheck:email && deno check --no-lock --node-modules-dir=none supabase/functions/trail-chat-rag/index.ts && deno check --no-lock --node-modules-dir=none supabase/functions/ops-ai/index.ts && deno check --no-lock --node-modules-dir=none supabase/functions/send-password-reset-emailjs/index.ts",
     "email:sync": "node scripts/sync-email-template.mjs",
     "email:check": "node scripts/sync-email-template.mjs --check",
     "validate:env": "node scripts/validate-env.mjs",

@@ -12,3 +12,8 @@ content_path = "./supabase/templates/confirmation.html"
 # The handler validates user JWTs with Auth.getUser, or the dedicated cron secret.
 # The cron request is not an end-user JWT and must reach that handler.
 verify_jwt = false
+
+[functions.send-password-reset-emailjs]
+# Password reset requests are intentionally unauthenticated; the function
+# generates a single-use Supabase recovery link before sending it via EmailJS.
+verify_jwt = false

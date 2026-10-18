@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { bookingEmailTemplate, bookingEmailLogo } from './booking-email-template.ts';
+import { sendEmailJs, type EmailJsConfig } from './emailjs.ts';
 
 const text = z.string().trim().min(1);
 const metaSchema = z.object({
@@ -16,12 +17,12 @@ export type ConfirmationBooking = z.infer<typeof bookingSchema>;
 export function confirmationMeta(notes: string) { return metaSchema.parse(JSON.parse(notes)); }
 const escapeHtml = (value: string) => value.replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[char]!);
 
-export function makeBookingEmail(input: { booking: unknown; guide: unknown; location: unknown; from: string }) {
+export function makeBookingEmail(input: { booking: unknown; guide: unknown; location: unknown; from?: string }) {
   const booking = bookingSchema.parse(input.booking);
   const meta = confirmationMeta(booking.notes);
   const guide = z.object({ full_name: text, phone: text.regex(/^[+\d ()-]{7,30}$/) }).parse(input.guide);
   const location = z.object({ name: text }).parse(input.location);
-  const from = text.refine(value => !/[\r\n]/.test(value) && /@[^<>\s]+\.[^<>\s]+>?$/.test(value)).parse(input.from);
+  const from = input.from ? text.refine(value => !/[\r\n]/.test(value) && /@[^<>\s]+\.[^<>\s]+>?$/.test(value)).parse(input.from) : '';
   const rawTime = meta.bookingChangeAcknowledgedAt && meta.adjustedDate === booking.booking_date && meta.adjustedTime ? meta.adjustedTime : meta.hikeTime;
   const match = /^(\d{1,2}):(\d{2})(?:\s*(AM|PM))?$/i.exec(rawTime);
   const hour = Number(match?.[1]); const minute = Number(match?.[2]); const period = match?.[3]?.toUpperCase();
@@ -37,6 +38,17 @@ export function makeBookingEmail(input: { booking: unknown; guide: unknown; loca
     hike_type: { morning: 'Morning', day: 'Morning', night: 'Night', overnight: 'Overnight' }[meta.hikeType],
     reminder: 'Please call your assigned guide the day before your hike to confirm your meeting arrangements.',
   };
+  const templateParams = {
+    ...values,
+    // The existing EmailJS reservation template uses these legacy names.
+    to_email: meta.emailAddress,
+    visitor_name: values.to_name,
+    booking_id: values.booking_reference,
+    trail_name: values.jump_off,
+    checkin_time: values.hike_time,
+    name: 'Mt. Kalisungan System',
+    email: meta.emailAddress,
+  };
   return {
     from, to: [meta.emailAddress], subject: `Your Mt. Kalisungan hike is confirmed - ${values.hike_date}`,
     html: bookingEmailTemplate.replace(/\{\{(\w+)\}\}/g, (_, key: string) => {
@@ -45,6 +57,7 @@ export function makeBookingEmail(input: { booking: unknown; guide: unknown; loca
     }),
     text: `Hi ${meta.fullName}, your ${values.hike_type} hike is confirmed.\nDate: ${values.hike_date}\nStart: ${hikeTime}\nJump-off: ${location.name}\nGroup: ${booking.group_size} hikers\nGuide: ${guide.full_name}\nGuide contact: ${guide.phone}\n${values.reminder}\nBooking reference: ${booking.id}\nThis is a booking confirmation, not a payment receipt.`,
     attachments: [{ filename: 'kalisungan-logo.png', content: bookingEmailLogo, content_id: 'kalisungan-logo', content_type: 'image/png' }],
+    templateParams,
   };
 }
 
@@ -61,8 +74,16 @@ export interface BookingEmailStore {
 }
 export type SendResult = { success: true; status: 'sent' | 'already_sent' } | { success: false; code: string; error: string };
 
-export async function dispatchBookingEmail(id: string, deps: { store: BookingEmailStore; apiKey: string; from: string; fetcher: typeof fetch }): Promise<SendResult> {
-  if (!deps.apiKey || !deps.from) return { success: false, code: 'not_configured', error: 'Booking email sender is not configured. Contact the administrator.' };
+export async function dispatchBookingEmail(id: string, deps: {
+  store: BookingEmailStore;
+  apiKey: string;
+  from: string;
+  fetcher: typeof fetch;
+  emailJs?: EmailJsConfig;
+}): Promise<SendResult> {
+  const emailJsConfigured = Boolean(deps.emailJs?.serviceId && deps.emailJs.templateId && deps.emailJs.publicKey);
+  const resendConfigured = Boolean(deps.apiKey && deps.from);
+  if (!emailJsConfigured && !resendConfigured) return { success: false, code: 'not_configured', error: 'Booking email sender is not configured. Contact the administrator.' };
   const { store } = deps;
   let job: EmailJob | null = null;
   try {
@@ -84,7 +105,7 @@ export async function dispatchBookingEmail(id: string, deps: { store: BookingEma
     }
     let payload = job.payload;
     let currentPayload: EmailPayload;
-    try { currentPayload = makeBookingEmail({ ...details, from: deps.from }); }
+    try { currentPayload = makeBookingEmail({ ...details, from: resendConfigured ? deps.from : undefined }); }
     catch {
       await store.update(job, { status: 'needs_review', last_error: 'Invalid confirmed schedule, recipient or guide contact.', lease_until: null });
       return { success: false, code: 'missing_details', error: 'Confirmation email has incomplete schedule, recipient or guide contact details.' };
@@ -97,30 +118,47 @@ export async function dispatchBookingEmail(id: string, deps: { store: BookingEma
       payload = currentPayload;
       await store.update(job, { payload });
     }
-    let response: Response;
+    let providerId: string;
     try {
-      response = await deps.fetcher('https://api.resend.com/emails', {
-        method: 'POST', headers: { Authorization: `Bearer ${deps.apiKey}`, 'Content-Type': 'application/json', 'Idempotency-Key': `booking-confirmation/${id}` },
-        body: JSON.stringify(payload), signal: AbortSignal.timeout(15000),
-      });
+      providerId = emailJsConfigured
+        ? await sendEmailJs(deps.fetcher, deps.emailJs!, payload.templateParams)
+        : await sendResend(deps.fetcher, deps.apiKey, payload, id);
+    } catch (error) {
+      const status = typeof (error as { status?: unknown })?.status === 'number' ? (error as { status: number }).status : null;
+      const providerName = typeof (error as { providerName?: unknown })?.providerName === 'string' ? (error as { providerName: string }).providerName : '';
+      const retry = status === null || status === 429 || status >= 500 || status === 409 && providerName === 'concurrent_idempotent_requests' || status === 200;
+      if (retry) {
+        await queueRetry(store, job, status === null ? 'Provider timeout or network failure; delivery unconfirmed.' : `Provider response ${status}; delivery unconfirmed.`);
+        return { success: false, code: 'queued', error: 'Email delivery is unconfirmed; a retry is queued.' };
+      }
+      await store.update(job, { status: 'needs_review', lease_until: null, last_error: `Email provider rejected the request (${status}). Check the EmailJS or Resend account configuration.` });
+      return { success: false, code: 'delivery_failed', error: 'Email provider rejected the confirmation. Check the configured email service.' };
+    }
+    try {
+      await store.update(job, { status: 'sent', provider_id: providerId, sent_at: new Date().toISOString(), lease_until: null, last_error: null });
+      return { success: true, status: 'sent' };
     } catch {
-      await queueRetry(store, job, 'Provider timeout or network failure; delivery unconfirmed.');
-      return { success: false, code: 'queued', error: 'Email delivery is unconfirmed; a retry is queued.' };
+      return { success: false, code: 'storage_failed', error: 'Email delivery status could not be saved. Check the email queue before retrying.' };
     }
-    const result = await response.json().catch(() => null) as { id?: unknown; name?: unknown } | null;
-    if (!response.ok || typeof result?.id !== 'string' || !result.id) {
-      const retry = response.status === 429 || response.status >= 500 || response.status === 409 && result?.name === 'concurrent_idempotent_requests' || response.ok;
-      if (retry) await queueRetry(store, job, `Provider response ${response.status}; delivery unconfirmed.`);
-      else await store.update(job, { status: 'needs_review', lease_until: null, last_error: `Resend rejected the request (${response.status}). Check verified sender and account configuration.` });
-      return { success: false, code: retry ? 'queued' : 'delivery_failed', error: retry ? 'Email is queued for retry.' : 'Resend rejected the email. Check the verified sender and provider dashboard.' };
-    }
-    await store.update(job, { status: 'sent', provider_id: result.id, sent_at: new Date().toISOString(), lease_until: null, last_error: null });
-    return { success: true, status: 'sent' };
   } catch {
     // Do not mark sent if persistence failed. A leased job is retried with the
     // same provider key; no browser success toast hides this uncertainty.
     return { success: false, code: 'storage_failed', error: 'Email delivery status could not be saved. Check the email queue before retrying.' };
   }
+}
+
+async function sendResend(fetcher: typeof fetch, apiKey: string, payload: EmailPayload, id: string) {
+  const response = await fetcher('https://api.resend.com/emails', {
+    method: 'POST', headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json', 'Idempotency-Key': `booking-confirmation/${id}` },
+    body: JSON.stringify(payload), signal: AbortSignal.timeout(15000),
+  });
+  const result = await response.json().catch(() => null) as { id?: unknown; name?: unknown } | null;
+  if (!response.ok || typeof result?.id !== 'string' || !result.id) {
+    const error = new Error(`Resend rejected the request (${response.status})`);
+    Object.assign(error, { status: response.status, providerName: result?.name });
+    throw error;
+  }
+  return result.id;
 }
 async function queueRetry(store: BookingEmailStore, job: EmailJob, message: string) {
   const delay = Math.min(6 * 60 * 60, 60 * 3 ** Math.min(job.attempts, 6));

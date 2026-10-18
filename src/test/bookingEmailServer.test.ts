@@ -72,6 +72,23 @@ describe('Resend dispatcher and endpoint', () => {
     expect(await dispatchBookingEmail(id, deps())).toMatchObject({ success: true, status: 'already_sent' });
     expect(fetcher).toHaveBeenCalledTimes(1);
   });
+  it('uses EmailJS when configured and sends only server-built template parameters', async () => {
+    fetcher.mockResolvedValue(new Response(JSON.stringify({ status: 200, text: 'OK' }), { status: 200 }));
+    const result = await dispatchBookingEmail(id, {
+      ...deps(),
+      apiKey: '',
+      from: '',
+      emailJs: { serviceId: 'service_test', templateId: 'template_booking', publicKey: 'public_test' },
+    });
+
+    expect(result).toEqual({ success: true, status: 'sent' });
+    const [url, req] = fetcher.mock.calls[0];
+    expect(url).toBe('https://api.emailjs.com/api/v1.0/email/send');
+    const body = JSON.parse(String(req?.body));
+    expect(body).toMatchObject({ service_id: 'service_test', template_id: 'template_booking', user_id: 'public_test' });
+    expect(body.template_params).toMatchObject({ to_email: 'hiker@example.com', visitor_name: 'Juan Dela Cruz', booking_id: id, trail_name: 'Lamot 2' });
+    expect(body).not.toHaveProperty('to');
+  });
   it('prevents two leased callers sending concurrently', async () => {
     const results = await Promise.all([dispatchBookingEmail(id, deps()), dispatchBookingEmail(id, deps())]);
     expect(results.some(result => result.success)).toBe(true); expect(fetcher).toHaveBeenCalledTimes(1);

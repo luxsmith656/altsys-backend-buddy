@@ -2,7 +2,7 @@
 
 `npm run verify` is the local release command. It validates environment configuration, email-template parity, lint, TypeScript project references, the booking-email Deno Edge Function, Vitest behavior tests with coverage, isolated PostgreSQL migration/RLS tests (`npm run test:db`), the production Vite build, and Chromium tests against `vite preview`.
 
-Resend confirmations require `20260908140000_booking_confirmation_outbox.sql`, the new Edge Function, verified sender and scheduled worker. See `email-templates/README.md`. Local mocks/queue tests never certify live delivery. No provider credentials are used by the default test suite, and no booking-confirmation emails are sent by it.
+EmailJS confirmations require `20260908140000_booking_confirmation_outbox.sql`, the Edge Function, the configured EmailJS service/templates and deployed function secrets or public defaults. Resend remains an optional booking fallback. See `docs/emailjs-setup.md` and `email-templates/README.md`. Local mocks/queue tests never certify live delivery. No provider credentials are used by the default test suite, and no booking-confirmation emails are sent by it.
 
 ## Protected monitoring
 

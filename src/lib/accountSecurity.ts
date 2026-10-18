@@ -24,6 +24,14 @@ export async function emailPasswordReset(email: string, origin: string) {
   const normalizedEmail = email.trim().toLowerCase();
   if (!normalizedEmail) throw new Error('Enter your account email address.');
 
+  const functions = (supabase as typeof supabase & { functions?: { invoke: (name: string, options: { body: Record<string, string> }) => Promise<{ data?: unknown; error?: unknown }> } }).functions;
+  if (functions?.invoke) {
+    const { data, error } = await functions.invoke('send-password-reset-emailjs', {
+      body: { email: normalizedEmail, app_url: resolveResetOrigin(origin) },
+    }).catch(() => ({ data: null, error: new Error('Password reset function unavailable') }));
+    if (!error && (data as { success?: unknown } | null)?.success === true) return;
+  }
+
   const { error } = await supabase.auth.resetPasswordForEmail(normalizedEmail, {
     redirectTo: `${resolveResetOrigin(origin)}/reset-password`,
   });
