@@ -13,8 +13,10 @@ export function getKaliExpression(content: string): KaliExpression {
 }
 
 export function getKaliQuickReplies(role: KaliRole): string[] {
-  if (role === 'guide') return ['How do I accept an assignment?', 'How do referral links work?', 'Help me prepare my group'];
-  if (role === 'admin' || role === 'super_admin' || role === 'ranger') return ['Help me review a check-in', 'What should I check before starting a group?', 'Explain guide assignments'];
+  if (role === 'guide') return ['Who is in my next booking?', 'Show my active group', 'How do I accept an assignment?'];
+  if (role === 'admin') return ['How many hikers are on my trailhead now?', 'Show today\'s pending bookings', 'Which guides are on duty?'];
+  if (role === 'super_admin') return ['How many hikers are on the mountain now?', 'Compare the three trailheads today', 'Show open emergency alerts'];
+  if (role === 'ranger') return ['Show active groups on my trailhead', 'What should I check during an emergency?', 'Explain last-known locations'];
   if (role === 'mdrrmo') return ['Explain last-known locations', 'What should I check during an emergency?', 'Explain offline location updates'];
   return ['Help me plan my hike', 'Weather and best time', 'What should my group bring?'];
 }

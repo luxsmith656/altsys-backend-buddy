@@ -11,9 +11,16 @@ import {
   type AiRoleScope,
   isFinanceRole,
   resolveAiRoleScope,
-  resolveScopedLocationId,
   roleAudienceInstructions,
 } from '../_shared/ai-role-scope.ts';
+import {
+  AI_NO_MATCH,
+  canUseAiTool,
+  redactSecrets,
+  safeToolLocation,
+  sanitizeMessages,
+  sanitizeToolParams,
+} from '../_shared/ai-access.ts';
 
 const SUPABASE_URL = (Deno.env.get('SUPABASE_URL') ?? '').trim();
 const SERVICE_ROLE = (Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '').trim();
@@ -181,7 +188,7 @@ Deno.serve(async (req) => {
       .eq('conversation_id', convId)
       .order('created_at', { ascending: false })
       .limit(20);
-    const history = (latest ?? []).slice().reverse();
+    const history = sanitizeMessages((latest ?? []).slice().reverse());
 
     const llmMessages: any[] = [
       { role: 'system', content: systemPrompt(scope) },
@@ -194,7 +201,7 @@ Deno.serve(async (req) => {
           `You have NO database access. Use the provided tools for every live number, and never guess.`,
       },
       ...(QUOTE_RE.test(message) ? [{ role: 'system', content: FEE_SCHEDULE }] : []),
-      ...history.map((m: any) => ({ role: m.role, content: m.content })),
+      ...history,
     ];
 
     // ---- Tool loop ----
@@ -250,13 +257,8 @@ Deno.serve(async (req) => {
 });
 
 // ---------------- tool execution ----------------
-async function runTool(userClient: any, admin: any, userId: string, scope: AiRoleScope, name: string, args: any) {
-  // Log every tool request (fixed fields only).
-  admin.from('ai_tool_logs').insert({
-    user_id: userId,
-    tool_name: name,
-    params: { start_date: args?.start_date ?? null, end_date: args?.end_date ?? null },
-  }).then(() => {}, () => {});
+async function executeTool(userClient: any, admin: any, userId: string, scope: AiRoleScope, name: string, args: any) {
+  if (!canUseAiTool(scope, name)) return { error: AI_NO_MATCH };
 
   if (name === 'search_internal_policies') {
     const q = String(args?.query ?? '');
@@ -267,11 +269,11 @@ async function runTool(userClient: any, admin: any, userId: string, scope: AiRol
   const r = validateRange(args?.start_date, args?.end_date);
   if ('error' in r) return { error: r.error };
 
-  const scoped = resolveScopedLocationId(scope, args?.location_id);
+  const scoped = safeToolLocation(scope, args?.location_id);
   if ('error' in scoped) return { error: scoped.error };
 
   if (name === 'get_revenue_summary') {
-    if (!isFinanceRole(scope.role)) return { error: 'Revenue data is available only to authorized local or central admins.' };
+    if (!isFinanceRole(scope.role)) return { error: AI_NO_MATCH };
     let query = admin.from('bookings')
       .select('location_id, booking_date, group_size, status, notes')
       .gte('booking_date', r.start)
@@ -358,6 +360,36 @@ async function runTool(userClient: any, admin: any, userId: string, scope: AiRol
     };
   }
   return out;
+}
+
+function toolRowCount(result: unknown): number {
+  if (!result || typeof result !== 'object') return 0;
+  return Object.values(result as Record<string, unknown>)
+    .filter(Array.isArray)
+    .reduce((sum, rows) => sum + (rows as unknown[]).length, 0);
+}
+
+async function runTool(userClient: any, admin: any, userId: string, scope: AiRoleScope, name: string, args: any) {
+  const allowed = ALLOWED_TOOLS.has(name) && canUseAiTool(scope, name);
+  let result: unknown;
+  try {
+    result = allowed ? await executeTool(userClient, admin, userId, scope, name, args) : { error: AI_NO_MATCH };
+  } catch (error) {
+    console.error('[ops-ai] tool error', name, error);
+    result = { error: AI_NO_MATCH };
+  }
+  const denied = !allowed || Boolean((result as any)?.error === AI_NO_MATCH);
+  void admin.from('ai_tool_logs').insert({
+    user_id: userId,
+    role: scope.role,
+    tool_name: name,
+    params: sanitizeToolParams(args),
+    allowed: !denied,
+    row_count: toolRowCount(result),
+    denied_reason: denied ? AI_NO_MATCH : null,
+    location_scope: { location_ids: scope.locationIds, all_locations: scope.allLocations },
+  }).then(() => {}, () => {});
+  return redactSecrets(result);
 }
 
 async function callRpc(userClient: any, fn: string, start: string, end: string, locationId: string | null) {

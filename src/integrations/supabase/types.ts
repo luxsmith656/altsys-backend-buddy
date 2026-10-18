@@ -105,23 +105,38 @@ export type Database = {
       }
       ai_tool_logs: {
         Row: {
+          allowed: boolean
           created_at: string
+          denied_reason: string | null
           id: string
+          location_scope: Json
           params: Json
+          role: string | null
+          row_count: number
           tool_name: string
           user_id: string
         }
         Insert: {
+          allowed?: boolean
           created_at?: string
+          denied_reason?: string | null
           id?: string
+          location_scope?: Json
           params?: Json
+          role?: string | null
+          row_count?: number
           tool_name: string
           user_id: string
         }
         Update: {
+          allowed?: boolean
           created_at?: string
+          denied_reason?: string | null
           id?: string
+          location_scope?: Json
           params?: Json
+          role?: string | null
+          row_count?: number
           tool_name?: string
           user_id?: string
         }
