@@ -16,10 +16,16 @@ export function emailJsConfigFromEnv(
   getEnv: (name: string) => string | undefined,
   templateEnvName: string,
   defaultTemplateId: string,
+  forbiddenTemplateId?: string,
 ): EmailJsConfig {
+  const configuredTemplateId = clean(getEnv(templateEnvName));
   return {
     serviceId: clean(getEnv('EMAILJS_SERVICE_ID')) || DEFAULT_EMAILJS_SERVICE_ID,
-    templateId: clean(getEnv(templateEnvName)) || defaultTemplateId,
+    // A copy-pasted secret must not make booking confirmations use the reset
+    // template (or the reverse). Fall back to the known template instead.
+    templateId: configuredTemplateId && configuredTemplateId !== forbiddenTemplateId
+      ? configuredTemplateId
+      : defaultTemplateId,
     publicKey: clean(getEnv('EMAILJS_PUBLIC_KEY')) || DEFAULT_EMAILJS_PUBLIC_KEY,
     privateKey: clean(getEnv('EMAILJS_PRIVATE_KEY')) || undefined,
   };

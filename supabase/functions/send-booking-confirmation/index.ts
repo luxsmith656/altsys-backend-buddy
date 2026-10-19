@@ -1,13 +1,13 @@
 import { createClient } from '@supabase/supabase-js';
 import { bookingConfirmationHandler, canSendBookingEmail, createBookingEmailStore } from './handler.ts';
-import { DEFAULT_EMAILJS_BOOKING_TEMPLATE_ID, emailJsConfigFromEnv } from '../_shared/emailjs.ts';
+import { DEFAULT_EMAILJS_BOOKING_TEMPLATE_ID, DEFAULT_EMAILJS_PASSWORD_RESET_TEMPLATE_ID, emailJsConfigFromEnv } from '../_shared/emailjs.ts';
 
 const env = (name: string) => (Deno.env.get(name) ?? '').trim();
 const db = createClient(env('SUPABASE_URL'), env('SUPABASE_SERVICE_ROLE_KEY'), { auth: { persistSession: false, autoRefreshToken: false } });
 Deno.serve(bookingConfirmationHandler({
   apiKey: env('RESENDAPI') || env('RESEND_API_KEY'),
   from: env('RESEND_FROM_EMAIL'),
-  emailJs: emailJsConfigFromEnv((name) => Deno.env.get(name), 'EMAILJS_BOOKING_TEMPLATE_ID', DEFAULT_EMAILJS_BOOKING_TEMPLATE_ID),
+  emailJs: emailJsConfigFromEnv((name) => Deno.env.get(name), 'EMAILJS_BOOKING_TEMPLATE_ID', DEFAULT_EMAILJS_BOOKING_TEMPLATE_ID, DEFAULT_EMAILJS_PASSWORD_RESET_TEMPLATE_ID),
   workerSecret: env('BOOKING_EMAIL_WORKER_SECRET'),
   store: createBookingEmailStore(db), fetcher: fetch,
   async userForToken(token) {
