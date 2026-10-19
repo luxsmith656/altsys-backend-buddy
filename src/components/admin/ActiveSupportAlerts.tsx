@@ -57,7 +57,14 @@ export default function ActiveSupportAlerts({ locationId }: Props) {
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'booking_messages' }, () => void load())
       .subscribe();
     const timer = window.setInterval(() => void load(), 30_000);
-    return () => { window.clearInterval(timer); void supabase.removeChannel(channel); };
+    const onOnline = () => {
+      // Catch an SOS that was queued on a hiker/guide device as soon as the
+      // connection returns, even if the realtime socket was briefly offline.
+      window.setTimeout(() => void load(), 1200);
+      window.setTimeout(() => void load(), 5000);
+    };
+    window.addEventListener('online', onOnline);
+    return () => { window.clearInterval(timer); window.removeEventListener('online', onOnline); void supabase.removeChannel(channel); };
   }, [load, locationId]);
 
   const updateAlert = async (id: string, status: 'acknowledged' | 'resolved') => {

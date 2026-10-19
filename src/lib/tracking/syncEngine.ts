@@ -4,6 +4,7 @@ import { drainQueue, removeQueueItem, bumpQueueAttempt, saveSession } from '@/li
 
 let timer: ReturnType<typeof setInterval> | null = null;
 let running = false;
+let onlineHandler: (() => void) | null = null;
 
 function isSchemaCacheError(error: unknown) {
   const message = String((error as { message?: unknown } | null)?.message ?? error ?? '').toLowerCase();
@@ -224,7 +225,14 @@ export async function syncOnce() {
 
 export function startSyncEngine() {
   if (timer) return;
-  window.addEventListener('online', () => void syncOnce());
+  onlineHandler = () => {
+    // Mobile browsers can emit `online` before the network path is usable.
+    // Retry shortly after the event as well as immediately, without a reload.
+    void syncOnce();
+    window.setTimeout(() => void syncOnce(), 1500);
+    window.setTimeout(() => void syncOnce(), 5000);
+  };
+  window.addEventListener('online', onlineHandler);
   window.addEventListener('pageshow', () => void syncOnce());
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'visible') void syncOnce();
@@ -236,4 +244,6 @@ export function startSyncEngine() {
 export function stopSyncEngine() {
   if (timer) clearInterval(timer);
   timer = null;
+  if (onlineHandler) window.removeEventListener('online', onlineHandler);
+  onlineHandler = null;
 }

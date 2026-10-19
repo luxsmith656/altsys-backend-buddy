@@ -799,9 +799,8 @@ export default function AdminDashboard() {
 
     if (matches.length) {
       setScanMatches(matches);
-      if (matches.length === 1) setScannedBooking(matches[0]);
       setCheckInVerified(false);
-      toast.info(matches.length === 1 ? 'Found booking record.' : `Found ${matches.length} matching booking records.`);
+      toast.info(`Found ${matches.length} matching booking record${matches.length === 1 ? '' : 's'}. Select it to open the full check-in details.`);
     } else {
       toast.error('No booking found. Try the QR code, booking ID, or hiker name/phone.');
     }
@@ -2615,7 +2614,7 @@ export default function AdminDashboard() {
                   loading={scanLoading || locationsLoading}
                 />
 
-                {scanMatches.length > 1 && !scannedBooking && (
+                {scanMatches.length > 0 && !scannedBooking && (
                   <Card className="border-primary/30 bg-primary/5">
                     <CardHeader className="pb-3">
                       <CardTitle className="text-sm">Matching bookings ({scanMatches.length})</CardTitle>
