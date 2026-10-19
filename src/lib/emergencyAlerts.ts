@@ -113,10 +113,19 @@ export async function loadEmergencyAlerts(locationId?: string | null) {
     .limit(100);
   if (locationId) query = query.eq('location_id', locationId);
   const { data, error } = await query;
-  if (!error) return (data as any[]) || [];
+  if (!error) {
+    const alerts = (data as any[]) || [];
+    const userIds = [...new Set(alerts.map((alert) => alert.user_id).filter(Boolean))];
+    if (!userIds.length) return alerts;
+    const { data: profiles } = await supabase.from('profiles')
+      .select('user_id,full_name,avatar_url').in('user_id', userIds);
+    const profileByUser = new Map((profiles || []).map((profile) => [profile.user_id, profile]));
+    return alerts.map((alert) => ({ ...alert, reporter_name: profileByUser.get(alert.user_id)?.full_name || null, reporter_avatar_url: profileByUser.get(alert.user_id)?.avatar_url || null }));
+  }
   // Keep the admin surface usable while an older project schema cache is
   // catching up with the offline-SOS columns.
-  if (String(error.message || '').toLowerCase().includes('schema cache')) {
+  const errorText = String(error.message || '').toLowerCase();
+  if (errorText.includes('schema cache') || errorText.includes('does not exist') || errorText.includes('column')) {
     let legacy = supabase.from('emergency_alerts' as any)
       .select('id,booking_id,session_id,user_id,reporter_role,location_id,latitude,longitude,message,status,created_at,acknowledged_at')
       .in('status', ['open', 'acknowledged'])

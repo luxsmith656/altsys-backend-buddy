@@ -47,6 +47,17 @@ function isNetworkFailure(error: unknown) {
   return !navigator.onLine || message.includes('network') || message.includes('fetch') || message.includes('offline');
 }
 
+function readFreshLocation() {
+  return new Promise<{ lat: number; lng: number } | null>((resolve) => {
+    if (!navigator.geolocation) return resolve(null);
+    navigator.geolocation.getCurrentPosition(
+      (position) => resolve({ lat: position.coords.latitude, lng: position.coords.longitude }),
+      () => resolve(null),
+      { enableHighAccuracy: true, maximumAge: 5_000, timeout: 12_000 },
+    );
+  });
+}
+
 export default function SOSPanel({ compact = false }: SOSPanelProps) {
   const { user, role } = useAuth();
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -135,6 +146,13 @@ export default function SOSPanel({ compact = false }: SOSPanelProps) {
     if (activeSos) return;
     setSending(true);
     try {
+      // Always try a fresh fix at the moment the SOS is confirmed. The
+      // dialog-open fix can be stale or still pending on mobile browsers.
+      const freshCoords = await readFreshLocation();
+      if (freshCoords) {
+        setCoords(freshCoords);
+      }
+      const pushCoords = freshCoords ?? coords;
       let locationId = activeSession?.location_id || null;
       if (!locationId && activeSession?.booking_id) {
         const { data } = await supabase.from('bookings').select('location_id').eq('id', activeSession.booking_id).maybeSingle();
@@ -147,14 +165,14 @@ export default function SOSPanel({ compact = false }: SOSPanelProps) {
         bookingId: activeSession?.booking_id,
         sessionId: activeSession?.id,
         locationId,
-        latitude: coords?.lat,
-        longitude: coords?.lng,
+        latitude: pushCoords?.lat,
+        longitude: pushCoords?.lng,
         clientAlertId,
       };
       let next: ActiveSos;
       try {
         const created = await createEmergencyAlert(payload);
-        next = { clientAlertId, serverAlertId: created.id, sentAt: created.created_at, lastLocation: coords, lastLocationAt: new Date().toISOString() };
+        next = { clientAlertId, serverAlertId: created.id, sentAt: created.created_at, lastLocation: pushCoords, lastLocationAt: new Date().toISOString() };
       } catch (error) {
         if (!isNetworkFailure(error)) throw error;
         const createdAt = new Date().toISOString();
@@ -165,12 +183,12 @@ export default function SOSPanel({ compact = false }: SOSPanelProps) {
           bookingId: activeSession?.booking_id ?? null,
           sessionId: activeSession?.id ?? null,
           locationId,
-          latitude: coords?.lat ?? null,
-          longitude: coords?.lng ?? null,
+          latitude: pushCoords?.lat ?? null,
+          longitude: pushCoords?.lng ?? null,
           message: 'Emergency assistance requested while offline',
           createdAt,
         } });
-        next = { clientAlertId, sentAt: createdAt, pendingSync: true, lastLocation: coords, lastLocationAt: createdAt };
+        next = { clientAlertId, sentAt: createdAt, pendingSync: true, lastLocation: pushCoords, lastLocationAt: createdAt };
       }
       setActiveSos(next);
       if (sosStorageKey) localStorage.setItem(sosStorageKey, JSON.stringify(next));

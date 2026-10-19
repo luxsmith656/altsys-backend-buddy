@@ -537,7 +537,7 @@ function ScopedMonitorMap({ locationId, canAddCheckpoints = false, tools, routeA
         zIndexOffset: 4000,
         title: `SOS ${alert.reporter_role || 'participant'}`,
         icon: L.divIcon({ className: '', html: '<div style="width:34px;height:34px;border-radius:50%;background:#dc2626;border:4px solid #fff;box-shadow:0 0 0 7px rgba(220,38,38,.28),0 2px 8px rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;color:#fff;font-weight:800;font-size:16px">!</div>', iconSize: [34, 34], iconAnchor: [17, 17] }),
-      }).bindPopup(`<strong style="color:#dc2626">SOS · ${esc(alert.reporter_role || 'participant')}</strong><br/><small>Status: ${esc(alert.status)}<br/>Pressed: ${esc(pressedAt)}<br/>Location: ${latitude.toFixed(5)}, ${longitude.toFixed(5)}${latestAt ? `<br/>Latest GPS: ${esc(latestAt)}` : ''}${alert.message ? `<br/>${esc(alert.message)}` : ''}</small>`);
+      }).bindPopup(`<strong style="color:#dc2626">SOS · ${esc(alert.reporter_name || alert.reporter_role || 'participant')}</strong><br/><small>Role: ${esc(alert.reporter_role || 'participant')}<br/>Status: ${esc(alert.status)}<br/>First push: ${esc(pressedAt)}<br/>Push/last-known location: ${latitude.toFixed(5)}, ${longitude.toFixed(5)}${latestAt ? `<br/>Latest GPS: ${esc(latestAt)}` : ''}${alert.booking_id ? `<br/>Booking: ${esc(String(alert.booking_id).slice(0, 8))}` : ''}${alert.message ? `<br/>${esc(alert.message)}` : ''}</small>`);
       sosLayer.current!.addLayer(marker);
     });
 
