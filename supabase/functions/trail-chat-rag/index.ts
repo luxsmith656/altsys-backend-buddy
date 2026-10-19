@@ -341,11 +341,36 @@ async function runRecordTool(db: any, scope: AiRoleScope, name: string, args: an
       query = query.in('id', bookingIds).neq('status', 'cancelled');
     }
     if (typeof args?.query === 'string' && args.query.trim()) {
-      const { data: matchingProfiles } = await db.from('profiles')
-        .select('user_id').ilike('full_name', `%${args.query.trim()}%`).limit(AI_RESULT_LIMIT);
-      const matchingIds = (matchingProfiles ?? []).map((p: any) => p.user_id).filter(Boolean);
-      if (!matchingIds.length) return { error: AI_NO_MATCH };
-      query = query.in('user_id', matchingIds);
+      const search = args.query.trim();
+      const [{ data: matchingProfiles }, { data: matchingGuides }] = await Promise.all([
+        db.from('profiles').select('user_id').ilike('full_name', `%${search}%`).limit(AI_RESULT_LIMIT),
+        (() => {
+          let guideQuery = db.from('guides').select('id,full_name,location_id').ilike('full_name', `%${search}%`).eq('is_active', true).limit(AI_RESULT_LIMIT);
+          if (requestedLocation) guideQuery = guideQuery.eq('location_id', requestedLocation);
+          else if (!scope.allLocations && scope.locationIds.length) guideQuery = guideQuery.in('location_id', scope.locationIds);
+          return guideQuery;
+        })(),
+      ]);
+      const matchingUserIds = (matchingProfiles ?? []).map((profile: any) => profile.user_id).filter(Boolean);
+      const matchingGuideIds = (matchingGuides ?? []).map((guide: any) => guide.id).filter(Boolean);
+      const { data: guideAssignments } = matchingGuideIds.length
+        ? await db.from('booking_assignments').select('booking_id').in('guide_id', matchingGuideIds).limit(1000)
+        : { data: [] };
+      const matchingBookingIds = (guideAssignments ?? []).map((assignment: any) => assignment.booking_id).filter(Boolean);
+      // UUIDs are searched exactly when supplied; names are resolved through
+      // profiles and assignments, all before the existing location scope is
+      // applied to the booking query.
+      const idMatch = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(search)
+        ? [search]
+        : [];
+      const candidateBookingIds = [...new Set([...idMatch, ...matchingBookingIds])];
+      if (!matchingUserIds.length && !candidateBookingIds.length) return { error: AI_NO_MATCH };
+      const filters: string[] = [];
+      if (matchingUserIds.length) filters.push(...matchingUserIds.map((id: string) => `user_id.eq.${id}`));
+      if (candidateBookingIds.length) filters.push(...candidateBookingIds.map((id: string) => `id.eq.${id}`));
+      query = query.or(filters.join(','));
+      // Keep a local guard for legacy/partial query builders and avoid an
+      // accidental broad result if the database rejects the OR expression.
     }
     if (typeof args?.booking_date === 'string') query = query.eq('booking_date', args.booking_date);
     if (typeof args?.status === 'string' && args.status.trim()) query = query.eq('status', args.status.trim());
