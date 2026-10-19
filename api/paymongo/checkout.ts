@@ -1,5 +1,9 @@
 import { env, getHeader, parseNotes, send, supabaseAuthUser, supabaseRequest, type ApiRequest, type ApiResponse } from './_shared';
 
+// PayMongo checkout uses Node request/auth primitives and must not be bundled
+// as an Edge function by a project-level Vercel runtime setting.
+export const config = { runtime: 'nodejs' };
+
 export default async function handler(req: ApiRequest, res: ApiResponse) {
   if (req.method === 'OPTIONS') return send(res, { ok: true });
   if (req.method !== 'POST') return send(res, { error: 'Method not allowed' }, 405);

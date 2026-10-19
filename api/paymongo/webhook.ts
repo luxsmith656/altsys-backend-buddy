@@ -1,7 +1,7 @@
 import { createHmac, timingSafeEqual } from 'node:crypto';
 import { env, getHeader, readRawBody, send, supabaseRequest, type ApiRequest, type ApiResponse } from './_shared';
 
-export const config = { api: { bodyParser: false } };
+export const config = { api: { bodyParser: false }, runtime: 'nodejs' };
 
 function isValidPaymongoSignature(rawBody: string, header: string | undefined, secret: string, liveMode: boolean) {
   if (!header) return false;
