@@ -16,6 +16,7 @@ import { LAMOT_2_REFERENCE_PATH, normalizeOfficialRoutePath, TRAILS } from '@/li
 import { supabase } from '@/integrations/supabase/client';
 import { officialTrailName, getTrailheadIdentity } from '@/lib/mapTrailheads';
 import { officialRoutesForLocation } from '@/lib/officialRoutes';
+import { MOUNTAIN_ELEVATION_LABEL, MOUNTAIN_FACTS } from '@/lib/mountainFacts';
 
 type LiveWeather = {
   temperature: number;
@@ -356,7 +357,7 @@ export default function Index() {
 
               <div className="hidden sm:flex mt-8 gap-6 text-xs sm:text-sm text-white/70 drop-shadow-[0_8px_24px_rgba(0,0,0,0.35)]">
                 <div>
-                  <div className="text-xl font-semibold text-white">622 m</div>
+                  <div className="text-xl font-semibold text-white">{MOUNTAIN_ELEVATION_LABEL}</div>
                   <div>Summit elevation</div>
                 </div>
                 <div>
@@ -386,7 +387,7 @@ export default function Index() {
                   <div className="flex flex-col items-end text-right text-xs text-muted-foreground">
                     <span>14.1475°N</span>
                     <span>121.3454°E</span>
-                    <span>622 m</span>
+                    <span>{MOUNTAIN_ELEVATION_LABEL}</span>
                   </div>
                 </div>
 
@@ -430,12 +431,12 @@ export default function Index() {
               {/* Mobile stats strip */}
               <div className="sm:hidden glass-card rounded-xl px-4 py-3 flex items-center justify-between text-[11px] text-muted-foreground">
                 <div>
-                  <div className="text-sm font-semibold text-foreground">622 m</div>
+                  <div className="text-sm font-semibold text-foreground">{MOUNTAIN_ELEVATION_LABEL}</div>
                   <div>Summit elevation</div>
                 </div>
                 <div>
                   <div className="text-sm font-semibold text-foreground">3 trails</div>
-                  <div>Summit • Plantation • Ridge</div>
+                  <div>{MOUNTAIN_FACTS.jumpOffs.join(' • ')}</div>
                 </div>
                 <div>
                   <div className="text-sm font-semibold text-foreground">Live weather</div>
@@ -468,7 +469,7 @@ export default function Index() {
             </p>
             <div className="mt-5 flex flex-wrap justify-center gap-2">
               <span className="px-3 py-1 rounded-full text-xs bg-primary/10 text-primary border border-primary/20">Calauan, Laguna</span>
-              <span className="px-3 py-1 rounded-full text-xs bg-secondary/60 text-foreground border border-border/40">Lamot - Nagcarlan routes</span>
+              <span className="px-3 py-1 rounded-full text-xs bg-secondary/60 text-foreground border border-border/40">Calauan routes</span>
               <span className="px-3 py-1 rounded-full text-xs bg-secondary/60 text-foreground border border-border/40">Sunrise ridge treks</span>
             </div>
             <div className="mt-7">
@@ -607,7 +608,7 @@ export default function Index() {
                 <h4 className="text-xs sm:text-sm font-semibold text-white mb-2 sm:mb-3 uppercase tracking-wider">Location</h4>
                 <ul className="space-y-1 sm:space-y-2 text-xs sm:text-sm">
                   <li className="flex items-center gap-1.5"><MapPin className="h-3 w-3 sm:h-3.5 sm:w-3.5 text-emerald-400 shrink-0" /> <span className="truncate">Calauan, Laguna, PH</span></li>
-                  <li className="flex items-center gap-1.5"><Mountain className="h-3 w-3 sm:h-3.5 sm:w-3.5 text-emerald-400 shrink-0" /> <span>Elevation: 622m</span></li>
+                  <li className="flex items-center gap-1.5"><Mountain className="h-3 w-3 sm:h-3.5 sm:w-3.5 text-emerald-400 shrink-0" /> <span>Elevation: {MOUNTAIN_ELEVATION_LABEL}</span></li>
                   <li className="flex items-center gap-1.5"><Trees className="h-3 w-3 sm:h-3.5 sm:w-3.5 text-emerald-400 shrink-0" /> <span>3 Trail Routes</span></li>
                 </ul>
               </div>

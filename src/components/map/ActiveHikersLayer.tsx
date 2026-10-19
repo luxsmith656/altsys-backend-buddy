@@ -22,10 +22,10 @@ import {
   ArrowDown
 } from 'lucide-react';
 
-// The official Summit Trail path points
+// Reference path points used when a published route is not available.
 const SUMMIT_TRAIL_PATH: [number, number][] = LAMOT_2_REFERENCE_PATH.map(([lat, lng]) => [lat, lng]);
 
-// 7 Official Stations along the Summit Trail
+// Reference stations for the published route map.
 export const OFFICIAL_STATIONS = [
   { id: 'st1', index: 1, name: 'Jump off: Start of Trail (0 km)', pos: [14.1486888, 121.3291523] as [number, number], description: 'Main trailhead. Registration, safety briefing, and guide assignment.' },
   { id: 'st2', index: 2, name: 'Station 1: Bamboo Grove (1 km)', pos: SUMMIT_TRAIL_PATH[5], description: 'Cool rest point shaded by bamboo arches. Emergency kit available.' },
@@ -33,7 +33,7 @@ export const OFFICIAL_STATIONS = [
   { id: 'st4', index: 4, name: 'Station 3: Mountain Spring (3 km)', pos: SUMMIT_TRAIL_PATH[15], description: 'Water source rest point under giant trees.' },
   { id: 'st5', index: 5, name: 'Station 4: Wilderness Ridge (4 km)', pos: SUMMIT_TRAIL_PATH[20], description: 'Steep ridge rest area. pre-summit scenic viewing spot.' },
   { id: 'st6', index: 6, name: 'Station 5: Summit Camp (5 km)', pos: SUMMIT_TRAIL_PATH[25], description: 'Final staging area camp before the summit assault.' },
-  { id: 'st7', index: 7, name: 'Mt. Kalisungan Peak (Summit - 6 km)', pos: SUMMIT_TRAIL_PATH.at(-1)!, description: 'Summit (629m). Breathtaking 360-degree views of Southern Tagalog.' },
+  { id: 'st7', index: 7, name: 'Mt. Kalisungan Peak (Summit)', pos: SUMMIT_TRAIL_PATH.at(-1)!, description: 'Summit viewpoint. Breathtaking 360-degree views of Southern Tagalog.' },
 ];
 
 interface SimulatedHiker {

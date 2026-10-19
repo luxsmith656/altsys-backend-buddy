@@ -1,7 +1,7 @@
 /**
- * Dedicated weather service for Mount Kalisungan (Calauan & Nagcarlan, Laguna, Philippines).
+ * Dedicated weather service for Mount Kalisungan (Calauan, Laguna, Philippines).
  *
- * Coordinates: 14.1475° N, 121.3454° E (Mt. Kalisungan Center & Summit Ridge, ~760m / 629m peak).
+ * Coordinates: 14.1475° N, 121.3454° E (Mt. Kalisungan center; live terrain elevation is separate from the 760 MASL mountain fact).
  * Provider: Open-Meteo High-Resolution Tropical Weather API.
  * The browser uses this public provider directly so a failed optional API key
  * can never create a console error or make the booking flow appear broken.
@@ -11,11 +11,11 @@ export const MT_KALISUNGAN_COORDS = {
   lat: 14.1475,
   lng: 121.3454,
   name: 'Mt. Kalisungan',
-  municipality: 'Calauan & Nagcarlan',
+  municipality: 'Calauan',
   province: 'Laguna',
   country: 'Philippines',
   elevationMeters: 760,
-  summitPeakMeters: 629,
+  summitPeakMeters: 760,
 };
 
 export const ACCUWEATHER_LOCATION_KEY = '263792'; // Calauan, Laguna
@@ -188,7 +188,7 @@ export function interpretKalisunganWeather(
         badgeLabel: '⚡ Thunderstorm Warning',
         headline: 'Lightning Hazard on Exposed Ridge & Summit',
         trailImpact:
-          'Mt. Kalisungan’s summit (629m) and upper grassland ridge are completely exposed with zero lightning shelter. Trail clay becomes treacherous mud.',
+          'Mt. Kalisungan’s summit and upper grassland ridge are exposed with limited lightning shelter. Trail clay becomes treacherous mud.',
         safetyAdvice:
           'Ascend early before midday convective storms form. If thunder is heard on the ridge, descend immediately away from high ground.',
       },
@@ -346,7 +346,7 @@ export async function fetchAccuWeather5DayForecast(apiKey: string): Promise<Reco
   const days: Record<string, KalisunganDayWeather> = {};
   const sourceName = OPEN_METEO_SOURCE_NAME;
   const sourceUrl = OPEN_METEO_SOURCE_URL;
-  const locationCitation = 'Mt. Kalisungan, Calauan & Nagcarlan, Laguna, Philippines (AccuWeather Station 263792 · 629m Peak)';
+  const locationCitation = 'Mt. Kalisungan, Calauan, Laguna, Philippines (AccuWeather Station 263792)';
   const now = Date.now();
 
   for (const item of data.DailyForecasts) {
@@ -425,7 +425,7 @@ export async function fetchOpenMeteoForecast(): Promise<KalisunganForecastResult
   const sourceName = OPEN_METEO_SOURCE_NAME;
   const sourceUrl = OPEN_METEO_SOURCE_URL;
   const locationCitation =
-    'Mt. Kalisungan, Calauan & Nagcarlan, Laguna, Philippines (Open-Meteo · 629m Peak)';
+    'Mt. Kalisungan, Calauan, Laguna, Philippines (Open-Meteo)';
   const now = Date.now();
 
   for (let i = 0; i < daily.time.length; i++) {
@@ -534,7 +534,7 @@ export async function fetchKalisungan16DayForecast(): Promise<KalisunganForecast
     sourceName: OPEN_METEO_SOURCE_NAME,
     sourceUrl: OPEN_METEO_SOURCE_URL,
     locationCitation:
-      'Mt. Kalisungan, Calauan & Nagcarlan, Laguna, Philippines (Open-Meteo · 629m Peak)',
+      'Mt. Kalisungan, Calauan, Laguna, Philippines (Open-Meteo)',
     fetchedAt: Date.now(),
   };
 

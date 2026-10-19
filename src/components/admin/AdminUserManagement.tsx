@@ -504,7 +504,7 @@ export default function AdminUserManagement({
                       id="editSpecialty"
                       value={editSpecialty}
                       onChange={(e) => setEditSpecialty(e.target.value)}
-                      placeholder="e.g. Summit Trail, First Aid"
+                      placeholder="e.g. Lamot 2 Trail, First Aid"
                     />
                   </div>
 

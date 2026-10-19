@@ -15,7 +15,7 @@ import {
 import { FacebookProphetEngine } from './prophetEngine';
 import { format, addDays, subDays, startOfWeek, endOfWeek, startOfMonth, endOfMonth, parseISO } from 'date-fns';
 
-// Mount Kalisungan Coordinates (Calauan & Nagcarlan, Laguna, Philippines)
+// Mount Kalisungan Coordinates (Calauan, Laguna, Philippines)
 const KALISUNGAN_LAT = 14.1475;
 const KALISUNGAN_LNG = 121.3454;
 

@@ -21,7 +21,7 @@ const SEED_RATINGS: GuideRating[] = [
   {
     guideId: 'test-guide-1',
     guideName: 'Test Guide',
-    trail: 'Summit Trail',
+    trail: 'Lamot 2 Trail',
     totalRating: 24.5,
     reviewCount: 5,
     avgRating: 4.9,

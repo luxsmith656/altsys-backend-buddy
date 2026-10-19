@@ -156,7 +156,7 @@ const DISPATCH_ROUTE_FIELDS = 'id,location_id,name,status,is_official,review_sta
 
 /* ── Mock guide data (replace with Supabase when guide profiles table is ready) ── */
 const MOCK_GUIDES = [
-  { id: 'g1', name: 'Rodel Manalansan', phone: '+63 912 345 6789', status: 'available', trail: 'Summit Trail', totalHikes: 48 },
+  { id: 'g1', name: 'Rodel Manalansan', phone: '+63 912 345 6789', status: 'available', trail: 'Lamot 2 Trail', totalHikes: 48 },
   { id: 'g2', name: 'Bong Villarosa', phone: '+63 917 234 5678', status: 'on-duty', trail: 'Ridge Route', totalHikes: 62 },
   { id: 'g3', name: 'Nilo Santos', phone: '+63 918 876 5432', status: 'available', trail: 'Scenic Loop', totalHikes: 35 },
   { id: 'g4', name: 'Allan Reyes', phone: '+63 921 456 7890', status: 'off-duty', trail: '—', totalHikes: 27 },

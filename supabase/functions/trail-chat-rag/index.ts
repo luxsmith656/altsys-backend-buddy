@@ -766,7 +766,7 @@ async function buildAudienceContext(scope: AiRoleScope, authHeader: string | nul
   return `${roleAudienceInstructions(scope)}\nUse only published trail guidance and authorized aggregate operational facts.`;
 }
 
-const SYSTEM_PROMPT = `You are the Mount Kalisungan Trail Assistant — a warm, human-sounding booking companion and expert guide for Mount Kalisungan (622m), Calauan, Laguna, Philippines.
+const SYSTEM_PROMPT = `You are the Mount Kalisungan Trail Assistant — a warm, human-sounding booking companion and expert guide for Mount Kalisungan (760 MASL), Calauan, Laguna, Philippines.
 
 IDENTITY & SCOPE RULES (ABSOLUTE — NEVER VIOLATE):
 - You are the "Mount Kalisungan Trail Assistant". That is the ONLY identity you may disclose.

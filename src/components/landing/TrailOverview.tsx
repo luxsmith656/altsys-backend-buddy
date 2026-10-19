@@ -1,30 +1,31 @@
 import { motion } from 'framer-motion';
 import { Route, TrendingUp, Clock, BarChart2 } from 'lucide-react';
+import { MOUNTAIN_FACTS, MOUNTAIN_ELEVATION_LABEL } from '@/lib/mountainFacts';
 
 const trailStats = [
   {
     icon: Route,
     label: 'Trail Distance',
-    value: '12 km',
-    desc: 'Total traversable distance covering all trail segments.',
+    value: '3 routes',
+    desc: 'Distances come from each published route.',
   },
   {
     icon: TrendingUp,
     label: 'Elevation Gain',
-    value: '622 m',
-    desc: 'Maximum point above sea level along the summit route.',
+    value: MOUNTAIN_ELEVATION_LABEL,
+    desc: 'Official mountain elevation.',
   },
   {
     icon: Clock,
     label: 'Estimated Hiking Time',
-    value: '4-5 hours',
-    desc: 'Estimated hiking time is 4-5 hours depending on pace.',
+    value: 'Published routes',
+    desc: 'Timing comes from each published route record.',
   },
   {
     icon: BarChart2,
     label: 'Difficulty Level',
-    value: 'Moderate',
-    desc: 'Difficulty spans beginner-friendly to base. Moderate overall.',
+    value: MOUNTAIN_FACTS.difficulty,
+    desc: 'Route-specific details come from the published route.',
   },
 ];
 

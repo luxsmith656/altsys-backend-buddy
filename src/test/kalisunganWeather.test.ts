@@ -31,7 +31,7 @@ describe('Mt. Kalisungan Weather Service', () => {
     expect(MT_KALISUNGAN_COORDS.province).toBe('Laguna');
     expect(MT_KALISUNGAN_COORDS.country).toBe('Philippines');
     expect(MT_KALISUNGAN_COORDS.elevationMeters).toBe(760);
-    expect(MT_KALISUNGAN_COORDS.summitPeakMeters).toBe(629);
+    expect(MT_KALISUNGAN_COORDS.summitPeakMeters).toBe(760);
     expect(ACCUWEATHER_LOCATION_KEY).toBe('263792');
     expect(MAX_ACCUWEATHER_CALLS_PER_DAY).toBe(10);
   });
@@ -41,7 +41,7 @@ describe('Mt. Kalisungan Weather Service', () => {
     expect(result.category).toBe('thunderstorm');
     expect(result.advisory.level).toBe('danger');
     expect(result.advisory.badgeLabel).toContain('Thunderstorm');
-    expect(result.advisory.trailImpact).toContain('629m');
+    expect(result.advisory.trailImpact.toLowerCase()).toContain('summit');
     expect(result.advisory.trailImpact.toLowerCase()).toContain('lightning');
     expect(result.advisory.safetyAdvice.toLowerCase()).toContain('descend');
   });

@@ -16,7 +16,7 @@ export const KB_SEED: KbSeed[] = [
     title: "Mountain overview",
     category: "trail",
     content:
-      "Mount Kalisungan is a 622-metre mountain in Calauan, Laguna, Philippines (about 14.1475N, 121.3454E). It is beginner friendly, rated easy to moderate, and takes roughly 2 to 4 hours to the summit depending on trail and pace. The summit gives views of Laguna de Bay, Mount Banahaw and Mount Makiling.",
+      "Mount Kalisungan is a 760 MASL mountain in Calauan, Laguna, Philippines (about 14.1475N, 121.3454E). It is moderate overall, and takes roughly 2.5 to 4 hours to the summit depending on the published route and pace. The summit gives views of Laguna de Bay, Mount Banahaw and Mount Makiling.",
   },
   {
     title: "Trails and difficulty",

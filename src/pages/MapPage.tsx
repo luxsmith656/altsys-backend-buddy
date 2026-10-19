@@ -139,7 +139,7 @@ function MapInstanceBridge({ onReady }: { onReady: (map: L.Map) => void }) {
   return null;
 }
 
-// Official Summit Trail stations matching ActiveHikersLayer coordinates
+// Reference stations for the published route map.
 const OFFICIAL_STATIONS: OfficialStation[] = [
   { index: 1, name: 'Jump off: Start of Trail (0 km)', pos: LAMOT_2_REFERENCE_PATH[0] as [number, number], description: 'Main trailhead. Registration, safety briefing, and guide assignment.' },
   { index: 2, name: 'Station 1: Bamboo Grove (1 km)', pos: [14.1455, 121.3440], description: 'Cool rest point shaded by bamboo arches. Emergency kit available.' },
@@ -147,7 +147,7 @@ const OFFICIAL_STATIONS: OfficialStation[] = [
   { index: 4, name: 'Station 3: Mountain Spring (3 km)', pos: [14.1478, 121.3455], description: 'Water source rest point under giant trees.' },
   { index: 5, name: 'Station 4: Wilderness Ridge (4 km)', pos: [14.1483, 121.3458], description: 'Steep ridge rest area. pre-summit scenic viewing spot.' },
   { index: 6, name: 'Station 5: Summit Camp (5 km)', pos: [14.1488, 121.3460], description: 'Final staging area camp before the summit assault.' },
-  { index: 7, name: 'Mt. Kalisungan Peak (Summit - 6 km)', pos: [14.1495, 121.3462], description: 'Summit (629m). Breathtaking 360-degree views of Southern Tagalog.' },
+  { index: 7, name: 'Mt. Kalisungan Peak (Summit)', pos: [14.1495, 121.3462], description: 'Peak viewpoint. Follow the selected published route.' },
 ];
 
 function routeStationIcon(station: RouteStation, routeLabel: string) {

@@ -16,59 +16,6 @@ interface Review {
   photo_url?: string | null;
 }
 
-const fallbackReviews: Review[] = [
-  {
-    id: '1',
-    reviewer_name: 'Maria Santos',
-    rating: 5,
-    trail_name: 'Lamot 2 Trail',
-    review_text: 'The trail was absolutely breathtaking! The AI assistant helped us prepare perfectly — it even warned us about the slippery section near the summit.',
-    created_at: '2026-02-15',
-  },
-  {
-    id: '2',
-    reviewer_name: 'Juan Dela Cruz',
-    rating: 5,
-    trail_name: 'Lamot 1 Trail',
-    review_text: 'As a first-time hiker, the offline AI guide was a lifesaver. Even without signal on the mountain, I could ask questions and get accurate answers.',
-    created_at: '2026-01-20',
-  },
-  {
-    id: '3',
-    reviewer_name: 'Angela Reyes',
-    rating: 4,
-    trail_name: 'Sto. Tomas Trail',
-    review_text: 'Beautiful sunrise hike! The booking system was smooth and the QR code made check-in super fast. My family felt safe knowing the ranger tracking was active.',
-    created_at: '2025-12-10',
-  },
-  {
-    id: '4',
-    reviewer_name: 'Carlos Mendoza',
-    rating: 5,
-    trail_name: 'Lamot 2 Trail',
-    review_text: "I've hiked Kalisungan many times but this tracking system changed everything. Real-time elevation profile and AI chatbot with offline mode — like a personal guide!",
-    created_at: '2026-01-05',
-  },
-  {
-    id: '5',
-    reviewer_name: 'Patricia Villanueva',
-    rating: 5,
-    trail_name: 'Lamot 1 Trail',
-    review_text: 'Brought a group of 8 friends and the group booking feature was perfect. The system even reminded us what to bring based on the weather forecast.',
-    created_at: '2026-02-01',
-  },
-  {
-    id: '6',
-    reviewer_name: 'Roberto Aquino',
-    rating: 4,
-    trail_name: 'Sto. Tomas Trail',
-    review_text: 'Great trail conditions info from ranger reports. The AI assistant gave me detailed info about nearby food spots even when offline. Very impressed.',
-    created_at: '2025-11-25',
-  },
-];
-
-
-
 function formatDate(dateStr: string): string {
   const date = new Date(dateStr);
   return date.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
@@ -118,7 +65,7 @@ function ReviewCard({ review }: { review: Review }) {
 }
 
 export default function HikerReviews() {
-  const [reviews, setReviews] = useState<Review[]>(fallbackReviews);
+  const [reviews, setReviews] = useState<Review[]>([]);
   const [reviewIndex, setReviewIndex] = useState(0);
 
   const fetchReviews = async () => {
@@ -140,7 +87,7 @@ export default function HikerReviews() {
   useEffect(() => { fetchReviews(); }, []);
   useEffect(() => { setReviewIndex((index) => Math.min(index, Math.max(reviews.length - 1, 0))); }, [reviews.length]);
 
-  const activeReview = reviews[reviewIndex] || fallbackReviews[0];
+  const activeReview = reviews[reviewIndex];
   const showPrevious = () => setReviewIndex((index) => (index - 1 + reviews.length) % reviews.length);
   const showNext = () => setReviewIndex((index) => (index + 1) % reviews.length);
 
@@ -166,8 +113,8 @@ export default function HikerReviews() {
             Real experiences from adventurers who conquered Mount Kalisungan.
           </p>
 
-          {/* Average rating display */}
-          {(() => {
+          {/* Average rating display only exists when approved reviews exist. */}
+          {reviews.length > 0 && (() => {
             const avg = reviews.length > 0
               ? reviews.reduce((sum, r) => sum + r.rating, 0) / reviews.length
               : 0;
@@ -194,6 +141,7 @@ export default function HikerReviews() {
 
         {/* One approved trail story at a time keeps the landing page easy to scan. */}
         <div className="mx-auto max-w-4xl">
+          {!activeReview ? <p className="py-10 text-center text-muted-foreground">No reviews yet.</p> : <>
           <AnimatePresence mode="wait">
             <ReviewCard key={activeReview.id} review={activeReview} />
           </AnimatePresence>
@@ -206,6 +154,7 @@ export default function HikerReviews() {
               Next <ChevronRight className="h-4 w-4" />
             </Button>
           </div>
+          </>}
         </div>
 
       </div>

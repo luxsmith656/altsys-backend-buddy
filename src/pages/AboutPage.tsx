@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { usePricing } from '@/hooks/usePricing';
 import heroImage from '@/assets/mt-kalisungan-hero.jpg';
 import GettingHere from '@/components/landing/GettingHere';
+import { MOUNTAIN_FACTS, MOUNTAIN_ELEVATION_FEET_LABEL, MOUNTAIN_ELEVATION_LABEL } from '@/lib/mountainFacts';
 
 export default function AboutPage() {
   const { pricing } = usePricing();
@@ -30,7 +31,7 @@ export default function AboutPage() {
             About <span className="text-gradient">Mount Kalisungan</span>
           </h1>
           <p className="text-base sm:text-lg md:text-xl text-muted-foreground max-w-3xl mx-auto leading-relaxed">
-            Rising prominently in Calauan, Laguna, Mount Kalisungan (622 MASL) offers scenic agricultural trails,
+            Rising prominently in {MOUNTAIN_FACTS.place}, {MOUNTAIN_FACTS.name} ({MOUNTAIN_ELEVATION_LABEL}) offers scenic agricultural trails,
             an expansive cogon ridge, and sweeping 360-degree panoramic views of Southern Tagalog and the Seven Crater Lakes.
           </p>
 
@@ -49,14 +50,14 @@ export default function AboutPage() {
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <Card className="glass-card text-center p-4 border-primary/20">
             <div className="text-xs uppercase tracking-wider text-muted-foreground font-medium">Elevation</div>
-            <div className="text-2xl sm:text-3xl font-extrabold text-foreground mt-1">622 MASL</div>
-            <div className="text-[11px] text-muted-foreground mt-0.5">2,041 feet above sea level</div>
+            <div className="text-2xl sm:text-3xl font-extrabold text-foreground mt-1">{MOUNTAIN_ELEVATION_LABEL}</div>
+            <div className="text-[11px] text-muted-foreground mt-0.5">{MOUNTAIN_ELEVATION_FEET_LABEL} above sea level</div>
           </Card>
 
           <Card className="glass-card text-center p-4 border-primary/20">
             <div className="text-xs uppercase tracking-wider text-muted-foreground font-medium">Difficulty</div>
-            <div className="text-2xl sm:text-3xl font-extrabold text-foreground mt-1">Minor (3/9)</div>
-            <div className="text-[11px] text-muted-foreground mt-0.5">Trail Class 1–2 • Beginner-friendly</div>
+            <div className="text-2xl sm:text-3xl font-extrabold text-foreground mt-1">{MOUNTAIN_FACTS.difficulty}</div>
+            <div className="text-[11px] text-muted-foreground mt-0.5">Route-specific classification is published per trailhead.</div>
           </Card>
 
           <Card className="glass-card text-center p-4 border-primary/20">
@@ -67,8 +68,8 @@ export default function AboutPage() {
 
           <Card className="glass-card text-center p-4 border-emerald-500/30 bg-emerald-500/5">
             <div className="text-xs uppercase tracking-wider text-emerald-600 dark:text-emerald-400 font-semibold">River Crossings</div>
-            <div className="text-2xl sm:text-3xl font-extrabold text-emerald-600 dark:text-emerald-400 mt-1">Strictly 0</div>
-            <div className="text-[11px] text-muted-foreground mt-0.5">100% dry land & ridge trail</div>
+            <div className="text-2xl sm:text-3xl font-extrabold text-emerald-600 dark:text-emerald-400 mt-1">Check route</div>
+            <div className="text-[11px] text-muted-foreground mt-0.5">Surface details follow the published route.</div>
           </Card>
         </div>
       </section>
@@ -122,7 +123,7 @@ export default function AboutPage() {
                 <CardTitle className="text-lg">Brgy. Sto. Tomas</CardTitle>
               </CardHeader>
               <CardContent className="p-4 pt-1 text-xs text-muted-foreground space-y-2">
-                <p>The southern approach preferred by hikers seeking cross-country views or traverse routes towards Nagcarlan and San Pablo borders.</p>
+                <p>The southern approach for hikers seeking a cross-country route from the Sto. Tomas jump-off.</p>
                 <div className="font-medium text-foreground text-[11px]">Highlights: Expansive agricultural landscapes, traverse option.</div>
               </CardContent>
             </Card>
@@ -141,8 +142,8 @@ export default function AboutPage() {
               <h3 className="text-lg sm:text-xl font-bold text-foreground">Strict 0 River Crossings Guarantee</h3>
               <p className="text-sm text-muted-foreground leading-relaxed">
                 Unlike mountains that require traversing dangerous river beds or wading through flash-flood prone currents during wet weather,
-                <strong> Mount Kalisungan has strictly ZERO river crossings</strong>. The trail follows dry agricultural footpaths,
-                shaded orchard trails, and elevated grassland ridges all the way to the 622 MASL summit.
+                <strong> route conditions vary by published trail</strong>. Follow the current route and safety guidance,
+                shaded orchard trails, and elevated grassland ridges toward the summit.
               </p>
             </div>
           </div>
@@ -157,7 +158,7 @@ export default function AboutPage() {
             </div>
             <h2 className="text-2xl sm:text-3xl font-bold">Panoramic Summit Views</h2>
             <p className="text-sm sm:text-base text-muted-foreground">
-              Standing at 622 MASL on the Kalisungan summit grassland provides an unobstructed 360° vantage point over Southern Tagalog.
+              Standing at {MOUNTAIN_ELEVATION_LABEL} on the Kalisungan summit grassland provides an unobstructed 360° vantage point over Southern Tagalog.
             </p>
           </div>
 
@@ -293,7 +294,7 @@ export default function AboutPage() {
                 Are there any river crossings on Mt. Kalisungan?
               </h4>
               <p className="text-xs sm:text-sm text-muted-foreground leading-relaxed pl-5">
-                <strong className="text-emerald-500">Strictly ZERO.</strong> Mt. Kalisungan has 0 river crossings. The entire route is dry land consisting of orchard trails, dirt paths, and ridge grasslands with no river flash flood hazard.
+                Route conditions vary by published trail and weather. Check the selected route briefing and follow your accredited guide around wet or uneven sections.
               </p>
             </Card>
 
@@ -323,7 +324,7 @@ export default function AboutPage() {
                 What is the difficulty rating and summit elevation?
               </h4>
               <p className="text-xs sm:text-sm text-muted-foreground leading-relaxed pl-5">
-                The mountain stands at <strong>622 MASL</strong> (2,041 ft) and is classified as a <strong>Minor Hike (Difficulty 3/9, Trail Class 1–2)</strong>. It is beginner-friendly, typically taking 2.5 to 3.5 hours to reach the summit.
+                The mountain stands at <strong>{MOUNTAIN_ELEVATION_LABEL}</strong> ({MOUNTAIN_ELEVATION_FEET_LABEL}) and is classified overall as <strong>{MOUNTAIN_FACTS.difficulty}</strong>. Route-specific timing is shown from the selected published route record.
               </p>
             </Card>
 
@@ -356,7 +357,7 @@ export default function AboutPage() {
                 What trailhead entry points can I choose from?
               </h4>
               <p className="text-xs sm:text-sm text-muted-foreground leading-relaxed pl-5">
-                Three jump-offs are registered in Calauan, Laguna: <strong>Sitio Lamot 1</strong> (the main terminal with complete registration and parking), <strong>Sitio Lamot 2</strong> (plantation trail), and <strong>Brgy. Sto. Tomas</strong> (cross-country trail).
+                The registered jump-offs in Calauan, Laguna are <strong>Lamot 1</strong>, <strong>Lamot 2</strong>, and <strong>Sto. Tomas</strong>. Route distance, terrain, and timing follow the currently published trail record.
               </p>
             </Card>
 

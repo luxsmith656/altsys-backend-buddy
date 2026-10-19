@@ -33,7 +33,7 @@ const SEEDS: SeedSpec[] = [
   { email: 'lamot2@kalisungan.ph',  password: 'lamot123',   full_name: 'Lamot 2 Admin', role: 'admin', location_slugs: ['lamot-2'] },
   { email: 'stotomas@kalisungan.ph', password: 'stotomas123', full_name: 'Sto. Tomas Admin', role: 'admin', location_slugs: ['sto-tomas'] },
   { email: 'guide@kalisungan.ph',   password: 'guide123',   full_name: 'Test Guide',   role: 'guide',
-    guide: { phone: '+63 917 000 0001', specialty: 'Summit Trail', per_trip_fee: 500 } },
+    guide: { phone: '+63 917 000 0001', specialty: 'Lamot 2 Trail', per_trip_fee: 500 } },
   { email: 'hiker@kalisungan.ph',   password: 'hiker123',   full_name: 'Test Hiker',   role: 'hiker' },
 ];
 

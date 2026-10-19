@@ -442,7 +442,7 @@ export async function fetchUsersList(locationId?: string | null): Promise<UserAc
         role: 'guide',
         locationId: locationId || 'lamot1',
         locationName: 'Lamot 1',
-        specialty: 'Summit Trail, Historical Caves',
+        specialty: 'Lamot 2 Trail, Historical Caves',
         status: isGuideDeact ? 'deactivated' : 'available',
         accountStatus: isGuideDeact ? 'deactivated' : 'active',
         createdAt: '2026-06-01T00:00:00Z',

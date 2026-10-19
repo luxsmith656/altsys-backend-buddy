@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Check, EyeOff, Image as ImageIcon, Loader2, RefreshCw, Star } from 'lucide-react';
+import { Check, EyeOff, Image as ImageIcon, Loader2, RefreshCw, Star, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -101,6 +101,17 @@ export default function TrailReviewModeration({ locationId, isCentralAdmin = fal
     toast.success(isApproved ? 'Trail review is now visible on the landing page.' : 'Trail review is hidden from the landing page.');
   };
 
+  const deleteReview = async (review: TrailReview) => {
+    if (!window.confirm('Delete this review permanently? It will be removed from the landing page and cannot be restored.')) return;
+    setUpdatingId(review.id);
+    const { error } = await supabase.rpc('delete_trail_review' as any, { _review_id: review.id });
+    setUpdatingId(null);
+    if (error) { toast.error(`Could not delete review: ${error.message}`); return; }
+    setReviews((previous) => previous.filter((item) => item.id !== review.id));
+    setSelectedPhoto((current) => current?.id === review.id ? null : current);
+    toast.success('Review permanently deleted.');
+  };
+
   return (
     <section className="space-y-4">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
@@ -181,6 +192,9 @@ export default function TrailReviewModeration({ locationId, isCentralAdmin = fal
                         {updating ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />} Publish
                       </Button>
                     )}
+                    <Button size="sm" variant="destructive" onClick={() => void deleteReview(review)} disabled={updating} className="gap-1.5">
+                      {updating ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />} Delete
+                    </Button>
                   </div>
                 </CardContent>
               </Card>

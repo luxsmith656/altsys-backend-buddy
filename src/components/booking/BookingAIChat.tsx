@@ -452,7 +452,7 @@ function generateResponse(
       content:
         `🚫 **No River Crossings on Mt. Kalisungan:**\n\n` +
         `There are **absolutely NO river crossings** anywhere on Mt. Kalisungan!\n\n` +
-        `• The trail climbs through **coconut plantations, fruit orchards, forest woodlands, and an open cogon grassland ridge** directly to the summit (622m).\n` +
+        `• The trail climbs through **coconut plantations, fruit orchards, forest woodlands, and an open cogon grassland ridge** toward the 760 MASL summit.\n` +
         `• Hikers will **never** need to wade across rivers, creeks, or streams.\n` +
         `• Trail running shoes or standard hiking boots with good grip are ideal—no water shoes or aquatic gear needed.\n` +
         `• Water refill stations and fresh buko juice are sold by local farmers at rest huts along the lower trail.`,
@@ -476,10 +476,10 @@ function generateResponse(
     return {
       content:
         `Mt. Kalisungan has **3 trail routes**:\n\n` +
-        `🏔️ **Summit Route** — Most popular, 622m elevation (~3–4 hrs up)\n` +
-        `🌴 **Plantation Route** — Shaded coconut & fruit groves, scenic valley (NO river crossings!)\n` +
-        `🌄 **Ridge Route** — Best panoramic views along the ridgeline\n\n` +
-        `**Summit Route** is ~7km round trip. Total estimated time: **6–8 hours**.\n\n` +
+        `🏔️ **Lamot 2 Trail** — Published distance and terrain details come from the selected route\n` +
+        `🌴 **Lamot 1 Trail** — Published distance and terrain details come from the selected route\n` +
+        `🌄 **Sto. Tomas Trail** — Published distance and terrain details come from the selected route\n\n` +
+        `The mountain is 760 MASL. Use the selected published route for distance and time.\n\n` +
         `Which route interests you most?`,
       quickReplies: ['Summit Route details', 'Are there river crossings?', 'Which is easiest?', 'Can beginners do it?'],
     };

@@ -16,17 +16,15 @@ const KB: KBEntry[] = [
     keywords: ['trail', 'available', 'trails', 'route', 'routes', 'path', 'which'],
     answer: `**Mt. Kalisungan has 3 trails:**
 
-1. **Summit Trail (Hard)** – 3.2 km, steep ascent through forest canopy to 622m summit
-2. **Plantation Trail (Easy)** – 2.1 km, scenic coconut & fruit groves, great for beginners, max 350m elevation (strictly NO river crossings)
-3. **Ridge Trail (Moderate)** – 2.8 km, panoramic ridge views, 480m elevation`,
+1. **Lamot 1 Trail** – published distance and terrain details come from the selected route.
+2. **Lamot 2 Trail** – published distance and terrain details come from the selected route.
+3. **Sto. Tomas Trail** – published distance and terrain details come from the selected route.`,
   },
   {
     keywords: ['summit', 'trail', 'top', 'peak'],
-    answer: `**Summit Trail (Hard):**
+    answer: `**Lamot 2 Trail:**
 
-- Distance: 3.2 km one way
-- Elevation gain: ~622m
-- Duration: 2–4 hours to summit
+- Distance, elevation along the trail, and duration: use the published route record
 - Features: Dense forest canopy, steep switchbacks, rocky sections near the top
 - Best for: Experienced hikers looking for a workout
 - ⚠️ Can be very slippery when wet — bring trekking poles`,
@@ -43,7 +41,7 @@ const KB: KBEntry[] = [
   },
   {
     keywords: ['plantation', 'orchard', 'valley', 'easy', 'flat', 'gentle'],
-    answer: `**Plantation & Valley Trail (Easy):**
+    answer: `**Lamot 1 Trail:**
 
 - Distance: 2.1 km one way
 - Max elevation: 350m
@@ -54,7 +52,7 @@ const KB: KBEntry[] = [
   },
   {
     keywords: ['ridge', 'trail', 'panoramic', 'view', 'views'],
-    answer: `**Ridge Trail (Moderate):**
+    answer: `**Sto. Tomas Trail:**
 
 - Distance: 2.8 km one way
 - Elevation: ~480m
@@ -85,7 +83,7 @@ const KB: KBEntry[] = [
     answer: `**Footwear Guide:**
 
 - ✅ Trail running shoes or hiking boots with good grip
-- ✅ Ankle-high boots recommended for Summit Trail
+- ✅ Ankle-high boots recommended for steep sections on the published routes
 - ❌ Do NOT wear slippers, sandals, or flat sneakers
 - The trail can be muddy and slippery, especially after rain
 - Break in new shoes before the hike to avoid blisters`,
@@ -127,7 +125,7 @@ Afternoon thunderstorms can occur year-round.`,
     answer: `**Temperature on Mt. Kalisungan:**
 
 - Base (trailhead): 25–35°C depending on season
-- Summit (622m): Usually 3–5°C cooler than base
+- Summit: Usually 3–5°C cooler than the trailhead
 - Early morning (5–7 AM): 20–25°C — most comfortable
 - Midday: Can exceed 32°C on exposed sections
 
@@ -157,7 +155,7 @@ Afternoon thunderstorms can occur year-round.`,
 🦅 **Animals:**
 - Philippine eagle owl
 - Various bird species (kingfishers, sunbirds)
-- Diverse butterfly species along Plantation Trail
+- Diverse butterfly species along the published forest routes
 - Monitor lizards (rare)
 
 ⚠️ **Watch out for:**
@@ -242,13 +240,12 @@ Afternoon thunderstorms can occur year-round.`,
     keywords: ['difficulty', 'beginner', 'easy', 'hard', 'moderate', 'level', 'fitness', 'fit'],
     answer: `**Trail Difficulty Levels:**
 
-- 🟢 **Plantation Trail (Easy)** – Best for beginners, families, 2.1 km
-- 🟡 **Ridge Trail (Moderate)** – Some steep sections, 2.8 km
-- 🔴 **Summit Trail (Hard)** – Steep ascent, requires good fitness, 3.2 km
+- Route difficulty is published per jump-off: Lamot 1, Lamot 2, or Sto. Tomas.
+- Use the selected route record for its current distance, terrain, and expected time.
 
 **Fitness tips:**
-- No prior hiking experience needed for Plantation Trail
-- Start jogging/walking 2 weeks before for Summit Trail
+- Ask the assigned guide which published route sections match your experience.
+- Start jogging/walking 2 weeks before a steep route if your guide recommends it.
 - Stretch before and after the hike
 - Listen to your body — rest when needed`,
   },
@@ -256,22 +253,22 @@ Afternoon thunderstorms can occur year-round.`,
     keywords: ['kid', 'kids', 'child', 'children', 'family', 'baby', 'toddler'],
     answer: `**Hiking with Kids:**
 
-- ✅ **Plantation Trail** is family-friendly (Easy, 2.1 km)
+- ✅ Ask the guide which published route is suitable for your family group.
 - Children 7+ can handle it with supervision
-- ❌ Summit Trail not recommended for young children
+- ❌ Steep sections may not be suitable for young children
 - Bring extra snacks and water for kids
 - Keep them close — some sections have drop-offs
-- Consider a carrier for toddlers on Plantation Trail only
+- Consider a carrier for toddlers only where the assigned guide confirms the terrain is suitable
 - Start very early to avoid midday heat`,
   },
   {
     keywords: ['senior', 'elderly', 'old', 'age', 'knee', 'joint'],
     answer: `**For Senior Hikers:**
 
-- ✅ **Plantation Trail** is gentle and doable for most fitness levels
+- ✅ Ask the guide which published route is gentlest for your fitness level
 - Use trekking poles for stability
 - Take frequent breaks
-- Avoid Summit Trail if you have knee/joint issues
+- Avoid steep sections if you have knee/joint issues
 - Start early when it's cooler
 - Bring personal medication
 - Hike at your own pace — it's not a race!`,
@@ -297,7 +294,7 @@ Afternoon thunderstorms can occur year-round.`,
     keywords: ['elevation', 'height', 'altitude', 'summit', 'meters', 'tall'],
     answer: `**Mt. Kalisungan Elevation:**
 
-- Summit: **622 meters** above sea level
+- Mountain summit: **760 MASL** (2,493 ft)
 - Location: Calauan, Laguna, Philippines
 - Coordinates: approximately 14.1475°N, 121.3454°E
 - Prominence: ~400m from trailhead
@@ -422,7 +419,7 @@ Afternoon thunderstorms can occur year-round.`,
     answer: `**About Mt. Kalisungan:**
 
 - Located in Calauan, Laguna, Philippines
-- Elevation: 622 meters above sea level
+- Mountain summit: 760 MASL; route terrain elevations are published separately
 - The name "Kalisungan" comes from the local dialect
 - Part of the Sierra Madre mountain range foothills
 - Rich in biodiversity and tropical forest ecosystems
@@ -438,8 +435,8 @@ Afternoon thunderstorms can occur year-round.`,
 
 📸 **Best photo spots:**
 - Summit — 360° panoramic views (best at sunrise)
-- Ridge Trail — dramatic landscape shots
-- Plantation Trail — coconut groves and forest canopy
+- Lamot 1 — route-specific landscape shots
+- Lamot 2 and Sto. Tomas — forest and jump-off scenery
 - Sunrise from the summit is the #1 photo op
 
 ⏰ **Best times:**
@@ -558,7 +555,7 @@ Afternoon thunderstorms can occur year-round.`,
 - Hire a local guide for safety
 - Tell someone your expected return time
 - Bring a whistle and fully charged phone
-- Stick to Plantation Trail (easiest, most trafficked)
+- Follow the selected published route and your assigned guide's safety instructions
 - Join organized group hikes through Facebook/mountaineering clubs`,
   },
 

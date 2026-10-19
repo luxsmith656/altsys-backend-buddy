@@ -15,14 +15,8 @@ type FeaturedReview = {
   photo_url?: string | null;
 };
 
-const fallback: FeaturedReview = {
-  id: 'featured-placeholder', reviewer_name: 'A fellow Kalisungan hiker',
-  review_text: 'Published trail stories from the Kalisungan community will appear here.',
-  trail_name: 'Lamot 2 Trail', rating: 5, photo_url: null,
-};
-
 export default function FeaturedHiker() {
-  const [reviews, setReviews] = useState<FeaturedReview[]>([fallback]);
+  const [reviews, setReviews] = useState<FeaturedReview[]>([]);
   const [index, setIndex] = useState(0);
 
   useEffect(() => {
@@ -32,7 +26,7 @@ export default function FeaturedHiker() {
       .eq('is_approved', true).eq('review_type', 'trail').order('created_at', { ascending: false }).limit(12)
       .then(({ data }) => {
         if (!active) return;
-        setReviews(Array.isArray(data) && data.length ? data as unknown as FeaturedReview[] : [fallback]);
+        setReviews(Array.isArray(data) ? data as unknown as FeaturedReview[] : []);
         setIndex(0);
       });
     void loadPublishedStories();
@@ -42,10 +36,11 @@ export default function FeaturedHiker() {
     return () => { active = false; void supabase.removeChannel(channel); };
   }, []);
 
-  const review = reviews[index] || fallback;
+  const review = reviews[index];
   const previous = () => setIndex((current) => (current - 1 + reviews.length) % reviews.length);
   const next = () => setIndex((current) => (current + 1) % reviews.length);
 
+  if (!review) return <section className="px-4 py-16 text-center text-muted-foreground">No reviews yet.</section>;
   return (
     <section className="px-4 py-16" aria-labelledby="featured-hiker-title">
       <div className="container mx-auto max-w-5xl">
