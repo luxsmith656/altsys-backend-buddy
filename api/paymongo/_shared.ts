@@ -1,5 +1,3 @@
-import { createClient } from '@supabase/supabase-js';
-
 export type ApiRequest = {
   method?: string;
   headers: Record<string, string | string[] | undefined>;
@@ -26,11 +24,28 @@ export function getHeader(req: ApiRequest, name: string) {
   return Array.isArray(value) ? value[0] : value;
 }
 
-export function databaseClient(accessToken?: string) {
+export function databaseConfig() {
   const url = env('SUPABASE_URL') || env('VITE_SUPABASE_URL');
   const key = env('SUPABASE_SERVICE_ROLE_KEY') || env('SUPABASE_SECRET_KEY');
-  if (!url || !key) return null;
-  return createClient(url, key, { global: accessToken ? { headers: { Authorization: `Bearer ${accessToken}` } } : undefined, auth: { persistSession: false, autoRefreshToken: false } });
+  return url && key ? { url, key } : null;
+}
+
+export async function supabaseRequest(path: string, init: RequestInit = {}) {
+  const config = databaseConfig();
+  if (!config) throw new Error('Server database configuration is missing.');
+  const headers = new Headers(init.headers);
+  headers.set('apikey', config.key);
+  headers.set('Authorization', `Bearer ${config.key}`);
+  if (init.body && !headers.has('Content-Type')) headers.set('Content-Type', 'application/json');
+  return fetch(`${config.url}/rest/v1/${path}`, { ...init, headers });
+}
+
+export async function supabaseAuthUser(token: string) {
+  const config = databaseConfig();
+  if (!config) return null;
+  const response = await fetch(`${config.url}/auth/v1/user`, { headers: { apikey: config.key, Authorization: `Bearer ${token}` } });
+  if (!response.ok) return null;
+  return response.json() as Promise<{ id: string; email?: string }>;
 }
 
 export function parseNotes(value: unknown): Record<string, unknown> {

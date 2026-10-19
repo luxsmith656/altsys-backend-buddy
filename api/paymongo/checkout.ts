@@ -1,4 +1,4 @@
-import { databaseClient, env, getHeader, parseNotes, send, type ApiRequest, type ApiResponse } from './_shared';
+import { env, getHeader, parseNotes, send, supabaseAuthUser, supabaseRequest, type ApiRequest, type ApiResponse } from './_shared';
 
 export default async function handler(req: ApiRequest, res: ApiResponse) {
   if (req.method === 'OPTIONS') return send(res, { ok: true });
@@ -7,14 +7,14 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
   const token = getHeader(req, 'authorization')?.replace(/^Bearer\s+/i, '');
   if (!paymongoSecret || !token) return send(res, { error: 'PayMongo checkout is not configured.' }, 503);
 
-  const db = databaseClient(token);
-  if (!db) return send(res, { error: 'Server database configuration is missing.' }, 503);
-  const { data: authData, error: authError } = await db.auth.getUser(token);
-  if (authError || !authData.user) return send(res, { error: 'Authentication required.' }, 401);
+  const authUser = await supabaseAuthUser(token);
+  if (!authUser) return send(res, { error: 'Authentication required.' }, 401);
   const input = (req.body && typeof req.body === 'object' ? req.body : {}) as { bookingId?: string; email?: string; name?: string; phone?: string };
   if (!input.bookingId) return send(res, { error: 'bookingId is required' }, 400);
-  const { data: booking, error } = await db.from('bookings').select('id,user_id,booking_date,notes').eq('id', input.bookingId).eq('user_id', authData.user.id).maybeSingle();
-  if (error || !booking) return send(res, { error: 'Booking not found' }, 404);
+  const bookingResponse = await supabaseRequest(`bookings?select=id,user_id,booking_date,notes&id=eq.${encodeURIComponent(input.bookingId)}&user_id=eq.${encodeURIComponent(authUser.id)}`);
+  const bookings = await bookingResponse.json().catch(() => []);
+  const booking = Array.isArray(bookings) ? bookings[0] : null;
+  if (!bookingResponse.ok || !booking) return send(res, { error: 'Booking not found' }, 404);
   const meta = parseNotes(booking.notes);
   const amount = Number(meta.totalFee || 0);
   if (!Number.isFinite(amount) || amount <= 0) return send(res, { error: 'Booking amount is invalid' }, 422);
@@ -41,6 +41,6 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
   const sessionId = body?.data?.id;
   const checkoutUrl = body?.data?.attributes?.checkout_url;
   if (!sessionId || !checkoutUrl) return send(res, { error: 'PayMongo returned an incomplete checkout session.' }, 502);
-  await db.from('bookings').update({ notes: JSON.stringify({ ...meta, paymentMethod: 'paymongo', paymentStatus: 'partial', paymongoCheckoutSessionId: sessionId, paymongoCheckoutCreatedAt: new Date().toISOString() }) }).eq('id', booking.id);
+  await supabaseRequest(`bookings?id=eq.${encodeURIComponent(booking.id)}`, { method: 'PATCH', headers: { Prefer: 'return=minimal' }, body: JSON.stringify({ notes: JSON.stringify({ ...meta, paymentMethod: 'paymongo', paymentStatus: 'partial', paymongoCheckoutSessionId: sessionId, paymongoCheckoutCreatedAt: new Date().toISOString() }) }) });
   return send(res, { checkoutUrl, sessionId });
 }
