@@ -10,20 +10,21 @@ export type EmailJsConfig = {
 export const DEFAULT_EMAILJS_SERVICE_ID = 'service_nwhz8gy';
 export const DEFAULT_EMAILJS_PUBLIC_KEY = 'KX8y6feyx4ifea6_I';
 export const DEFAULT_EMAILJS_BOOKING_TEMPLATE_ID = 'template_quhvfai';
-export const DEFAULT_EMAILJS_PASSWORD_RESET_TEMPLATE_ID = 'template_dcs8uaj';
+// The account's template_dcs8uaj is OTP, not password recovery.
+export const DEFAULT_EMAILJS_PASSWORD_RESET_TEMPLATE_ID = '';
 
 export function emailJsConfigFromEnv(
   getEnv: (name: string) => string | undefined,
   templateEnvName: string,
   defaultTemplateId: string,
-  forbiddenTemplateId?: string,
+  forbiddenTemplateIds: string[] = [],
 ): EmailJsConfig {
   const configuredTemplateId = clean(getEnv(templateEnvName));
   return {
     serviceId: clean(getEnv('EMAILJS_SERVICE_ID')) || DEFAULT_EMAILJS_SERVICE_ID,
     // A copy-pasted secret must not make booking confirmations use the reset
     // template (or the reverse). Fall back to the known template instead.
-    templateId: configuredTemplateId && configuredTemplateId !== forbiddenTemplateId
+    templateId: configuredTemplateId && !forbiddenTemplateIds.includes(configuredTemplateId)
       ? configuredTemplateId
       : defaultTemplateId,
     publicKey: clean(getEnv('EMAILJS_PUBLIC_KEY')) || DEFAULT_EMAILJS_PUBLIC_KEY,

@@ -4,9 +4,9 @@ EmailJS is the primary provider for password-reset and booking-confirmation mail
 
 - Gmail service: `service_nwhz8gy`
 - Booking template: `template_quhvfai`
-- Password-reset template: `template_dcs8uaj`
+- Password-reset template: configure `EMAILJS_PASSWORD_RESET_TEMPLATE_ID` with a dedicated reset template. `template_dcs8uaj` is the account's OTP template and must not be used for booking confirmations or password recovery.
 
-The reset template is branded for Mt. Kalisungan and expects `to_name`, `to_email`, `email`, and `reset_link`. The booking template receives both its existing fields (`visitor_name`, `booking_id`, `hike_date`, `trail_name`, `checkin_time`, `name`, `email`) and the newer confirmation fields.
+The dedicated reset template should expect `to_name`, `to_email`, `email`, and `reset_link`. The booking template receives both its existing fields (`visitor_name`, `booking_id`, `hike_date`, `trail_name`, `checkin_time`, `name`, `email`) and the newer confirmation fields.
 
 ## Runtime
 

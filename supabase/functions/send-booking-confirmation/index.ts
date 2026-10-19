@@ -7,7 +7,12 @@ const db = createClient(env('SUPABASE_URL'), env('SUPABASE_SERVICE_ROLE_KEY'), {
 Deno.serve(bookingConfirmationHandler({
   apiKey: env('RESENDAPI') || env('RESEND_API_KEY'),
   from: env('RESEND_FROM_EMAIL'),
-  emailJs: emailJsConfigFromEnv((name) => Deno.env.get(name), 'EMAILJS_BOOKING_TEMPLATE_ID', DEFAULT_EMAILJS_BOOKING_TEMPLATE_ID, DEFAULT_EMAILJS_PASSWORD_RESET_TEMPLATE_ID),
+  emailJs: emailJsConfigFromEnv(
+    (name) => Deno.env.get(name),
+    'EMAILJS_BOOKING_TEMPLATE_ID',
+    DEFAULT_EMAILJS_BOOKING_TEMPLATE_ID,
+    [DEFAULT_EMAILJS_PASSWORD_RESET_TEMPLATE_ID, 'template_dcs8uaj'],
+  ),
   workerSecret: env('BOOKING_EMAIL_WORKER_SECRET'),
   store: createBookingEmailStore(db), fetcher: fetch,
   async userForToken(token) {
