@@ -1,6 +1,6 @@
 export type ApiRequest = {
   method?: string;
-  headers: Record<string, string | string[] | undefined>;
+  headers?: Record<string, string | string[] | undefined>;
   body?: unknown;
   rawBody?: string | Uint8Array;
 };
@@ -21,7 +21,8 @@ export function send(res: ApiResponse, body: unknown, status = 200) {
 }
 
 export function getHeader(req: ApiRequest, name: string) {
-  const value = req.headers[name.toLowerCase()] ?? req.headers[name];
+  const headers = req.headers || {};
+  const value = headers[name.toLowerCase()] ?? headers[name];
   return Array.isArray(value) ? value[0] : value;
 }
 
