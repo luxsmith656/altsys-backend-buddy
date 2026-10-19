@@ -29,11 +29,11 @@ export default function TrailGallery() {
   const move = (delta: number) => setActive((current) => current === null ? current : (current + delta + images.length) % images.length);
 
   return (
-    <section id="trail-gallery" className="px-4 py-16">
-      <div className="container mx-auto grid grid-cols-2 gap-3 md:grid-cols-3 md:gap-5">
+    <section id="trail-gallery" className="px-4 py-12 sm:py-16">
+      <div className="container mx-auto grid max-w-6xl grid-cols-2 gap-3 sm:gap-4 md:grid-cols-3 lg:grid-cols-4">
         {images.map((image, index) => (
-          <motion.button key={image.id} type="button" initial={{ opacity: 0 }} whileInView={{ opacity: 1 }} viewport={{ once: true }} onClick={() => setActive(index)} className={`group relative overflow-hidden rounded-2xl ${index === 0 ? 'md:col-span-2 md:row-span-2' : ''}`} aria-label={`Open ${image.alt}`}>
-            <img src={image.src} alt={image.alt} loading="lazy" decoding="async" className={`w-full object-cover transition-transform duration-500 group-hover:scale-105 ${index === 0 ? 'h-64 md:h-full' : 'h-48 md:h-56'}`} />
+          <motion.button key={image.id} type="button" initial={{ opacity: 0 }} whileInView={{ opacity: 1 }} viewport={{ once: true }} onClick={() => setActive(index)} className="group relative aspect-[4/3] min-w-0 overflow-hidden rounded-xl border border-border/30 bg-secondary/20 shadow-sm" aria-label={`Open ${image.alt}`}>
+            <img src={image.src} alt={image.alt} loading="lazy" decoding="async" className="h-full w-full object-contain p-1 transition-transform duration-500 group-hover:scale-[1.03]" />
           </motion.button>
         ))}
       </div>
