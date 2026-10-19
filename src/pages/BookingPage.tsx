@@ -1147,6 +1147,8 @@ export default function BookingPage() {
         hasMinors,
         minorCount: hasMinors ? minorCount : undefined,
         preferredGuide: selectedGuide?.full_name,
+        referralGuideId: selectedGuide?.id,
+        referralCode: selectedGuide?.referral_code || undefined,
         entryPoint: selectedLocation?.name || startLocationId,
         assignedTrailZoneId: publishedRoute?.id,
         assignedTrailName: publishedRoute?.name || officialTrailNameFromLocation(

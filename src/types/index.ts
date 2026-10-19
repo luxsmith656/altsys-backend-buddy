@@ -67,6 +67,8 @@ export interface BookingMeta {
   hasMinors?: boolean;
   minorCount?: number;
   preferredGuide?: string;
+  referralGuideId?: string;
+  referralCode?: string;
   hikeType?: string;
   hikeTime?: string;
   // Payment screenshot (Firebase URL)

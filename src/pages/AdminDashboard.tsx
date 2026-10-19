@@ -1833,13 +1833,17 @@ export default function AdminDashboard() {
         : null;
       if (direct) return direct;
       // Older bookings may only have the referral name in encoded notes.
-      const legacyName = parseMeta(acceptBooking.notes).preferredGuide;
+      const meta = parseMeta(acceptBooking.notes) as any;
+      const legacyId = meta.referralGuideId;
+      const byStoredId = legacyId ? guides.find((guide) => guide.id === legacyId) : null;
+      if (byStoredId) return byStoredId;
+      const legacyName = meta.preferredGuide;
       return legacyName
         ? guides.find((guide) => guide.name.trim().toLowerCase() === String(legacyName).trim().toLowerCase()) ?? null
         : null;
     }, [acceptBooking, guides],
   );
-  const isReferredBooking = Boolean(referredGuide);
+  const isReferredBooking = Boolean(referredGuide || (acceptBooking && (acceptBooking.referral_guide_id || (parseMeta(acceptBooking.notes) as any).referralGuideId || (parseMeta(acceptBooking.notes) as any).preferredGuide)));
 
   useEffect(() => {
     if (referredGuide) setSelectedGuide(referredGuide.id);
@@ -2335,7 +2339,7 @@ export default function AdminDashboard() {
                               <>
                                 <Button size="sm" className="gap-1.5 bg-primary hover:bg-primary/90 text-primary-foreground"
                                   onClick={() => { setAcceptDialogId(b.id); setSelectedGuide(''); setSelectedTrailZoneId(''); }}>
-                                  <UserCheck className="h-3.5 w-3.5" /> {b.referral_guide_id || parseMeta(b.notes).preferredGuide ? 'Review Referral' : 'Accept & Assign Guide'}
+                                  <UserCheck className="h-3.5 w-3.5" /> {(b.referral_guide_id || (parseMeta(b.notes) as any).referralGuideId || parseMeta(b.notes).preferredGuide) ? 'Review Referral' : 'Accept & Assign Guide'}
                                 </Button>
                                 <AlertDialog>
                                   <AlertDialogTrigger asChild>
