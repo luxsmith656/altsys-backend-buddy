@@ -31,6 +31,8 @@ interface Props {
   routeActions?: ReactNode;
   /** Local admins monitor only; route browsing/editing belongs to Central Admin. */
   showRoutePanel?: boolean;
+  focusBookingId?: string | null;
+  focusSosId?: string | null;
 }
 
 interface ActiveSession {
@@ -101,7 +103,7 @@ export default function RealtimeMonitorMap(props: Props) {
   return <ScopedMonitorMap key={props.locationId ?? 'all'} {...props} />;
 }
 
-function ScopedMonitorMap({ locationId, canAddCheckpoints = false, tools, routeActions, showRoutePanel = !locationId }: Props) {
+function ScopedMonitorMap({ locationId, canAddCheckpoints = false, tools, routeActions, showRoutePanel = !locationId, focusBookingId, focusSosId }: Props) {
   const { locations } = useLocations();
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<L.Map | null>(null);
@@ -120,6 +122,7 @@ function ScopedMonitorMap({ locationId, canAddCheckpoints = false, tools, routeA
   const [progress, setProgress] = useState<Record<string, { checkpoint_id: string; created_at: string }[]>>({});
   const [loading, setLoading] = useState(true);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [selectedSosId, setSelectedSosId] = useState<string | null>(null);
   const [panelOpen, setPanelOpen] = useState(false);
   const [placingCheckpoint, setPlacingCheckpoint] = useState(false);
   const placingRef = useRef(false);
@@ -488,6 +491,21 @@ function ScopedMonitorMap({ locationId, canAddCheckpoints = false, tools, routeA
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [locationId]);
 
+  useEffect(() => {
+    const target = focusSosId
+      ? sosAlerts.find((alert) => alert.id === focusSosId)
+      : focusBookingId
+        ? sosAlerts.find((alert) => alert.booking_id === focusBookingId)
+        : null;
+    if (!target) return;
+    setSelectedSosId(target.id);
+    setSelectedId(null);
+    setPanelOpen(true);
+    const latitude = Number(target.latitude ?? target.pushed_latitude);
+    const longitude = Number(target.longitude ?? target.pushed_longitude);
+    if (Number.isFinite(latitude) && Number.isFinite(longitude)) mapRef.current?.setView([latitude, longitude], 17);
+  }, [focusBookingId, focusSosId, sosAlerts]);
+
   /* ── realtime subscriptions ── */
   useEffect(() => {
     const refresh = coalescedRefresh(loadData);
@@ -537,7 +555,7 @@ function ScopedMonitorMap({ locationId, canAddCheckpoints = false, tools, routeA
         zIndexOffset: 4000,
         title: `SOS ${alert.reporter_role || 'participant'}`,
         icon: L.divIcon({ className: '', html: '<div style="width:34px;height:34px;border-radius:50%;background:#dc2626;border:4px solid #fff;box-shadow:0 0 0 7px rgba(220,38,38,.28),0 2px 8px rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;color:#fff;font-weight:800;font-size:16px">!</div>', iconSize: [34, 34], iconAnchor: [17, 17] }),
-      }).bindPopup(`<strong style="color:#dc2626">SOS · ${esc(alert.reporter_name || alert.reporter_role || 'participant')}</strong><br/><small>Role: ${esc(alert.reporter_role || 'participant')}<br/>Status: ${esc(alert.status)}<br/>First push: ${esc(pressedAt)}<br/>Push/last-known location: ${latitude.toFixed(5)}, ${longitude.toFixed(5)}${latestAt ? `<br/>Latest GPS: ${esc(latestAt)}` : ''}${alert.booking_id ? `<br/>Booking: ${esc(String(alert.booking_id).slice(0, 8))}` : ''}${alert.message ? `<br/>${esc(alert.message)}` : ''}</small>`);
+      }).bindPopup(`<strong style="color:#dc2626">SOS · ${esc(alert.reporter_name || alert.reporter_role || 'participant')}</strong><br/><small>Role: ${esc(alert.reporter_role || 'participant')}<br/>Status: ${esc(alert.status)}<br/>First push: ${esc(pressedAt)}<br/>Push/last-known location: ${latitude.toFixed(5)}, ${longitude.toFixed(5)}${latestAt ? `<br/>Latest GPS: ${esc(latestAt)}` : ''}${alert.booking_id ? `<br/>Booking: ${esc(String(alert.booking_id).slice(0, 8))}` : ''}${alert.message ? `<br/>${esc(alert.message)}` : ''}</small>`).on('click', () => { setSelectedSosId(alert.id); setSelectedId(null); setPanelOpen(true); });
       sosLayer.current!.addLayer(marker);
     });
 
@@ -776,6 +794,7 @@ function ScopedMonitorMap({ locationId, canAddCheckpoints = false, tools, routeA
     phone: session.guidePhone, emergencyContact: session.emergencyContact, medicalNotes: session.medicalNotes,
   }));
   const selected = groups.find((group) => group.id === selectedId);
+  const selectedSos = sosAlerts.find((alert) => alert.id === selectedSosId);
   const locate = (group: LiveMapGroup) => {
     if (gpsPresentation(group, clock).hasFix) mapRef.current?.setView([group.lat!, group.lng!], 17);
   };
@@ -783,6 +802,7 @@ function ScopedMonitorMap({ locationId, canAddCheckpoints = false, tools, routeA
   const handleStationFilter = (nextId: string) => {
     setStationFilterId(nextId);
     setSelectedId(null);
+    setSelectedSosId(null);
     if (nextId === 'all') {
       mapRef.current?.setView(DEFAULT_CENTER, 14);
       return;
@@ -852,6 +872,22 @@ function ScopedMonitorMap({ locationId, canAddCheckpoints = false, tools, routeA
           {tools}
         </>}
         panel={<>
+        {selectedSos ? <div className="space-y-3 p-3 text-sm">
+          <div className="flex items-start justify-between gap-2">
+            <div><p className="font-semibold text-destructive">SOS alert</p><p className="text-xs text-muted-foreground">{selectedSos.reporter_name || selectedSos.reporter_role || 'Participant'}</p></div>
+            <Button size="sm" variant="ghost" onClick={() => setSelectedSosId(null)}>Back to groups</Button>
+          </div>
+          <div className="space-y-1.5 rounded-lg border border-destructive/30 bg-destructive/[0.06] p-3">
+            <p><strong>Status:</strong> {selectedSos.status}</p>
+            <p><strong>Role:</strong> {selectedSos.reporter_role || 'participant'}</p>
+            <p><strong>First SOS:</strong> {selectedSos.created_at ? new Date(selectedSos.created_at).toLocaleString('en-PH', { timeZone: 'Asia/Manila' }) : 'Not recorded'}</p>
+            <p><strong>SOS location:</strong> {selectedSos.pushed_latitude != null ? `${Number(selectedSos.pushed_latitude).toFixed(5)}, ${Number(selectedSos.pushed_longitude).toFixed(5)}` : 'Not recorded'}</p>
+            <p><strong>Latest location:</strong> {selectedSos.latitude != null ? `${Number(selectedSos.latitude).toFixed(5)}, ${Number(selectedSos.longitude).toFixed(5)}` : 'No later fix'}</p>
+            {selectedSos.last_location_at && <p><strong>Latest GPS time:</strong> {new Date(selectedSos.last_location_at).toLocaleString('en-PH', { timeZone: 'Asia/Manila' })}</p>}
+            {selectedSos.booking_id && <p><strong>Booking:</strong> {String(selectedSos.booking_id).slice(0, 8)}</p>}
+          </div>
+          {selectedSos.message && <p className="text-xs text-muted-foreground">{selectedSos.message}</p>}
+        </div> : <>
         {loadError && <p role="alert" className="live-map-empty">Live data could not be fully loaded. <button type="button" onClick={() => void loadData()}>Retry</button></p>}
         <ul className="live-map-group-list" aria-label="Active groups">
           {groups.map((group) => {
@@ -867,7 +903,7 @@ function ScopedMonitorMap({ locationId, canAddCheckpoints = false, tools, routeA
         {!loading && !groups.length && !loadError && <p className="live-map-empty">No active groups at this location.</p>}
         {selected ? <LiveGroupDetails group={selected} now={clock} onLocate={() => locate(selected)} />
           : groups.length > 0 && <p className="live-map-empty live-map-muted">No group selected</p>}
-      </>}>
+      </>}</>}>
         <div ref={containerRef} className="live-map-surface" aria-label="Live group positions" />
         <div className="live-map-tools" role="group" aria-label="Map controls">
           <button type="button" className="live-map-icon" aria-label="Zoom in" title="Zoom in" onClick={() => mapRef.current?.zoomIn()}><Plus size={18} /></button>

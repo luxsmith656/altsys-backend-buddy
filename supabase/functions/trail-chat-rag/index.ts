@@ -143,6 +143,37 @@ function manilaNowLabel(): string {
 function isDate(s: unknown): s is string {
   return typeof s === "string" && /^\d{4}-\d{2}-\d{2}$/.test(s) && !Number.isNaN(Date.parse(s));
 }
+
+function pastBookingRequest(message: string): string | null {
+  const text = String(message ?? '').trim();
+  if (!/\b(book|booking|reserve|reservation|hike|schedule)\b/i.test(text)) return null;
+
+  const today = manilaToday();
+  const relative = text.match(/\b(yesterday|today|last\s+(?:night|week|month)|the\s+past\s+(?:day|week|month))\b/i)?.[0];
+  if (relative) return relative;
+
+  const iso = text.match(/\b(20\d{2}-\d{2}-\d{2})\b/);
+  if (iso && isDate(iso[1]) && iso[1] <= today) return iso[1];
+
+  const numeric = text.match(/\b(\d{1,2})[/-](\d{1,2})[/-](20\d{2})\b/);
+  if (numeric) {
+    const [, month, day, year] = numeric;
+    const candidate = `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+    if (isDate(candidate) && candidate <= today) return `${month}/${day}/${year}`;
+  }
+
+  // Date.parse handles natural English dates such as "October 18, 2026".
+  // Only use it when the message contains a year, avoiding false positives
+  // from ordinary trail questions that mention a month name.
+  if (/\b20\d{2}\b/.test(text)) {
+    const parsed = Date.parse(text);
+    if (!Number.isNaN(parsed)) {
+      const candidate = new Intl.DateTimeFormat('en-CA', { timeZone: TZ }).format(new Date(parsed));
+      if (isDate(candidate) && candidate <= today) return candidate;
+    }
+  }
+  return null;
+}
 function validateRange(start: unknown, end: unknown): { start: string; end: string } | { error: string } {
   const s = isDate(start) ? start : manilaToday();
   const e = isDate(end) ? end : s;
@@ -950,6 +981,10 @@ serve(async (req) => {
 
     const lastUser = [...messages].reverse().find((m: any) => m?.role === 'user')?.content ?? '';
     if (!validAssistantQuery(lastUser)) return textEvent('Please ask a specific Mount Kalisungan question.');
+    const pastDate = pastBookingRequest(lastUser);
+    if (pastDate && (scope.role === 'hiker' || scope.role === 'guest')) {
+      return textEvent(`I can't help book ${pastDate} because that date has already passed or is today. Please choose a booking date starting tomorrow (${new Date(Date.parse(`${manilaToday()}T00:00:00Z`) + 86400000).toISOString().slice(0, 10)} in Asia/Manila).`);
+    }
     if (isMutationRequest(lastUser)) return textEvent(READ_ONLY_REFUSAL);
     if (scope.role === 'guide' && isGuidePiiRequest(lastUser)) return textEvent(GUIDE_PII_REFUSAL);
     if (!isFinanceRole(scope.role) && PRIVATE_PAYMENT_RE.test(lastUser) && !isOwnPaymentQuestion(lastUser)) return textEvent(FINANCE_REFUSAL);

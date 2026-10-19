@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import type { CSSProperties } from 'react';
 import { MapContainer, Polyline, Marker, Popup, useMap } from 'react-leaflet';
 import OfflineLayer from '@/components/map/OfflineLayer';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import L from 'leaflet';
 import {
   routeStationsFromMetadata,
@@ -164,6 +164,9 @@ export default function MapPage() {
   const { role, user } = useAuth();
   const { activeLocationId, loading: locationsLoading, isSuperAdmin, locations } = useLocations();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const focusBookingId = searchParams.get('bookingId');
+  const focusSosId = searchParams.get('sosId');
 
   useEffect(() => {
     document.body.classList.add('map-workspace-open');
@@ -821,7 +824,7 @@ export default function MapPage() {
       {canMonitorAll && activeMapTab === 'tracker' && !simulationMode ? (
         locationsLoading || (!isSuperAdmin && !activeLocationId)
           ? <p className="live-map-empty" role="status">Loading your assigned location...</p>
-          : <RealtimeMonitorMap locationId={isSuperAdmin ? null : activeLocationId} canAddCheckpoints={role === 'admin' || role === 'super_admin'} tools={mapTools} routeActions={routeActions} showRoutePanel={role === 'super_admin'} />
+          : <RealtimeMonitorMap locationId={isSuperAdmin ? null : activeLocationId} canAddCheckpoints={role === 'admin' || role === 'super_admin'} tools={mapTools} routeActions={routeActions} showRoutePanel={role === 'super_admin'} focusBookingId={focusBookingId} focusSosId={focusSosId} />
       ) : (
         <div className="live-map-page-body">
           <MapWorkspace title={simulationMode ? 'Simulation groups' : 'My hike'} open={workspacePanelOpen} onOpenChange={setWorkspacePanelOpen}

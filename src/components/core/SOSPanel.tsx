@@ -83,6 +83,37 @@ export default function SOSPanel({ compact = false }: SOSPanelProps) {
     }
   }, [sosStorageKey]);
 
+  // The reporter's device may still have the active SOS cached after an admin
+  // resolves it. Mirror the server status so the next SOS is never blocked by
+  // stale local state, including after a page reload.
+  useEffect(() => {
+    const alertId = activeSos?.serverAlertId;
+    if (!alertId || !user?.id) return;
+    let disposed = false;
+    const clearResolved = () => {
+      if (disposed) return;
+      if (sosStorageKey) localStorage.removeItem(sosStorageKey);
+      void removeQueuedSos(activeSos.clientAlertId);
+      setActiveSos(null);
+      setSent(false);
+    };
+    const checkStatus = async () => {
+      if (!navigator.onLine) return;
+      const { data } = await supabase.from('emergency_alerts' as any).select('status').eq('id', alertId).maybeSingle();
+      if (data && !['open', 'acknowledged'].includes(String((data as any).status))) clearResolved();
+    };
+    void checkStatus();
+    const channel = supabase.channel(`sos-status-${alertId}`)
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'emergency_alerts', filter: `id=eq.${alertId}` }, (payload) => {
+        if (!['open', 'acknowledged'].includes(String((payload.new as any)?.status))) clearResolved();
+      })
+      .subscribe();
+    return () => {
+      disposed = true;
+      void supabase.removeChannel(channel);
+    };
+  }, [activeSos?.clientAlertId, activeSos?.serverAlertId, sosStorageKey, user?.id]);
+
   useEffect(() => {
     const onSynced = (event: Event) => {
       const detail = (event as CustomEvent<{ clientAlertId?: string; alertId?: string | null }>).detail;

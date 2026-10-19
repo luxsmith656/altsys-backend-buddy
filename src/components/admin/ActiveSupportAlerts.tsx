@@ -90,7 +90,7 @@ export default function ActiveSupportAlerts({ locationId }: Props) {
             {alert.pushed_latitude != null && <p className="text-xs">Push location: {Number(alert.pushed_latitude).toFixed(5)}, {Number(alert.pushed_longitude).toFixed(5)}</p>}
             {alert.latitude != null && <p className="text-xs">Latest location: {Number(alert.latitude).toFixed(5)}, {Number(alert.longitude).toFixed(5)}{alert.last_location_at ? ` · ${new Date(alert.last_location_at).toLocaleString('en-PH', { timeZone: 'Asia/Manila' })}` : ''}</p>}
             <div className="mt-2 flex gap-2">
-              {alert.booking_id && <Button size="sm" variant="outline" asChild><Link to={`/admin?tab=operations&bookingId=${alert.booking_id}`}>View booking</Link></Button>}
+              {alert.booking_id && <Button size="sm" variant="outline" asChild><Link to={`/map?bookingId=${encodeURIComponent(alert.booking_id)}&sosId=${encodeURIComponent(alert.id)}`}>View booking</Link></Button>}
               {alert.status === 'open' && <Button size="sm" variant="outline" onClick={() => void updateAlert(alert.id, 'acknowledged')}>Acknowledge</Button>}
               <Button size="sm" variant="outline" onClick={() => void updateAlert(alert.id, 'resolved')}><Check className="mr-1 h-3.5 w-3.5" /> Resolve</Button>
             </div>
