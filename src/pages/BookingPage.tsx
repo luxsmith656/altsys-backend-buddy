@@ -66,6 +66,7 @@ import { useLocations } from '@/hooks/useLocations';
 import LocationPreview from '@/components/booking/LocationPreview';
 import AdminWalkInRegistrationDialog from '@/components/admin/AdminWalkInRegistrationDialog';
 import AdminWalkInDesk from '@/components/admin/AdminWalkInDesk';
+import PaymongoQrPayment from '@/components/booking/PaymongoQrPayment';
 import KaliContextPanel from '@/components/kali/KaliContextPanel';
 import { useKaliContext } from '@/hooks/useKaliContext';
 import { HIKE_TIME_OPTIONS, getGuideFeePerGuide, getHikeTypeLabel, isValidHikeTime, normalizeHikeType, type HikeType } from '@/lib/hikeSchedule';
@@ -1283,6 +1284,18 @@ export default function BookingPage() {
         }
       }
 
+      if (paymentOption === 'online') {
+        const { data: checkout, error: checkoutError } = await supabase.functions.invoke('paymongo-checkout', {
+          body: { bookingId: data.id, email: emailAddress, name: fullName, phone: phoneNumber },
+        });
+        if (!checkoutError && checkout?.checkoutUrl) {
+          window.location.assign(checkout.checkoutUrl);
+          return;
+        }
+        if (checkoutError) console.warn('PayMongo checkout unavailable; keeping QR fallback:', checkoutError.message);
+        toast.info('Booking saved. Use the QR Ph payment option and submit your receipt for verification.');
+      }
+
       setBooking({
         ...data,
         hikeTime,
@@ -2360,7 +2373,7 @@ export default function BookingPage() {
                         <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-4">
                           <div className="grid grid-cols-2 gap-2">
                             {([
-                              { value: 'gcash' as OnlinePayMethod, Icon: Smartphone, label: 'GCash' },
+                                { value: 'gcash' as OnlinePayMethod, Icon: Smartphone, label: 'QR Ph / GCash' },
                               { value: 'bank_transfer' as OnlinePayMethod, Icon: Building2, label: 'Bank Transfer' },
                             ]).map(({ value, Icon, label }) => (
                               <button
@@ -2382,9 +2395,12 @@ export default function BookingPage() {
                           <div className="rounded-xl border border-primary/20 bg-primary/5 p-4 text-sm space-y-1">
                             {onlinePayMethod === 'gcash' ? (
                               <>
-                                <p className="font-semibold text-primary mb-2">GCash Payment Details</p>
-                                <p>Number: <strong>{GCASH_DETAILS.number}</strong></p>
-                                <p>Name: <strong>{GCASH_DETAILS.name}</strong></p>
+                                <PaymongoQrPayment amount={totalFee} />
+                                <div className="text-xs text-muted-foreground pt-1">
+                                  <p className="font-semibold text-primary mb-1">Alternative account details</p>
+                                  <p>Number: <strong>{GCASH_DETAILS.number}</strong></p>
+                                  <p>Name: <strong>{GCASH_DETAILS.name}</strong></p>
+                                </div>
                               </>
                             ) : (
                               <>

@@ -1,6 +1,6 @@
 export type AppRole = 'admin' | 'ranger' | 'hiker' | 'guide' | 'super_admin' | 'mdrrmo';
 export type BookingStatus = 'pending' | 'confirmed' | 'cancelled' | 'adjustment_pending';
-export type BookingPaymentMethod = 'onsite' | 'gcash' | 'bank_transfer' | 'cash' | 'online';
+export type BookingPaymentMethod = 'onsite' | 'gcash' | 'bank_transfer' | 'cash' | 'online' | 'paymongo';
 
 /** Companion with full demographic details */
 export interface CompanionDetail {
@@ -77,6 +77,10 @@ export interface BookingMeta {
   additionalPaymentStatus?: 'pending' | 'paid';
   additionalPaymentDue?: number;
   paymentMethod?: BookingPaymentMethod;
+  paymongoCheckoutSessionId?: string;
+  paymongoCheckoutCreatedAt?: string;
+  paymongoPaymentId?: string;
+  paymongoPaidAt?: string;
   paymentReference?: string;
   amountPaid?: number;
   cashTendered?: number;

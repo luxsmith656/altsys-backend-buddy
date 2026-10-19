@@ -52,6 +52,7 @@ import { isMissingTotalAmountColumn, withoutTotalAmount } from '@/lib/walkInBook
 import { useLocations } from '@/hooks/useLocations';
 import { officialTrailNameFromLocation } from '@/lib/mapTrailheads';
 import { getBusyGuideIdsForSlot } from '@/lib/guideAvailability';
+import PaymongoQrPayment from '@/components/booking/PaymongoQrPayment';
 
 interface AdminWalkInDeskProps {
   locationId: string | null;
@@ -771,6 +772,9 @@ export default function AdminWalkInDesk({
                 )}
 
                 {/* GCash / Reference */}
+                {paymentMethod === 'gcash' && (
+                  <PaymongoQrPayment amount={totalAmount} />
+                )}
                 {paymentMethod !== 'cash' && (
                   <div className="space-y-1">
                     <Label className="text-xs">Payment Reference / Transaction ID</Label>

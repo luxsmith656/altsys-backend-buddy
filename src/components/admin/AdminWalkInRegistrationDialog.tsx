@@ -49,6 +49,7 @@ import { isMissingTotalAmountColumn, withoutTotalAmount } from '@/lib/walkInBook
 import { useLocations } from '@/hooks/useLocations';
 import { officialTrailNameFromLocation } from '@/lib/mapTrailheads';
 import { getBusyGuideIdsForSlot } from '@/lib/guideAvailability';
+import PaymongoQrPayment from '@/components/booking/PaymongoQrPayment';
 
 interface AdminWalkInRegistrationDialogProps {
   open: boolean;
@@ -651,6 +652,10 @@ export default function AdminWalkInRegistrationDialog({
                   </span>
                 </div>
               </div>
+
+              {paymentMethod === 'gcash' && (
+                <PaymongoQrPayment amount={totalAmount} />
+              )}
             </div>
 
             <DialogFooter className="flex flex-row justify-end gap-2 pt-2">
