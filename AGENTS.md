@@ -1,0 +1,2 @@
+# Architecture rules
+- Keep the EmailJS password-recovery handler server-only with injectable Auth and email dependencies; this permits privacy tests without exposing credentials or generating real recovery tokens.
