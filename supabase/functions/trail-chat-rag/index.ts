@@ -43,7 +43,7 @@ const ANON_KEY = (Deno.env.get("SUPABASE_ANON_KEY") ?? "").trim();
 const PRIVATE_PAYMENT_RE =
   /\b(revenue|earnings|income|sales|profit|collections?|payout|payouts|billing|invoice|invoices|receipt|receipts|transaction|transactions|refunds?|who paid|paid users?|other (?:user|hiker|guest)s?['’]? (?:payment|paid)|payment (?:history|records?|list|logs?|status of)|reference number|account number)\b/i;
 const DATA_INTENT_RE =
-  /\b(how many|how much|number of|count|hiker|hikers|climber|climbers|book(?:ed|ing|ings)?|reserv\w*|slot|slots|capacity|full|busy|crowded|available|availability|attendance|checked[- ]in|check[- ]in|no[- ]show|turnout|schedule[d]?|today|tomorrow|tonight|this week|next week|weekend|this month|revenue|earnings|income|collections?)\b/i;
+  /\b(how many|how much|number of|count|hiker|hikers|climber|climbers|book(?:ed|ing|ings)?|booking details?|my booking|my guide|assigned guide|lead hiker|receipt|reserv\w*|slot|slots|capacity|full|busy|crowded|available|availability|attendance|checked[- ]in|check[- ]in|no[- ]show|turnout|schedule[d]?|today|tomorrow|tonight|this week|next week|weekend|this month|revenue|earnings|income|collections?)\b/i;
 
 const TRAIL_INTENT_RE =
   /\b(trail|trails|route|routes|summit|ridge|river|condition|conditions|closed|closure|open|status|muddy|slippery|landslide)\b/i;
@@ -179,7 +179,7 @@ const TOOLS = [
     },
   },
   { type: "function", function: { name: "my_profile", description: "The signed-in user's own profile, with safe contact fields only.", parameters: { type: "object", properties: {}, additionalProperties: false } } },
-  { type: "function", function: { name: "my_bookings", description: "The signed-in user's own bookings and assigned guide summary.", parameters: { type: "object", properties: { status: { type: "string" } }, additionalProperties: false } } },
+  { type: "function", function: { name: "my_bookings", description: "The signed-in user's own live booking records, full booking details, assigned guide profiles and assignment status. Never returns another hiker's booking.", parameters: { type: "object", properties: { status: { type: "string" } }, additionalProperties: false } } },
   { type: "function", function: { name: "my_active_session", description: "The signed-in user's current active hike session and latest location.", parameters: { type: "object", properties: {}, additionalProperties: false } } },
   { type: "function", function: { name: "list_guides", description: "Guides in the verified admin trailhead scope. Use a name query to narrow results.", parameters: { type: "object", properties: { query: { type: "string" }, location_id: { type: "string" } }, additionalProperties: false } } },
   { type: "function", function: { name: "guide_details", description: "A safe profile and duty summary for one guide in the verified scope.", parameters: { type: "object", properties: { guide_id: { type: "string" }, query: { type: "string" } }, additionalProperties: false } } },
@@ -254,7 +254,7 @@ async function runRecordTool(db: any, scope: AiRoleScope, name: string, args: an
       const { data: guides } = guideIds.length
         ? await db.from('guides').select('id, full_name, phone, status, photo_url').in('id', guideIds)
         : { data: [] };
-      result.push({ ...row, notes: undefined, lead_hiker: { user_id: userId }, assigned_guides: assignments ?? [], guides: guides ?? [] });
+      result.push({ ...row, lead_hiker: { user_id: userId }, assigned_guides: assignments ?? [], guides: guides ?? [] });
     }
     const capped = capRows(result);
     return { bookings: redactSecrets(capped.rows), total: capped.total, truncated: capped.truncated };
@@ -687,29 +687,43 @@ async function buildUserContext(authHeader: string | null): Promise<string> {
     const { data: { user } } = await db.auth.getUser();
     if (!user) return "";
 
+    const readDb = SERVICE_ROLE
+      ? createClient(SUPABASE_URL, SERVICE_ROLE, { auth: { persistSession: false, autoRefreshToken: false } })
+      : db;
     const [{ data: profile }, { data: bookings }] = await Promise.all([
-      db.from("profiles").select("full_name, phone, age, emergency_contact").eq("user_id", user.id).maybeSingle(),
-      db.from("bookings")
-        .select("booking_date, group_size, status, notes, created_at")
+      readDb.from("profiles").select("*").eq("user_id", user.id).maybeSingle(),
+      readDb.from("bookings")
+        .select("*")
         .eq("user_id", user.id)
         .order("booking_date", { ascending: false })
         .limit(1000),
     ]);
 
     const lines: string[] = [];
-    lines.push(`Signed-in hiker: ${profile?.full_name || "(name not set)"}${profile?.age ? `, age ${profile.age}` : ""}.`);
+    lines.push(`Signed-in hiker account: user_id=${user.id}; name=${profile?.full_name || "(name not set)"}${profile?.age ? `; age=${profile.age}` : ""}.`);
     if (profile?.emergency_contact) lines.push(`Emergency contact on file: yes.`);
     if (bookings && bookings.length) {
-      lines.push("Their own booking history (all available records, most recent first):");
+      lines.push("AUTHORITATIVE OWN BOOKING DIRECTORY (live database; only this signed-in hiker's records):");
       for (const b of bookings) {
-        let meta: any = {};
-        try { meta = JSON.parse(b.notes || "{}"); } catch { meta = {}; }
-        const hikeTime = typeof meta?.hikeTime === 'string' ? meta.hikeTime.slice(0, 32) : '';
-        const hikeType = typeof meta?.hikeType === 'string' ? meta.hikeType.slice(0, 32) : '';
+        const { data: assignments } = await readDb.from('booking_assignments')
+          .select('guide_id, status, decided_at')
+          .eq('booking_id', b.id).limit(3);
+        const guideIds = (assignments ?? []).map((assignment: any) => assignment.guide_id).filter(Boolean);
+        const { data: guides } = guideIds.length
+          ? await readDb.from('guides').select('id, full_name, phone, status, photo_url').in('id', guideIds)
+          : { data: [] };
+        const guideById = new globalThis.Map((guides ?? []).map((guide: any) => [guide.id, guide]));
+        const assignedGuides = (assignments ?? []).map((assignment: any) => ({
+          ...assignment,
+          guide: guideById.get(assignment.guide_id) ?? null,
+        }));
+        const safeBooking = redactSecrets({
+          ...b,
+          lead_hiker: { user_id: user.id, full_name: profile?.full_name ?? null },
+          assigned_guides: assignedGuides,
+        });
         lines.push(
-          `- ${b.booking_date} · ${b.group_size} pax · status=${b.status}` +
-          (hikeTime ? ` · start ${hikeTime}` : "") +
-          (hikeType ? ` · ${hikeType} hike` : ""),
+          `- booking_id=${b.id} · ${JSON.stringify(safeBooking)}`,
         );
       }
     } else {
@@ -839,7 +853,7 @@ KEY INFORMATION:
 - Give general safety guidance without turning remembered values into official system rules.
 
 AUDIENCE CONTEXT:
-- When a "HIKER CONTEXT" block is present it describes the signed-in hiker and THEIR OWN bookings. Use it naturally — greet them by first name, reference their upcoming or past hikes, and tailor advice to their group size and age.
+- When a "HIKER CONTEXT" block is present it is the authoritative live database directory for the signed-in hiker's own bookings. Use the exact booking_id, date, status, guide profile, assignment status, route, companions and other returned fields. Never say you do not know or lack access when the requested record is present there; never reveal another hiker's record.
 - When a "STAFF OPERATIONAL CONTEXT" block is present, it is already filtered by the verified role and trailhead scope. Local admins may use their own trailhead's booking directory and aggregate revenue for operations. Central admins may compare all trailheads using aggregate data. MDRRMO is safety-first and has no revenue access.
 - Never cross a local admin's scope, and never invent a booking, revenue figure, identity, contact, medical note or payment record that is not in the scoped context.
 - When discussing a booking, copy its exact booking_id, date, status, group size, and profile name from a live tool or context result. If the record is absent, say that no matching record is available; never create an example booking or substitute a shortened or fabricated reference.
