@@ -2580,9 +2580,9 @@ export default function AdminDashboard() {
                         </Select>
                       )}
                     </div>
-                    <div className="flex flex-col gap-2 pt-2 min-[380px]:flex-row">
-                      <Button variant="outline" className="flex-1" onClick={() => { setAcceptDialogId(null); setSelectedTrailZoneId(''); }} disabled={acceptSaving}>Cancel</Button>
-                      <Button className="flex-1 gap-2" onClick={handleAcceptBooking} disabled={!(selectedGuide || referredGuide?.id) || (acceptBooking && calculateFees(Number(acceptBooking.group_size) || 1).guidesNeeded > 1 && !selectedAdditionalGuide) || acceptRouteOptions.length === 0 || (acceptNeedsRouteSelection && !selectedTrailZoneId) || acceptSaving}>
+                    <div className="flex flex-col gap-2 pt-2 min-[520px]:flex-row">
+                      <Button variant="outline" className="min-w-0 flex-1 whitespace-normal break-words text-center leading-tight" onClick={() => { setAcceptDialogId(null); setSelectedTrailZoneId(''); }} disabled={acceptSaving}>Cancel</Button>
+                      <Button className="min-w-0 flex-1 gap-2 whitespace-normal break-words text-center leading-tight" onClick={handleAcceptBooking} disabled={!(selectedGuide || referredGuide?.id) || (acceptBooking && calculateFees(Number(acceptBooking.group_size) || 1).guidesNeeded > 1 && !selectedAdditionalGuide) || acceptRouteOptions.length === 0 || (acceptNeedsRouteSelection && !selectedTrailZoneId) || acceptSaving}>
                         {acceptSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
                         {isReferredBooking ? 'Accept & Notify Referred Guide' : 'Confirm & Notify Guide'}
                       </Button>
