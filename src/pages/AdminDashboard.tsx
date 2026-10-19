@@ -1269,12 +1269,13 @@ export default function AdminDashboard() {
 
   /* ── Accept booking + assign guide ── */
   const handleAcceptBooking = async () => {
-    if (!acceptDialogId || !selectedGuide || acceptSaving) return;
+    const effectiveGuideId = selectedGuide || referredGuide?.id || '';
+    if (!acceptDialogId || !effectiveGuideId || acceptSaving) return;
     setAcceptSaving(true);
     const booking = allTabBookings.find((b) => b.id === acceptDialogId) || pendingBookings.find((b) => b.id === acceptDialogId);
     // selectedGuide now stores guide.id; resolve display name
-    const guideRow = guides.find((g) => g.id === selectedGuide);
-    const guideName = guideRow?.name ?? selectedGuide;
+    const guideRow = guides.find((g) => g.id === effectiveGuideId);
+    const guideName = guideRow?.name ?? effectiveGuideId;
     const routeInfo = resolveAssignedTrail(booking, selectedTrailZoneId || undefined);
     if (routeInfo.routes.length > 1 && !routeInfo.route) {
       toast.error('Select the official route for this hiker before confirming.');
@@ -1300,7 +1301,7 @@ export default function AdminDashboard() {
     });
     const requiredGuides = calculateFees(Number(booking?.group_size) || 1).guidesNeeded;
     if (result.success && requiredGuides > 1) {
-      if (!selectedAdditionalGuide || selectedAdditionalGuide === selectedGuide) {
+      if (!selectedAdditionalGuide || selectedAdditionalGuide === effectiveGuideId) {
         toast.error('Select a second different guide for groups over five hikers.');
         setAcceptSaving(false);
         return;
@@ -1824,6 +1825,17 @@ export default function AdminDashboard() {
     [acceptBooking, activeLocationId, officialRoutesForLocation],
   );
   const acceptNeedsRouteSelection = acceptRouteOptions.length > 1;
+  const referredGuide = useMemo(
+    () => acceptBooking?.referral_guide_id
+      ? guides.find((guide) => guide.id === acceptBooking.referral_guide_id) ?? null
+      : null,
+    [acceptBooking?.referral_guide_id, guides],
+  );
+  const isReferredBooking = Boolean(referredGuide);
+
+  useEffect(() => {
+    if (referredGuide) setSelectedGuide(referredGuide.id);
+  }, [referredGuide?.id]);
 
   useEffect(() => {
     let cancelled = false;
@@ -2486,7 +2498,7 @@ export default function AdminDashboard() {
                 <Card className="glass-card max-h-[calc(100dvh-1rem)] w-full max-w-md overflow-y-auto">
                   <CardHeader>
                     <CardTitle className="flex items-center gap-2">
-                      <UserCheck className="h-5 w-5 text-primary" /> Accept & Assign Guide
+                      <UserCheck className="h-5 w-5 text-primary" /> {isReferredBooking ? 'Review Referred Booking' : 'Accept & Assign Guide'}
                     </CardTitle>
                   </CardHeader>
                   <CardContent className="space-y-4 mt-0">
@@ -2500,17 +2512,24 @@ export default function AdminDashboard() {
                       );
                     })()}
                     <div className="space-y-2">
-                      <Label>Assign Guide</Label>
-                      <Select value={selectedGuide} onValueChange={setSelectedGuide}>
-                        <SelectTrigger><SelectValue placeholder="Select a guide…" /></SelectTrigger>
-                        <SelectContent>
-                          {assignableGuides.map((g) => (
-                            <SelectItem key={g.id} value={g.id}>
-                              {g.name} — <span className="capitalize">{g.status || 'available'}</span> ({routeDisplayName(null, g.location_id)})
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                        <Label>{isReferredBooking ? 'Referred Guide' : 'Assign Guide'}</Label>
+                        {isReferredBooking ? (
+                          <div className="rounded-md border border-primary/25 bg-primary/10 px-3 py-2 text-sm">
+                            <span className="font-semibold">{referredGuide?.name}</span>
+                            <span className="text-muted-foreground"> — selected by referral</span>
+                          </div>
+                        ) : (
+                          <Select value={selectedGuide} onValueChange={setSelectedGuide}>
+                            <SelectTrigger><SelectValue placeholder="Select a guide…" /></SelectTrigger>
+                            <SelectContent>
+                              {assignableGuides.map((g) => (
+                                <SelectItem key={g.id} value={g.id}>
+                                  {g.name} — <span className="capitalize">{g.status || 'available'}</span> ({routeDisplayName(null, g.location_id)})
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        )}
                     </div>
                     {acceptBooking && calculateFees(Number(acceptBooking.group_size) || 1).guidesNeeded > 1 && (
                       <div className="space-y-2">
@@ -2518,7 +2537,7 @@ export default function AdminDashboard() {
                         <Select value={selectedAdditionalGuide} onValueChange={setSelectedAdditionalGuide}>
                           <SelectTrigger><SelectValue placeholder="Select a second available guide…" /></SelectTrigger>
                           <SelectContent>
-                            {assignableGuides.filter((g) => g.id !== selectedGuide).map((g) => (
+                          {assignableGuides.filter((g) => g.id !== (selectedGuide || referredGuide?.id)).map((g) => (
                               <SelectItem key={g.id} value={g.id}>{g.name} — <span className="capitalize">{g.status || 'available'}</span> ({routeDisplayName(null, g.location_id)})</SelectItem>
                             ))}
                           </SelectContent>
@@ -2551,9 +2570,9 @@ export default function AdminDashboard() {
                     </div>
                     <div className="flex flex-col gap-2 pt-2 min-[380px]:flex-row">
                       <Button variant="outline" className="flex-1" onClick={() => { setAcceptDialogId(null); setSelectedTrailZoneId(''); }} disabled={acceptSaving}>Cancel</Button>
-                      <Button className="flex-1 gap-2" onClick={handleAcceptBooking} disabled={!selectedGuide || (acceptBooking && calculateFees(Number(acceptBooking.group_size) || 1).guidesNeeded > 1 && !selectedAdditionalGuide) || acceptRouteOptions.length === 0 || (acceptNeedsRouteSelection && !selectedTrailZoneId) || acceptSaving}>
+                      <Button className="flex-1 gap-2" onClick={handleAcceptBooking} disabled={!(selectedGuide || referredGuide?.id) || (acceptBooking && calculateFees(Number(acceptBooking.group_size) || 1).guidesNeeded > 1 && !selectedAdditionalGuide) || acceptRouteOptions.length === 0 || (acceptNeedsRouteSelection && !selectedTrailZoneId) || acceptSaving}>
                         {acceptSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
-                        Confirm & Notify Guide
+                        {isReferredBooking ? 'Accept & Notify Referred Guide' : 'Confirm & Notify Guide'}
                       </Button>
                     </div>
                   </CardContent>
