@@ -188,9 +188,10 @@ export default function SOSPanel({ compact = false }: SOSPanelProps) {
     try {
       if (activeSos.serverAlertId && navigator.onLine) {
         await cancelEmergencyAlert(activeSos.serverAlertId);
-      } else {
-        await removeQueuedSos(activeSos.clientAlertId);
+      } else if (activeSos.serverAlertId) {
+        await enqueue({ kind: 'sos_cancel', payload: { alertId: activeSos.serverAlertId, clientAlertId: activeSos.clientAlertId, userId: user?.id } });
       }
+      await removeQueuedSos(activeSos.clientAlertId);
       if (sosStorageKey) localStorage.removeItem(sosStorageKey);
       setActiveSos(null);
       setSent(false);

@@ -91,7 +91,18 @@ export async function updateEmergencyAlertLocation(alertId: string, coords: { la
 
 export async function cancelEmergencyAlert(alertId: string) {
   const { error } = await supabase.rpc('cancel_own_emergency_alert' as any, { p_alert_id: alertId });
-  if (error) throw error;
+  if (!error) return;
+  // Keep cancellation usable while a project has an older function cache. The
+  // migration also grants reporters a status-only update policy.
+  const fallback = await supabase.from('emergency_alerts' as any)
+    .update({ status: 'cancelled', resolved_at: new Date().toISOString() })
+    .eq('id', alertId)
+    .eq('user_id', (await supabase.auth.getUser()).data.user?.id ?? '')
+    .in('status', ['open', 'acknowledged'])
+    .select('id')
+    .maybeSingle();
+  if (fallback.error) throw fallback.error;
+  if (!fallback.data) throw error;
 }
 
 export async function loadEmergencyAlerts(locationId?: string | null) {

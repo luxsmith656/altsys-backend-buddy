@@ -11,6 +11,18 @@ function isSchemaCacheError(error: unknown) {
 }
 
 async function pushOne(item: any) {
+  if (item.kind === 'sos_cancel') {
+    const { error } = await supabase.rpc('cancel_own_emergency_alert' as any, { p_alert_id: item.payload.alertId });
+    if (error) {
+      const fallback = await supabase.from('emergency_alerts' as any)
+        .update({ status: 'cancelled', resolved_at: new Date().toISOString() })
+        .eq('id', item.payload.alertId)
+        .eq('user_id', item.payload.userId)
+        .in('status', ['open', 'acknowledged']);
+      if (fallback.error) throw fallback.error;
+    }
+    return;
+  }
   if (item.kind === 'sos') {
     const p = item.payload;
     let latest = { latitude: p.latitude, longitude: p.longitude };

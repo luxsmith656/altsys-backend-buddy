@@ -48,7 +48,7 @@ export interface TileRecord {
 
 export interface QueueItem {
   id?: number;
-  kind: 'session' | 'points' | 'ping' | 'station' | 'sos';
+  kind: 'session' | 'points' | 'ping' | 'station' | 'sos' | 'sos_cancel';
   payload: any;
   createdAt: number;
   attempts: number;
