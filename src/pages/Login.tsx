@@ -5,14 +5,12 @@ import { useAuth } from '@/hooks/useAuth';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Loader2, Mail } from 'lucide-react';
 import { toast } from 'sonner';
 import logo from '@/assets/logo.png';
 import { signInWithFirebaseGoogle } from '@/lib/firebase-auth';
 import { isFirebaseConfigured } from '@/lib/firebase';
 import { resolvePostLoginPath } from '@/lib/post-login';
-import { ResetPasswordDialog } from '@/components/auth/ResetPasswordDialog';
 import PasswordInput from '@/components/auth/PasswordInput';
 import { isEmailConfirmationRequired, resendSignupVerification } from '@/lib/authEmail';
 
@@ -24,7 +22,6 @@ export default function Login() {
   const { signIn } = useAuth();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const [resetOpen, setResetOpen] = useState(false);
   const [unverified, setUnverified] = useState(false);
   const [resendBusy, setResendBusy] = useState(false);
   const [resendCooldown, setResendCooldown] = useState(0);
@@ -112,18 +109,7 @@ export default function Login() {
               <Input id="email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@example.com" required />
             </div>
             <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <Label htmlFor="password">Password</Label>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setResetOpen(true);
-                  }}
-                  className="text-xs text-primary hover:underline font-medium transition-colors"
-                >
-                  Forgot password?
-                </button>
-              </div>
+              <Label htmlFor="password">Password</Label>
               <PasswordInput id="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="••••••••" required />
             </div>
             <Button type="submit" className="w-full" disabled={loading}>
@@ -185,7 +171,6 @@ export default function Login() {
         </div>
       </div>
 
-      <ResetPasswordDialog open={resetOpen} onOpenChange={setResetOpen} defaultEmail={email} />
     </div>
   );
 }
