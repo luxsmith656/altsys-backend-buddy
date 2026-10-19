@@ -247,7 +247,55 @@ export default function HikerDashboard() {
           .eq('user_id', user.id)
           .eq('review_type', 'trail'),
       ]);
-      setBookings(b || []);
+      // Guide identity is relational data, not a best-effort value hidden in
+      // legacy booking notes. Hydrate only this hiker's own bookings so the
+      // receipt can always show the live assignment without exposing anyone
+      // else's booking records.
+      let ownedBookings = b || [];
+      const bookingIds = ownedBookings.map((booking) => booking.id).filter(Boolean);
+      if (bookingIds.length) {
+        const { data: assignments } = await supabase
+          .from('booking_assignments')
+          .select('booking_id, guide_id, status, decided_at')
+          .in('booking_id', bookingIds);
+        const guideIds = [...new Set((assignments || []).map((assignment: any) => assignment.guide_id).filter(Boolean))];
+        const { data: guides } = guideIds.length
+          ? await supabase.from('guides').select('id, full_name, phone, status, photo_url').in('id', guideIds)
+          : { data: [] };
+        const guideById = new globalThis.Map((guides || []).map((guide: any) => [guide.id, guide]));
+        const assignmentsByBooking = new globalThis.Map<string, any[]>();
+        (assignments || []).forEach((assignment: any) => {
+          const list = assignmentsByBooking.get(assignment.booking_id) || [];
+          const guide = guideById.get(assignment.guide_id);
+          if (guide) list.push({ ...assignment, guide });
+          assignmentsByBooking.set(assignment.booking_id, list);
+        });
+        ownedBookings = ownedBookings.map((booking) => {
+          const meta = parseMeta(booking.notes);
+          const bookingAssignments = assignmentsByBooking.get(booking.id) || [];
+          const primary = bookingAssignments[0]?.guide;
+          return {
+            ...booking,
+            notes: encodeMeta({
+              ...meta,
+              fullName: meta.fullName || user.user_metadata?.full_name || user.email || 'Hiker',
+              assignedGuide: primary?.full_name || meta.assignedGuide,
+              assignedGuideId: primary?.id || meta.assignedGuideId,
+              guidePhone: primary?.phone || meta.guidePhone,
+              guidePhotoUrl: primary?.photo_url || meta.guidePhotoUrl,
+              assignedGuideStatus: primary?.status || meta.assignedGuideStatus,
+              assignedGuides: bookingAssignments.map((assignment: any) => ({
+                id: assignment.guide.id,
+                name: assignment.guide.full_name,
+                phone: assignment.guide.phone,
+                status: assignment.status || assignment.guide.status,
+                photoUrl: assignment.guide.photo_url,
+              })),
+            }),
+          };
+        });
+      }
+      setBookings(ownedBookings);
       setSessions(s || []);
       if (guideReviews) {
         const ids = new Set((guideReviews as Array<{ booking_id?: string | null }>).flatMap((review) => review.booking_id ? [review.booking_id] : []));

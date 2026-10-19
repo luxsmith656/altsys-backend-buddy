@@ -88,6 +88,10 @@ interface BookingAIChatProps {
 const CHAT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/trail-chat-rag`;
 const APPLY_RE = /\[\[APPLY\s*(\{[\s\S]*?\})\s*\]\]/;
 
+function manilaToday(): string {
+  return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Manila' }).format(new Date());
+}
+
 /** Pull the machine-readable booking suggestion out of an assistant reply. */
 function extractSuggestion(text: string): { clean: string; suggestion?: BookingSuggestion } {
   const match = text.match(APPLY_RE);
@@ -96,7 +100,12 @@ function extractSuggestion(text: string): { clean: string; suggestion?: BookingS
   try {
     const raw = JSON.parse(match[1]) as Record<string, unknown>;
     const suggestion: BookingSuggestion = {};
-    if (typeof raw.date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(raw.date)) suggestion.date = raw.date;
+    if (typeof raw.date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(raw.date)) {
+      if (raw.date <= manilaToday()) {
+        return { clean: `${clean}\n\nThat date has already passed or is today. Please choose a booking date starting tomorrow.` };
+      }
+      suggestion.date = raw.date;
+    }
     if (typeof raw.hikeTime === 'string' && /^\d{1,2}:\d{2}\s?(AM|PM)$/i.test(raw.hikeTime.trim())) {
       suggestion.hikeTime = raw.hikeTime.trim().toUpperCase();
     }

@@ -99,11 +99,11 @@ export function roleAudienceInstructions(scope: AiRoleScope): string {
     case 'admin':
       return `AUDIENCE SCOPE: You are speaking to a local trailhead admin. This account is restricted to ${locations}. Discuss only that trailhead's bookings, hikers, guide operations, capacity, system status and authorized aggregate revenue. Never mix another trailhead into the answer. If the account has no verified scope, say that staff must map the account before showing operational data.`;
     case 'super_admin':
-      return 'AUDIENCE SCOPE: You are speaking to the central tourism admin. Discuss all active trailheads together or compare a selected local admin/trailhead, including booking, capacity, guide operations and authorized aggregate revenue. Label every figure with its trailhead and date. Do not expose raw personal records when an aggregate answers the question.';
+      return 'AUDIENCE SCOPE: You are speaking to the central tourism admin. You may read exact booking, hiker and guide records across all local trailheads, including IDs, names, dates, status, group size and assigned guides. Use live database records for named lookups and never invent details. Central access is read-only: do not delete, edit, cancel, approve or otherwise modify records.';
     case 'mdrrmo':
       return 'AUDIENCE SCOPE: You are speaking to MDRRMO. Prioritize cross-trailhead emergency operations, active hikers, capacity and safety. Use only the minimum personal detail needed for an emergency response and do not discuss revenue.';
     case 'guide':
-      return `AUDIENCE SCOPE: You are speaking to a mountain guide assigned to ${locations}. Focus on that guide's assigned hikes, route, safety, check-in and active session. Do not reveal unrelated hikers or trailheads.`;
+      return `AUDIENCE SCOPE: You are speaking to a mountain guide assigned to ${locations}. You may read the complete operational details for hikers and companions on bookings assigned to this guide, including contact and safety details needed for the hike. Do not reveal unrelated hikers or trailheads, and never modify records.`;
     case 'ranger':
       return `AUDIENCE SCOPE: You are speaking to a ranger for ${locations}. Focus on trail conditions, safety, check-in and active session aggregates within that trailhead scope.`;
     default:

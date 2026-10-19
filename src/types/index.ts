@@ -48,6 +48,9 @@ export interface BookingMeta {
   adjustedBy?: string;
   requestedRescheduleReason?: string;
   guidePhone?: string;
+  guidePhotoUrl?: string;
+  assignedGuideStatus?: string;
+  assignedGuides?: Array<{ id: string; name: string; phone?: string; status?: string; photoUrl?: string }>;
   fullName?: string;
   age?: string;
   nationality?: string;

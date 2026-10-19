@@ -1,12 +1,12 @@
 /** Shared, deterministic assistant policy. No database access or prompt-specific cases belong here. */
 export const FINANCE_REFUSAL = 'I can’t provide that: financial analytics are restricted to administrative personnel.';
 export const READ_ONLY_REFUSAL = 'I’m an informational assistant and cannot delete, edit, update, cancel, or modify database records. Please use the appropriate Booking Operations or management screen.';
-export const GUIDE_PII_REFUSAL = 'I can share the names, group size, start time, and hike safety or medical notes needed for this assigned group, but not home addresses or personal phone numbers or email addresses.';
+export const GUIDE_PII_REFUSAL = 'I can share the operational details for hikers assigned to your booking, but not unrelated people or home addresses.';
 
 const WEATHER_RE = /\b(weather|forecast|rain|rainfall|storm|thunder|wind|temperature|humid|climate|ulan|bagyo|maulan|hangin|init|lamig)\b/i;
 const RESERVATION_RE = /\b(book|booking|reserve|reservation|hike|trek|schedule|slot|date|group|pax|hikers|guide|bukas|mag[- ]?book|reserba|iskedyul)\b/i;
 const MUTATION_RE = /\b(delete|remove|erase|drop|edit|update|change|modify|alter|cancel|void|reject|approve|accept|insert|write|sql|database|record)\b/i;
-const PII_RE = /\b(address|home|residential|contact|phone|mobile|telephone|email|e[- ]?mail|number|where do they live|personal details|impormasyon|tirahan|numero|kontak)\b/i;
+const PII_RE = /\b(address|home|residential|where do they live|where does .* live|tirahan)\b/i;
 
 export function validAssistantQuery(input: unknown): input is string {
   return typeof input === 'string' && input.trim().length >= 3 && input.trim().length <= 4000;
@@ -35,6 +35,14 @@ export function missingReservationFields(input: { date?: unknown; startTime?: un
   return missing;
 }
 
+/** Booking dates are interpreted in Manila time and must be at least tomorrow. */
+export function isDateAtLeastTomorrow(date: unknown, todayManila: string): boolean {
+  return typeof date === 'string'
+    && /^\d{4}-\d{2}-\d{2}$/.test(date)
+    && /^\d{4}-\d{2}-\d{2}$/.test(todayManila)
+    && date > todayManila;
+}
+
 export function projectGuideBooking(booking: Record<string, unknown>, profile?: Record<string, unknown> | null) {
   let meta: Record<string, unknown> = {};
   try {
@@ -43,11 +51,18 @@ export function projectGuideBooking(booking: Record<string, unknown>, profile?: 
   } catch { /* malformed legacy notes are omitted */ }
   return {
     booking_id: booking.id,
+    user_id: booking.user_id,
+    location_id: booking.location_id,
     booking_date: booking.booking_date,
     start_time: meta.hikeTime ?? meta.startTime ?? null,
     group_size: booking.group_size,
     status: booking.status,
+    created_at: booking.created_at,
     lead_hiker_name: profile?.full_name ?? meta.fullName ?? 'Not recorded',
+    lead_hiker_phone: profile?.phone ?? booking.contact_phone ?? meta.phoneNumber ?? null,
+    lead_hiker_email: profile?.email ?? booking.contact_email ?? null,
+    emergency_contact: meta.emergencyContactName ?? booking.emergency_contact_name ?? null,
+    emergency_phone: meta.emergencyContactPhone ?? booking.emergency_contact_phone ?? null,
     safety_notes: meta.medicalNotes ?? meta.safetyNotes ?? null,
   };
 }

@@ -240,7 +240,7 @@ async function runRecordTool(db: any, scope: AiRoleScope, name: string, args: an
   if (name === 'my_bookings') {
     if (scope.role === 'guide') return runRecordTool(db, scope, 'guide_assigned_bookings', args, requestedLocation);
     let query = db.from('bookings')
-      .select('id, location_id, booking_date, group_size, status, notes, created_at')
+      .select('id, location_id, booking_date, group_size, status, notes, contact_phone, contact_email, emergency_contact_name, emergency_contact_phone, created_at')
       .eq('user_id', userId).order('booking_date', { ascending: false }).limit(AI_RESULT_LIMIT + 1);
     if (typeof args?.status === 'string' && args.status.trim()) query = query.eq('status', args.status.trim());
     const { data: rows, error } = await query;
@@ -250,7 +250,11 @@ async function runRecordTool(db: any, scope: AiRoleScope, name: string, args: an
       const { data: assignments } = await db.from('booking_assignments')
         .select('guide_id, status, decided_at')
         .eq('booking_id', row.id).limit(3);
-      result.push({ ...row, notes: undefined, assigned_guides: assignments ?? [] });
+      const guideIds = (assignments ?? []).map((assignment: any) => assignment.guide_id).filter(Boolean);
+      const { data: guides } = guideIds.length
+        ? await db.from('guides').select('id, full_name, phone, status, photo_url').in('id', guideIds)
+        : { data: [] };
+      result.push({ ...row, notes: undefined, lead_hiker: { user_id: userId }, assigned_guides: assignments ?? [], guides: guides ?? [] });
     }
     const capped = capRows(result);
     return { bookings: redactSecrets(capped.rows), total: capped.total, truncated: capped.truncated };
@@ -302,14 +306,14 @@ async function runRecordTool(db: any, scope: AiRoleScope, name: string, args: an
     const { data: assignments } = await db.from('booking_assignments').select('booking_id, guide_id, status, decided_at').in('guide_id', guideIds).limit(100);
     const bookingIds = [...new Set((assignments ?? []).map((a: any) => a.booking_id))].slice(0, AI_RESULT_LIMIT + 1);
     if (!bookingIds.length) return { bookings: [] };
-    let bq = db.from('bookings').select('id, user_id, location_id, booking_date, group_size, status, created_at').in('id', bookingIds);
+    let bq = db.from('bookings').select('id, user_id, location_id, booking_date, group_size, status, notes, contact_phone, contact_email, emergency_contact_name, emergency_contact_phone, created_at').in('id', bookingIds);
     if (requestedLocation) bq = bq.eq('location_id', requestedLocation);
     const { data: bookings } = await bq.limit(AI_RESULT_LIMIT + 1);
     const enriched = [];
     for (const booking of bookings ?? []) {
       const bookingAssignments = (assignments ?? []).filter((a: any) => a.booking_id === booking.id);
       const guideIds = bookingAssignments.map((a: any) => a.guide_id).filter(Boolean);
-      const { data: profile } = await db.from('profiles').select('user_id, full_name, age').eq('user_id', booking.user_id).maybeSingle();
+      const { data: profile } = await db.from('profiles').select('user_id, full_name, phone, age').eq('user_id', booking.user_id).maybeSingle();
       enriched.push({ ...projectGuideBooking(booking, profile), assignments: bookingAssignments, guide_ids: guideIds });
     }
     const capped = capRows(enriched);
@@ -318,7 +322,7 @@ async function runRecordTool(db: any, scope: AiRoleScope, name: string, args: an
 
   if (name === 'list_bookings' || name === 'booking_details') {
     const isAdmin = scope.role === 'admin' || scope.role === 'super_admin';
-    let query = db.from('bookings').select('id, user_id, location_id, booking_date, group_size, status, notes, created_at').limit(AI_RESULT_LIMIT + 1);
+    let query = db.from('bookings').select('id, user_id, location_id, booking_date, group_size, status, notes, contact_phone, contact_email, emergency_contact_name, emergency_contact_phone, created_at').limit(AI_RESULT_LIMIT + 1);
     if (name === 'booking_details' && typeof args?.booking_id === 'string') query = query.eq('id', args.booking_id);
     if (requestedLocation) query = query.eq('location_id', requestedLocation);
     else if (isAdmin && !scope.allLocations && scope.locationIds.length) query = query.in('location_id', scope.locationIds);
@@ -344,17 +348,17 @@ async function runRecordTool(db: any, scope: AiRoleScope, name: string, args: an
     if (error || !bookings?.length) return { error: AI_NO_MATCH };
     const out = [];
     for (const booking of bookings) {
-      const profileFields = scope.role === 'guide' ? 'user_id, full_name, age' : 'user_id, full_name, phone, age, avatar_url';
+      const profileFields = 'user_id, full_name, phone, age, avatar_url';
       const { data: profile } = await db.from('profiles').select(profileFields).eq('user_id', booking.user_id).maybeSingle();
       const { data: assignments } = await db.from('booking_assignments').select('guide_id, status, decided_at').eq('booking_id', booking.id).limit(3);
       const guideIds = (assignments ?? []).map((a: any) => a.guide_id).filter(Boolean);
-      const guideFields = scope.role === 'guide' ? 'id, full_name, status' : 'id, full_name, phone, status, photo_url';
+      const guideFields = 'id, full_name, phone, status, photo_url';
       const { data: guides } = guideIds.length
         ? await db.from('guides').select(guideFields).in('id', guideIds)
         : { data: [] };
       out.push(scope.role === 'guide'
-        ? { ...projectGuideBooking(booking, profile), assignments, guides: (guides ?? []).map((guide: any) => ({ id: guide.id, full_name: guide.full_name, status: guide.status })) }
-        : { ...booking, notes: undefined, hiker: profile, assignments, guides });
+        ? { ...projectGuideBooking(booking, profile), assignments, guides }
+        : { ...booking, hiker: profile, assignments, guides });
     }
     const capped = capRows(out);
     return { bookings: redactSecrets(capped.rows), total: capped.total, truncated: capped.truncated };
@@ -381,7 +385,7 @@ async function runRecordTool(db: any, scope: AiRoleScope, name: string, args: an
     }
     const scopedUserIds = allowedUserIds ?? [];
     if (!scopedUserIds.length) return { error: AI_NO_MATCH };
-    const profileFields = scope.role === 'guide' ? 'user_id, full_name, age' : 'user_id, full_name, phone, age, avatar_url';
+    const profileFields = 'user_id, full_name, phone, age, avatar_url';
     let pq = db.from('profiles').select(profileFields).in('user_id', scopedUserIds).limit(AI_RESULT_LIMIT + 1);
     if (typeof args?.user_id === 'string' && name === 'hiker_details') pq = pq.eq('user_id', args.user_id);
     else if (queryText) pq = pq.ilike('full_name', `%${queryText}%`);
@@ -744,8 +748,19 @@ async function buildStaffContext(scope: AiRoleScope): Promise<string> {
     : { data: [] };
   const profileNames = new Map((profiles ?? []).map((profile: any) => [profile.user_id, profile.full_name]));
 
-  const { data: locationRows } = await db.from('locations').select('id,name').in('id', scope.locationIds);
+  let locationQuery = db.from('locations').select('id,name');
+  if (!scope.allLocations && scope.locationIds.length) locationQuery = locationQuery.in('id', scope.locationIds);
+  const { data: locationRows } = await locationQuery;
   const locationNames = new Map((locationRows ?? []).map((row: { id: string; name: string }) => [row.id, row.name]));
+  const bookingIds = (bookings ?? []).map((booking: any) => booking.id).filter(Boolean);
+  const { data: assignments } = bookingIds.length
+    ? await db.from('booking_assignments').select('booking_id, guide_id, status').in('booking_id', bookingIds)
+    : { data: [] };
+  const guideIds = [...new Set((assignments ?? []).map((assignment: any) => assignment.guide_id).filter(Boolean))];
+  const { data: guideRows } = guideIds.length
+    ? await db.from('guides').select('id, full_name, phone, status, photo_url').in('id', guideIds)
+    : { data: [] };
+  const guideById = new Map((guideRows ?? []).map((guide: any) => [guide.id, guide]));
   const summaries = new Map<string, { bookings: number; hikers: number; pending: number; confirmed: number; completed: number; revenue: number }>();
   const operationalRows: string[] = [];
 
@@ -761,13 +776,22 @@ async function buildStaffContext(scope: AiRoleScope): Promise<string> {
     summary.revenue += recordedAmount(meta);
     summaries.set(key, summary);
 
-    // Local admins may ask about an individual operational booking in their own scope.
-    if (scope.role === 'admin') {
+    const assignedGuides = (assignments ?? [])
+      .filter((assignment: any) => assignment.booking_id === booking.id)
+      .map((assignment: any) => {
+        const guide = guideById.get(assignment.guide_id);
+        return guide ? `${guide.full_name} (${assignment.status || guide.status || 'assigned'})` : null;
+      })
+      .filter(Boolean)
+      .join(', ');
+
+    // Staff may ask about an individual booking only inside their verified scope.
+    if (scope.role === 'admin' || scope.role === 'super_admin') {
       operationalRows.push(
         `- booking ${String(booking.id)} · ${booking.booking_date} · ${booking.group_size} pax · status=${booking.status}` +
         ` · lead=${profileNames.get(booking.user_id) || 'not recorded'} · contact=${meta.phoneNumber || booking.contact_phone || 'not recorded'}` +
         ` · hike=${meta.hikeType || 'not recorded'} ${meta.hikeTime || ''}`.trim() +
-        ` · guide=${meta.assignedGuide || 'unassigned'} · payment_status=${meta.paymentStatus || 'unrecorded'}`,
+        ` · guide=${assignedGuides || meta.assignedGuide || 'unassigned'} · payment_status=${meta.paymentStatus || 'unrecorded'}`,
       );
     }
   }
@@ -786,7 +810,8 @@ async function buildStaffContext(scope: AiRoleScope): Promise<string> {
     lines.push(...(operationalRows.length ? operationalRows.slice(0, 1000) : ['- No booking directory entries.']));
     lines.push('Medical notes and emergency details are not included in the assistant context; use the authorized booking detail screen only when an operational need requires them.');
   } else if (scope.role === 'super_admin') {
-    lines.push('Central view is aggregate-first. Compare local admins/trailheads by name, booking totals, hiker totals, capacity and recorded revenue; do not output a raw personal booking directory.');
+    lines.push('Central read-only booking directory across all trailheads (use exact live records for named booking, hiker or guide questions; never modify records):');
+    lines.push(...(operationalRows.length ? operationalRows.slice(0, 1000) : ['- No booking directory entries.']));
   } else {
     lines.push('MDRRMO view is safety-first and aggregate-first; do not discuss revenue or unnecessary personal details.');
   }
@@ -852,7 +877,7 @@ BOOKING ASSISTANCE (IMPORTANT):
 - Whenever you recommend or agree on concrete form values, END your reply with a single machine line, on its own last line, in this exact format:
   [[APPLY {"date":"YYYY-MM-DD","hikeTime":"06:00 AM","groupSize":4,"hikeType":"day","label":"Apply: Aug 12, 6:00 AM, 4 pax"}]]
   Include ONLY the fields you are actually recommending, plus a short "label". Never output more than one APPLY line, never output it when you are not recommending changes, and never explain or mention the line in your prose.
-- Dates must be today or later in Asia/Manila. hikeTime must be 12-hour like "05:30 AM". hikeType is "morning", "night", or "overnight" for new bookings; "day" remains readable for legacy records. groupSize is 1–30.
+- New booking dates must be tomorrow or later in Asia/Manila; never apply a date that is today or in the past. hikeTime must be 12-hour like "05:30 AM". hikeType is "morning", "night", or "overnight" for new bookings; "day" remains readable for legacy records. groupSize is 1–30.
 - Add "submit": true to the APPLY line ONLY when the hiker has clearly asked you to go ahead and book, and date, start time, group size and hike type are all settled. Otherwise omit it. You never confirm a booking yourself — the app still asks the hiker to review the details and accept the safety reminders, sworn declaration and agreements before anything is submitted. Say so plainly when you hand off.
 - Only a hiker or public visitor may receive a booking APPLY line or booking CTA. Guides must never be offered a booking CTA or encouraged to book themselves; direct them to their duty dashboard and local admin.
 - Missing details the app requires (emergency contact, city/municipality, group composition) must be filled in on the booking form; tell the hiker what is still needed instead of inventing values.
