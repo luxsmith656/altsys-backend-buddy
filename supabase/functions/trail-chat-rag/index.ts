@@ -308,7 +308,7 @@ async function runRecordTool(db: any, scope: AiRoleScope, name: string, args: an
     if (!bookingIds.length) return { bookings: [] };
     let bq = db.from('bookings').select('id, user_id, location_id, booking_date, group_size, status, notes, contact_phone, contact_email, emergency_contact_name, emergency_contact_phone, created_at').in('id', bookingIds);
     if (requestedLocation) bq = bq.eq('location_id', requestedLocation);
-    const { data: bookings } = await bq.limit(AI_RESULT_LIMIT + 1);
+    const { data: bookings } = await bq.neq('status', 'cancelled').limit(AI_RESULT_LIMIT + 1);
     const enriched = [];
     for (const booking of bookings ?? []) {
       const bookingAssignments = (assignments ?? []).filter((a: any) => a.booking_id === booking.id);
@@ -333,7 +333,7 @@ async function runRecordTool(db: any, scope: AiRoleScope, name: string, args: an
       const { data: as } = ids.length ? await db.from('booking_assignments').select('booking_id').in('guide_id', ids) : { data: [] };
       const bookingIds = [...new Set((as ?? []).map((a: any) => a.booking_id))];
       if (!bookingIds.length) return { error: AI_NO_MATCH };
-      query = query.in('id', bookingIds);
+      query = query.in('id', bookingIds).neq('status', 'cancelled');
     }
     if (typeof args?.query === 'string' && args.query.trim()) {
       const { data: matchingProfiles } = await db.from('profiles')

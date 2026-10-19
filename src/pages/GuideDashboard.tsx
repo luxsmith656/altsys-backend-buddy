@@ -248,7 +248,9 @@ export default function GuideDashboard() {
       mineList.forEach((a: any) => {
         a.booking = bookingMap[a.booking_id];
       });
-      setAssignments(mineList);
+      // A cancelled booking is no longer a guide assignment. Keep it out of
+      // every guide tab, counter, earnings calculation and action list.
+      setAssignments(mineList.filter((assignment: any) => assignment.booking && assignment.booking.status !== 'cancelled'));
 
       // 5. Peer guide stats
       const peersList = (peers as any[]) ?? [];

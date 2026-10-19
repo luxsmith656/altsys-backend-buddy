@@ -273,7 +273,11 @@ export default function HikerDashboard() {
         ownedBookings = ownedBookings.map((booking) => {
           const meta = parseMeta(booking.notes);
           const bookingAssignments = assignmentsByBooking.get(booking.id) || [];
-          const primary = bookingAssignments[0]?.guide;
+          const primary = [...bookingAssignments]
+            .sort((a, b) => {
+              const rank = (status: string) => status === 'accepted' ? 0 : status === 'pending' ? 1 : status === 'completed' ? 2 : 3;
+              return rank(a.status || a.guide.status) - rank(b.status || b.guide.status);
+            })[0]?.guide;
           return {
             ...booking,
             notes: encodeMeta({
