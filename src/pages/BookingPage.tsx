@@ -1203,6 +1203,9 @@ export default function BookingPage() {
           notes: metaNotes,
           status: 'pending',
           location_id: startLocationId,
+          // Keep the referral relationship as a real FK. The display name in
+          // notes is only a snapshot and must not be the source of truth.
+          referral_guide_id: selectedGuide?.id ?? null,
         } as any).select().abortSignal(signal).single(),
         'Booking submission',
       );
@@ -1295,7 +1298,6 @@ export default function BookingPage() {
         ? 'Your booking was saved, but some follow-up details failed. Check My Bookings before retrying.'
         : `${message} Your form is still here; you can safely retry.`);
     } finally {
-      setScreenshotUploading(false);
       setLoading(false);
       bookingSubmitLock.current = false;
     }
