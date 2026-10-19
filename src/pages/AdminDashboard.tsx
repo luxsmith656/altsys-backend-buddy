@@ -443,6 +443,7 @@ export default function AdminDashboard() {
   /* ── QR Scan / Onsite Check-in state ── */
   const [qrInput, setQrInput] = useState('');
   const [scannedBooking, setScannedBooking] = useState<any | null>(null);
+  const [scanMatches, setScanMatches] = useState<any[]>([]);
   const [scanLoading, setScanLoading] = useState(false);
   const [startingHike, setStartingHike] = useState(false);
   const [hikeStarted, setHikeStarted] = useState(false);
@@ -724,6 +725,7 @@ export default function AdminDashboard() {
 
     setScanLoading(true);
     setScannedBooking(null);
+    setScanMatches([]);
     setHikeStarted(false);
     setShowScanPayForm(false);
 
@@ -748,24 +750,58 @@ export default function AdminDashboard() {
 
     if (exactData) {
       setScannedBooking(exactData);
+      setScanMatches([exactData]);
       setCheckInVerified(false);
       setScanLoading(false);
       return;
     }
 
-    const findName = async (column: 'emergency_contact_name' | 'emergency_contact_phone') => {
-      if (!q) return null;
-      let query: any = supabase.from('bookings').select('*').ilike(column, `%${q}%`).not('status', 'eq', 'cancelled').order('created_at', { ascending: false }).limit(1);
-      if (!isSuperAdmin) query = query.eq('location_id', activeLocationId);
-      const { data } = await query;
-      return data?.[0] ?? null;
-    };
-    const nameData = await findName('emergency_contact_name') || await findName('emergency_contact_phone');
+    // A manual name lookup must search the whole booking manifest. The lead,
+    // companions and assigned guide are all valid ways to find the same
+    // booking, so never collapse the result to the first row.
+    let bookingQuery: any = supabase.from('bookings').select('*')
+      .not('status', 'eq', 'cancelled').order('booking_date', { ascending: true }).limit(500);
+    if (!isSuperAdmin) bookingQuery = bookingQuery.eq('location_id', activeLocationId);
+    const { data: candidateBookings } = await bookingQuery;
+    const candidates = (candidateBookings ?? []) as any[];
+    const candidateIds = candidates.map((booking) => booking.id).filter(Boolean);
+    const { data: assignmentRows } = candidateIds.length
+      ? await supabase.from('booking_assignments').select('booking_id,guide_id').in('booking_id', candidateIds)
+      : { data: [] };
+    const guideIds = [...new Set((assignmentRows ?? []).map((row: any) => row.guide_id).filter(Boolean))];
+    const { data: guideRows } = guideIds.length
+      ? await supabase.from('guides').select('id,full_name').in('id', guideIds)
+      : { data: [] };
+    const guideNames = new Map((guideRows ?? []).map((guide: any) => [guide.id, String(guide.full_name ?? '')]));
+    const needle = String(q || raw).trim().toLowerCase();
+    const matches = candidates.filter((booking) => {
+      const meta = parseMeta(booking.notes);
+      const people = [
+        booking.emergency_contact_name,
+        booking.emergency_contact_phone,
+        meta.fullName,
+        meta.phoneNumber,
+        meta.assignedGuide,
+        ...(Array.isArray(meta.companions) ? meta.companions : []),
+        ...(Array.isArray(meta.companionDetails) ? meta.companionDetails.map((person: any) => person?.name) : []),
+        ...(assignmentRows ?? [])
+          .filter((row: any) => row.booking_id === booking.id)
+          .map((row: any) => guideNames.get(row.guide_id)),
+      ].filter(Boolean).map((value) => String(value).toLowerCase());
+      return people.some((value) => value.includes(needle));
+    }).map((booking) => ({
+      ...booking,
+      __guideNames: (assignmentRows ?? [])
+        .filter((row: any) => row.booking_id === booking.id)
+        .map((row: any) => guideNames.get(row.guide_id))
+        .filter(Boolean),
+    }));
 
-    if (nameData) {
-      setScannedBooking(nameData);
+    if (matches.length) {
+      setScanMatches(matches);
+      if (matches.length === 1) setScannedBooking(matches[0]);
       setCheckInVerified(false);
-      toast.info('Found booking record.');
+      toast.info(matches.length === 1 ? 'Found booking record.' : `Found ${matches.length} matching booking records.`);
     } else {
       toast.error('No booking found. Try the QR code, booking ID, or hiker name/phone.');
     }
@@ -2578,6 +2614,37 @@ export default function AdminDashboard() {
                   onManualSubmit={() => void handleQrLookup()}
                   loading={scanLoading || locationsLoading}
                 />
+
+                {scanMatches.length > 1 && !scannedBooking && (
+                  <Card className="border-primary/30 bg-primary/5">
+                    <CardHeader className="pb-3">
+                      <CardTitle className="text-sm">Matching bookings ({scanMatches.length})</CardTitle>
+                      <p className="text-xs text-muted-foreground">Select the booking to open its complete lead, companion, guide, payment, and check-in details.</p>
+                    </CardHeader>
+                    <CardContent className="grid gap-2">
+                      {scanMatches.map((booking) => {
+                        const matchMeta = parseMeta(booking.notes);
+                        const matchCompanions = Array.isArray(matchMeta.companionDetails)
+                          ? matchMeta.companionDetails.map((person: any) => String(person?.name ?? '')).filter(Boolean)
+                          : Array.isArray(matchMeta.companions) ? matchMeta.companions.filter(Boolean) : [];
+                        const matchGuides = Array.isArray(booking.__guideNames) ? booking.__guideNames : [];
+                        return (
+                          <button key={booking.id} type="button" className="rounded-xl border border-border/40 bg-background/60 p-3 text-left transition hover:border-primary/60" onClick={() => { setScannedBooking(booking); setCheckInVerified(false); }}>
+                            <span className="flex flex-wrap items-center justify-between gap-2 font-semibold">
+                              <span>{matchMeta.fullName || booking.emergency_contact_name || 'Hiker group'}</span>
+                              <span className="text-xs font-normal text-muted-foreground">{booking.booking_date} · {booking.group_size} pax</span>
+                            </span>
+                            <span className="mt-1 block text-xs text-muted-foreground">
+                              Guide: {matchGuides.length ? matchGuides.join(', ') : matchMeta.assignedGuide || 'Not assigned'}
+                              {matchCompanions.length ? ` · Companions: ${matchCompanions.join(', ')}` : ''}
+                            </span>
+                            <span className="mt-1 block text-[11px] text-muted-foreground">Booking #{String(booking.id).slice(0, 8)} · {booking.status}</span>
+                          </button>
+                        );
+                      })}
+                    </CardContent>
+                  </Card>
+                )}
 
                 {scannedBooking && (() => {
                   const meta = parseMeta(scannedBooking.notes);
