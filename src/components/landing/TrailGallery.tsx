@@ -30,12 +30,27 @@ export default function TrailGallery() {
 
   return (
     <section id="trail-gallery" className="px-4 py-12 sm:py-16">
-      <div className="container mx-auto grid max-w-6xl grid-cols-2 gap-3 sm:gap-4 md:grid-cols-3 lg:grid-cols-4">
+      <div className="container mx-auto max-w-6xl">
+        <div className="mb-7 text-center">
+          <div className="mb-2 inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.16em] text-primary/80">
+            <span className="h-px w-8 bg-primary/50" />
+            Mt. Kalisungan
+            <span className="h-px w-8 bg-primary/50" />
+          </div>
+          <h2 className="text-3xl font-bold leading-tight sm:text-4xl">
+            Trail <span className="text-gradient">Gallery</span>
+          </h2>
+          <p className="mx-auto mt-2 max-w-xl text-sm text-muted-foreground sm:text-base">
+            Moments from the mountain, shared by the Kalisungan hiking community.
+          </p>
+        </div>
+        <div className="grid auto-rows-[9rem] grid-cols-2 gap-3 sm:auto-rows-[11rem] sm:gap-4 md:grid-cols-4">
         {images.map((image, index) => (
-          <motion.button key={image.id} type="button" initial={{ opacity: 0 }} whileInView={{ opacity: 1 }} viewport={{ once: true }} onClick={() => setActive(index)} className="group relative aspect-[4/3] min-w-0 overflow-hidden rounded-xl border border-border/30 bg-secondary/20 shadow-sm" aria-label={`Open ${image.alt}`}>
+          <motion.button key={image.id} type="button" initial={{ opacity: 0 }} whileInView={{ opacity: 1 }} viewport={{ once: true }} onClick={() => setActive(index)} className={`group relative min-w-0 overflow-hidden rounded-xl border border-border/30 bg-secondary/20 shadow-sm ${index === 0 ? 'col-span-2 row-span-2' : ''}`} aria-label={`Open ${image.alt}`}>
             <img src={image.src} alt={image.alt} loading="lazy" decoding="async" className="h-full w-full object-contain p-1 transition-transform duration-500 group-hover:scale-[1.03]" />
           </motion.button>
         ))}
+        </div>
       </div>
       <AnimatePresence>
         {active !== null && (
