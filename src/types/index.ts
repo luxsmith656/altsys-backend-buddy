@@ -39,6 +39,7 @@ export interface BookingMeta {
   assignedTrailZoneId?: string; // Official route assigned by admin or auto-assigned
   assignedTrailName?: string;
   assignedTrail?: string;
+  entryPoint?: string;
   assignedTrailAuto?: boolean;
   groupSize?: number;
   guideStatus?: 'pending' | 'accepted' | 'declined' | 'reassigned_pending' | 'completed' | string;

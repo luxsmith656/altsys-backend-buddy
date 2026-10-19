@@ -5,6 +5,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { loadEmergencyAlerts } from '@/lib/emergencyAlerts';
 import { parseMeta } from '@/lib/bookingMeta';
 import { formatPeso } from '@/lib/payments';
+import { setHorseHelpStatusForBooking } from '@/lib/hikeSupport';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -17,6 +18,7 @@ export default function ActiveSupportAlerts({ locationId }: Props) {
   const [horse, setHorse] = useState<{ bookingId: string; name: string; station: string; fee: number; requestedAt: string }[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [horseActionKey, setHorseActionKey] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -76,6 +78,26 @@ export default function ActiveSupportAlerts({ locationId }: Props) {
     void load();
   };
 
+  const resolveHorseHelp = async (request: (typeof horse)[number]) => {
+    const actionKey = `${request.bookingId}:${request.requestedAt}`;
+    if (horseActionKey) return;
+    setHorseActionKey(actionKey);
+    try {
+      await setHorseHelpStatusForBooking({
+        bookingId: request.bookingId,
+        requestedAt: request.requestedAt,
+        status: 'resolved',
+        actorRole: 'admin',
+      });
+      toast.success('Horse-help request resolved and included in settlement.');
+      await load();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Could not resolve horse-help request.');
+    } finally {
+      setHorseActionKey(null);
+    }
+  };
+
   if (!loading && sos.length === 0 && horse.length === 0 && !loadError) return null;
 
   return (
@@ -108,6 +130,16 @@ export default function ActiveSupportAlerts({ locationId }: Props) {
             <p className="font-semibold text-amber-700 dark:text-amber-300">🐴 Horse help requested</p>
             <p className="mt-1">{request.name} · {request.station}</p>
             <p className="text-xs text-muted-foreground">Additional payment due: {formatPeso(request.fee)} · {new Date(request.requestedAt).toLocaleString('en-PH', { timeZone: 'Asia/Manila' })}</p>
+            <Button
+              size="sm"
+              variant="outline"
+              className="mt-2"
+              onClick={() => void resolveHorseHelp(request)}
+              disabled={horseActionKey !== null}
+            >
+              {horseActionKey === `${request.bookingId}:${request.requestedAt}` ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <Check className="mr-1 h-3.5 w-3.5" />}
+              Resolve
+            </Button>
           </div>
         ))}
       </CardContent>

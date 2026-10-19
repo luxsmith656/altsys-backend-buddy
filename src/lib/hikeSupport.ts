@@ -109,3 +109,62 @@ export async function requestHorseHelpForBooking(params: {
   }).catch(() => null)));
   return updatedMeta;
 }
+
+export async function setHorseHelpStatusForBooking(params: {
+  bookingId: string;
+  requestedAt: string;
+  status: 'resolved' | 'cancelled';
+  actorRole: 'admin' | 'guide';
+  actorId?: string;
+}) {
+  const { data: booking, error: readError } = await supabase
+    .from('bookings')
+    .select('id,notes,status')
+    .eq('id', params.bookingId)
+    .single();
+  if (readError || !booking) throw new Error(readError?.message || 'Booking not found.');
+  if (booking.status === 'cancelled') throw new Error('This booking is cancelled.');
+
+  const meta = parseMeta(booking.notes);
+  const requests = meta.horseHelpRequests ?? [];
+  const index = requests.findIndex((request) => request.requestedAt === params.requestedAt);
+  if (index < 0) throw new Error('Horse-help request was not found.');
+  const current = requests[index];
+  if (params.actorRole === 'guide' && params.actorId && current.requestedBy && current.requestedBy !== params.actorId) {
+    throw new Error('Only the guide who requested this horse help can cancel it.');
+  }
+  if (params.actorRole === 'guide' && (params.status !== 'cancelled' || current.status !== 'requested')) {
+    throw new Error('A guide can only cancel an active horse-help request.');
+  }
+  if (current.status === 'cancelled') return meta;
+
+  const nextRequests = requests.map((request, requestIndex) => requestIndex === index
+    ? { ...request, status: params.status, resolvedAt: params.status === 'resolved' ? new Date().toISOString() : undefined, cancelledAt: params.status === 'cancelled' ? new Date().toISOString() : undefined }
+    : request);
+  const activeDue = nextRequests
+    .filter((request) => request.status !== 'cancelled')
+    .reduce((sum, request) => sum + Number(request.fee || 0), 0);
+  const updatedMeta = {
+    ...meta,
+    horseHelpRequests: nextRequests,
+    additionalPaymentDue: activeDue,
+    ...(activeDue > 0 ? { additionalPaymentStatus: 'pending' as const } : { additionalPaymentStatus: undefined }),
+  };
+  let update = supabase.from('bookings').update({ notes: JSON.stringify(updatedMeta) } as any)
+    .eq('id', params.bookingId).eq('status', booking.status);
+  update = booking.notes == null ? update.is('notes', null) : update.eq('notes', booking.notes);
+  const { error: updateError } = await update;
+  if (updateError) throw new Error(`Could not update horse-help request: ${updateError.message}`);
+
+  if (params.actorId) {
+    await supabase.from('booking_messages' as any).insert({
+      booking_id: params.bookingId,
+      sender_id: params.actorId,
+      sender_role: params.actorRole,
+      recipient_role: params.actorRole === 'guide' ? 'admin' : 'guide',
+      kind: `horse_help_${params.status}`,
+      content: `Horse help request ${params.status}.`,
+    } as any);
+  }
+  return updatedMeta;
+}

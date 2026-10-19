@@ -117,7 +117,7 @@ export default function EndHikeSettlementDialog({
         additionalPaymentDue: 0,
         additionalPaymentSettledAt: now,
         horseHelpRequests: (meta.horseHelpRequests ?? []).map((request) =>
-          request.status === 'requested' ? { ...request, status: 'paid', paidAt: now } : request,
+          request.status !== 'cancelled' && request.status !== 'paid' ? { ...request, status: 'paid', paidAt: now } : request,
         ),
       });
 

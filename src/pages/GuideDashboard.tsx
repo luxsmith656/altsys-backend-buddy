@@ -63,7 +63,7 @@ import { acceptGuideAssignment } from '@/lib/guideAssignmentService';
 import { calculateGuideEarnings, GuideEarningsSummary } from '@/lib/guideEarnings';
 import { formatPeso } from '@/lib/payments';
 import BookingReceipt from '@/components/booking/BookingReceipt';
-import { getHorseHelpOption, requestHorseHelpForBooking, HORSE_HELP_OPTIONS, type HorseHelpStation } from '@/lib/hikeSupport';
+import { getHorseHelpOption, requestHorseHelpForBooking, setHorseHelpStatusForBooking, HORSE_HELP_OPTIONS, type HorseHelpStation } from '@/lib/hikeSupport';
 import { completeHike } from '@/lib/hikeCompletion';
 import ImportantAnnouncements from '@/components/common/ImportantAnnouncements';
 
@@ -107,6 +107,7 @@ export default function GuideDashboard() {
   const [loadWarnings, setLoadWarnings] = useState<string[]>([]);
   const [horseHelpStation, setHorseHelpStation] = useState<HorseHelpStation>('station-5-3');
   const [horseHelpSaving, setHorseHelpSaving] = useState(false);
+  const [horseHelpActionKey, setHorseHelpActionKey] = useState<string | null>(null);
   const [profileOpen, setProfileOpen] = useState(false);
   // The existing profile migration adds photo_url and guide_reviews together.
   const reviewsAvailable = Boolean(guideRow && Object.prototype.hasOwnProperty.call(guideRow, 'photo_url'));
@@ -460,6 +461,29 @@ export default function GuideDashboard() {
       toast.error(err?.message || 'Could not request horse help.');
     } finally {
       setHorseHelpSaving(false);
+    }
+  };
+
+  const handleCancelHorseHelp = async (assignment: AssignmentRow, requestedAt: string) => {
+    if (!guideRow?.id || !assignment.booking?.id || horseHelpActionKey) return;
+    const actionKey = `${assignment.booking.id}:${requestedAt}`;
+    setHorseHelpActionKey(actionKey);
+    try {
+      const updatedMeta = await setHorseHelpStatusForBooking({
+        bookingId: assignment.booking.id,
+        requestedAt,
+        status: 'cancelled',
+        actorRole: 'guide',
+        actorId: guideRow.id,
+      });
+      const updatedBooking = { ...assignment.booking, notes: JSON.stringify(updatedMeta) };
+      setAssignments((current) => current.map((item) => item.id === assignment.id ? { ...item, booking: updatedBooking } : item));
+      setDetailOpen((current) => current?.id === assignment.id ? { ...current, booking: updatedBooking } : current);
+      toast.success('Horse-help request cancelled. It will not be added to settlement.');
+    } catch (err: any) {
+      toast.error(err?.message || 'Could not cancel horse help.');
+    } finally {
+      setHorseHelpActionKey(null);
     }
   };
 
@@ -1268,7 +1292,7 @@ export default function GuideDashboard() {
                     />
                   </div>
                   <div className="py-2 space-y-1">
-                    <Row k="Trail / Route" v={meta.assignedTrail || 'Standard Kalisungan Route'} />
+                    <Row k="Trail / Route" v={meta.assignedTrailName || meta.assignedTrail || meta.entryPoint || 'Awaiting route assignment'} />
                     <Row k="Medical Notes" v={meta.medicalNotes ?? 'None specified'} />
                     <Row k="Hiker Notes" v={meta.userNotes ?? 'None'} />
                     {detailOpen.reassignment_reason && (
@@ -1309,7 +1333,22 @@ export default function GuideDashboard() {
                           {meta.horseHelpRequests?.map((request, index) => (
                             <div key={`${request.requestedAt}-${index}`} className="flex items-center justify-between gap-2">
                               <span>{request.stationLabel}</span>
-                              <span className="font-semibold">{formatPeso(request.fee)} · {request.status}</span>
+                              <span className="flex items-center gap-2 text-right font-semibold">
+                                <span>{formatPeso(request.fee)} · {request.status}</span>
+                                {request.status === 'requested' && (
+                                  <Button
+                                    type="button"
+                                    size="sm"
+                                    variant="outline"
+                                    className="h-7 px-2 text-xs"
+                                    onClick={() => void handleCancelHorseHelp(detailOpen, request.requestedAt)}
+                                    disabled={horseHelpActionKey !== null}
+                                  >
+                                    {horseHelpActionKey === `${detailOpen.booking_id}:${request.requestedAt}` ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : <XCircle className="mr-1 h-3 w-3" />}
+                                    Cancel
+                                  </Button>
+                                )}
+                              </span>
                             </div>
                           ))}
                         </div>
