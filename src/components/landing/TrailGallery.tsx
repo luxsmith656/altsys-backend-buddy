@@ -46,8 +46,8 @@ export default function TrailGallery() {
         </div>
         <div className="grid auto-rows-[9rem] grid-cols-2 gap-3 sm:auto-rows-[11rem] sm:gap-4 md:grid-cols-4">
         {images.map((image, index) => (
-          <motion.button key={image.id} type="button" initial={{ opacity: 0 }} whileInView={{ opacity: 1 }} viewport={{ once: true }} onClick={() => setActive(index)} className={`group relative min-w-0 overflow-hidden rounded-2xl border border-border/30 bg-secondary/20 shadow-sm transition-shadow hover:shadow-lg ${index === 0 ? 'col-span-2 row-span-2' : index === 3 ? 'md:col-span-2' : ''}`} aria-label={`Open ${image.alt}`}>
-            <img src={image.src} alt={image.alt} loading="lazy" decoding="async" className="h-full w-full object-contain p-1 transition-transform duration-500 group-hover:scale-[1.03]" />
+          <motion.button key={image.id} type="button" initial={{ opacity: 0 }} whileInView={{ opacity: 1 }} viewport={{ once: true }} onClick={() => setActive(index)} className={`group relative min-w-0 overflow-hidden rounded-sm ${index === 0 ? 'col-span-2 row-span-2' : index === 3 ? 'md:col-span-2' : ''}`} aria-label={`Open ${image.alt}`}>
+            <img src={image.src} alt={image.alt} loading="lazy" decoding="async" className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.03]" />
           </motion.button>
         ))}
         </div>
