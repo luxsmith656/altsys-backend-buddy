@@ -1,4 +1,5 @@
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Marker, Polyline, Popup, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import { toast } from 'sonner';
@@ -9,7 +10,7 @@ import type { HikeTracker, TrackerSnapshot } from '@/lib/tracking/HikeTracker';
 import { getActiveSession, getSessionPoints } from '@/lib/offlineDb';
 import { splitTrackAtGaps, guideFixToTrail } from '@/lib/tracking/geo';
 import StationReportControl from './StationReportControl';
-import LocationPingControl from './LocationPingControl';
+import SOSPanel from '@/components/core/SOSPanel';
 
 type SessionRole = 'hiker' | 'guide' | 'ranger' | 'admin';
 
@@ -38,6 +39,22 @@ type LocationPoint = {
   heading?: number | null;
   timestamp: string;
 };
+
+function SelfMapSosControl() {
+  const map = useMap();
+  const container = useMemo(() => document.createElement('div'), []);
+
+  useEffect(() => {
+    const control = new L.Control({ position: 'bottomright' });
+    control.onAdd = () => container;
+    L.DomEvent.disableClickPropagation(container);
+    L.DomEvent.disableScrollPropagation(container);
+    control.addTo(map);
+    return () => { control.remove(); };
+  }, [container, map]);
+
+  return createPortal(<SOSPanel compact />, container);
+}
 
 type Props = {
   routePaths?: { id?: string; path: [number, number, number?][] }[];
@@ -107,7 +124,6 @@ export default function LiveSessionsLayer({
   const centeredRef = useRef(false);
   const gpsErrorShownRef = useRef(false);
   const hadSelfSessionRef = useRef(false);
-  const [activeTracker, setActiveTracker] = useState<HikeTracker | null>(null);
 
   const loadLocalSelfSession = useCallback(async () => {
     if (mode !== 'self') return null;
@@ -319,7 +335,6 @@ export default function LiveSessionsLayer({
     })
       .then((tracker) => {
         if (!active) return;
-        setActiveTracker(tracker);
         unsubscribe = tracker.subscribe(setLocalSnapshot);
       })
       .catch((error) => {
@@ -332,7 +347,6 @@ export default function LiveSessionsLayer({
       });
     return () => {
       active = false;
-      setActiveTracker(null);
       unsubscribe?.();
     };
   }, [locationId, selfSession, userId, userRole]);
@@ -369,7 +383,7 @@ export default function LiveSessionsLayer({
 
   return (
     <>
-      {selfSession && (userRole === 'hiker' || userRole === 'guide') && <LocationPingControl tracker={activeTracker} />}
+      {selfSession && (userRole === 'hiker' || userRole === 'guide') && <SelfMapSosControl />}
       {selfSession && (userRole === 'hiker' || userRole === 'guide') && selfSession.id !== selfSession.local_session_id && <StationReportControl sessionId={selfSession.id} userId={userId} />}
       {sessions.map((session) => {
         const points = renderedPaths[session.id] ?? [];

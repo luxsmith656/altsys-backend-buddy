@@ -26,7 +26,6 @@ import {
   Compass,
   Users,
   RefreshCw,
-  Navigation,
   Clock,
   ChevronLeft,
   ChevronRight,
@@ -759,7 +758,6 @@ export default function MapPage() {
     </Button>
   </div> : null;
   const mapTools = <div className="live-map-menu">
-    {isSelfTrackingRole && activeMapTab === 'tracker' && <SOSPanel compact />}
     {canMonitorAll && activeMapTab === 'tracker' && <Button variant="ghost"
       aria-pressed={simulationMode} aria-label={simulationMode ? 'Disable simulation mode' : 'Enable simulation mode'}
       onClick={() => { setSimulationMode(!simulationMode); setSimulationControlsOpen(false); setWorkspacePanelOpen(!simulationMode); }}>
@@ -827,7 +825,7 @@ export default function MapPage() {
       ) : (
         <div className="live-map-page-body">
           <MapWorkspace title={simulationMode ? 'Simulation groups' : 'My hike'} open={workspacePanelOpen} onOpenChange={setWorkspacePanelOpen}
-            routes={role === 'super_admin' || (role === 'hiker' && !activeSelfSession && !bookedLocationId) ? routePanel : null} tools={mapTools}
+            routes={role === 'super_admin' || (role === 'hiker' && !activeSelfSession && !bookedLocationId) ? routePanel : null} tools={canMonitorAll ? mapTools : null}
             panel={activeMapTab === 'editor' ? null : simulationMode ? simulationPanel : selfPanel}>
             <MapContainer center={MT_KALISUNGAN_CENTER} zoom={DEFAULT_ZOOM} minZoom={3} maxZoom={20}
               zoomAnimation={false} zoomSnap={0.5} zoomDelta={0.5} wheelPxPerZoomLevel={80}
@@ -851,8 +849,6 @@ export default function MapPage() {
             {activeMapTab === 'tracker' && <div className="live-map-tools" role="group" aria-label="Map controls">
               <button type="button" className="live-map-icon" aria-label="Zoom in" title="Zoom in" onClick={() => mapInstance?.zoomIn()}><Plus size={18} /></button>
               <button type="button" className="live-map-icon" aria-label="Zoom out" title="Zoom out" onClick={() => mapInstance?.zoomOut()}><Minus size={18} /></button>
-              {isSelfTrackingRole && <button type="button" className="live-map-icon" aria-label="Locate my live position" title="Locate my live position"
-                disabled={!selfLocation} onClick={locateSelf}><Navigation size={18} /></button>}
             </div>}
           </MapWorkspace>
         </div>
