@@ -69,6 +69,10 @@ export default function GlobalAIAssistant() {
   if (hidden) return null;
 
   const goToBooking = (s: BookingSuggestion) => {
+    if (role === 'guide') {
+      toast.error('Guides cannot create hiker bookings. Use your duty dashboard or contact the local admin.');
+      return;
+    }
     const params = new URLSearchParams();
     if (s.date) params.set('date', s.date);
     if (s.hikeTime) params.set('time', s.hikeTime);
@@ -179,7 +183,7 @@ export default function GlobalAIAssistant() {
       pageContext={`${info.label} — ${info.blurb}`}
       greeting={greeting}
       applyLabel="Book Now"
-      onApplySuggestion={goToBooking}
+      onApplySuggestion={role === 'guide' ? undefined : goToBooking}
     />
     </>
   );

@@ -727,7 +727,7 @@ async function buildStaffContext(scope: AiRoleScope): Promise<string> {
 
   const db = createClient(SUPABASE_URL, SERVICE_ROLE, { auth: { persistSession: false, autoRefreshToken: false } });
   let query = db.from('bookings')
-    .select('id, location_id, booking_date, group_size, status, notes, contact_phone, contact_email')
+    .select('id, user_id, location_id, booking_date, group_size, status, notes, contact_phone, contact_email')
     .neq('status', 'cancelled')
     .order('booking_date', { ascending: false })
     .limit(1000);
@@ -737,6 +737,12 @@ async function buildStaffContext(scope: AiRoleScope): Promise<string> {
     console.error('[trail-chat-rag] staff context error', error.message);
     return 'Scoped operational data is temporarily unavailable. Do not guess figures.';
   }
+
+  const profileIds = [...new Set((bookings ?? []).map((booking: any) => booking.user_id).filter(Boolean))];
+  const { data: profiles } = profileIds.length
+    ? await db.from('profiles').select('user_id,full_name').in('user_id', profileIds)
+    : { data: [] };
+  const profileNames = new Map((profiles ?? []).map((profile: any) => [profile.user_id, profile.full_name]));
 
   const { data: locationRows } = await db.from('locations').select('id,name').in('id', scope.locationIds);
   const locationNames = new Map((locationRows ?? []).map((row: { id: string; name: string }) => [row.id, row.name]));
@@ -758,8 +764,8 @@ async function buildStaffContext(scope: AiRoleScope): Promise<string> {
     // Local admins may ask about an individual operational booking in their own scope.
     if (scope.role === 'admin') {
       operationalRows.push(
-        `- booking ${String(booking.id).slice(0, 8)} · ${booking.booking_date} · ${booking.group_size} pax · status=${booking.status}` +
-        ` · lead=${meta.fullName || 'not recorded'} · contact=${meta.phoneNumber || booking.contact_phone || 'not recorded'}` +
+        `- booking ${String(booking.id)} · ${booking.booking_date} · ${booking.group_size} pax · status=${booking.status}` +
+        ` · lead=${profileNames.get(booking.user_id) || 'not recorded'} · contact=${meta.phoneNumber || booking.contact_phone || 'not recorded'}` +
         ` · hike=${meta.hikeType || 'not recorded'} ${meta.hikeTime || ''}`.trim() +
         ` · guide=${meta.assignedGuide || 'unassigned'} · payment_status=${meta.paymentStatus || 'unrecorded'}`,
       );
@@ -811,6 +817,7 @@ AUDIENCE CONTEXT:
 - When a "HIKER CONTEXT" block is present it describes the signed-in hiker and THEIR OWN bookings. Use it naturally — greet them by first name, reference their upcoming or past hikes, and tailor advice to their group size and age.
 - When a "STAFF OPERATIONAL CONTEXT" block is present, it is already filtered by the verified role and trailhead scope. Local admins may use their own trailhead's booking directory and aggregate revenue for operations. Central admins may compare all trailheads using aggregate data. MDRRMO is safety-first and has no revenue access.
 - Never cross a local admin's scope, and never invent a booking, revenue figure, identity, contact, medical note or payment record that is not in the scoped context.
+- When discussing a booking, copy its exact booking_id, date, status, group size, and profile name from a live tool or context result. If the record is absent, say that no matching record is available; never create an example booking or substitute a shortened or fabricated reference.
 
 LIVE OPERATIONAL DATA:
 - When a "LIVE DATA" system message is present it contains real, up-to-date numbers from the registration system. USE THEM. Never claim you lack access to registration numbers when that data is provided.
