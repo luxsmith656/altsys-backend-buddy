@@ -1,4 +1,4 @@
-import { env, getHeader, parseNotes, send, supabaseRequest, type ApiRequest, type ApiResponse } from './_shared';
+import { env, getHeader, send, supabaseRequest, type ApiRequest, type ApiResponse } from './_shared';
 
 export default async function handler(req: ApiRequest, res: ApiResponse) {
   if (req.method !== 'POST') return send(res, { error: 'Method not allowed' }, 405);
@@ -6,6 +6,7 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
   if (!paymongoSecret) return send(res, { error: 'PayMongo is not configured.' }, 503);
   if (!env('SUPABASE_SERVICE_ROLE_KEY') && !env('SUPABASE_SECRET_KEY')) return send(res, { error: 'Server database configuration is missing.' }, 503);
   const payload = req.body as any;
+  const eventId = String(payload?.data?.id || '').trim();
   const event = payload?.data?.attributes;
   const eventType = String(event?.type || '');
   if (!eventType.includes('paid') && eventType !== 'payment.paid') return send(res, { received: true });
@@ -32,20 +33,31 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
     || verifiedAttrs.payment_intent?.attributes?.status === 'succeeded'
     || verifiedPayments.some((payment: any) => ['paid', 'succeeded'].includes(String(payment?.attributes?.status || '').toLowerCase()));
   if (!verifiedPaid) return send(res, { received: true });
-  const query = reference
-    ? `bookings?select=id,user_id,notes&id=eq.${encodeURIComponent(reference)}`
+  const verifiedReference = String(verifiedAttrs.reference_number || '').trim();
+  const bookingReference = reference || verifiedReference;
+  const paidPayment = verifiedPayments.find((payment: any) => payment?.id) || resource;
+  const paymentId = String(paidPayment?.id || resource?.id || '').trim();
+  const paidAttrs = paidPayment?.attributes || attrs;
+  if (!paymentId) return send(res, { received: true });
+  const query = bookingReference
+    ? `bookings?select=id,user_id,notes&id=eq.${encodeURIComponent(bookingReference)}`
     : `bookings?select=id,user_id,notes&notes=like.*${encodeURIComponent(sessionId)}*`;
   const bookingResponse = await supabaseRequest(query);
   const bookings = await bookingResponse.json().catch(() => []);
   const booking = Array.isArray(bookings) ? bookings[0] : null;
   if (!booking) return send(res, { received: true });
-  const meta = parseNotes(booking.notes);
-  if (meta.paymentStatus === 'paid' && meta.paymongoPaymentId === String(resource?.id || '')) return send(res, { received: true, alreadyProcessed: true });
-  const paidPayment = verifiedPayments.find((payment: any) => payment?.id) || resource;
-  const paidAttrs = paidPayment?.attributes || attrs;
-  const nextMeta = { ...meta, paymentMethod: 'paymongo', paymentStatus: 'paid', amountPaid: Number(paidAttrs.amount || meta.totalFee || 0) / 100, paymongoPaymentId: String(paidPayment?.id || resource?.id || ''), paymongoPaidAt: new Date().toISOString() };
-  const updateResponse = await supabaseRequest(`bookings?id=eq.${encodeURIComponent(booking.id)}`, { method: 'PATCH', headers: { Prefer: 'return=minimal' }, body: JSON.stringify({ notes: JSON.stringify(nextMeta) }) });
-  if (!updateResponse.ok) return send(res, { error: 'Booking payment update failed' }, 500);
-  await supabaseRequest('app_notifications', { method: 'POST', headers: { Prefer: 'return=minimal' }, body: JSON.stringify({ user_id: booking.user_id, title: 'Payment received', body: `Your PayMongo payment for booking ${booking.id.slice(0, 8)} was received.`, category: 'booking', link: `/hiker?booking=${booking.id}` }) });
-  return send(res, { received: true });
+  const amountPaid = Number(paidAttrs.amount || 0) / 100;
+  const processResponse = await supabaseRequest('rpc/process_paymongo_payment', {
+    method: 'POST',
+    body: JSON.stringify({
+      p_booking_id: booking.id,
+      p_provider_payment_id: paymentId,
+      p_provider_event_id: eventId,
+      p_amount_paid: amountPaid,
+      p_paid_at: new Date().toISOString(),
+    }),
+  });
+  if (!processResponse.ok) return send(res, { error: 'Booking payment update failed' }, 500);
+  const processed = await processResponse.json().catch(() => false);
+  return send(res, { received: true, alreadyProcessed: processed !== true && !(Array.isArray(processed) && processed[0] === true) });
 }

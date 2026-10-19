@@ -1,6 +1,4 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.106.0';
-import { encodeMeta, parseMeta } from '../_shared/booking-meta.ts';
-import type { BookingMeta } from '../../../src/types/index.ts';
 
 const env = (name: string) => (Deno.env.get(name) ?? '').trim();
 const db = createClient(env('SUPABASE_URL'), env('SUPABASE_SERVICE_ROLE_KEY'), {
@@ -24,6 +22,7 @@ Deno.serve(async (request) => {
   if (!paymongoSecret) return json({ error: 'PayMongo is not configured.' }, 503);
 
   const payload = await request.json().catch(() => null);
+  const eventId = String(payload?.data?.id || '').trim();
   const event = payload?.data?.attributes;
   const eventType = String(event?.type || '');
   if (!eventType.includes('paid') && eventType !== 'payment.paid') return json({ received: true });
@@ -49,37 +48,27 @@ Deno.serve(async (request) => {
     || verifiedAttrs.payment_intent?.attributes?.status === 'succeeded'
     || verifiedPayments.some((payment: any) => ['paid', 'succeeded'].includes(String(payment?.attributes?.status || '').toLowerCase()));
   if (!verifiedPaid) return json({ received: true });
+  const verifiedReference = String(verifiedAttrs.reference_number || '').trim();
+  const bookingReference = reference || verifiedReference;
+  const paidPayment = verifiedPayments.find((payment: any) => payment?.id) || resource;
+  const paymentId = String(paidPayment?.id || resource?.id || '').trim();
+  if (!paymentId) return json({ received: true });
 
   let query = db.from('bookings').select('id,user_id,notes').limit(1);
-  if (reference) query = query.eq('id', reference);
+  if (bookingReference) query = query.eq('id', bookingReference);
   else if (sessionId) query = query.ilike('notes', `%${sessionId}%`);
   else return json({ received: true });
   const { data: booking, error: bookingError } = await query.maybeSingle();
   if (bookingError || !booking) return json({ received: true });
 
-  const meta = parseMeta(booking.notes);
-  if (meta.paymentStatus === 'paid' && meta.paymongoPaymentId === String(resource?.id || '')) {
-    return json({ received: true, alreadyProcessed: true });
-  }
-  const paidPayment = verifiedPayments.find((payment: any) => payment?.id) || resource;
   const paidAttrs = paidPayment?.attributes || attrs;
-  const nextMeta: BookingMeta = {
-    ...meta,
-    paymentMethod: 'paymongo',
-    paymentStatus: 'paid',
-    amountPaid: Number(paidAttrs.amount || meta.totalFee || 0) / 100,
-    paymongoPaymentId: String(paidPayment?.id || resource?.id || ''),
-    paymongoPaidAt: new Date().toISOString(),
-  };
-  const { error: updateError } = await db.from('bookings').update({ notes: encodeMeta(nextMeta) }).eq('id', booking.id);
-  if (updateError) return json({ error: 'Booking payment update failed' }, 500);
-
-  await db.from('app_notifications').insert({
-    user_id: booking.user_id,
-    title: 'Payment received',
-    body: `Your PayMongo payment for booking ${booking.id.slice(0, 8)} was received.`,
-    category: 'booking',
-    link: `/hiker?booking=${booking.id}`,
+  const { data: processed, error: processError } = await db.rpc('process_paymongo_payment', {
+    p_booking_id: booking.id,
+    p_provider_payment_id: paymentId,
+    p_provider_event_id: eventId,
+    p_amount_paid: Number(paidAttrs.amount || 0) / 100,
+    p_paid_at: new Date().toISOString(),
   });
-  return json({ received: true });
+  if (processError) return json({ error: 'Booking payment update failed' }, 500);
+  return json({ received: true, alreadyProcessed: processed !== true });
 });
