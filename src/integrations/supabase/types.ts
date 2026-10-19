@@ -105,23 +105,38 @@ export type Database = {
       }
       ai_tool_logs: {
         Row: {
+          allowed: boolean
           created_at: string
+          denied_reason: string | null
           id: string
+          location_scope: Json
           params: Json
+          role: string | null
+          row_count: number
           tool_name: string
           user_id: string
         }
         Insert: {
+          allowed?: boolean
           created_at?: string
+          denied_reason?: string | null
           id?: string
+          location_scope?: Json
           params?: Json
+          role?: string | null
+          row_count?: number
           tool_name: string
           user_id: string
         }
         Update: {
+          allowed?: boolean
           created_at?: string
+          denied_reason?: string | null
           id?: string
+          location_scope?: Json
           params?: Json
+          role?: string | null
+          row_count?: number
           tool_name?: string
           user_id?: string
         }
@@ -358,6 +373,136 @@ export type Database = {
           },
         ]
       }
+      booking_capacity_audit: {
+        Row: {
+          changed_by: string | null
+          created_at: string
+          flagged_booking_count: number
+          flagged_summary: Json
+          id: string
+          new_config: Json
+          old_config: Json
+        }
+        Insert: {
+          changed_by?: string | null
+          created_at?: string
+          flagged_booking_count?: number
+          flagged_summary?: Json
+          id?: string
+          new_config: Json
+          old_config: Json
+        }
+        Update: {
+          changed_by?: string | null
+          created_at?: string
+          flagged_booking_count?: number
+          flagged_summary?: Json
+          id?: string
+          new_config?: Json
+          old_config?: Json
+        }
+        Relationships: []
+      }
+      booking_capacity_settings: {
+        Row: {
+          capacity_mode: string
+          hold_pending: boolean
+          id: number
+          max_people_per_group: number
+          max_people_per_slot: number | null
+          shared_max_groups: number
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          capacity_mode?: string
+          hold_pending?: boolean
+          id?: number
+          max_people_per_group?: number
+          max_people_per_slot?: number | null
+          shared_max_groups?: number
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          capacity_mode?: string
+          hold_pending?: boolean
+          id?: number
+          max_people_per_group?: number
+          max_people_per_slot?: number | null
+          shared_max_groups?: number
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: []
+      }
+      booking_capacity_trailhead_overrides: {
+        Row: {
+          location_id: string
+          max_groups: number
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          location_id: string
+          max_groups?: number
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          location_id?: string
+          max_groups?: number
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "booking_capacity_trailhead_overrides_location_id_fkey"
+            columns: ["location_id"]
+            isOneToOne: true
+            referencedRelation: "locations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      booking_companion_claims: {
+        Row: {
+          booking_id: string
+          claimed_at: string
+          claimed_by: string | null
+          claimed_device_id: string | null
+          companion_index: number
+          companion_name: string
+          id: string
+        }
+        Insert: {
+          booking_id: string
+          claimed_at?: string
+          claimed_by?: string | null
+          claimed_device_id?: string | null
+          companion_index: number
+          companion_name: string
+          id?: string
+        }
+        Update: {
+          booking_id?: string
+          claimed_at?: string
+          claimed_by?: string | null
+          claimed_device_id?: string | null
+          companion_index?: number
+          companion_name?: string
+          id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "booking_companion_claims_booking_id_fkey"
+            columns: ["booking_id"]
+            isOneToOne: false
+            referencedRelation: "bookings"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       booking_confirmation_emails: {
         Row: {
           attempts: number
@@ -441,9 +586,45 @@ export type Database = {
         }
         Relationships: []
       }
+      booking_schedule_settings: {
+        Row: {
+          id: string
+          location_id: string | null
+          schedule: Json
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          id?: string
+          location_id?: string | null
+          schedule?: Json
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          id?: string
+          location_id?: string | null
+          schedule?: Json
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "booking_schedule_settings_location_id_fkey"
+            columns: ["location_id"]
+            isOneToOne: false
+            referencedRelation: "locations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       bookings: {
         Row: {
           booking_date: string
+          capacity_flag_reason: string | null
+          capacity_flagged_at: string | null
+          capacity_status: string
+          companion_join_code: string | null
           contact_email: string | null
           contact_phone: string | null
           created_at: string
@@ -463,6 +644,10 @@ export type Database = {
         }
         Insert: {
           booking_date: string
+          capacity_flag_reason?: string | null
+          capacity_flagged_at?: string | null
+          capacity_status?: string
+          companion_join_code?: string | null
           contact_email?: string | null
           contact_phone?: string | null
           created_at?: string
@@ -482,6 +667,10 @@ export type Database = {
         }
         Update: {
           booking_date?: string
+          capacity_flag_reason?: string | null
+          capacity_flagged_at?: string | null
+          capacity_status?: string
+          companion_join_code?: string | null
           contact_email?: string | null
           contact_phone?: string | null
           created_at?: string
@@ -675,6 +864,7 @@ export type Database = {
           acknowledged_at: string | null
           acknowledged_by: string | null
           booking_id: string | null
+          client_alert_id: string | null
           created_at: string
           id: string
           latitude: number | null
@@ -692,6 +882,7 @@ export type Database = {
           acknowledged_at?: string | null
           acknowledged_by?: string | null
           booking_id?: string | null
+          client_alert_id?: string | null
           created_at?: string
           id?: string
           latitude?: number | null
@@ -709,6 +900,7 @@ export type Database = {
           acknowledged_at?: string | null
           acknowledged_by?: string | null
           booking_id?: string | null
+          client_alert_id?: string | null
           created_at?: string
           id?: string
           latitude?: number | null
@@ -1565,6 +1757,70 @@ export type Database = {
           },
         ]
       }
+      trailhead_slot_capacity_audit: {
+        Row: {
+          changed_at: string
+          changed_by: string | null
+          id: string
+          location_id: string
+          new_max_groups: number
+          old_max_groups: number | null
+        }
+        Insert: {
+          changed_at?: string
+          changed_by?: string | null
+          id?: string
+          location_id: string
+          new_max_groups: number
+          old_max_groups?: number | null
+        }
+        Update: {
+          changed_at?: string
+          changed_by?: string | null
+          id?: string
+          location_id?: string
+          new_max_groups?: number
+          old_max_groups?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "trailhead_slot_capacity_audit_location_id_fkey"
+            columns: ["location_id"]
+            isOneToOne: false
+            referencedRelation: "locations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      trailhead_slot_capacity_settings: {
+        Row: {
+          location_id: string
+          max_groups: number
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          location_id: string
+          max_groups?: number
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          location_id?: string
+          max_groups?: number
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "trailhead_slot_capacity_settings_location_id_fkey"
+            columns: ["location_id"]
+            isOneToOne: true
+            referencedRelation: "locations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       user_locations: {
         Row: {
           id: string
@@ -1670,9 +1926,53 @@ export type Database = {
         }
         Returns: Json
       }
+      booking_capacity_group_limit: {
+        Args: { p_location_id: string }
+        Returns: number
+      }
+      booking_capacity_holds: { Args: { p_status: string }; Returns: boolean }
+      booking_capacity_issue: {
+        Args: {
+          p_booking: Database["public"]["Tables"]["bookings"]["Row"]
+          p_ignore_id?: string
+        }
+        Returns: string
+      }
+      booking_companion_names: {
+        Args: { p_booking_id: string }
+        Returns: {
+          companion_index: number
+          companion_name: string
+        }[]
+      }
+      booking_effective_date: {
+        Args: { p_booking: Database["public"]["Tables"]["bookings"]["Row"] }
+        Returns: string
+      }
+      booking_effective_meta: {
+        Args: { p_booking: Database["public"]["Tables"]["bookings"]["Row"] }
+        Returns: Json
+      }
+      booking_normalize_time: { Args: { p_time: string }; Returns: string }
+      booking_schedule_for_location: {
+        Args: { p_location_id?: string }
+        Returns: Json
+      }
       booking_schedule_range: {
         Args: { p_booking_id: string }
         Returns: unknown
+      }
+      booking_slot_is_scheduled: {
+        Args: {
+          p_hike_time: string
+          p_hike_type: string
+          p_location_id: string
+        }
+        Returns: boolean
+      }
+      booking_validate_schedule: {
+        Args: { p_schedule: Json }
+        Returns: undefined
       }
       can_moderate_guide_review: {
         Args: { _booking_id: string }
@@ -1685,6 +1985,14 @@ export type Database = {
       can_submit_guide_review: {
         Args: { _booking_id: string; _guide_id: string }
         Returns: boolean
+      }
+      claim_booking_companion: {
+        Args: {
+          p_companion_index: number
+          p_device_id: string
+          p_join_code: string
+        }
+        Returns: Json
       }
       claim_booking_confirmation_email: {
         Args: { _booking_id: string }
@@ -1722,6 +2030,51 @@ export type Database = {
           p_user_id: string
         }
         Returns: string
+      }
+      create_staff_change_announcement: {
+        Args: { p_actor: string; p_body: string; p_title: string }
+        Returns: string
+      }
+      create_staff_change_announcement_for_location: {
+        Args: {
+          p_actor: string
+          p_body: string
+          p_location_id: string
+          p_title: string
+        }
+        Returns: string
+      }
+      get_booking_capacity_control: { Args: never; Returns: Json }
+      get_booking_companion_options: {
+        Args: { p_join_code: string }
+        Returns: {
+          booking_date: string
+          booking_id: string
+          claimed: boolean
+          companion_index: number
+          companion_name: string
+          group_size: number
+        }[]
+      }
+      get_booking_slot_availability: {
+        Args: {
+          p_end_date: string
+          p_location_id?: string
+          p_start_date: string
+        }
+        Returns: {
+          available_groups: number
+          available_people: number
+          booking_date: string
+          group_count: number
+          hike_time: string
+          hike_type: string
+          location_id: string
+          max_groups: number
+          max_people: number
+          people_count: number
+          using_trailheads: string[]
+        }[]
       }
       get_booking_slot_capacity: {
         Args: { p_end_date: string; p_start_date: string }
@@ -1824,7 +2177,15 @@ export type Database = {
         Returns: Json
       }
       safe_booking_meta: { Args: { _notes: string }; Returns: Json }
+      save_booking_capacity_control: {
+        Args: { p_payload: Json }
+        Returns: Json
+      }
       session_location_id: { Args: { _session_id: string }; Returns: string }
+      set_trailhead_slot_capacity: {
+        Args: { p_location_id: string; p_max_groups: number }
+        Returns: Json
+      }
     }
     Enums: {
       app_role:
