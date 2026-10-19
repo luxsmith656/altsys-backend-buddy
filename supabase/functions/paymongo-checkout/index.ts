@@ -68,7 +68,7 @@ Deno.serve(async (request) => {
           name: 'Mt. Kalisungan hiking reservation',
           quantity: 1,
         }],
-        payment_method_types: ['gcash', 'card', 'paymaya', 'grab_pay'],
+        payment_method_types: ['qrph'],
         reference_number: booking.id,
         send_email_receipt: false,
         show_description: true,
@@ -77,7 +77,7 @@ Deno.serve(async (request) => {
     },
   };
 
-  const paymongoResponse = await fetch('https://api.paymongo.com/v1/checkout_sessions', {
+  const paymongoResponse = await fetch('https://api.paymongo.com/v2/checkout_sessions', {
     method: 'POST',
     headers: {
       Accept: 'application/json',

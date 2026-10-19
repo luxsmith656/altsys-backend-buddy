@@ -34,13 +34,9 @@ import {
   Plus,
   Baby,
   CreditCard,
-  Smartphone,
-  Building2,
   AlertTriangle,
   Star,
   Upload,
-  ImageIcon,
-  X,
   Globe,
   MapPin,
   UserPlus,
@@ -48,7 +44,7 @@ import {
   Compass,
   CheckCircle2,
 } from 'lucide-react';
-import { calculateFees, formatPeso, GCASH_DETAILS, BANK_DETAILS, MAX_PAX_PER_GUIDE } from '@/lib/payments';
+import { calculateFees, formatPeso, MAX_PAX_PER_GUIDE } from '@/lib/payments';
 import { usePricing } from '@/hooks/usePricing';
 import { QRCodeSVG } from 'qrcode.react';
 import { toast } from 'sonner';
@@ -59,14 +55,12 @@ import { CapacityCalendar, type DayCapacityMap } from '@/components/booking/Capa
 import BookingAIChat, { type GroupComposition, type PublishedRouteContext } from '@/components/booking/BookingAIChat';
 import { cn } from '@/lib/utils';
 import { getPHLocationOptions, COMMON_NATIONALITIES } from '@/lib/ph-locations';
-import { uploadPaymentScreenshot, isFirebaseConfigured } from '@/lib/firebase-storage';
 import { notifyUser } from '@/lib/firestoreNotifications';
 import type { CompanionDetail } from '@/types';
 import { useLocations } from '@/hooks/useLocations';
 import LocationPreview from '@/components/booking/LocationPreview';
 import AdminWalkInRegistrationDialog from '@/components/admin/AdminWalkInRegistrationDialog';
 import AdminWalkInDesk from '@/components/admin/AdminWalkInDesk';
-import PaymongoQrPayment from '@/components/booking/PaymongoQrPayment';
 import KaliContextPanel from '@/components/kali/KaliContextPanel';
 import { useKaliContext } from '@/hooks/useKaliContext';
 import { HIKE_TIME_OPTIONS, getGuideFeePerGuide, getHikeTypeLabel, isValidHikeTime, normalizeHikeType, type HikeType } from '@/lib/hikeSchedule';
@@ -130,7 +124,6 @@ interface PublishedRouteRow {
 
 type Sex = 'male' | 'female' | 'prefer_not_to_say';
 type PaymentOption = 'onsite' | 'online';
-type OnlinePayMethod = 'gcash' | 'bank_transfer';
 
 type SubmittedBooking = {
   booking_date: string;
@@ -398,12 +391,6 @@ export default function BookingPage() {
 
   // -- Step 4: Payment
   const [paymentOption, setPaymentOption] = useState<PaymentOption>('onsite');
-  const [onlinePayMethod, setOnlinePayMethod] = useState<OnlinePayMethod>('gcash');
-  const [transactionRef, setTransactionRef] = useState('');
-  const [amountPaid, setAmountPaid] = useState('');
-  const [paymentScreenshot, setPaymentScreenshot] = useState<File | null>(null);
-  const [screenshotPreview, setScreenshotPreview] = useState<string | null>(null);
-  const [screenshotUploading, setScreenshotUploading] = useState(false);
 
   const phLocations = useMemo(() => getPHLocationOptions(), []);
 
@@ -1055,18 +1042,6 @@ export default function BookingPage() {
     setStep((s) => s + 1);
   };
 
-  /* -- Screenshot handler -- */
-  const handleScreenshotChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    if (!file.type.startsWith('image/')) { toast.error('Please upload an image file.'); return; }
-    if (file.size > 15 * 1024 * 1024) { toast.error('File too large. Max 15MB.'); return; }
-    setPaymentScreenshot(file);
-    const reader = new FileReader();
-    reader.onload = (ev) => setScreenshotPreview(ev.target?.result as string);
-    reader.readAsDataURL(file);
-  };
-
   /* -- Submit -- */
   const handleBook = async () => {
     if (bookingSubmitLock.current) return;
@@ -1151,32 +1126,6 @@ export default function BookingPage() {
       const companionNames = companions.map((name) => name.trim()).filter(Boolean);
       const fees = calculateFees(groupSize, { hikeType });
 
-      let screenshotUrl: string | undefined;
-      let screenshotPath: string | undefined;
-      if (paymentScreenshot) {
-        setScreenshotUploading(true);
-        let uploadTimeout: ReturnType<typeof setTimeout> | undefined;
-        try {
-          const result = await Promise.race([
-            uploadPaymentScreenshot(paymentScreenshot, `${user.id.slice(0, 8)}-${dateStr}`),
-            new Promise<never>((_, reject) => {
-              uploadTimeout = setTimeout(() => reject(new Error('Screenshot upload timed out')), 15000);
-            }),
-          ]);
-          if (result) {
-            screenshotUrl = result.url;
-            screenshotPath = result.path;
-          } else {
-            toast.warning('Screenshot storage is unavailable. Your booking will be submitted without the image.');
-          }
-        } catch {
-          toast.warning('Screenshot upload did not finish. Your booking will be submitted without the image.');
-        } finally {
-          if (uploadTimeout !== undefined) clearTimeout(uploadTimeout);
-        }
-        setScreenshotUploading(false);
-      }
-
       const enrichedCompanions = companionDetails.map((c, i) => ({
         ...c,
         name: c.name || companions[i] || '',
@@ -1209,12 +1158,8 @@ export default function BookingPage() {
         ),
         hikeType,
         hikeTime,
-        paymentStatus: paymentOption === 'online' && (transactionRef || screenshotUrl) ? 'partial' : 'unpaid',
-        paymentMethod: paymentOption === 'online' ? onlinePayMethod : 'onsite',
-        transactionId: transactionRef.trim() || undefined,
-        amountPaid: amountPaid ? Number(amountPaid) : undefined,
-        paymentScreenshotUrl: screenshotUrl,
-        paymentScreenshotPath: screenshotPath,
+        paymentStatus: 'unpaid',
+        paymentMethod: paymentOption === 'online' ? 'paymongo' : 'onsite',
         entryFee: fees.entryFee,
         envFee: fees.envFee,
         guideFee: fees.guideFee,
@@ -1299,8 +1244,9 @@ export default function BookingPage() {
           window.location.assign(checkout.checkoutUrl as string);
           return;
         }
-        if (!checkoutResponse.ok) console.warn('PayMongo checkout unavailable; keeping QR fallback:', checkout?.error);
-        toast.info('Booking saved. Use the QR Ph payment option and submit your receipt for verification.');
+        if (!checkoutResponse.ok || !checkout?.checkoutUrl) {
+          throw new Error(checkout?.error || 'Automatic QR Ph checkout is unavailable. Please try again.');
+        }
       }
 
       setBooking({
@@ -2378,103 +2324,11 @@ export default function BookingPage() {
 
                       {paymentOption === 'online' && (
                         <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-4">
-                          <div className="grid grid-cols-2 gap-2">
-                            {([
-                                { value: 'gcash' as OnlinePayMethod, Icon: Smartphone, label: 'QR Ph / GCash' },
-                              { value: 'bank_transfer' as OnlinePayMethod, Icon: Building2, label: 'Bank Transfer' },
-                            ]).map(({ value, Icon, label }) => (
-                              <button
-                                key={value}
-                                type="button"
-                                onClick={() => setOnlinePayMethod(value)}
-                                className={cn(
-                                  'flex items-center justify-center gap-2 py-2.5 rounded-xl border-2 text-xs font-semibold transition-all',
-                                  onlinePayMethod === value
-                                    ? 'border-primary bg-primary/10 text-primary'
-                                    : 'border-border/30 text-muted-foreground hover:border-primary/30',
-                                )}
-                              >
-                                <Icon className="h-4 w-4" /> {label}
-                              </button>
-                            ))}
+                          <div className="rounded-xl border border-primary/20 bg-primary/5 p-4 text-sm space-y-2">
+                            <p className="font-semibold text-primary">Pay online with dynamic QR Ph</p>
+                            <p className="text-xs text-muted-foreground">After you submit the booking, you will be redirected to PayMongo. Scan the QR Ph shown there and pay the exact amount of {formatPeso(totalFee)}.</p>
+                            <p className="text-xs text-muted-foreground">Payment is confirmed automatically by PayMongo. No screenshot, reference number, bank transfer, or manual verification is required.</p>
                           </div>
-
-                          <div className="rounded-xl border border-primary/20 bg-primary/5 p-4 text-sm space-y-1">
-                            {onlinePayMethod === 'gcash' ? (
-                              <>
-                                <PaymongoQrPayment amount={totalFee} />
-                                <div className="text-xs text-muted-foreground pt-1">
-                                  <p className="font-semibold text-primary mb-1">Alternative account details</p>
-                                  <p>Number: <strong>{GCASH_DETAILS.number}</strong></p>
-                                  <p>Name: <strong>{GCASH_DETAILS.name}</strong></p>
-                                </div>
-                              </>
-                            ) : (
-                              <>
-                                <p className="font-semibold text-primary mb-2">Bank Transfer Details</p>
-                                <p>Bank: <strong>{BANK_DETAILS.bank}</strong></p>
-                                <p>Account No.: <strong>{BANK_DETAILS.accountNo}</strong></p>
-                                <p>Account Name: <strong>{BANK_DETAILS.accountName}</strong></p>
-                              </>
-                            )}
-                            <p className="text-xs text-muted-foreground pt-1">Amount: <strong>{formatPeso(totalFee)}</strong>  -  use your booking name as reference.</p>
-                          </div>
-
-                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                            <div className="space-y-2">
-                              <Label htmlFor="transactionRef" className="text-xs">Transaction Reference No.</Label>
-                              <Input
-                                id="transactionRef"
-                                value={transactionRef}
-                                onChange={(e) => setTransactionRef(e.target.value)}
-                                placeholder={onlinePayMethod === 'gcash' ? 'GCash ref no.' : 'Bank transaction no.'}
-                              />
-                            </div>
-                            <div className="space-y-2">
-                              <Label htmlFor="amountPaid" className="text-xs">Amount Paid (PHP )</Label>
-                              <Input
-                                id="amountPaid"
-                                type="number"
-                                value={amountPaid}
-                                onChange={(e) => setAmountPaid(e.target.value)}
-                                placeholder={String(totalFee)}
-                              />
-                            </div>
-                          </div>
-
-                          {/* Payment screenshot upload */}
-                          <div className="space-y-2">
-                            <Label className="text-xs flex items-center gap-1.5">
-                              <ImageIcon className="h-3.5 w-3.5" /> Payment Screenshot
-                              {isFirebaseConfigured() ? (
-                                <span className="text-[10px] font-normal text-muted-foreground">(saved to secure storage, compressed)</span>
-                              ) : (
-                                <span className="text-[10px] font-normal text-amber-500">(Firebase not configured  -  admin will request manually)</span>
-                              )}
-                            </Label>
-                            {screenshotPreview ? (
-                              <div className="relative inline-block">
-                                <img src={screenshotPreview} alt="Payment screenshot" className="max-h-36 rounded-xl border border-border/30 object-cover" />
-                                <button
-                                  type="button"
-                                  onClick={() => { setPaymentScreenshot(null); setScreenshotPreview(null); }}
-                                  className="absolute -top-2 -right-2 w-5 h-5 rounded-full bg-destructive text-white flex items-center justify-center"
-                                >
-                                  <X className="h-3 w-3" />
-                                </button>
-                              </div>
-                            ) : (
-                              <label className="flex flex-col items-center gap-2 p-4 rounded-xl border-2 border-dashed border-border/40 hover:border-primary/40 cursor-pointer transition-colors bg-secondary/10">
-                                <Upload className="h-5 w-5 text-muted-foreground" />
-                                <span className="text-xs text-muted-foreground">Click to upload screenshot</span>
-                                <input type="file" accept="image/*" className="sr-only" onChange={handleScreenshotChange} />
-                              </label>
-                            )}
-                          </div>
-
-                          <p className="text-xs text-muted-foreground">
-                            Online payment is optional  -  you may pay remaining balance onsite. Proof of payment may be required at check-in.
-                          </p>
                         </motion.div>
                       )}
 
@@ -2523,15 +2377,15 @@ export default function BookingPage() {
             ) : (
               <Button
                 onClick={handleBook}
-                disabled={loading || screenshotUploading}
+                disabled={loading}
                 className="gap-2 px-8 h-12 text-base font-bold shadow-lg shadow-primary/20"
               >
-                {loading || screenshotUploading ? (
+                {loading ? (
                   <Loader2 className="h-4 w-4 animate-spin" />
                 ) : (
                   <Check className="h-4 w-4" />
                 )}
-                {screenshotUploading ? 'Uploading...' : 'Confirm Reservation'}
+                Confirm Reservation
               </Button>
             )}
           </div>
@@ -2555,15 +2409,15 @@ export default function BookingPage() {
               ) : (
                 <Button
                   onClick={handleBook}
-                  disabled={loading || screenshotUploading}
+                  disabled={loading}
                   className="gap-2 flex-1 h-11 text-sm font-bold"
                 >
-                  {loading || screenshotUploading ? (
+                  {loading ? (
                     <Loader2 className="h-4 w-4 animate-spin" />
                   ) : (
                     <Check className="h-4 w-4" />
                   )}
-                  {screenshotUploading ? 'Uploading...' : 'Confirm'}
+                  Confirm
                 </Button>
               )}
             </div>

@@ -1,12 +1,13 @@
 # PayMongo payment setup
 
-The booking page now displays the supplied QR Ph merchant image at
-`/payments/qrph-kooketz.jpg` when a hiker chooses online payment. The hiker
-enters the transaction reference and may attach a receipt; the payment stays
-pending until an admin verifies it.
+Online hiker payments now use a PayMongo Hosted Checkout Session restricted to
+dynamic QR Ph. PayMongo generates a QR code for the exact booking amount, the
+hiker scans and pays it, and the `checkout_session.payment.paid` webhook marks
+the booking paid automatically. No screenshot, transaction reference, bank
+transfer, or admin verification is used for online bookings.
 
-This QR is a static merchant QR. It does not require a PayMongo API key and it
-does not provide automatic payment confirmation by itself.
+The supplied static QR image remains available only for staff walk-in payment
+collection. It is not used for automatic online booking confirmation.
 
 ## Secret handling
 
@@ -45,7 +46,8 @@ PAYMONGO_PUBLIC_KEY=pk_live_...
 
 Vercel deploys `api/paymongo/checkout.ts` and `api/paymongo/webhook.ts`
 automatically. Register one PayMongo webhook pointing to
-`https://YOUR_VERCEL_DOMAIN/api/paymongo/webhook` for the
-Checkout Session/payment-paid event. Use PayMongo's test keys first; switch to
-live keys only after a real test payment succeeds. The supplied static QR
-remains available as a fallback when checkout secrets are unavailable.
+`https://YOUR_VERCEL_DOMAIN/api/paymongo/webhook` and subscribe to
+`checkout_session.payment.paid`. Use PayMongo's test keys first; switch to
+live keys only after a real test payment succeeds. If the server variables are
+missing, online checkout stops with a clear configuration error instead of
+creating a booking that appears paid.

@@ -20,7 +20,7 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
   if (!Number.isFinite(amount) || amount <= 0) return send(res, { error: 'Booking amount is invalid' }, 422);
 
   const origin = getHeader(req, 'origin') || env('APP_ORIGIN') || 'https://mtkali.vercel.app';
-  const paymongo = await fetch('https://api.paymongo.com/v1/checkout_sessions', {
+  const paymongo = await fetch('https://api.paymongo.com/v2/checkout_sessions', {
     method: 'POST',
     headers: { Accept: 'application/json', Authorization: `Basic ${Buffer.from(`${paymongoSecret}:`).toString('base64')}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({ data: { attributes: {
@@ -29,7 +29,9 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
       success_url: `${origin}/hiker?payment=success&booking=${booking.id}`,
       description: `Mt. Kalisungan booking ${booking.id}`,
       line_items: [{ amount: Math.round(amount * 100), currency: 'PHP', description: `Hike on ${booking.booking_date}`, name: 'Mt. Kalisungan hiking reservation', quantity: 1 }],
-      payment_method_types: ['gcash', 'card', 'paymaya', 'grab_pay'],
+      // Dynamic QR Ph encodes this booking's exact amount. Payment is
+      // confirmed automatically by the checkout_session.payment.paid webhook.
+      payment_method_types: ['qrph'],
       reference_number: booking.id,
       send_email_receipt: false,
       show_description: true,

@@ -14,15 +14,14 @@ function json(body: Record<string, unknown>, status = 200) {
 /**
  * PayMongo calls this endpoint for payment events. Keep it idempotent: a
  * retried webhook must not send duplicate notifications or rewrite paid data.
- * Configure PayMongo's webhook signing secret as PAYMONGO_WEBHOOK_SECRET when
- * the account exposes one; otherwise protect this endpoint at the edge.
+ * PayMongo's paid event is only accepted after the resource is re-read with
+ * the server-only secret key. This keeps payment confirmation automatic while
+ * avoiding client-submitted proof or status changes.
  */
 Deno.serve(async (request) => {
   if (request.method !== 'POST') return json({ error: 'Method not allowed' }, 405);
-  const configuredSecret = env('PAYMONGO_WEBHOOK_SECRET');
-  if (configuredSecret && request.headers.get('x-webhook-secret') !== configuredSecret) {
-    return json({ error: 'Unauthorized' }, 401);
-  }
+  const paymongoSecret = env('PAYMONGO_SECRET_KEY');
+  if (!paymongoSecret) return json({ error: 'PayMongo is not configured.' }, 503);
 
   const payload = await request.json().catch(() => null);
   const event = payload?.data?.attributes;
@@ -33,6 +32,23 @@ Deno.serve(async (request) => {
   const attrs = resource?.attributes ?? {};
   const reference = String(attrs.reference_number || attrs.metadata?.booking_id || '').trim();
   const sessionId = String(resource?.id || attrs.checkout_session_id || '').trim();
+
+  if (!sessionId) return json({ received: true });
+  const resourceType = String(resource?.type || '').toLowerCase();
+  const endpoint = resourceType === 'payment' ? 'v1/payments' : 'v2/checkout_sessions';
+  const verifiedResponse = await fetch(`https://api.paymongo.com/${endpoint}/${sessionId}`, {
+    headers: { Accept: 'application/json', Authorization: `Basic ${btoa(`${paymongoSecret}:`)}` },
+  });
+  const verifiedBody = await verifiedResponse.json().catch(() => ({}));
+  if (!verifiedResponse.ok) return json({ received: true });
+  const verifiedAttrs = verifiedBody?.data?.attributes ?? {};
+  const verifiedPayments = Array.isArray(verifiedAttrs.payments) ? verifiedAttrs.payments : [];
+  const verifiedPaid = eventType === 'checkout_session.payment.paid'
+    || verifiedAttrs.status === 'paid'
+    || verifiedAttrs.status === 'succeeded'
+    || verifiedAttrs.payment_intent?.attributes?.status === 'succeeded'
+    || verifiedPayments.some((payment: any) => ['paid', 'succeeded'].includes(String(payment?.attributes?.status || '').toLowerCase()));
+  if (!verifiedPaid) return json({ received: true });
 
   let query = db.from('bookings').select('id,user_id,notes').limit(1);
   if (reference) query = query.eq('id', reference);
@@ -45,12 +61,14 @@ Deno.serve(async (request) => {
   if (meta.paymentStatus === 'paid' && meta.paymongoPaymentId === String(resource?.id || '')) {
     return json({ received: true, alreadyProcessed: true });
   }
+  const paidPayment = verifiedPayments.find((payment: any) => payment?.id) || resource;
+  const paidAttrs = paidPayment?.attributes || attrs;
   const nextMeta: BookingMeta = {
     ...meta,
     paymentMethod: 'paymongo',
     paymentStatus: 'paid',
-    amountPaid: Number(attrs.amount || meta.totalFee || 0) / 100,
-    paymongoPaymentId: String(resource?.id || ''),
+    amountPaid: Number(paidAttrs.amount || meta.totalFee || 0) / 100,
+    paymongoPaymentId: String(paidPayment?.id || resource?.id || ''),
     paymongoPaidAt: new Date().toISOString(),
   };
   const { error: updateError } = await db.from('bookings').update({ notes: encodeMeta(nextMeta) }).eq('id', booking.id);
