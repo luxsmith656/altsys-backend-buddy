@@ -6,6 +6,9 @@ CREATE TABLE IF NOT EXISTS public.hike_station_reports (
   reported_at timestamptz NOT NULL,
   created_at timestamptz NOT NULL DEFAULT now()
 );
+ALTER TABLE public.hike_station_reports ADD COLUMN IF NOT EXISTS latitude double precision;
+ALTER TABLE public.hike_station_reports ADD COLUMN IF NOT EXISTS longitude double precision;
+ALTER TABLE public.hike_station_reports ADD COLUMN IF NOT EXISTS accuracy double precision;
 ALTER TABLE public.hike_station_reports ENABLE ROW LEVEL SECURITY;
 GRANT SELECT, INSERT ON public.hike_station_reports TO authenticated;
 CREATE POLICY station_report_read ON public.hike_station_reports FOR SELECT TO authenticated

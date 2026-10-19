@@ -1094,24 +1094,33 @@ export type Database = {
       }
       hike_station_reports: {
         Row: {
+          accuracy: number | null
           created_at: string
           id: string
+          latitude: number | null
+          longitude: number | null
           reported_at: string
           session_id: string
           station: number
           user_id: string
         }
         Insert: {
+          accuracy?: number | null
           created_at?: string
           id: string
+          latitude?: number | null
+          longitude?: number | null
           reported_at: string
           session_id: string
           station: number
           user_id: string
         }
         Update: {
+          accuracy?: number | null
           created_at?: string
           id?: string
+          latitude?: number | null
+          longitude?: number | null
           reported_at?: string
           session_id?: string
           station?: number

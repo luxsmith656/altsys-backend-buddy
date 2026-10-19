@@ -64,7 +64,12 @@ async function pushOne(item: any) {
   }
 
   if (item.kind === 'station') {
-    const { error } = await supabase.from('hike_station_reports').upsert(item.payload, { onConflict: 'id', ignoreDuplicates: true });
+    let { error } = await supabase.from('hike_station_reports').upsert(item.payload, { onConflict: 'id', ignoreDuplicates: true });
+    if (error && isSchemaCacheError(error)) {
+      const { latitude: _latitude, longitude: _longitude, accuracy: _accuracy, ...legacyPayload } = item.payload;
+      const fallback = await supabase.from('hike_station_reports').upsert(legacyPayload, { onConflict: 'id', ignoreDuplicates: true });
+      error = fallback.error;
+    }
     if (error) throw error;
     return;
   }

@@ -69,7 +69,9 @@ export class HikeTracker {
   private gpsFilter = new MotionGpsFilter({
     minAccuracyForStartM: 55,
     maxAccuracyM: 90,
-    minAppendDistanceM: 1.8,
+    // Broadcast a new live point after roughly 5m of real movement. Smaller
+    // fixes are usually mountain GPS drift and create a false idle trail.
+    minAppendDistanceM: 5,
   });
 
   constructor(opts: {
@@ -360,7 +362,7 @@ export class HikeTracker {
       // GPS receivers can wander several metres while a hiker is standing
       // still. Require a larger displacement when speed is zero so idle
       // sessions do not draw a false trail.
-      const noiseRadius = Math.max(5, Math.min(12, (accuracy + this.lastFix.accuracy) * 0.18));
+      const noiseRadius = Math.max(5, Math.min(8, (accuracy + this.lastFix.accuracy) * 0.18));
       const stationaryRadius = Math.max(8, Math.min(22, accuracy * 0.45));
       const impliedSpeed = dt > 0 ? d / Math.max(1, dt) : 0;
       if (dt < 120 && accuracy > 25 && (d > 90 || impliedSpeed > Math.max(4.5, speed + 2.5))) return;

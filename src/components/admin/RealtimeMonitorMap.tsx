@@ -113,7 +113,9 @@ function ScopedMonitorMap({ locationId, canAddCheckpoints = false, tools, routeA
   const sosLayer = useRef<L.LayerGroup | null>(null);
 
   const [rawSessions, setRawSessions] = useState<ActiveSession[]>([]);
-  const [stationReports, setStationReports] = useState<Record<string, { station: number; reported_at: string }>>({});
+  type StationReport = { station: number; reported_at: string; latitude?: number | null; longitude?: number | null; accuracy?: number | null };
+  const [stationReports, setStationReports] = useState<Record<string, StationReport>>({});
+  const [stationReportHistory, setStationReportHistory] = useState<Record<string, StationReport[]>>({});
   const [sessions, setSessions] = useState<ActiveSession[]>([]);
   const [checkpoints, setCheckpoints] = useState<Checkpoint[]>([]);
   const [officialRoutes, setOfficialRoutes] = useState<TrailZoneRef[]>([]);
@@ -444,14 +446,32 @@ function ScopedMonitorMap({ locationId, canAddCheckpoints = false, tools, routeA
 
     const reportIds = sessList.map(session => session.id);
     const latestReports: typeof stationReports = {};
+    const reportHistory: Record<string, StationReport[]> = {};
     if (reportIds.length) {
-      const { data: reports } = await supabase.from('hike_station_reports')
-        .select('session_id,station,reported_at').in('session_id', reportIds)
+      let { data: reports } = await supabase.from('hike_station_reports' as any)
+        .select('session_id,station,reported_at,latitude,longitude,accuracy').in('session_id', reportIds)
         .order('reported_at', { ascending: false }).limit(500);
-      for (const report of reports ?? []) latestReports[report.session_id] ??= report;
+      if (!reports) {
+        const fallback = await supabase.from('hike_station_reports')
+          .select('session_id,station,reported_at').in('session_id', reportIds)
+          .order('reported_at', { ascending: false }).limit(500);
+        reports = fallback.data as any;
+      }
+      for (const report of (reports ?? []) as any[]) {
+        const normalized = {
+          station: Number(report.station),
+          reported_at: report.reported_at,
+          latitude: report.latitude == null ? null : Number(report.latitude),
+          longitude: report.longitude == null ? null : Number(report.longitude),
+          accuracy: report.accuracy == null ? null : Number(report.accuracy),
+        } satisfies StationReport;
+        (reportHistory[report.session_id] ??= []).push(normalized);
+        latestReports[report.session_id] ??= normalized;
+      }
     }
     if (version !== loadVersion.current) return;
     setStationReports(latestReports);
+    setStationReportHistory(reportHistory);
     setProgress(nextProgress);
     setLoadError(Boolean(cpError || routeError));
     setRawSessions(sessList);
@@ -901,7 +921,27 @@ function ScopedMonitorMap({ locationId, canAddCheckpoints = false, tools, routeA
           })}
         </ul>
         {!loading && !groups.length && !loadError && <p className="live-map-empty">No active groups at this location.</p>}
-        {selected ? <LiveGroupDetails group={selected} now={clock} onLocate={() => locate(selected)} />
+        {selected ? <LiveGroupDetails
+          group={selected}
+          now={clock}
+          onLocate={() => locate(selected)}
+          actions={stationReportHistory[selected.id]?.length ? (
+            <details className="mt-2 rounded border border-border/60 p-2 text-xs">
+              <summary className="cursor-pointer font-semibold">Station track history ({stationReportHistory[selected.id].length})</summary>
+              <ol className="mt-2 max-h-40 space-y-1 overflow-y-auto">
+                {stationReportHistory[selected.id].map((report, index) => (
+                  <li key={`${report.reported_at}-${index}`} className="flex items-start justify-between gap-2">
+                    <span>{report.station === 6 ? 'Peak' : `Station ${report.station}`}</span>
+                    <span className="text-right text-muted-foreground">
+                      {new Date(report.reported_at).toLocaleString('en-PH', { timeZone: 'Asia/Manila' })}
+                      {report.latitude != null && report.longitude != null && <span className="block">{report.latitude.toFixed(5)}, {report.longitude.toFixed(5)}</span>}
+                    </span>
+                  </li>
+                ))}
+              </ol>
+            </details>
+          ) : undefined}
+        />
           : groups.length > 0 && <p className="live-map-empty live-map-muted">No group selected</p>}
       </>}</>}>
         <div ref={containerRef} className="live-map-surface" aria-label="Live group positions" />

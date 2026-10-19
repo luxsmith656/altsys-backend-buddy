@@ -6,6 +6,7 @@ import { MapPin } from 'lucide-react';
 import { toast } from 'sonner';
 import { enqueue } from '@/lib/offlineDb';
 import { syncOnce } from '@/lib/tracking/syncEngine';
+import { getCurrentPlatformPosition } from '@/lib/tracking/platformGeolocation';
 
 export default function StationReportControl({ sessionId, userId }: { sessionId: string; userId: string }) {
   const map = useMap();
@@ -24,9 +25,23 @@ export default function StationReportControl({ sessionId, userId }: { sessionId:
     if (saving) return;
     setSaving(true);
     try {
+      let gps: { latitude: number; longitude: number; accuracy: number } | null = null;
+      try {
+        const position = await new Promise<GeolocationPosition>((resolve, reject) => {
+          void getCurrentPlatformPosition(resolve, reject, { enableHighAccuracy: true, maximumAge: 0, timeout: 15_000 }).catch(reject);
+        });
+        gps = {
+          latitude: position.coords.latitude,
+          longitude: position.coords.longitude,
+          accuracy: position.coords.accuracy,
+        };
+      } catch {
+        // Keep the station/time report durable even when a mountain fix is temporarily unavailable.
+      }
       await enqueue({ kind: 'station', payload: {
         id: crypto.randomUUID(), session_id: sessionId, user_id: userId,
         station: Number(station), reported_at: new Date().toISOString(),
+        latitude: gps?.latitude ?? null, longitude: gps?.longitude ?? null, accuracy: gps?.accuracy ?? null,
       } });
       toast.success(`${station === '6' ? 'Peak' : `Station ${station}`} report saved`, {
         description: 'Your report is stored on this device and will sync when connected.',
