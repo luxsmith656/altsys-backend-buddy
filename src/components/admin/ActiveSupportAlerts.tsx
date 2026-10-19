@@ -16,10 +16,12 @@ export default function ActiveSupportAlerts({ locationId }: Props) {
   const [sos, setSos] = useState<any[]>([]);
   const [horse, setHorse] = useState<{ bookingId: string; name: string; station: string; fee: number; requestedAt: string }[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
+      setLoadError(null);
       const alerts = await loadEmergencyAlerts(locationId);
       setSos(alerts);
       let query = supabase.from('bookings').select('id,booking_date,location_id,notes,status,emergency_contact_name')
@@ -40,8 +42,8 @@ export default function ActiveSupportAlerts({ locationId }: Props) {
       });
       setHorse(requests);
     } catch (error) {
-      // A missing migration should be visible to the admin rather than hidden.
-      toast.error(error instanceof Error ? error.message : 'Support alerts could not be loaded.');
+      const message = error instanceof Error ? error.message : 'Support alerts could not be loaded.';
+      setLoadError(message);
     } finally {
       setLoading(false);
     }
@@ -67,7 +69,7 @@ export default function ActiveSupportAlerts({ locationId }: Props) {
     void load();
   };
 
-  if (!loading && sos.length === 0 && horse.length === 0) return null;
+  if (!loading && sos.length === 0 && horse.length === 0 && !loadError) return null;
 
   return (
     <Card className="border-destructive/30 bg-destructive/[0.03]">
@@ -78,6 +80,7 @@ export default function ActiveSupportAlerts({ locationId }: Props) {
         </Button>
       </CardHeader>
       <CardContent className="grid gap-3 md:grid-cols-2">
+        {loadError && <p role="alert" className="text-sm text-destructive md:col-span-2">Emergency alerts could not be loaded. Use refresh to retry.</p>}
         {sos.map((alert) => (
           <div key={alert.id} className="rounded-lg border border-destructive/30 bg-background p-3 text-sm">
             <div className="flex items-start justify-between gap-2"><p className="flex items-center gap-1.5 font-semibold text-destructive"><AlertTriangle className="h-4 w-4" /> SOS · {alert.reporter_role}</p><Badge variant="destructive">{alert.status}</Badge></div>

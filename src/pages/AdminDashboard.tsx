@@ -1944,6 +1944,8 @@ export default function AdminDashboard() {
         </motion.div>
 
         <ImportantAnnouncements />
+        {/* Keep emergency alerts visible while staff move between dashboard tabs. */}
+        <ActiveSupportAlerts locationId={isSuperAdmin ? null : activeLocationId} />
 
         <Tabs
           value={activeTab}
@@ -1987,7 +1989,6 @@ export default function AdminDashboard() {
           {/* ─────────────────────────────── BOOKINGS TAB ── */}
 
           <TabsContent value="overview" className="space-y-6 mt-0">
-            <ActiveSupportAlerts locationId={isSuperAdmin ? null : activeLocationId} />
             <OverviewDashboard locationId={activeLocationId} locationIds={analyticsLocationIds} />
             <Suspense fallback={<p role="status">Loading analytics...</p>}>
               <CentralAnalyticsReporting locationIds={analyticsLocationIds} />

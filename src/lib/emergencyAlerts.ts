@@ -110,7 +110,7 @@ export async function loadEmergencyAlerts(locationId?: string | null) {
     .select('id,booking_id,session_id,user_id,reporter_role,location_id,latitude,longitude,pushed_latitude,pushed_longitude,last_location_at,message,status,created_at,acknowledged_at')
     .in('status', ['open', 'acknowledged'])
     .order('created_at', { ascending: false })
-    .limit(25);
+    .limit(100);
   if (locationId) query = query.eq('location_id', locationId);
   const { data, error } = await query;
   if (error) throw error;
