@@ -544,6 +544,11 @@ export default function AdminDashboard() {
         const m = parseMeta(b.notes);
         return b.status === 'confirmed' && !m.onsiteStartConfirmed && b.status !== 'completed' && m.groupPhase !== 'completed';
       });
+    } else if (bookingTabFilter === 'assigned') {
+      list = list.filter((b) => {
+        const m = parseMeta(b.notes);
+        return ((b as any).__assignedGuideIds?.length ?? 0) > 0 || Boolean(m.assignedGuideId || m.assignedGuide);
+      });
     } else if (bookingTabFilter === 'deleted') {
       list = list.filter((b) => ['cancelled', 'deleted'].includes(String(b.status)));
     }
@@ -704,10 +709,28 @@ export default function AdminDashboard() {
     else if (isSuperAdmin) q = q.in('location_id', trailheadLocations.map((loc) => loc.id));
     const { data } = await q;
     if (data) {
+      const bookingIds = data.map((booking: any) => booking.id).filter(Boolean);
+      const assignmentByBooking = new Map<string, string[]>();
+      if (bookingIds.length) {
+        const { data: assignmentRows } = await supabase
+          .from('booking_assignments' as any)
+          .select('booking_id,guide_id,status')
+          .in('booking_id', bookingIds)
+          .in('status', ['pending', 'accepted', 'completed']);
+        ((assignmentRows as any[]) ?? []).forEach((row) => {
+          const current = assignmentByBooking.get(row.booking_id) ?? [];
+          current.push(row.guide_id);
+          assignmentByBooking.set(row.booking_id, current);
+        });
+      }
+      const enriched = data.map((booking: any) => ({
+        ...booking,
+        __assignedGuideIds: assignmentByBooking.get(booking.id) ?? [],
+      }));
       setAllTabBookings((prev) => {
-        const existingIds = new Set(data.map((d: any) => d.id));
+        const existingIds = new Set(enriched.map((d: any) => d.id));
         const missingRealtime = prev.filter((p) => !existingIds.has(p.id));
-        return [...missingRealtime, ...data];
+        return [...missingRealtime, ...enriched];
       });
     }
     setAllTabLoading(false);
@@ -2162,6 +2185,7 @@ export default function AdminDashboard() {
                 { value: 'all', label: 'All' },
                 { value: 'pending', label: 'Pending', count: pendingCount },
                 { value: 'confirmed', label: 'Confirmed' },
+                { value: 'assigned', label: 'Assigned' },
                 { value: 'started', label: 'Check-in / In Progress' },
                 { value: 'completed', label: 'Completed & Settled', count: completedCount },
                 { value: 'deleted', label: 'Deleted / Cancelled' },
