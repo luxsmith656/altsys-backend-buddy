@@ -8,6 +8,7 @@ import { formatPeso } from '@/lib/payments';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { Link } from 'react-router-dom';
 
 type Props = { locationId?: string | null };
 
@@ -80,9 +81,13 @@ export default function ActiveSupportAlerts({ locationId }: Props) {
         {sos.map((alert) => (
           <div key={alert.id} className="rounded-lg border border-destructive/30 bg-background p-3 text-sm">
             <div className="flex items-start justify-between gap-2"><p className="flex items-center gap-1.5 font-semibold text-destructive"><AlertTriangle className="h-4 w-4" /> SOS · {alert.reporter_role}</p><Badge variant="destructive">{alert.status}</Badge></div>
-            <p className="mt-1 text-xs text-muted-foreground">{new Date(alert.created_at).toLocaleString('en-PH', { timeZone: 'Asia/Manila' })}</p>
-            {alert.latitude != null && <p className="text-xs">GPS: {Number(alert.latitude).toFixed(5)}, {Number(alert.longitude).toFixed(5)}</p>}
+            <p className="mt-1 text-xs text-muted-foreground">Pushed: {new Date(alert.created_at).toLocaleString('en-PH', { timeZone: 'Asia/Manila' })}</p>
+            <p className="text-xs">Reporter: {alert.reporter_role} · Account {String(alert.user_id).slice(0, 8)}</p>
+            {alert.booking_id && <p className="text-xs">Booking: {String(alert.booking_id).slice(0, 8)}</p>}
+            {alert.pushed_latitude != null && <p className="text-xs">Push location: {Number(alert.pushed_latitude).toFixed(5)}, {Number(alert.pushed_longitude).toFixed(5)}</p>}
+            {alert.latitude != null && <p className="text-xs">Latest location: {Number(alert.latitude).toFixed(5)}, {Number(alert.longitude).toFixed(5)}{alert.last_location_at ? ` · ${new Date(alert.last_location_at).toLocaleString('en-PH', { timeZone: 'Asia/Manila' })}` : ''}</p>}
             <div className="mt-2 flex gap-2">
+              {alert.booking_id && <Button size="sm" variant="outline" asChild><Link to={`/admin?tab=operations&bookingId=${alert.booking_id}`}>View booking</Link></Button>}
               {alert.status === 'open' && <Button size="sm" variant="outline" onClick={() => void updateAlert(alert.id, 'acknowledged')}>Acknowledge</Button>}
               <Button size="sm" variant="outline" onClick={() => void updateAlert(alert.id, 'resolved')}><Check className="mr-1 h-3.5 w-3.5" /> Resolve</Button>
             </div>

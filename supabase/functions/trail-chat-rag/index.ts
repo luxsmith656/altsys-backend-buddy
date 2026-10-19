@@ -443,7 +443,7 @@ async function runRecordTool(db: any, scope: AiRoleScope, name: string, args: an
 
   if (name === 'emergency_alerts') {
     if (!['admin', 'super_admin', 'mdrrmo', 'ranger'].includes(scope.role)) return { error: AI_NO_MATCH };
-    let query = db.from('emergency_alerts').select('id, booking_id, session_id, user_id, reporter_role, location_id, latitude, longitude, message, status, created_at, acknowledged_at, resolved_at').order('created_at', { ascending: false }).limit(AI_RESULT_LIMIT + 1);
+    let query = db.from('emergency_alerts').select('id, booking_id, session_id, user_id, reporter_role, location_id, latitude, longitude, pushed_latitude, pushed_longitude, last_location_at, message, status, created_at, acknowledged_at, resolved_at').order('created_at', { ascending: false }).limit(AI_RESULT_LIMIT + 1);
     if (requestedLocation) query = query.eq('location_id', requestedLocation);
     else if (!scope.allLocations && scope.locationIds.length) query = query.in('location_id', scope.locationIds);
     if (typeof args?.status === 'string' && args.status.trim()) query = query.eq('status', args.status.trim());
