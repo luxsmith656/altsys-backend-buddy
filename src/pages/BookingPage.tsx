@@ -1285,14 +1285,21 @@ export default function BookingPage() {
       }
 
       if (paymentOption === 'online') {
-        const { data: checkout, error: checkoutError } = await supabase.functions.invoke('paymongo-checkout', {
-          body: { bookingId: data.id, email: emailAddress, name: fullName, phone: phoneNumber },
+        const { data: session } = await supabase.auth.getSession();
+        const checkoutResponse = await fetch('/api/paymongo/checkout', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(session.session?.access_token ? { Authorization: `Bearer ${session.session.access_token}` } : {}),
+          },
+          body: JSON.stringify({ bookingId: data.id, email: emailAddress, name: fullName, phone: phoneNumber }),
         });
-        if (!checkoutError && checkout?.checkoutUrl) {
-          window.location.assign(checkout.checkoutUrl);
+        const checkout = await checkoutResponse.json().catch(() => null);
+        if (checkoutResponse.ok && checkout?.checkoutUrl) {
+          window.location.assign(checkout.checkoutUrl as string);
           return;
         }
-        if (checkoutError) console.warn('PayMongo checkout unavailable; keeping QR fallback:', checkoutError.message);
+        if (!checkoutResponse.ok) console.warn('PayMongo checkout unavailable; keeping QR fallback:', checkout?.error);
         toast.info('Booking saved. Use the QR Ph payment option and submit your receipt for verification.');
       }
 

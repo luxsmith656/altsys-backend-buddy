@@ -11,8 +11,8 @@ does not provide automatic payment confirmation by itself.
 ## Secret handling
 
 Never put the PayMongo secret key in `VITE_*` variables, source files, or Git.
-For the automatic Checkout API and webhook, add the keys as deployment secrets
-instead:
+For the automatic Checkout API and webhook, add the keys as Vercel project
+environment variables instead:
 
 ```text
 PAYMONGO_PUBLIC_KEY=pk_live_...
@@ -23,16 +23,31 @@ PAYMONGO_WEBHOOK_SECRET=...
 `PAYMONGO_SECRET_KEY` belongs only in the Supabase Edge Function or server
 environment. The frontend does not need either key for the static QR flow.
 
-For Supabase CLI deployments, set the secret without committing it:
+In Vercel, open **Project Settings → Environment Variables**, then add those
+three variables for **Production** (and Preview if you test there). Do not add
+them with the `VITE_` prefix.
 
-```bash
-supabase secrets set PAYMONGO_SECRET_KEY=sk_live_...
-supabase secrets set PAYMONGO_PUBLIC_KEY=pk_live_...
-supabase secrets set PAYMONGO_WEBHOOK_SECRET=...
+Also add the existing backend values that the Vercel API route needs:
+
+```text
+VITE_SUPABASE_URL=https://YOUR_PROJECT.supabase.co
+SUPABASE_SERVICE_ROLE_KEY=your-existing-server-key
 ```
 
-Deploy both functions, then register one PayMongo webhook pointing to
-`https://<project-ref>.supabase.co/functions/v1/paymongo-webhook` for the
+The service-role key is only read by the Vercel server function for the
+existing database and is never sent to the browser.
+
+For local testing, set them in an untracked `.env.local` file:
+
+```bash
+PAYMONGO_SECRET_KEY=sk_live_...
+PAYMONGO_PUBLIC_KEY=pk_live_...
+PAYMONGO_WEBHOOK_SECRET=...
+```
+
+Vercel deploys `api/paymongo/checkout.ts` and `api/paymongo/webhook.ts`
+automatically. Register one PayMongo webhook pointing to
+`https://YOUR_VERCEL_DOMAIN/api/paymongo/webhook` for the
 Checkout Session/payment-paid event. Use PayMongo's test keys first; switch to
 live keys only after a real test payment succeeds. The supplied static QR
 remains available as a fallback when checkout secrets are unavailable.
