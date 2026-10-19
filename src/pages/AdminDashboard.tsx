@@ -199,6 +199,13 @@ const getBookingDisplayStatus = (booking: any) => {
   return booking.status as string;
 };
 
+const isBookingClosedForCheckIn = (booking: any) => {
+  const meta = parseMeta(booking?.notes);
+  return ['cancelled', 'completed', 'deleted'].includes(String(booking?.status))
+    || meta.groupPhase === 'completed'
+    || Boolean(meta.hikeCompletedAt);
+};
+
 export default function AdminDashboard() {
   const [searchParams, setSearchParams] = useSearchParams();
   const routeEditorRef = useRef<HTMLDivElement | null>(null);
@@ -749,6 +756,11 @@ export default function AdminDashboard() {
     const exactData = await findExact('id', q) || await findExact('qr_code_data', raw) || (q !== raw ? await findExact('qr_code_data', q) : null);
 
     if (exactData) {
+      if (isBookingClosedForCheckIn(exactData)) {
+        setScanLoading(false);
+        toast.error(exactData.status === 'cancelled' ? 'This booking is cancelled and cannot be checked in.' : 'This booking is already completed and settled. It cannot be checked in again.');
+        return;
+      }
       setScannedBooking(exactData);
       setScanMatches([exactData]);
       setCheckInVerified(false);
@@ -760,10 +772,10 @@ export default function AdminDashboard() {
     // companions and assigned guide are all valid ways to find the same
     // booking, so never collapse the result to the first row.
     let bookingQuery: any = supabase.from('bookings').select('*')
-      .not('status', 'eq', 'cancelled').order('booking_date', { ascending: true }).limit(500);
+      .not('status', 'in', '(cancelled,completed,deleted)').order('booking_date', { ascending: true }).limit(500);
     if (!isSuperAdmin) bookingQuery = bookingQuery.eq('location_id', activeLocationId);
     const { data: candidateBookings } = await bookingQuery;
-    const candidates = (candidateBookings ?? []) as any[];
+    const candidates = ((candidateBookings ?? []) as any[]).filter((booking) => !isBookingClosedForCheckIn(booking));
     const candidateIds = candidates.map((booking) => booking.id).filter(Boolean);
     const { data: assignmentRows } = candidateIds.length
       ? await supabase.from('booking_assignments').select('booking_id,guide_id').in('booking_id', candidateIds)
@@ -810,6 +822,22 @@ export default function AdminDashboard() {
   /* ── QR Scan: start hike ── */
   const handleStartHike = async () => {
     if (!scannedBooking) return;
+    const { data: latestBooking, error: latestBookingError } = await supabase
+      .from('bookings')
+      .select('status,notes')
+      .eq('id', scannedBooking.id)
+      .single();
+    if (latestBookingError) {
+      toast.error(`Could not verify booking status: ${latestBookingError.message}`);
+      return;
+    }
+    if (isBookingClosedForCheckIn(latestBooking)) {
+      setScannedBooking((current) => current ? { ...current, ...latestBooking } : current);
+      setCheckInVerified(false);
+      setHikeStarted(false);
+      toast.error(latestBooking.status === 'cancelled' ? 'This booking was cancelled and cannot be checked in.' : 'This booking is already completed and settled. It cannot be checked in again.');
+      return;
+    }
     if (!checkInVerified) {
       toast.error('Verify every person and confirm the booked headcount before starting tracking.');
       return;
