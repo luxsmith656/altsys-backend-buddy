@@ -1826,10 +1826,18 @@ export default function AdminDashboard() {
   );
   const acceptNeedsRouteSelection = acceptRouteOptions.length > 1;
   const referredGuide = useMemo(
-    () => acceptBooking?.referral_guide_id
-      ? guides.find((guide) => guide.id === acceptBooking.referral_guide_id) ?? null
-      : null,
-    [acceptBooking?.referral_guide_id, guides],
+    () => {
+      if (!acceptBooking) return null;
+      const direct = acceptBooking.referral_guide_id
+        ? guides.find((guide) => guide.id === acceptBooking.referral_guide_id)
+        : null;
+      if (direct) return direct;
+      // Older bookings may only have the referral name in encoded notes.
+      const legacyName = parseMeta(acceptBooking.notes).preferredGuide;
+      return legacyName
+        ? guides.find((guide) => guide.name.trim().toLowerCase() === String(legacyName).trim().toLowerCase()) ?? null
+        : null;
+    }, [acceptBooking, guides],
   );
   const isReferredBooking = Boolean(referredGuide);
 
@@ -2327,7 +2335,7 @@ export default function AdminDashboard() {
                               <>
                                 <Button size="sm" className="gap-1.5 bg-primary hover:bg-primary/90 text-primary-foreground"
                                   onClick={() => { setAcceptDialogId(b.id); setSelectedGuide(''); setSelectedTrailZoneId(''); }}>
-                                  <UserCheck className="h-3.5 w-3.5" /> Accept & Assign Guide
+                                  <UserCheck className="h-3.5 w-3.5" /> {b.referral_guide_id || parseMeta(b.notes).preferredGuide ? 'Review Referral' : 'Accept & Assign Guide'}
                                 </Button>
                                 <AlertDialog>
                                   <AlertDialogTrigger asChild>
