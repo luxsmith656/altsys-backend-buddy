@@ -11,7 +11,7 @@ const metaSchema = z.object({
 });
 export const bookingSchema = z.object({
   id: text, status: z.literal('confirmed'), notes: text, booking_date: text,
-  group_size: z.number().int().positive(), location_id: text,
+  group_size: z.number().int().positive(), location_id: text, qr_code_data: text.optional(),
 });
 export type ConfirmationBooking = z.infer<typeof bookingSchema>;
 export function confirmationMeta(notes: string) { return metaSchema.parse(JSON.parse(notes)); }
@@ -38,6 +38,8 @@ export function makeBookingEmail(input: { booking: unknown; guide: unknown; loca
     hike_type: { morning: 'Morning', day: 'Morning', night: 'Night', overnight: 'Overnight' }[meta.hikeType],
     reminder: 'Please call your assigned guide the day before your hike to confirm your meeting arrangements.',
   };
+  const qrValue = booking.qr_code_data || `KALISUNGAN-${booking.id}`;
+  values.qr_code_url = `https://quickchart.io/qr?text=${encodeURIComponent(qrValue)}&size=220&margin=2`;
   const templateParams = {
     ...values,
     // The existing EmailJS reservation template uses these legacy names.

@@ -26,7 +26,7 @@ Deno.serve(async (req: Request) => {
          (name) => Deno.env.get(name),
          'EMAILJS_PASSWORD_RESET_TEMPLATE_ID',
          DEFAULT_EMAILJS_PASSWORD_RESET_TEMPLATE_ID,
-         [DEFAULT_EMAILJS_BOOKING_TEMPLATE_ID, 'template_dcs8uaj'],
+         [DEFAULT_EMAILJS_BOOKING_TEMPLATE_ID, Deno.env.get('EMAILJS_BOOKING_TEMPLATE_ID')?.trim() ?? '', 'template_dcs8uaj'],
        ).templateId,
     },
     generateLink: (email, redirectTo) => admin.auth.admin.generateLink({

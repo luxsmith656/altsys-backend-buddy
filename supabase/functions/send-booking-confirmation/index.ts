@@ -11,7 +11,7 @@ Deno.serve(bookingConfirmationHandler({
     (name) => Deno.env.get(name),
     'EMAILJS_BOOKING_TEMPLATE_ID',
     DEFAULT_EMAILJS_BOOKING_TEMPLATE_ID,
-    [DEFAULT_EMAILJS_PASSWORD_RESET_TEMPLATE_ID, 'template_dcs8uaj'],
+    [DEFAULT_EMAILJS_PASSWORD_RESET_TEMPLATE_ID, env('EMAILJS_PASSWORD_RESET_TEMPLATE_ID'), 'template_dcs8uaj'],
   ),
   workerSecret: env('BOOKING_EMAIL_WORKER_SECRET'),
   store: createBookingEmailStore(db), fetcher: fetch,

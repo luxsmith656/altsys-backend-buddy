@@ -44,7 +44,7 @@ export function createBookingEmailStore(db: SupabaseClient): BookingEmailStore {
       return data as EmailJob | null;
     },
     async loadDetails(id) {
-      const { data, error } = await db.from('bookings').select('id,status,notes,booking_date,group_size,location_id').eq('id', id).single();
+      const { data, error } = await db.from('bookings').select('id,status,notes,booking_date,group_size,location_id,qr_code_data').eq('id', id).single();
       if (error) throw error;
       const booking = bookingSchema.parse(data);
       const meta = confirmationMeta(booking.notes);

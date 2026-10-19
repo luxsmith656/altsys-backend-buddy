@@ -10,6 +10,7 @@ const example = {
   to_name: 'Sample Hiker', hike_type: 'Morning', hike_date: 'October 12, 2026', hike_time: '06:00 AM PHT (UTC+8)',
   jump_off: 'Lamot 2 Jump-off', pax: '4', guide_name: 'Sample Guide', guide_contact: '+63 917 000 0000',
   reminder: 'Please call your assigned guide the day before your hike to confirm your meeting arrangements.',
+  qr_code_url: 'https://quickchart.io/qr?text=PREVIEW-ONLY&size=220&margin=2',
   booking_reference: 'PREVIEW ONLY - not a real booking',
 };
 const preview = template.replace(/\{\{(\w+)\}\}/g, (_, key) => {
