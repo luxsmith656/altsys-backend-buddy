@@ -1,11 +1,38 @@
-import { env, getHeader, send, supabaseRequest, type ApiRequest, type ApiResponse } from './_shared';
+import { createHmac, timingSafeEqual } from 'node:crypto';
+import { env, getHeader, readRawBody, send, supabaseRequest, type ApiRequest, type ApiResponse } from './_shared';
+
+export const config = { api: { bodyParser: false } };
+
+function isValidPaymongoSignature(rawBody: string, header: string | undefined, secret: string, liveMode: boolean) {
+  if (!header) return false;
+  const parts = Object.fromEntries(header.split(',').map((part) => {
+    const [key, value] = part.split('=', 2);
+    return [key?.trim(), value?.trim() || ''];
+  }));
+  const timestamp = parts.t;
+  const supplied = liveMode ? parts.li : parts.te;
+  if (!timestamp || !supplied || !/^\d+$/.test(timestamp)) return false;
+  if (Math.abs(Date.now() / 1000 - Number(timestamp)) > 600) return false;
+  const expected = createHmac('sha256', secret).update(`${timestamp}.${rawBody}`).digest('hex');
+  const expectedBytes = Buffer.from(expected, 'hex');
+  const suppliedBytes = Buffer.from(supplied, 'hex');
+  return expectedBytes.length === suppliedBytes.length && timingSafeEqual(expectedBytes, suppliedBytes);
+}
 
 export default async function handler(req: ApiRequest, res: ApiResponse) {
   if (req.method !== 'POST') return send(res, { error: 'Method not allowed' }, 405);
   const paymongoSecret = env('PAYMONGO_SECRET_KEY');
+  const webhookSecret = env('PAYMONGO_WEBHOOK_SECRET');
   if (!paymongoSecret) return send(res, { error: 'PayMongo is not configured.' }, 503);
+  if (!webhookSecret) return send(res, { error: 'PayMongo webhook is not configured.' }, 503);
   if (!env('SUPABASE_SERVICE_ROLE_KEY') && !env('SUPABASE_SECRET_KEY')) return send(res, { error: 'Server database configuration is missing.' }, 503);
-  const payload = req.body as any;
+  const rawBody = await readRawBody(req);
+  let payload: any;
+  try { payload = JSON.parse(rawBody); } catch { return send(res, { error: 'Invalid webhook payload.' }, 400); }
+  const liveMode = payload?.data?.attributes?.livemode !== false;
+  if (!isValidPaymongoSignature(rawBody, getHeader(req, 'paymongo-signature'), webhookSecret, liveMode)) {
+    return send(res, { error: 'Invalid PayMongo webhook signature.' }, 401);
+  }
   const eventId = String(payload?.data?.id || '').trim();
   const event = payload?.data?.attributes;
   const eventType = String(event?.type || '');

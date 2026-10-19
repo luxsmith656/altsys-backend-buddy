@@ -2,6 +2,7 @@ export type ApiRequest = {
   method?: string;
   headers: Record<string, string | string[] | undefined>;
   body?: unknown;
+  rawBody?: string | Uint8Array;
 };
 
 export type ApiResponse = {
@@ -54,4 +55,17 @@ export function parseNotes(value: unknown): Record<string, unknown> {
     const parsed = JSON.parse(value);
     return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed as Record<string, unknown> : {};
   } catch { return {}; }
+}
+
+export async function readRawBody(req: ApiRequest): Promise<string> {
+  if (typeof req.rawBody === 'string') return req.rawBody;
+  if (req.rawBody instanceof Uint8Array) return Buffer.from(req.rawBody).toString('utf8');
+  if (typeof req.body === 'string') return req.body;
+  const stream = req as unknown as AsyncIterable<Uint8Array>;
+  if (typeof stream[Symbol.asyncIterator] === 'function') {
+    const chunks: Uint8Array[] = [];
+    for await (const chunk of stream) chunks.push(chunk);
+    return Buffer.concat(chunks.map((chunk) => Buffer.from(chunk))).toString('utf8');
+  }
+  return JSON.stringify(req.body ?? {});
 }

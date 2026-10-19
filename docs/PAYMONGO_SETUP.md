@@ -18,10 +18,11 @@ environment variables instead:
 ```text
 PAYMONGO_PUBLIC_KEY=pk_live_...
 PAYMONGO_SECRET_KEY=sk_live_...
+PAYMONGO_WEBHOOK_SECRET=whsec_...
 ```
 
 `PAYMONGO_SECRET_KEY` belongs only in the Vercel server environment. The
-frontend does not need either key for the static QR fallback.
+frontend does not need any of these keys for payment confirmation.
 
 In Vercel, open **Project Settings → Environment Variables**, then add those
 the two PayMongo variables for **Production** (and Preview if you test there). Do not add

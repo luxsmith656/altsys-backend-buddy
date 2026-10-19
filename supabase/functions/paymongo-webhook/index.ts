@@ -9,6 +9,22 @@ function json(body: Record<string, unknown>, status = 200) {
   return new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
 }
 
+async function isValidPaymongoSignature(rawBody: string, header: string | null, secret: string, liveMode: boolean) {
+  if (!header) return false;
+  const parts = Object.fromEntries(header.split(',').map((part) => {
+    const [key, value] = part.split('=', 2);
+    return [key?.trim(), value?.trim() || ''];
+  }));
+  const timestamp = parts.t;
+  const supplied = liveMode ? parts.li : parts.te;
+  if (!timestamp || !supplied || !/^\d+$/.test(timestamp)) return false;
+  if (Math.abs(Date.now() / 1000 - Number(timestamp)) > 600) return false;
+  const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(secret), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+  const signature = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(`${timestamp}.${rawBody}`));
+  const expected = Array.from(new Uint8Array(signature), (byte) => byte.toString(16).padStart(2, '0')).join('');
+  return expected === supplied.toLowerCase();
+}
+
 /**
  * PayMongo calls this endpoint for payment events. Keep it idempotent: a
  * retried webhook must not send duplicate notifications or rewrite paid data.
@@ -19,9 +35,16 @@ function json(body: Record<string, unknown>, status = 200) {
 Deno.serve(async (request) => {
   if (request.method !== 'POST') return json({ error: 'Method not allowed' }, 405);
   const paymongoSecret = env('PAYMONGO_SECRET_KEY');
+  const webhookSecret = env('PAYMONGO_WEBHOOK_SECRET');
   if (!paymongoSecret) return json({ error: 'PayMongo is not configured.' }, 503);
+  if (!webhookSecret) return json({ error: 'PayMongo webhook is not configured.' }, 503);
 
-  const payload = await request.json().catch(() => null);
+  const rawBody = await request.text();
+  const payload = JSON.parse(rawBody || '{}');
+  const liveMode = payload?.data?.attributes?.livemode !== false;
+  if (!await isValidPaymongoSignature(rawBody, request.headers.get('paymongo-signature'), webhookSecret, liveMode)) {
+    return json({ error: 'Invalid PayMongo webhook signature.' }, 401);
+  }
   const eventId = String(payload?.data?.id || '').trim();
   const event = payload?.data?.attributes;
   const eventType = String(event?.type || '');
