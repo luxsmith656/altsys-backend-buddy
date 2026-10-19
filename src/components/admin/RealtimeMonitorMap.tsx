@@ -19,6 +19,7 @@ import { parseMeta } from '@/lib/bookingMeta';
 import { filterByTrailhead, getTrailheadIdentity, officialTrailNameFromLocation } from '@/lib/mapTrailheads';
 import { splitTrackAtGaps } from '@/lib/tracking/geo';
 import { buildRouteStations, cleanTrailPath, LAMOT_2_REFERENCE_PATH, normalizeOfficialRoutePath, routeStationPosition, routeStationsFromMetadata } from '@/lib/map-data';
+import { loadEmergencyAlerts } from '@/lib/emergencyAlerts';
 import type { CompanionDetail } from '@/types';
 
 interface Props {
@@ -107,6 +108,7 @@ function ScopedMonitorMap({ locationId, canAddCheckpoints = false, tools, routeA
   const hikerLayer = useRef<L.LayerGroup | null>(null);
   const checkpointLayer = useRef<L.LayerGroup | null>(null);
   const routeLayer = useRef<L.LayerGroup | null>(null);
+  const sosLayer = useRef<L.LayerGroup | null>(null);
 
   const [rawSessions, setRawSessions] = useState<ActiveSession[]>([]);
   const [stationReports, setStationReports] = useState<Record<string, { station: number; reported_at: string }>>({});
@@ -114,6 +116,7 @@ function ScopedMonitorMap({ locationId, canAddCheckpoints = false, tools, routeA
   const [checkpoints, setCheckpoints] = useState<Checkpoint[]>([]);
   const [officialRoutes, setOfficialRoutes] = useState<TrailZoneRef[]>([]);
   const [lamot2ReferencePath, setLamot2ReferencePath] = useState<L.LatLngTuple[]>([]);
+  const [sosAlerts, setSosAlerts] = useState<any[]>([]);
   const [progress, setProgress] = useState<Record<string, { checkpoint_id: string; created_at: string }[]>>({});
   const [loading, setLoading] = useState(true);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -190,6 +193,7 @@ function ScopedMonitorMap({ locationId, canAddCheckpoints = false, tools, routeA
     hikerLayer.current = L.layerGroup().addTo(mapRef.current);
     checkpointLayer.current = L.layerGroup().addTo(mapRef.current);
     routeLayer.current = L.layerGroup().addTo(mapRef.current);
+    sosLayer.current = L.layerGroup().addTo(mapRef.current);
 
     if (canAddCheckpoints) {
       mapRef.current.on('click', (e) => {
@@ -208,6 +212,7 @@ function ScopedMonitorMap({ locationId, canAddCheckpoints = false, tools, routeA
       observer?.disconnect();
       mapRef.current?.remove();
       mapRef.current = null;
+      sosLayer.current = null;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -222,6 +227,9 @@ function ScopedMonitorMap({ locationId, canAddCheckpoints = false, tools, routeA
     const version = ++loadVersion.current;
     setLoading(true);
     setLoadError(false);
+    const alerts = await loadEmergencyAlerts(locationId).catch(() => []);
+    if (version !== loadVersion.current) return;
+    setSosAlerts(alerts);
 
     let cpQuery = supabase.from('checkpoints' as any).select('*').order('order_index');
     if (locationId) cpQuery = cpQuery.eq('location_id', locationId);
@@ -494,6 +502,9 @@ function ScopedMonitorMap({ locationId, canAddCheckpoints = false, tools, routeA
       .on('postgres_changes', { event: '*', schema: 'public', table: 'hiker_sessions' }, () => {
         refresh.schedule();
       })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'emergency_alerts' }, () => {
+        refresh.schedule();
+      })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'checkpoint_surveys' }, () => {
         refresh.schedule();
       })
@@ -510,10 +521,25 @@ function ScopedMonitorMap({ locationId, canAddCheckpoints = false, tools, routeA
 
   /* ── render markers ── */
   useEffect(() => {
-    if (!mapRef.current || !hikerLayer.current || !checkpointLayer.current || !routeLayer.current) return;
+    if (!mapRef.current || !hikerLayer.current || !checkpointLayer.current || !routeLayer.current || !sosLayer.current) return;
     hikerLayer.current.clearLayers();
     checkpointLayer.current.clearLayers();
     routeLayer.current.clearLayers();
+    sosLayer.current.clearLayers();
+
+    sosAlerts.forEach((alert) => {
+      const latitude = Number(alert.pushed_latitude ?? alert.latitude);
+      const longitude = Number(alert.pushed_longitude ?? alert.longitude);
+      if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return;
+      const pressedAt = alert.created_at ? new Date(alert.created_at).toLocaleString('en-PH', { timeZone: 'Asia/Manila' }) : 'Unknown time';
+      const latestAt = alert.last_location_at ? new Date(alert.last_location_at).toLocaleString('en-PH', { timeZone: 'Asia/Manila' }) : null;
+      const marker = L.marker([latitude, longitude], {
+        zIndexOffset: 4000,
+        title: `SOS ${alert.reporter_role || 'participant'}`,
+        icon: L.divIcon({ className: '', html: '<div style="width:34px;height:34px;border-radius:50%;background:#dc2626;border:4px solid #fff;box-shadow:0 0 0 7px rgba(220,38,38,.28),0 2px 8px rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;color:#fff;font-weight:800;font-size:16px">!</div>', iconSize: [34, 34], iconAnchor: [17, 17] }),
+      }).bindPopup(`<strong style="color:#dc2626">SOS · ${esc(alert.reporter_role || 'participant')}</strong><br/><small>Status: ${esc(alert.status)}<br/>Pressed: ${esc(pressedAt)}<br/>Location: ${latitude.toFixed(5)}, ${longitude.toFixed(5)}${latestAt ? `<br/>Latest GPS: ${esc(latestAt)}` : ''}${alert.message ? `<br/>${esc(alert.message)}` : ''}</small>`);
+      sosLayer.current!.addLayer(marker);
+    });
 
     const referenceRoute = officialRoutes
       .filter((route) => {
@@ -682,7 +708,7 @@ function ScopedMonitorMap({ locationId, canAddCheckpoints = false, tools, routeA
       }).on('click', () => { setSelectedId(s.id); setPanelOpen(true); });
       hikerLayer.current!.addLayer(m);
     });
-  }, [rawSessions, visibleSessions, visibleCheckpoints, progress, visibleRoutes, lamot2ReferencePath, viewMode, clock, locations]);
+  }, [rawSessions, visibleSessions, visibleCheckpoints, progress, visibleRoutes, lamot2ReferencePath, viewMode, clock, locations, sosAlerts]);
 
   /* ── Inactivity alert: warn admin when a hiker hasn't pinged in 20+ min ── */
   const alertedRef = useRef<Set<string>>(new Set());

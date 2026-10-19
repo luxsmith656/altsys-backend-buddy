@@ -113,6 +113,17 @@ export async function loadEmergencyAlerts(locationId?: string | null) {
     .limit(100);
   if (locationId) query = query.eq('location_id', locationId);
   const { data, error } = await query;
-  if (error) throw error;
-  return (data as any[]) || [];
+  if (!error) return (data as any[]) || [];
+  // Keep the admin surface usable while an older project schema cache is
+  // catching up with the offline-SOS columns.
+  if (String(error.message || '').toLowerCase().includes('schema cache')) {
+    let legacy = supabase.from('emergency_alerts' as any)
+      .select('id,booking_id,session_id,user_id,reporter_role,location_id,latitude,longitude,message,status,created_at,acknowledged_at')
+      .in('status', ['open', 'acknowledged'])
+      .order('created_at', { ascending: false }).limit(100);
+    if (locationId) legacy = legacy.eq('location_id', locationId);
+    const fallback = await legacy;
+    if (!fallback.error) return (fallback.data as any[]) || [];
+  }
+  throw error;
 }
