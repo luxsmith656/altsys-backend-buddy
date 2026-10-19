@@ -254,7 +254,12 @@ async function runRecordTool(db: any, scope: AiRoleScope, name: string, args: an
       const { data: guides } = guideIds.length
         ? await db.from('guides').select('id, full_name, phone, status, photo_url').in('id', guideIds)
         : { data: [] };
-      result.push({ ...row, lead_hiker: { user_id: userId }, assigned_guides: assignments ?? [], guides: guides ?? [] });
+      const guideById = new Map((guides ?? []).map((guide: any) => [guide.id, guide]));
+      const assignedGuides = (assignments ?? []).map((assignment: any) => ({
+        ...assignment,
+        guide: guideById.get(assignment.guide_id) ?? null,
+      }));
+      result.push({ ...row, lead_hiker: { user_id: userId }, assigned_guides: assignedGuides, guides: guides ?? [] });
     }
     const capped = capRows(result);
     return { bookings: redactSecrets(capped.rows), total: capped.total, truncated: capped.truncated };
@@ -722,9 +727,11 @@ async function buildUserContext(authHeader: string | null): Promise<string> {
           lead_hiker: { user_id: user.id, full_name: profile?.full_name ?? null },
           assigned_guides: assignedGuides,
         });
-        lines.push(
-          `- booking_id=${b.id} · ${JSON.stringify(safeBooking)}`,
-        );
+        const guideNames = assignedGuides
+          .map((assignment: any) => assignment.guide?.full_name)
+          .filter(Boolean)
+          .join(', ');
+        lines.push(`- booking_id=${b.id} · assigned_guide_names=${guideNames || 'none'} · ${JSON.stringify(safeBooking)}`);
       }
     } else {
       lines.push("They have no bookings yet — this would be their first hike with us.");
