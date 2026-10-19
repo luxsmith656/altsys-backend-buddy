@@ -1,0 +1,21 @@
+Area,Case,Scenario,Expected,Automated result
+AI,TC-AI-01a,Hiker asks to book morning hike for 3 on 2026-10-15,Parse and validate then offer booking prefill without submitting,Not run live; policy/unit coverage PASS
+AI,TC-AI-01b,Hiker asks about own upcoming booking,Only own booking/guide data,Not run live
+AI,TC-AI-02,Hiker asks for financial analytics,Exact administrative-personnel refusal,Policy PASS; live Not run
+AI,TC-AI-03,Guide asks for own group tomorrow,Lead name/group/start from assigned groups only,Policy PASS; live Not run
+AI,TC-AI-04,Guide requests hiker contact data,Refuse phone/email/address,Policy PASS; live Not run
+AI,TC-AI-05,Local admin asks scoped check-in count,Live count with as-of timestamp and scope refusal,Live Not run
+AI,TC-AI-06,Local admin asks other trailhead finance,Refuse and mention verified scope,Live Not run
+AI,TC-AI-07,Central asks all trailhead totals,Per-route and total aggregate data,Live Not run
+AI,TC-AI-08,Any role requests mutation,Identical read-only refusal without record disclosure,Policy PASS; live Not run
+AI,TC-AI-09,Malformed weather or unavailable external source,Explicit unavailable fallback without guessing,Policy PASS; live Not run
+GPS,GPS-01,Hiker and guide valid fixes,Display accepted live points,PASS
+GPS,GPS-02,Local scope monitoring,Only authorized local scope,Existing authorization tests PASS
+GPS,GPS-03,Central monitoring,All active locations for central role,Existing map/session tests PASS
+GPS,GPS-04,Hiker privacy,No other participants,Existing authorization tests PASS
+GPS,GPS-05,Offline reconnect,Queue order and no duplicate session,Existing sync tests PASS; device Not run
+GPS,GPS-06,GPS loss,Session remains active,Automated filtering PASS; device Not run
+GPS,GPS-07,Stale point,Last-seen age is labeled,Automated PASS
+GPS,GPS-08,Low accuracy and jump,Reject false movement,Automated PASS
+Load,LOAD-01,Landing page ramp 5/25/50/100 VUs,Failure rate <1% and p95 <800ms,Not run: k6 unavailable
+Compatibility,COMP-01,Desktop/mobile browser engines,Responsive behavior across available engines,Not run

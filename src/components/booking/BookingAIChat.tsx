@@ -606,6 +606,7 @@ export default function BookingAIChat({
   const [basicGuidance, setBasicGuidance] = useState(false);
   const latestReply = [...messages].reverse().find((message) => message.role === 'assistant');
   const expression = isTyping ? 'thinking' : input ? 'listening' : getKaliExpression(latestReply?.content ?? '');
+  const canOfferBooking = role !== 'guide';
 
   useEffect(() => {
     if (!user?.id) {
@@ -962,12 +963,12 @@ export default function BookingAIChat({
                         {msg.content}
                       </ReactMarkdown>
                     </div>
-                    {msg.suggestion && onApplySuggestion && (
+                    {msg.suggestion && onApplySuggestion && canOfferBooking && (
                       <button
                         onClick={() => onApplySuggestion(msg.suggestion!)}
                         className="mt-2.5 w-full text-[11px] font-semibold bg-primary text-primary-foreground px-3 py-2 rounded-xl hover:bg-primary/90 transition-colors"
                       >
-                        {applyLabel || msg.suggestion.label || 'Apply these details to my booking'}
+                        {applyLabel || 'Book Now'}
                       </button>
                     )}
                     {msg.quickReplies && msg.quickReplies.length > 0 && (

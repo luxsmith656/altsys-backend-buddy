@@ -17,6 +17,16 @@ import {
   sanitizeMessages,
   sanitizeToolParams,
 } from '../_shared/ai-access.ts';
+import {
+  FINANCE_REFUSAL,
+  GUIDE_PII_REFUSAL,
+  READ_ONLY_REFUSAL,
+  isGuidePiiRequest,
+  isOwnPaymentQuestion,
+  isMutationRequest,
+  projectGuideBooking,
+  validAssistantQuery,
+} from '../_shared/ai-thesis-policy.ts';
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -299,8 +309,8 @@ async function runRecordTool(db: any, scope: AiRoleScope, name: string, args: an
     for (const booking of bookings ?? []) {
       const bookingAssignments = (assignments ?? []).filter((a: any) => a.booking_id === booking.id);
       const guideIds = bookingAssignments.map((a: any) => a.guide_id).filter(Boolean);
-      const { data: profile } = await db.from('profiles').select('user_id, full_name, phone, age, avatar_url').eq('user_id', booking.user_id).maybeSingle();
-      enriched.push({ ...booking, hiker: profile, assignments: bookingAssignments, guide_ids: guideIds });
+      const { data: profile } = await db.from('profiles').select('user_id, full_name, age').eq('user_id', booking.user_id).maybeSingle();
+      enriched.push({ ...projectGuideBooking(booking, profile), assignments: bookingAssignments, guide_ids: guideIds });
     }
     const capped = capRows(enriched);
     return { bookings: redactSecrets(capped.rows), total: capped.total, truncated: capped.truncated };
@@ -334,13 +344,17 @@ async function runRecordTool(db: any, scope: AiRoleScope, name: string, args: an
     if (error || !bookings?.length) return { error: AI_NO_MATCH };
     const out = [];
     for (const booking of bookings) {
-      const { data: profile } = await db.from('profiles').select('user_id, full_name, phone, age, avatar_url').eq('user_id', booking.user_id).maybeSingle();
+      const profileFields = scope.role === 'guide' ? 'user_id, full_name, age' : 'user_id, full_name, phone, age, avatar_url';
+      const { data: profile } = await db.from('profiles').select(profileFields).eq('user_id', booking.user_id).maybeSingle();
       const { data: assignments } = await db.from('booking_assignments').select('guide_id, status, decided_at').eq('booking_id', booking.id).limit(3);
       const guideIds = (assignments ?? []).map((a: any) => a.guide_id).filter(Boolean);
+      const guideFields = scope.role === 'guide' ? 'id, full_name, status' : 'id, full_name, phone, status, photo_url';
       const { data: guides } = guideIds.length
-        ? await db.from('guides').select('id, full_name, phone, status, photo_url').in('id', guideIds)
+        ? await db.from('guides').select(guideFields).in('id', guideIds)
         : { data: [] };
-      out.push({ ...booking, notes: undefined, hiker: profile, assignments, guides });
+      out.push(scope.role === 'guide'
+        ? { ...projectGuideBooking(booking, profile), assignments, guides: (guides ?? []).map((guide: any) => ({ id: guide.id, full_name: guide.full_name, status: guide.status })) }
+        : { ...booking, notes: undefined, hiker: profile, assignments, guides });
     }
     const capped = capRows(out);
     return { bookings: redactSecrets(capped.rows), total: capped.total, truncated: capped.truncated };
@@ -367,7 +381,8 @@ async function runRecordTool(db: any, scope: AiRoleScope, name: string, args: an
     }
     const scopedUserIds = allowedUserIds ?? [];
     if (!scopedUserIds.length) return { error: AI_NO_MATCH };
-    let pq = db.from('profiles').select('user_id, full_name, phone, age, avatar_url').in('user_id', scopedUserIds).limit(AI_RESULT_LIMIT + 1);
+    const profileFields = scope.role === 'guide' ? 'user_id, full_name, age' : 'user_id, full_name, phone, age, avatar_url';
+    let pq = db.from('profiles').select(profileFields).in('user_id', scopedUserIds).limit(AI_RESULT_LIMIT + 1);
     if (typeof args?.user_id === 'string' && name === 'hiker_details') pq = pq.eq('user_id', args.user_id);
     else if (queryText) pq = pq.ilike('full_name', `%${queryText}%`);
     const { data: profiles } = await pq;
@@ -571,9 +586,18 @@ function aiConfig() {
   };
 }
 
+function textEvent(content: string) {
+  return new Response(`data: ${JSON.stringify({ choices: [{ delta: { content } }] })}\n\ndata: [DONE]\n\n`, {
+    headers: { ...corsHeaders, 'Content-Type': 'text/event-stream' },
+  });
+}
+
 async function gatherLiveData(messages: any[], scope: AiRoleScope): Promise<string | null> {
   const lastUser = [...messages].reverse().find((m) => m?.role === "user")?.content ?? "";
-  if (typeof lastUser !== "string" || !(DATA_INTENT_RE.test(lastUser) || TRAIL_INTENT_RE.test(lastUser))) return null;
+  // Authenticated users may ask about their permitted live records in natural
+  // language; keyword gates caused valid booking, guide, and attendance
+  // questions to miss the tool phase. Keep the gate only for guests.
+  if (typeof lastUser !== "string" || (!scope.userId && !(DATA_INTENT_RE.test(lastUser) || TRAIL_INTENT_RE.test(lastUser)))) return null;
   if (!SUPABASE_URL || !SERVICE_ROLE) return null;
 
   const { key, url, model } = aiConfig();
@@ -598,7 +622,10 @@ async function gatherLiveData(messages: any[], scope: AiRoleScope): Promise<stri
       headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
       body: JSON.stringify({ model, messages: convo, tools: TOOLS, stream: false }),
     });
-    if (!r.ok) { console.error("[trail-chat-rag] tool phase failed", r.status); break; }
+    if (!r.ok) {
+      console.error("[trail-chat-rag] tool phase failed", r.status);
+      return `LIVE DATA ERROR: could not retrieve live data from the assistant tools (HTTP ${r.status}). Do not guess; tell the user the live source is temporarily unavailable.`;
+    }
     const j = await r.json();
     const choice = j?.choices?.[0]?.message;
     const calls = choice?.tool_calls ?? [];
@@ -820,6 +847,7 @@ BOOKING ASSISTANCE (IMPORTANT):
   Include ONLY the fields you are actually recommending, plus a short "label". Never output more than one APPLY line, never output it when you are not recommending changes, and never explain or mention the line in your prose.
 - Dates must be today or later in Asia/Manila. hikeTime must be 12-hour like "05:30 AM". hikeType is "morning", "night", or "overnight" for new bookings; "day" remains readable for legacy records. groupSize is 1–30.
 - Add "submit": true to the APPLY line ONLY when the hiker has clearly asked you to go ahead and book, and date, start time, group size and hike type are all settled. Otherwise omit it. You never confirm a booking yourself — the app still asks the hiker to review the details and accept the safety reminders, sworn declaration and agreements before anything is submitted. Say so plainly when you hand off.
+- Only a hiker or public visitor may receive a booking APPLY line or booking CTA. Guides must never be offered a booking CTA or encouraged to book themselves; direct them to their duty dashboard and local admin.
 - Missing details the app requires (emergency contact, city/municipality, group composition) must be filled in on the booking form; tell the hiker what is still needed instead of inventing values.
 
 ANSWER STYLE:
@@ -842,21 +870,21 @@ serve(async (req) => {
       req.headers.get('Authorization'),
     );
 
+    const lastUser = [...messages].reverse().find((m: any) => m?.role === 'user')?.content ?? '';
+    if (!validAssistantQuery(lastUser)) return textEvent('Please ask a specific Mount Kalisungan question.');
+    if (isMutationRequest(lastUser)) return textEvent(READ_ONLY_REFUSAL);
+    if (scope.role === 'guide' && isGuidePiiRequest(lastUser)) return textEvent(GUIDE_PII_REFUSAL);
+    if (!isFinanceRole(scope.role) && PRIVATE_PAYMENT_RE.test(lastUser) && !isOwnPaymentQuestion(lastUser)) return textEvent(FINANCE_REFUSAL);
+
     const { key: AI_API_KEY, url: AI_GATEWAY_URL, model: AI_MODEL } = aiConfig();
     if (!AI_API_KEY) throw new Error("LOVABLE_API_KEY is not configured");
 
-    const lastUser = [...messages].reverse().find((m: any) => m?.role === "user")?.content ?? "";
-    if (typeof lastUser === "string" && PRIVATE_PAYMENT_RE.test(lastUser) && !isFinanceRole(scope.role)) {
-      const text = "I can only help with what your own hike would cost. Other people's payment details aren't available here.";
-      const sse = `data: ${JSON.stringify({ choices: [{ delta: { content: text } }] })}\n\ndata: [DONE]\n\n`;
-      return new Response(sse, { headers: { ...corsHeaders, "Content-Type": "text/event-stream" } });
-    }
     const liveDb = createClient(SUPABASE_URL, SERVICE_ROLE, { auth: { persistSession: false, autoRefreshToken: false } });
     const liveLocation = !scope.allLocations && scope.locationIds.length === 1 ? scope.locationIds[0] : null;
     const [ragContext, audienceContext, liveData, liveRules] = await Promise.all([
       buildRagContext(typeof lastUser === "string" ? lastUser : "").catch(() => ""),
       buildAudienceContext(scope, req.headers.get("Authorization")).catch((e) => { console.error("[trail-chat-rag] audience context error", e); return ""; }),
-      gatherLiveData(messages, scope).catch((e) => { console.error("[trail-chat-rag] live data error", e); return null; }),
+      gatherLiveData(messages, scope).catch((e) => { console.error("[trail-chat-rag] live data error", e); return "LIVE DATA ERROR: could not retrieve live data from the assistant tools. Do not guess; tell the user the live source is temporarily unavailable."; }),
       loadLiveRules(liveDb, liveLocation).catch((e) => { console.error("[trail-chat-rag] live rules error", e); return null; }),
     ]);
 

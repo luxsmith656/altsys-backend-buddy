@@ -1327,6 +1327,20 @@ export default function BookingPage() {
   };
 
   /* --------------- SUCCESS SCREEN --------------- */
+  if (role === 'guide') {
+    return (
+      <div className="min-h-screen pt-24 px-4 pb-12 flex items-center justify-center">
+        <Card className="glass-card max-w-lg w-full border-primary/30">
+          <CardHeader><CardTitle>Guides cannot create hiker bookings</CardTitle></CardHeader>
+          <CardContent className="space-y-4 text-sm text-muted-foreground">
+            <p>Use your assignments and duty dashboard to manage hikes. A local administrator creates and confirms bookings for hikers.</p>
+            <Button className="w-full" onClick={() => navigate('/guide')}>Open Guide Dashboard</Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
   if (booking) {
     return (
       <motion.div

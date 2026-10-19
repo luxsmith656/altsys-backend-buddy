@@ -178,7 +178,7 @@ export default function GlobalAIAssistant() {
       hikeType="day"
       pageContext={`${info.label} — ${info.blurb}`}
       greeting={greeting}
-      applyLabel="Book this now →"
+      applyLabel="Book Now"
       onApplySuggestion={goToBooking}
     />
     </>
