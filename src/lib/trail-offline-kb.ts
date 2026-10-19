@@ -1,6 +1,6 @@
 // Offline knowledge base for Mt. Kalisungan trail assistant
 // Static entries + dynamic learning cache from previous AI responses
-import { FEE_POLICY_TEXT, getDynamicFeePolicyText, getPricingConfig } from './payments';
+import { getPricingConfig } from './payments';
 
 const CACHE_KEY = 'kalisungan_learned_cache';
 const CACHE_MAX = 200;
@@ -11,7 +11,6 @@ interface KBEntry {
 }
 
 const KB: KBEntry[] = [
-  { keywords: ['fee', 'fees', 'price', 'cost', 'rate', 'guide fee', 'walk-in', 'porter', 'horse'], answer: () => getDynamicFeePolicyText() },
   // ─── TRAILS ───
   {
     keywords: ['trail', 'available', 'trails', 'route', 'routes', 'path', 'which'],
@@ -678,8 +677,8 @@ export function getCacheSize(): number {
 
 export function getOfflineAnswer(query: string): string {
   const q = query.toLowerCase();
-  if (/(fee|fees|pricing|prices|price|cost|costs|rate|rates|fare|fares|magkano|how much)/i.test(q)) {
-    return `${getDynamicFeePolicyText()}\n\n---\n*📴 Offline response — connect to the internet for more detailed answers.*`;
+  if (/(fee|fees|pricing|prices|price|cost|costs|rate|rates|fare|fares|magkano|how much|capacity|available|availability|schedule|start time|group limit|route|trail|distance|elevation|difficulty)/i.test(q)) {
+    return `I can’t confirm current route, fare, schedule, capacity, group-limit, or slot details while offline. Connect to the internet so I can read Central’s latest published database rules.`;
   }
 
   const queryKeywords = extractKeywords(query);

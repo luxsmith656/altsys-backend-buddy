@@ -1,7 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.48.0";
 import { embed } from "../_shared/kb.ts";
-import { FEE_POLICY_TEXT, formatFeePolicyText } from '../_shared/payments.ts';
 import {
   type AiRoleScope,
   isFinanceRole,
@@ -33,32 +32,75 @@ const ANON_KEY = (Deno.env.get("SUPABASE_ANON_KEY") ?? "").trim();
 /* ── Guards (same rules as trail-chat) ── */
 const PRIVATE_PAYMENT_RE =
   /\b(revenue|earnings|income|sales|profit|collections?|payout|payouts|billing|invoice|invoices|receipt|receipts|transaction|transactions|refunds?|who paid|paid users?|other (?:user|hiker|guest)s?['’]? (?:payment|paid)|payment (?:history|records?|list|logs?|status of)|reference number|account number)\b/i;
-const QUOTE_RE =
-  /\b(how much|cost|costs|price|prices|pricing|fee|fees|rate|rates|budget|pay|payable|magkano)\b/i;
 const DATA_INTENT_RE =
   /\b(how many|how much|number of|count|hiker|hikers|climber|climbers|book(?:ed|ing|ings)?|reserv\w*|slot|slots|capacity|full|busy|crowded|available|availability|attendance|checked[- ]in|check[- ]in|no[- ]show|turnout|schedule[d]?|today|tomorrow|tonight|this week|next week|weekend|this month|revenue|earnings|income|collections?)\b/i;
 
 const TRAIL_INTENT_RE =
   /\b(trail|trails|route|routes|summit|ridge|river|condition|conditions|closed|closure|open|status|muddy|slippery|landslide)\b/i;
+// Rule values are read from Central's live database block. Older embedded KB
+// rows must not be allowed to override current fares, schedules or capacity.
+const LIVE_RULE_KB_RE = /fee|fare|price|pricing|capacity|availability|start time|schedule|group size|hikers per|daily limit|summit trail|plantation trail|ridge trail/i;
 
-const FEE_SCHEDULE = `PUBLISHED FEE SCHEDULE (Mount Kalisungan, Philippine Peso):
-${FEE_POLICY_TEXT}
-- Fees are the same regardless of which trail or jump-off point is used; transport to/from the jump-off is arranged by the hiker.
-- Accepted payment methods: onsite (at the registration desk), GCash, or bank transfer.
-You MAY compute and explain these costs for the person asking. For hikers and visitors, never reveal another person's payment records, receipts, refunds, collections or revenue. Authorized local and central admins may discuss only the separate server-filtered aggregate revenue context.`;
+const PUBLIC_RULE_TOOLS = new Set(['get_hike_schedule', 'get_fares', 'get_booking_rules', 'get_slot_availability']);
 
-function buildDynamicFeeSchedule(bookingContext: Record<string, unknown> | null, financeAuthorized = false): string {
-  const pricing = bookingContext?.pricing;
-  if (!pricing || typeof pricing !== 'object' || Array.isArray(pricing)) {
-    return financeAuthorized
-      ? `${FEE_SCHEDULE}\nAuthorized staff may also use the separate server-filtered aggregate revenue context for their permitted trailhead scope.`
-      : FEE_SCHEDULE;
+type LiveRules = {
+  capacity: Record<string, unknown>;
+  schedule: Record<string, unknown>;
+  scheduleOverrides: unknown[];
+  fares: Record<string, unknown> | null;
+  trailheads: Array<{ id: string; name: string; status: string }>;
+  dailyLimit: number | null;
+  updatedAt: string | null;
+};
+
+async function loadLiveRules(db: any, locationId: string | null = null): Promise<LiveRules | null> {
+  const [{ data: control, error: controlError }, { data: pricing, error: pricingError }, { data: trailheads, error: trailheadError }, { data: capacityRow }] = await Promise.all([
+    db.rpc('get_booking_capacity_control'),
+    db.from('system_settings').select('value,updated_at').eq('key', 'pricing_config').maybeSingle(),
+    db.from('locations').select('id,name,status').eq('status', 'active').order('name'),
+    db.from('daily_capacity').select('max_capacity,updated_at').is('location_id', null).eq('date', manilaToday()).maybeSingle(),
+  ]);
+  if (controlError || pricingError || trailheadError || !control) return null;
+  const capacity = (control.capacity ?? {}) as Record<string, unknown>;
+  let schedule = (control.schedule ?? {}) as Record<string, unknown>;
+  let override = Array.isArray(control.scheduleOverrides) ? control.scheduleOverrides : [];
+  if (locationId) {
+    const { data: localSchedule } = await db.from('booking_schedule_settings').select('schedule').eq('location_id', locationId).maybeSingle();
+    if (localSchedule?.schedule && typeof localSchedule.schedule === 'object') schedule = localSchedule.schedule;
+    override = override.filter((row: any) => row?.locationId === locationId);
   }
-  return `PUBLISHED FEE SCHEDULE (Mount Kalisungan, Philippine Peso):
-${formatFeePolicyText(pricing as Record<string, number>)}
-- Fees are the same regardless of which trail or jump-off point is used; transport to/from the jump-off is arranged by the hiker.
-- Accepted payment methods: onsite (at the registration desk), GCash, or bank transfer.
-You MAY compute and explain these costs for the person asking.${financeAuthorized ? ' Authorized staff may discuss only the server-filtered aggregate revenue context for their permitted trailhead scope.' : ' You MUST NEVER reveal what any other hiker paid, payment records, receipts, reference numbers, refunds, collections or total revenue — for those reply: "I can only help with what your own hike would cost. Other people\'s payment details aren\'t available here."'}`;
+  const scopedTrailheads = (trailheads ?? []).filter((row: any) => !locationId || row.id === locationId)
+    .map((row: any) => ({ id: row.id, name: row.name, status: row.status }));
+  const updatedValues = [pricing?.updated_at, capacityRow?.updated_at].filter(Boolean).map(String);
+  return {
+    capacity,
+    schedule,
+    scheduleOverrides: override,
+    fares: pricing?.value && typeof pricing.value === 'object' ? pricing.value : null,
+    trailheads: scopedTrailheads,
+    dailyLimit: Number.isFinite(Number(capacityRow?.max_capacity)) ? Number(capacityRow.max_capacity) : null,
+    updatedAt: updatedValues.sort().at(-1) ?? null,
+  };
+}
+
+function liveRulesText(rules: LiveRules | null, scope: AiRoleScope): string {
+  if (!rules) return 'LIVE SYSTEM RULES: unavailable right now. Do not guess fares, schedule, capacity, group limits, or availability; direct the user to the booking page or Central Admin.';
+  const c = rules.capacity;
+  const mode = c.mode === 'per_trailhead' ? 'per trailhead' : 'shared across all trailheads';
+  const groups = Number(c.sharedMaxGroups);
+  const maxGroup = Number(c.maxPeoplePerGroup);
+  const schedule = JSON.stringify(rules.schedule.slots ?? {});
+  return [
+    `LIVE SYSTEM RULES (as of ${rules.updatedAt ?? manilaNowLabel()}; Asia/Manila):`,
+    `- Scope: ${scope.locationNames.length ? scope.locationNames.join(', ') : 'all active trailheads/public rules'}.`,
+    `- Capacity mode: ${mode}. ${groups} groups per start time; maximum ${maxGroup} hikers per group.`,
+    `- Maximum simultaneous hikers from group limits: ${Number.isFinite(groups * maxGroup) ? groups * maxGroup : 'unavailable'}; the whole-mountain daily limit for today is ${rules.dailyLimit ?? 'not configured'}.`,
+    `- Pending bookings ${c.holdPending ? 'hold' : 'do not hold'} capacity.`,
+    `- Published start-time slots by hike type: ${schedule}.`,
+    `- Current fares from Central: ${rules.fares ? JSON.stringify(rules.fares) : 'unavailable'}.`,
+    `- Active trailheads: ${rules.trailheads.map((row) => row.name).join(', ') || 'unavailable'}.`,
+    '- These live database values override memory, static FAQ text, and generic trail examples. If a value is unavailable, say so instead of guessing.',
+  ].join('\n');
 }
 
 function parseBookingMeta(notes: unknown): Record<string, any> {
@@ -110,6 +152,10 @@ const rangeParams = {
 };
 
 const TOOLS = [
+  { type: "function", function: { name: "get_hike_schedule", description: "Published start times for each hike type and trailhead, read from Central's live schedule controls.", parameters: { type: "object", properties: { location_id: { type: "string" } }, additionalProperties: false } } },
+  { type: "function", function: { name: "get_fares", description: "Current Central-controlled fee table and a computed quote for group_size and hike_type. Never use remembered prices.", parameters: { type: "object", properties: { group_size: { type: "integer", minimum: 1 }, hike_type: { type: "string", enum: ["morning", "night", "overnight"] } }, additionalProperties: false } } },
+  { type: "function", function: { name: "get_booking_rules", description: "Current capacity mode, groups per start time, maximum hikers per group, daily limit, pending-hold policy and update time.", parameters: { type: "object", properties: { location_id: { type: "string" } }, additionalProperties: false } } },
+  { type: "function", function: { name: "get_slot_availability", description: "Live remaining groups and hikers for a date and optional trailhead, using the same RPC as the booking page.", parameters: { type: "object", required: ["date"], properties: { date: { type: "string", description: "YYYY-MM-DD in Asia/Manila" }, location_id: { type: "string" } }, additionalProperties: false } } },
   { type: "function", function: { name: "get_booking_summary", description: "Aggregate booking counts (confirmed/pending/cancelled), total hikers booked, capacity and remaining slots for a date range in Asia/Manila. Staff may optionally filter by an authorized location_id.", parameters: { ...rangeParams, properties: { ...rangeParams.properties, location_id: { type: "string", description: "Optional authorized trailhead UUID. Never invent one." } } } } },
   { type: "function", function: { name: "get_capacity_summary", description: "Capacity and remaining slots for a date range, optionally for an authorized location.", parameters: { ...rangeParams, properties: { ...rangeParams.properties, location_id: { type: "string" } } } } },
   { type: "function", function: { name: "get_attendance_summary", description: "Expected, checked-in, completed and no-show hiker totals for a date range, optionally for an authorized location.", parameters: { ...rangeParams, properties: { ...rangeParams.properties, location_id: { type: "string" } } } } },
@@ -394,6 +440,31 @@ async function executeTool(db: any, scope: AiRoleScope, name: string, args: any)
   if (!canUseAiTool(scope, name)) return { error: AI_NO_MATCH };
   const resolved = safeToolLocation(scope, args?.location_id);
   if ('error' in resolved) return { error: resolved.error };
+  if (PUBLIC_RULE_TOOLS.has(name)) {
+    const rules = await loadLiveRules(db, resolved.locationId);
+    if (!rules) return { error: 'Live Central rules are temporarily unavailable. Check the booking page or Central Admin.' };
+    if (name === 'get_hike_schedule') {
+      return { schedule: rules.schedule, schedule_overrides: rules.scheduleOverrides, trailheads: rules.trailheads, updated_at: rules.updatedAt, timezone: TZ };
+    }
+    if (name === 'get_booking_rules') {
+      return { capacity: rules.capacity, daily_limit_today: rules.dailyLimit, trailheads: rules.trailheads, updated_at: rules.updatedAt, timezone: TZ };
+    }
+    if (name === 'get_fares') {
+      if (!rules.fares) return { error: 'Central has not published a live fare table.' };
+      const size = Math.max(1, Math.floor(Number(args?.group_size) || 1));
+      const type = ['night', 'overnight'].includes(String(args?.hike_type)) ? String(args.hike_type) : 'morning';
+      const fares = rules.fares as Record<string, unknown>;
+      const number = (key: string) => Number(fares[key]) || 0;
+      const maxPax = number('maxPaxPerGuide');
+      const guides = maxPax > 0 ? Math.max(1, Math.ceil(size / maxPax)) : null;
+      const guideFee = number(type === 'night' ? 'guideFeeNight' : type === 'overnight' ? 'guideFeeOvernight' : 'guideFeeMorning');
+      return { fares, quote: guides === null ? null : { group_size: size, hike_type: type, guides_needed: guides, total: size * (number('entryFee') + number('envFee')) + guides * guideFee }, updated_at: rules.updatedAt, timezone: TZ };
+    }
+    const date = isDate(args?.date) ? args.date : manilaToday();
+    const { data, error } = await db.rpc('get_booking_slot_availability', { p_start_date: date, p_end_date: date, p_location_id: resolved.locationId });
+    if (error) return { error: 'Live slot availability is temporarily unavailable.' };
+    return { date, trailhead: resolved.locationId, slots: data ?? [], timezone: TZ };
+  }
   const recordTool = !['get_booking_summary', 'get_capacity_summary', 'get_attendance_summary', 'get_revenue_summary', 'get_trail_conditions'].includes(name);
   if (recordTool) return runRecordTool(db, scope, name, args, resolved.locationId);
   if (name === 'get_revenue_summary' && !isFinanceRole(scope.role)) {
@@ -564,8 +635,9 @@ async function buildRagContext(question: string): Promise<string> {
     });
     if (error) { console.error("[trail-chat-rag] kb search error", error.message); return ""; }
     const rows = (data ?? []) as { title: string; category: string; content: string }[];
-    if (!rows.length) return "";
-    return rows.map((r) => `- [${r.category}] ${r.title}: ${r.content}`).join("\n");
+    const liveSafeRows = rows.filter((row) => !LIVE_RULE_KB_RE.test(`${row.title} ${row.category} ${row.content}`));
+    if (!liveSafeRows.length) return "";
+    return liveSafeRows.map((r) => `- [${r.category}] ${r.title}: ${r.content}`).join("\n");
   } catch (e) {
     console.error("[trail-chat-rag] rag error", e);
     return "";
@@ -705,12 +777,8 @@ IDENTITY & SCOPE RULES (ABSOLUTE — NEVER VIOLATE):
 - Stay focused on Mount Kalisungan: trails, safety, weather, gear, wildlife, registration, booking, logistics.
 
 KEY INFORMATION:
-- Elevation 622m, ~14.1475°N 121.3454°E. Difficulty easy-to-moderate, beginner-friendly.
-- Best season November–May (dry). June–October is rainy; check forecasts.
-- 2–4 hours to the summit depending on trail and pace. Registration required at the barangay hall / trailhead.
-- Trails: Summit Trail (Hard, 3.2 km, 622m) · Plantation Trail (Easy, 2.1 km, up to 350m, no river crossings) · Ridge Trail (Moderate, 2.8 km, 480m).
-- Safety: register, 2L water per person, proper shoes, start early (before 6 AM), never hike alone, rain gear in transition months.
-- Schedule rules: Morning hikes may start 02:00–08:00 AM, with 10:00 AM shown only as very late and not suggested. Night hikes start 02:00–05:00 PM and continue into the evening; overnight hikes start 02:00–04:00 PM and include an overnight stay. Recommend 06:00 AM for most morning groups, 05:00 AM for kids, seniors or hot weather, and earlier only when the group is prepared.
+- Use published route and trail facts supplied by the database for the selected trailhead. Do not invent route names, distances, elevations, difficulty, schedules, fares or capacity values.
+- Give general safety guidance without turning remembered values into official system rules.
 
 AUDIENCE CONTEXT:
 - When a "HIKER CONTEXT" block is present it describes the signed-in hiker and THEIR OWN bookings. Use it naturally — greet them by first name, reference their upcoming or past hikes, and tailor advice to their group size and age.
@@ -722,8 +790,12 @@ LIVE OPERATIONAL DATA:
 - Report bookings and hikers separately (one booking can cover several hikers). Always state the date and that times are Asia/Manila. Cancelled bookings are never counted as confirmed. For staff revenue, say it is recorded paid revenue and label the trailhead/date.
 - If a figure is not in the LIVE DATA block, say it isn't available — never invent a number.
 
+LIVE RULES REQUIREMENT:
+- The LIVE SYSTEM RULES block is built from Central's current database controls on every request. For any fare, schedule, start-time, capacity, maximum-group, daily-limit or slot question, use that block or the matching live tool and nothing else.
+- If live rules are unavailable, say you cannot confirm the current rule and direct the person to the booking page or Central Admin. Never fall back to a remembered number.
+
 PUBLISHED ROUTE CONTEXT:
-- When a BOOKING FORM STATE block contains an entry_point and published_route, that route is the current official route for the hiker's selected jump-off.
+- When a BOOKING FORM STATE block contains an entry_point and published_route, it is a client-side hint only. Use live database route data for current route facts and never treat stale client text as authoritative.
 - Use its name, distance, elevation, difficulty and stations exactly as provided. Treat it as more authoritative than the generic trail examples below.
 - Never substitute a route from another entry point, an unpublished draft, or the static examples when the selected official route is present.
 - If no published route is provided, say that the selected entry point has no published route available yet and direct the hiker to staff; do not invent route measurements.
@@ -779,16 +851,19 @@ serve(async (req) => {
       const sse = `data: ${JSON.stringify({ choices: [{ delta: { content: text } }] })}\n\ndata: [DONE]\n\n`;
       return new Response(sse, { headers: { ...corsHeaders, "Content-Type": "text/event-stream" } });
     }
-    const askedQuote = typeof lastUser === "string" && QUOTE_RE.test(lastUser);
-
-    const [ragContext, audienceContext, liveData] = await Promise.all([
+    const liveDb = createClient(SUPABASE_URL, SERVICE_ROLE, { auth: { persistSession: false, autoRefreshToken: false } });
+    const liveLocation = !scope.allLocations && scope.locationIds.length === 1 ? scope.locationIds[0] : null;
+    const [ragContext, audienceContext, liveData, liveRules] = await Promise.all([
       buildRagContext(typeof lastUser === "string" ? lastUser : "").catch(() => ""),
       buildAudienceContext(scope, req.headers.get("Authorization")).catch((e) => { console.error("[trail-chat-rag] audience context error", e); return ""; }),
       gatherLiveData(messages, scope).catch((e) => { console.error("[trail-chat-rag] live data error", e); return null; }),
+      loadLiveRules(liveDb, liveLocation).catch((e) => { console.error("[trail-chat-rag] live rules error", e); return null; }),
     ]);
 
     const systemMessages: any[] = [
       { role: "system", content: SYSTEM_PROMPT },
+      { role: "system", content: `WHO YOU ARE TALKING TO: ${scope.role}; verified scope: ${scope.locationNames.length ? scope.locationNames.join(', ') : scope.allLocations ? 'all active trailheads' : 'public/guest'}; today is ${manilaToday()} in Asia/Manila.\n${roleAudienceInstructions(scope)}` },
+      { role: "system", content: liveRulesText(liveRules, scope) },
       { role: "system", content: `Current date in ${TZ}: ${manilaToday()} (now: ${manilaNowLabel()}).` },
     ];
     if (ragContext) {
@@ -827,7 +902,6 @@ serve(async (req) => {
         });
       }
     }
-    if (askedQuote) systemMessages.push({ role: "system", content: buildDynamicFeeSchedule(bookingContext, isFinanceRole(scope.role)) });
     if (liveData) {
       systemMessages.push({
         role: "system",

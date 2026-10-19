@@ -1,7 +1,6 @@
 // Shared knowledge-base helpers for the unified hiker AI.
 // Content lives in public.kb_chunks with pgvector embeddings; retrieval is
 // similarity search so we never dump the whole corpus into a prompt.
-import { FEE_POLICY_TEXT } from './payments.ts';
 
 export const EMBED_MODEL = "openai/text-embedding-3-small"; // 1536 dims
 
@@ -23,7 +22,7 @@ export const KB_SEED: KbSeed[] = [
     title: "Trails and difficulty",
     category: "trail",
     content:
-      "Summit Trail: hard, about 3.2 km, tops out at 622 m, the steepest and most direct route. Plantation Trail: easy, about 2.1 km, up to 350 m, shaded coconut groves and best for kids, seniors and first timers (strictly no river crossings). Ridge Trail: moderate, about 2.8 km, up to 480 m, exposed ridgeline with strong wind and sun.",
+      "Official route names, station sequence, distance, elevation and difficulty are published per jump-off in the database. Use the live route data supplied for the selected trailhead; never substitute a generic route or a route from another trailhead.",
   },
   {
     title: "Best season and weather guidance",
@@ -35,19 +34,19 @@ export const KB_SEED: KbSeed[] = [
     title: "Recommended start times",
     category: "booking",
     content:
-      "For all adult groups the recommended morning start time is 06:00 AM. When the group includes children, seniors, or the forecast is hot (32C or above), 05:00 AM is better. Morning hikes may start 02:00–08:00 AM, night hikes 02:00–05:00 PM and descend the same day, and overnight hikes 02:00–04:00 PM with the hiker's own tent because there is no peak lodging.",
+      "Start-time options and hike-type windows are controlled by Central and may change. Read the live schedule for the selected trailhead and date before recommending a time.",
   },
   {
     title: "Registration and booking policy",
     category: "booking",
     content:
-      "Every hiker must be registered before climbing. Bookings are made per group with a booking date, start time, group size and hike type (day or night). A booking is pending until staff confirm it, and daily capacity limits how many hikers can be confirmed for a date. Hikers may reschedule from their dashboard; staff review the request. One group should not book twice within the same Monday to Sunday week without approval.",
+      "Every hiker must be registered before climbing. Bookings are made per group with a booking date, start time, group size and hike type. Confirmation, capacity, pending holds, rescheduling and duplicate-booking rules are enforced from the live database settings and booking workflow.",
   },
   {
     title: "Fees",
     category: "fees",
     content:
-      FEE_POLICY_TEXT,
+      "Published entry, environmental, guide, peak, horse-rescue and other fees come from Central's live pricing configuration. Quote only the current database values; if they are unavailable, direct the user to the booking page or staff.",
   },
   {
     title: "Guides",
@@ -83,7 +82,7 @@ export const KB_SEED: KbSeed[] = [
     title: "Capacity and availability",
     category: "booking",
     content:
-      "Each date has a maximum capacity of hikers. Remaining slots are the capacity minus already confirmed hikers. Only confirmed bookings consume capacity; cancelled bookings do not. If no capacity is configured for a date, availability is unknown rather than closed, and staff should be asked to confirm.",
+      "Capacity mode, group limits, daily limits, pending holds and slot availability are live Central settings. Only the current database response can establish whether a date or start time is available; missing data is unknown rather than closed.",
   },
   {
     title: "Privacy policy for the assistant",

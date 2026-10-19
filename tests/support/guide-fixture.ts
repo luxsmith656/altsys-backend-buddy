@@ -25,6 +25,7 @@ export function createGuideFixture() {
     booking_assignments: assignments, hiker_sessions: [], user_locations: [{ location_id: 'lamot2' }],
     locations: [{ id: 'lamot2', name: 'Lamot 2', slug: 'lamot2', status: 'active', center_lat: 14.15, center_lng: 121.34 }, { id: 'lamot1', name: 'Lamot 1', slug: 'lamot1', status: 'active', center_lat: 14.15, center_lng: 121.33 }],
     daily_capacity: [],
+    booking_schedule_settings: [],
     announcements: [],
     system_settings: [],
     trail_zones: [],
@@ -52,6 +53,14 @@ export async function installGuideFixture(page: Page, options: { legacyProfileSc
     if (url.pathname.startsWith('/auth/v1/')) return route.fulfill({ json: user });
     if (url.pathname === '/rest/v1/rpc/refresh_guide_duty_status') {
       return route.fulfill({ json: (rows.guides[0] as { status?: string })?.status || 'available' });
+    }
+    if (url.pathname === '/rest/v1/rpc/get_booking_capacity_control') {
+      return route.fulfill({ json: {
+        mode: 'shared',
+        capacity: { mode: 'shared', sharedMaxGroups: 3, maxPeoplePerGroup: 5, holdPending: false },
+        schedule: { slots: {} },
+        scheduleOverrides: [],
+      } });
     }
     const table = url.pathname.split('/rest/v1/')[1];
     if (request.method() !== 'GET' || !Object.hasOwn(rows, table)) {
