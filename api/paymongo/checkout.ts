@@ -1,4 +1,4 @@
-import { env, getHeader, parseNotes, send, supabaseAuthUser, supabaseRequest, type ApiRequest, type ApiResponse } from './_shared';
+import { env, getHeader, parseNotes, send, supabaseAuthUser, supabaseRequest, type ApiRequest, type ApiResponse } from './_shared.js';
 
 // PayMongo checkout uses Node request/auth primitives and must not be bundled
 // as an Edge function by a project-level Vercel runtime setting.

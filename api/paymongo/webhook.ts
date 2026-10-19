@@ -1,5 +1,5 @@
 import { createHmac, timingSafeEqual } from 'node:crypto';
-import { env, getHeader, readRawBody, send, supabaseRequest, type ApiRequest, type ApiResponse } from './_shared';
+import { env, getHeader, readRawBody, send, supabaseRequest, type ApiRequest, type ApiResponse } from './_shared.js';
 
 export const config = { api: { bodyParser: false }, runtime: 'nodejs' };
 
