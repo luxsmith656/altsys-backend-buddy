@@ -1,25 +1,53 @@
+import { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import { Route, TrendingUp, Clock, BarChart2 } from 'lucide-react';
 import { MOUNTAIN_FACTS, MOUNTAIN_ELEVATION_LABEL } from '@/lib/mountainFacts';
+import { haversineDistance } from '@/lib/map-data';
+import { supabase } from '@/integrations/supabase/client';
 
-const trailStats = [
+type RouteStats = { count: number; shortestKm: number | null; longestKm: number | null };
+
+const fallbackRouteStats: RouteStats = { count: 0, shortestKm: null, longestKm: null };
+
+function routeDistanceKm(points: unknown): number | null {
+  if (!Array.isArray(points) || points.length < 2) return null;
+  let total = 0;
+  for (let i = 1; i < points.length; i += 1) {
+    const previous = points[i - 1] as any;
+    const current = points[i] as any;
+    const lat1 = Number(previous?.lat ?? previous?.[0]);
+    const lng1 = Number(previous?.lng ?? previous?.lon ?? previous?.[1]);
+    const lat2 = Number(current?.lat ?? current?.[0]);
+    const lng2 = Number(current?.lng ?? current?.lon ?? current?.[1]);
+    if ([lat1, lng1, lat2, lng2].every(Number.isFinite)) total += haversineDistance(lat1, lng1, lat2, lng2);
+  }
+  return total > 0 ? total : null;
+}
+
+function buildTrailStats(stats: RouteStats) {
+  const distance = stats.shortestKm === null
+    ? 'Not published'
+    : stats.shortestKm === stats.longestKm
+      ? `${stats.shortestKm.toFixed(1)} km`
+      : `${stats.shortestKm.toFixed(1)}–${stats.longestKm?.toFixed(1)} km`;
+  return [
   {
     icon: Route,
     label: 'Trail Distance',
-    value: '3 routes',
-    desc: 'Distances come from each published route.',
+    value: distance,
+    desc: stats.count ? `Measured from ${stats.count} published route${stats.count === 1 ? '' : 's'}.` : 'Published route distance is not available yet.',
   },
   {
     icon: TrendingUp,
-    label: 'Elevation Gain',
+    label: 'Summit Elevation',
     value: MOUNTAIN_ELEVATION_LABEL,
-    desc: 'Official mountain elevation.',
+    desc: 'Official Mt. Kalisungan summit elevation.',
   },
   {
     icon: Clock,
-    label: 'Estimated Hiking Time',
-    value: 'Published routes',
-    desc: 'Timing comes from each published route record.',
+    label: 'Typical Hiking Time',
+    value: '2.5–4 hours',
+    desc: 'Approximate summit time; actual pace varies by route and conditions.',
   },
   {
     icon: BarChart2,
@@ -27,9 +55,30 @@ const trailStats = [
     value: MOUNTAIN_FACTS.difficulty,
     desc: 'Route-specific details come from the published route.',
   },
-];
+  ];
+}
 
 export default function TrailOverview() {
+  const [routeStats, setRouteStats] = useState<RouteStats>(fallbackRouteStats);
+
+  useEffect(() => {
+    let mounted = true;
+    void supabase.from('trail_zones' as any)
+      .select('coordinates_json,status,is_official,review_status')
+      .eq('status', 'active').eq('is_official', true).eq('review_status', 'approved')
+      .then(({ data }) => {
+        if (!mounted || !Array.isArray(data)) return;
+        const distances = data.map((route: any) => routeDistanceKm(route.coordinates_json)).filter((distance): distance is number => distance !== null);
+        setRouteStats({
+          count: distances.length,
+          shortestKm: distances.length ? Math.min(...distances) : null,
+          longestKm: distances.length ? Math.max(...distances) : null,
+        });
+      });
+    return () => { mounted = false; };
+  }, []);
+
+  const trailStats = buildTrailStats(routeStats);
   return (
     <section className="py-24 px-4 relative overflow-hidden section-dot-pattern">
       {/* Subtle decorative blurs */}
