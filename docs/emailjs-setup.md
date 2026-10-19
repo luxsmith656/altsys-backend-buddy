@@ -19,6 +19,7 @@ The Edge Functions include the current EmailJS identifiers as public integration
 ```text
 EMAILJS_SERVICE_ID
 EMAILJS_PUBLIC_KEY
+EMAILJS_PRIVATE_KEY
 EMAILJS_BOOKING_TEMPLATE_ID
 EMAILJS_PASSWORD_RESET_TEMPLATE_ID
 ```
@@ -30,4 +31,4 @@ supabase functions deploy send-password-reset-emailjs
 supabase functions deploy send-booking-confirmation
 ```
 
-Never put an EmailJS private key, Supabase service-role key, or reset token in `VITE_` variables or in a template parameter supplied by the browser.
+`EMAILJS_PRIVATE_KEY` is required when EmailJS Account > Security has **Use Private Key** enabled. Set it as a Supabase Edge Function secret for both functions. Never put it, a Supabase service-role key, or a reset token in `VITE_` variables or in a template parameter supplied by the browser.

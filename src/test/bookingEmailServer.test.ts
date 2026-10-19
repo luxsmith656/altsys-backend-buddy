@@ -89,6 +89,18 @@ describe('Resend dispatcher and endpoint', () => {
     expect(body.template_params).toMatchObject({ to_email: 'hiker@example.com', visitor_name: 'Juan Dela Cruz', booking_id: id, trail_name: 'Lamot 2' });
     expect(body).not.toHaveProperty('to');
   });
+  it('includes the EmailJS private key for strict server-side accounts', async () => {
+    fetcher.mockResolvedValue(new Response(JSON.stringify({ status: 200, text: 'OK' }), { status: 200 }));
+    const result = await dispatchBookingEmail(id, {
+      ...deps(),
+      apiKey: '',
+      from: '',
+      emailJs: { serviceId: 'service_test', templateId: 'template_booking', publicKey: 'public_test', privateKey: 'private_test' },
+    });
+    expect(result).toEqual({ success: true, status: 'sent' });
+    const body = JSON.parse(String(fetcher.mock.calls[0][1]?.body));
+    expect(body.accessToken).toBe('private_test');
+  });
   it('prevents two leased callers sending concurrently', async () => {
     const results = await Promise.all([dispatchBookingEmail(id, deps()), dispatchBookingEmail(id, deps())]);
     expect(results.some(result => result.success)).toBe(true); expect(fetcher).toHaveBeenCalledTimes(1);

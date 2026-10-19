@@ -2,6 +2,7 @@ export type EmailJsConfig = {
   serviceId: string;
   templateId: string;
   publicKey: string;
+  privateKey?: string;
 };
 
 // These identifiers are public EmailJS integration values. Environment values
@@ -20,6 +21,7 @@ export function emailJsConfigFromEnv(
     serviceId: clean(getEnv('EMAILJS_SERVICE_ID')) || DEFAULT_EMAILJS_SERVICE_ID,
     templateId: clean(getEnv(templateEnvName)) || defaultTemplateId,
     publicKey: clean(getEnv('EMAILJS_PUBLIC_KEY')) || DEFAULT_EMAILJS_PUBLIC_KEY,
+    privateKey: clean(getEnv('EMAILJS_PRIVATE_KEY')) || undefined,
   };
 }
 
@@ -35,6 +37,7 @@ export async function sendEmailJs(
       service_id: config.serviceId,
       template_id: config.templateId,
       user_id: config.publicKey,
+      ...(config.privateKey ? { accessToken: config.privateKey } : {}),
       template_params: templateParams,
     }),
     signal: AbortSignal.timeout(15000),
