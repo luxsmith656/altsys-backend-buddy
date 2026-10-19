@@ -19,11 +19,11 @@ PAYMONGO_PUBLIC_KEY=pk_live_...
 PAYMONGO_SECRET_KEY=sk_live_...
 ```
 
-`PAYMONGO_SECRET_KEY` belongs only in the Supabase Edge Function or server
-environment. The frontend does not need either key for the static QR flow.
+`PAYMONGO_SECRET_KEY` belongs only in the Vercel server environment. The
+frontend does not need either key for the static QR fallback.
 
 In Vercel, open **Project Settings → Environment Variables**, then add those
-three variables for **Production** (and Preview if you test there). Do not add
+the two PayMongo variables for **Production** (and Preview if you test there). Do not add
 them with the `VITE_` prefix.
 
 Also add the existing backend values that the Vercel API route needs:
