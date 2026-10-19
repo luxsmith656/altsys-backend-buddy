@@ -741,6 +741,16 @@ export default function HikerDashboard() {
                             <p className="font-semibold">{meta.assignedGuide}</p>
                           </div>
                         )}
+                        {Array.isArray(meta.assignedGuides) && meta.assignedGuides.length > 1 && (
+                          <div className="space-y-0.5 pt-1 text-[10px] text-muted-foreground">
+                            {meta.assignedGuides.map((guide: any) => (
+                              <p key={guide.id || guide.name}>
+                                {guide.name || 'Assigned guide'}{guide.phone ? ` · ${guide.phone}` : ''}
+                                {guide.status ? ` · ${guide.status}` : ''}
+                              </p>
+                            ))}
+                          </div>
+                        )}
                         {meta.bookingChange && (
                           <div className="basis-full rounded-md border border-border/30 bg-background/40 p-3 text-xs space-y-1">
                             <p className="font-semibold">Change receipt</p>
