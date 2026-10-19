@@ -11,6 +11,10 @@ ALTER TABLE public.hike_station_reports ADD COLUMN IF NOT EXISTS longitude doubl
 ALTER TABLE public.hike_station_reports ADD COLUMN IF NOT EXISTS accuracy double precision;
 ALTER TABLE public.hike_station_reports ENABLE ROW LEVEL SECURITY;
 GRANT SELECT, INSERT ON public.hike_station_reports TO authenticated;
+-- This migration is also used in the SQL editor during recovery. Recreate
+-- only these named policies so rerunning it never fails with 42710.
+DROP POLICY IF EXISTS station_report_read ON public.hike_station_reports;
+DROP POLICY IF EXISTS station_report_insert ON public.hike_station_reports;
 CREATE POLICY station_report_read ON public.hike_station_reports FOR SELECT TO authenticated
 USING (
   user_id = auth.uid() OR public.has_role(auth.uid(), 'super_admin') OR
