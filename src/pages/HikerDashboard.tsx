@@ -54,6 +54,8 @@ import {
   Users,
   AlertTriangle,
   ImageUp,
+  Minus,
+  Plus,
 } from 'lucide-react';
 import BookingChat from '@/components/booking/BookingChat';
 import BookingRescheduleDialog from '@/components/booking/BookingRescheduleDialog';
@@ -132,7 +134,9 @@ export default function HikerDashboard() {
   const [chatBooking, setChatBooking] = useState<{ id: string; date: string } | null>(null);
   const [rescheduleBooking, setRescheduleBooking] = useState<{ id: string; date: string } | null>(null);
   const bookingMessageAlerts = useBookingMessageAlerts(bookings.map((booking) => booking.id), chatBooking?.id);
-  const [companionQrBooking, setCompanionQrBooking] = useState<any | null>(null);
+  const [bookingSearch, setBookingSearch] = useState('');
+  const [qrViewer, setQrViewer] = useState<{ title: string; value: string; caption?: string } | null>(null);
+  const [qrScale, setQrScale] = useState(1);
   const [receiptBookingId, setReceiptBookingId] = useState<string | null>(null);
   const [trailResult, setTrailResult] = useState<{ sessionId?: string; bookingId?: string; title: string } | null>(null);
   const receiptBooking = bookings.find(booking => booking.id === receiptBookingId);
@@ -547,7 +551,16 @@ export default function HikerDashboard() {
     () => bookings
       .filter((booking) => {
         const meta = parseMeta(booking.notes);
-        return booking.status !== 'completed'
+        if (booking.status === 'cancelled') return false;
+        const query = bookingSearch.trim().toLowerCase();
+        const matchesSearch = !query || [
+          booking.id,
+          booking.booking_date,
+          meta.fullName,
+          meta.assignedGuide,
+          ...(Array.isArray(meta.assignedGuides) ? meta.assignedGuides.map((guide: any) => guide?.name) : []),
+        ].some((value) => String(value ?? '').toLowerCase().includes(query));
+        return matchesSearch && booking.status !== 'completed'
           && meta.groupPhase !== 'completed'
           && !meta.hikeCompletedAt;
       })
@@ -561,7 +574,7 @@ export default function HikerDashboard() {
         };
         return priority(a) - priority(b) || String(a.booking_date).localeCompare(String(b.booking_date));
       }),
-    [bookings],
+    [bookings, bookingSearch],
   );
   const hasNotifications = adjustmentPending.length > 0;
 
@@ -1094,6 +1107,20 @@ export default function HikerDashboard() {
                 </Badge>
               )}
             </CardTitle>
+            <div className="pt-3">
+              <Input
+                value={bookingSearch}
+                onChange={(event) => setBookingSearch(event.target.value)}
+                placeholder="Search by guide, booking ID, or hiker name..."
+                aria-label="Search my bookings"
+                className="h-9 text-sm"
+              />
+              {bookingSearch.trim() && (
+                <p className="mt-2 text-xs text-muted-foreground">
+                  Showing {visibleBookings.length} matching non-cancelled booking{visibleBookings.length === 1 ? '' : 's'}.
+                </p>
+              )}
+            </div>
           </CardHeader>
           <CardContent>
             {visibleBookings.length === 0 ? (
@@ -1123,9 +1150,18 @@ export default function HikerDashboard() {
                     >
                       {/* QR Code */}
                       {b.status === 'confirmed' && (
-                        <div className="flex justify-center bg-white rounded-lg p-2 sm:p-3">
+                        <button
+                          type="button"
+                          className="flex cursor-zoom-in justify-center rounded-lg bg-white p-2 text-left transition hover:ring-2 hover:ring-primary/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary sm:p-3"
+                          aria-label={`Open full QR code for booking ${b.id.slice(0, 8)}`}
+                          title="Open QR code"
+                          onClick={() => {
+                            setQrScale(1);
+                            setQrViewer({ title: 'Booking QR code', value: b.qr_code_data || b.id, caption: `Booking #${b.id.slice(0, 8)}` });
+                          }}
+                        >
                           <QRCodeSVG value={b.qr_code_data || b.id} size={76} bgColor="#ffffff" fgColor="#1a2e1a" />
-                        </div>
+                        </button>
                       )}
 
                       {/* Info */}
@@ -1285,7 +1321,14 @@ export default function HikerDashboard() {
                           size="sm"
                           variant="outline"
                           className="w-full gap-1 px-2 text-[11px] border-primary/30 text-primary hover:bg-primary/10 font-medium"
-                          onClick={() => setCompanionQrBooking(b)}
+                          onClick={() => {
+                            setQrScale(1);
+                            setQrViewer({
+                              title: 'Group companion QR',
+                              value: `${window.location.origin}/join-hike?code=${b.companion_join_code}`,
+                              caption: `Join code: ${b.companion_join_code}`,
+                            });
+                          }}
                         >
                           <Users className="h-3.5 w-3.5" /> Share Companion QR
                         </Button>
@@ -1314,47 +1357,30 @@ export default function HikerDashboard() {
           </CardContent>
         </Card>
 
-        {/* ── Group Companion Join QR Modal for Hikers ── */}
-        <Dialog open={!!companionQrBooking} onOpenChange={(open) => !open && setCompanionQrBooking(null)}>
-          <DialogContent className="sm:max-w-md rounded-3xl p-6 text-center">
-            <DialogHeader className="space-y-2">
-              <DialogTitle className="text-lg font-bold flex items-center justify-center gap-2">
-                <Users className="h-5 w-5 text-primary" /> Group Companion QR
+        <Dialog open={!!qrViewer} onOpenChange={(open) => !open && setQrViewer(null)}>
+          <DialogContent className="z-[3200] w-[min(92vw,520px)] max-w-lg rounded-3xl p-5 text-center sm:p-6">
+            <DialogHeader className="space-y-1">
+              <DialogTitle className="flex items-center justify-center gap-2 text-lg font-bold">
+                <QrCode className="h-5 w-5 text-primary" /> {qrViewer?.title}
               </DialogTitle>
-              <p className="text-xs text-muted-foreground">
-                Your companions can scan this code and select their assigned name to join live GPS tracking. Names are taken from this booking and cannot be edited.
-              </p>
+              <DialogDescription>{qrViewer?.caption}</DialogDescription>
             </DialogHeader>
-            <div className="flex flex-col items-center justify-center p-6 bg-white rounded-2xl border border-border/40 shadow-inner my-2">
-              {companionQrBooking && (
-                <QRCodeSVG
-                  value={`${window.location.origin}/join-hike?code=${companionQrBooking.companion_join_code}`}
-                  size={200}
-                  level="H"
-                  includeMargin
-                />
+            <div className="my-2 flex max-h-[58dvh] min-h-[280px] items-center justify-center overflow-auto rounded-2xl border border-border/40 bg-white p-5 shadow-inner">
+              {qrViewer && (
+                <div style={{ transform: `scale(${qrScale})`, transformOrigin: 'center center' }} className="shrink-0 transition-transform">
+                  <QRCodeSVG value={qrViewer.value} size={260} level="H" includeMargin bgColor="#ffffff" fgColor="#1a2e1a" />
+                </div>
               )}
-              <p className="text-[11px] text-muted-foreground font-mono mt-3">
-                Join code: {companionQrBooking?.companion_join_code || 'Preparing…'}
-              </p>
             </div>
-            <div className="grid grid-cols-1 gap-2 min-[360px]:grid-cols-2">
-              <Button
-                variant="outline"
-                className="w-full text-xs"
-                onClick={() => {
-                  if (companionQrBooking) {
-                    const url = `${window.location.origin}/join-hike?code=${companionQrBooking.companion_join_code}`;
-                    navigator.clipboard.writeText(url);
-                    toast.success('Companion invite link copied to clipboard!');
-                  }
-                }}
-              >
-                Copy Link
+            <div className="flex items-center justify-center gap-2">
+              <Button type="button" size="icon" variant="outline" onClick={() => setQrScale((scale) => Math.max(0.75, Number((scale - 0.25).toFixed(2))))} aria-label="Zoom out">
+                <Minus className="h-4 w-4" />
               </Button>
-              <Button className="w-full text-xs" onClick={() => setCompanionQrBooking(null)}>
-                Close
+              <span className="min-w-14 text-sm font-medium tabular-nums">{Math.round(qrScale * 100)}%</span>
+              <Button type="button" size="icon" variant="outline" onClick={() => setQrScale((scale) => Math.min(2.5, Number((scale + 0.25).toFixed(2))))} aria-label="Zoom in">
+                <Plus className="h-4 w-4" />
               </Button>
+              <Button type="button" variant="ghost" className="text-xs" onClick={() => setQrScale(1)}>Reset</Button>
             </div>
           </DialogContent>
         </Dialog>
