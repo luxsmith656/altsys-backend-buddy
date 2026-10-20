@@ -101,6 +101,7 @@ export default function GuideDashboard() {
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const [statusUpdating, setStatusUpdating] = useState(false);
   const [activeSession, setActiveSession] = useState<any | null>(null);
+  const [groupLastLocations, setGroupLastLocations] = useState<Array<{ userId: string; name: string; latitude: number; longitude: number; timestamp: string }>>([]);
   const [acceptingId, setAcceptingId] = useState<string | null>(null);
   const [earningsFilter, setEarningsFilter] = useState<'all' | 'completed' | 'pending'>('all');
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -245,6 +246,36 @@ export default function GuideDashboard() {
         (bks ?? []).forEach((b: any) => {
           bookingMap[b.id] = b;
         });
+
+        // Guides may monitor the last known position of hikers in their own
+        // assigned groups, including after a brief signal loss.
+        const { data: groupSessions } = await supabase
+          .from('hiker_sessions')
+          .select('id,booking_id,user_id,status')
+          .in('booking_id', bookingIds)
+          .eq('status', 'active');
+        const sessionIds = (groupSessions ?? []).map((row: any) => row.id).filter(Boolean);
+        if (sessionIds.length) {
+          const { data: locationRows } = await supabase
+            .from('hiker_locations')
+            .select('session_id,latitude,longitude,timestamp')
+            .in('session_id', sessionIds)
+            .order('timestamp', { ascending: false })
+            .limit(500);
+          const latest = new Map<string, any>();
+          for (const row of locationRows ?? []) if (!latest.has(row.session_id)) latest.set(row.session_id, row);
+          const participantIds = [...new Set((groupSessions ?? []).map((row: any) => row.user_id).filter(Boolean))];
+          const { data: participantProfiles } = participantIds.length
+            ? await supabase.from('profiles').select('user_id,full_name').in('user_id', participantIds)
+            : { data: [] };
+          const names = new Map((participantProfiles ?? []).map((row: any) => [row.user_id, row.full_name || 'Hiker']));
+          setGroupLastLocations((groupSessions ?? []).flatMap((session: any) => {
+            const point = latest.get(session.id);
+            return point ? [{ userId: session.user_id, name: names.get(session.user_id) || 'Hiker', latitude: Number(point.latitude), longitude: Number(point.longitude), timestamp: point.timestamp }] : [];
+          }));
+        } else {
+          setGroupLastLocations([]);
+        }
       }
       mineList.forEach((a: any) => {
         a.booking = bookingMap[a.booking_id];
@@ -592,6 +623,14 @@ export default function GuideDashboard() {
                 <p className="text-xs text-muted-foreground mt-0.5">Your group is checked in at the jump-off.</p>
               </div>
             </div>
+            {groupLastLocations.length > 0 && (
+              <div className="mt-3 border-t border-emerald-500/20 pt-3 text-xs text-muted-foreground">
+                <p className="font-semibold text-foreground">Last known group locations</p>
+                <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1">
+                  {groupLastLocations.map((point) => <span key={`${point.userId}-${point.timestamp}`}>{point.name}: {point.latitude.toFixed(5)}, {point.longitude.toFixed(5)} · {new Date(point.timestamp).toLocaleTimeString('en-PH', { timeZone: 'Asia/Manila' })}</span>)}
+                </div>
+              </div>
+            )}
             <div className="flex items-center gap-2 shrink-0">
               <Button
                 size="sm"
