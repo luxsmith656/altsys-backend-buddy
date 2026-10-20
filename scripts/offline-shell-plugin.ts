@@ -6,10 +6,11 @@ export function offlineShellPlugin(): Plugin {
     apply: 'build',
     generateBundle(_, bundle) {
       const assets = Object.keys(bundle).filter(name => /\.(js|css)$/.test(name)).map(name => `/${name}`);
-      const version = assets.join('|').split('').reduce((hash, char) => (hash * 31 + char.charCodeAt(0)) | 0, 0);
+      const publicAssets = ['/payments/qrph-kooketz.jpg'];
+      const version = assets.concat(publicAssets).join('|').split('').reduce((hash, char) => (hash * 31 + char.charCodeAt(0)) | 0, 0);
       this.emitFile({ type: 'asset', fileName: 'sw.js', source: `
 const CACHE = 'mtk-shell-${version}';
-const ASSETS = ${JSON.stringify(['/index.html', ...assets])};
+const ASSETS = ${JSON.stringify(['/index.html', ...assets, ...publicAssets])};
 self.addEventListener('install', event => event.waitUntil(caches.open(CACHE).then(async cache => {
   await Promise.all(ASSETS.map(async asset => {
     try { await cache.add(asset); } catch { /* keep the shell installable if one asset is temporarily unavailable */ }
