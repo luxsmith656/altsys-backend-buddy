@@ -1306,7 +1306,11 @@ export default function BookingPage() {
       } catch { /* storage unavailable */ }
     } catch (error) {
       console.error('Booking submission failed:', error);
-      const message = error instanceof Error ? error.message : 'Unexpected error while submitting your booking.';
+      const message = error instanceof Error
+        ? error.message
+        : (error && typeof error === 'object' && 'message' in error
+          ? String((error as { message?: unknown }).message || 'Booking service rejected the request.')
+          : 'Unexpected error while submitting your booking.');
       toast.error(bookingSaved
         ? 'Your booking was saved, but some follow-up details failed. Check My Bookings before retrying.'
         : `${message} Your form is still here; you can safely retry.`);
