@@ -8,14 +8,16 @@ const metaSchema = z.object({
   assignedGuideId: text, guideStatus: z.literal('accepted'),
   hikeType: z.enum(['morning', 'day', 'night', 'overnight']), hikeTime: text,
   adjustedDate: z.string().optional(), adjustedTime: z.string().optional(), bookingChangeAcknowledgedAt: z.string().optional(),
+  paymentStatus: z.enum(['unpaid', 'partial', 'paid']).default('unpaid'),
+  assignedTrailName: z.string().optional(), assignedTrail: z.string().optional(),
 });
 export const bookingSchema = z.object({
   id: text, status: z.literal('confirmed'), notes: text, booking_date: text,
-  group_size: z.number().int().positive(), location_id: text, qr_code_data: text.optional(),
+  group_size: z.number().int().positive(), location_id: text, qr_code_data: text,
 });
 export type ConfirmationBooking = z.infer<typeof bookingSchema>;
 export function confirmationMeta(notes: string) { return metaSchema.parse(JSON.parse(notes)); }
-const escapeHtml = (value: string) => value.replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[char]!);
+const escapeHtml = (value: string) => value.replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[char] ?? char);
 
 export function makeBookingEmail(input: { booking: unknown; guide: unknown; location: unknown; from?: string }) {
   const booking = bookingSchema.parse(input.booking);
@@ -35,10 +37,12 @@ export function makeBookingEmail(input: { booking: unknown; guide: unknown; loca
     to_name: meta.fullName, booking_reference: booking.id, guide_name: guide.full_name, guide_contact: guide.phone,
     hike_date: new Intl.DateTimeFormat('en-US', { timeZone: 'Asia/Manila', year: 'numeric', month: 'long', day: 'numeric' }).format(date),
     hike_time: hikeTime, jump_off: location.name, pax: String(booking.group_size),
+    route: meta.assignedTrailName || meta.assignedTrail || location.name,
+    payment_status: { unpaid: 'Unpaid', partial: 'Partially paid', paid: 'Paid' }[meta.paymentStatus],
     hike_type: { morning: 'Morning', day: 'Morning', night: 'Night', overnight: 'Overnight' }[meta.hikeType],
     reminder: 'Please call your assigned guide the day before your hike to confirm your meeting arrangements.',
   };
-  const qrValue = booking.qr_code_data || `KALISUNGAN-${booking.id}`;
+  const qrValue = booking.qr_code_data;
   values.qr_code_url = `https://quickchart.io/qr?text=${encodeURIComponent(qrValue)}&size=220&margin=2`;
   const templateParams = {
     ...values,
@@ -46,7 +50,7 @@ export function makeBookingEmail(input: { booking: unknown; guide: unknown; loca
     to_email: meta.emailAddress,
     visitor_name: values.to_name,
     booking_id: values.booking_reference,
-    trail_name: values.jump_off,
+    trail_name: values.route,
     checkin_time: values.hike_time,
     name: 'Mt. Kalisungan System',
     email: meta.emailAddress,
@@ -57,7 +61,7 @@ export function makeBookingEmail(input: { booking: unknown; guide: unknown; loca
       if (!(key in values)) throw new Error(`Unknown email template field: ${key}`);
       return escapeHtml(values[key]);
     }),
-    text: `Hi ${meta.fullName}, your ${values.hike_type} hike is confirmed.\nDate: ${values.hike_date}\nStart: ${hikeTime}\nJump-off: ${location.name}\nGroup: ${booking.group_size} hikers\nGuide: ${guide.full_name}\nGuide contact: ${guide.phone}\n${values.reminder}\nBooking reference: ${booking.id}\nThis is a booking confirmation, not a payment receipt.`,
+    text: `Hi ${meta.fullName}, your ${values.hike_type} hike is confirmed.\nDate: ${values.hike_date}\nStart: ${hikeTime}\nJump-off: ${location.name}\nRoute: ${values.route}\nGroup: ${booking.group_size} hikers\nGuide: ${guide.full_name}\nGuide contact: ${guide.phone}\nPayment status: ${values.payment_status}\n${values.reminder}\nBooking reference: ${booking.id}\nThis is a booking confirmation, not a payment receipt.`,
     attachments: [{ filename: 'kalisungan-logo.png', content: bookingEmailLogo, content_id: 'kalisungan-logo', content_type: 'image/png' }],
     templateParams,
   };
@@ -122,12 +126,18 @@ export async function dispatchBookingEmail(id: string, deps: {
     }
     let providerId: string;
     try {
-      providerId = emailJsConfigured
-        ? await sendEmailJs(deps.fetcher, deps.emailJs!, payload.templateParams)
+      providerId = emailJsConfigured && deps.emailJs
+        ? await sendEmailJs(deps.fetcher, deps.emailJs, payload.templateParams)
         : await sendResend(deps.fetcher, deps.apiKey, payload, id);
     } catch (error) {
       const status = typeof (error as { status?: unknown })?.status === 'number' ? (error as { status: number }).status : null;
       const providerName = typeof (error as { providerName?: unknown })?.providerName === 'string' ? (error as { providerName: string }).providerName : '';
+      // EmailJS has no provider idempotency key. Ambiguous acceptance must not
+      // be blindly retried, or the same reservation could reach the inbox twice.
+      if (emailJsConfigured && (status === null || status >= 500 || status === 200)) {
+        await store.update(job, { status: 'needs_review', lease_until: null, last_error: 'EmailJS acceptance is uncertain; verify provider history before retrying.' });
+        return { success: false, code: 'needs_review', error: 'Email delivery is uncertain; provider history must be checked before retrying.' };
+      }
       const retry = status === null || status === 429 || status >= 500 || status === 409 && providerName === 'concurrent_idempotent_requests' || status === 200;
       if (retry) {
         await queueRetry(store, job, status === null ? 'Provider timeout or network failure; delivery unconfirmed.' : `Provider response ${status}; delivery unconfirmed.`);

@@ -12,6 +12,7 @@ const example = {
   reminder: 'Please call your assigned guide the day before your hike to confirm your meeting arrangements.',
   qr_code_url: 'https://quickchart.io/qr?text=PREVIEW-ONLY&size=220&margin=2',
   booking_reference: 'PREVIEW ONLY - not a real booking',
+  route: 'Official Lamot 2 route', payment_status: 'Paid',
 };
 const preview = template.replace(/\{\{(\w+)\}\}/g, (_, key) => {
   if (!(key in example)) throw new Error(`Unknown preview field ${key}`);
