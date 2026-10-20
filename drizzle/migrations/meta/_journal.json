@@ -8,6 +8,13 @@
       "when": 1791992122331,
       "tag": "0000_create_hike_station_reports",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1792487018287,
+      "tag": "0001_paymongo_payment_idempotency",
+      "breakpoints": true
     }
   ]
 }

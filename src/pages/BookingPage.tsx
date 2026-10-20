@@ -1246,21 +1246,14 @@ export default function BookingPage() {
       }
 
       if (paymentOption === 'online') {
-        const { data: session } = await supabase.auth.getSession();
-        const checkoutResponse = await fetch('/api/paymongo/checkout', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            ...(session.session?.access_token ? { Authorization: `Bearer ${session.session.access_token}` } : {}),
-          },
-          body: JSON.stringify({ bookingId: data.id, email: emailAddress, name: fullName, phone: phoneNumber }),
+        const { data: checkout, error: checkoutError } = await supabase.functions.invoke('paymongo-checkout', {
+          body: { bookingId: data.id },
         });
-        const checkout = await checkoutResponse.json().catch(() => null);
-        if (checkoutResponse.ok && checkout?.checkoutUrl) {
+        if (!checkoutError && checkout?.checkoutUrl) {
           window.location.assign(checkout.checkoutUrl as string);
           return;
         }
-        if (!checkoutResponse.ok || !checkout?.checkoutUrl) {
+        if (checkoutError || !checkout?.checkoutUrl) {
           throw new Error(checkout?.error || 'Automatic QR Ph checkout is unavailable. Please try again.');
         }
       }

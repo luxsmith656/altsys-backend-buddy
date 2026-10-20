@@ -5,10 +5,20 @@ import { bookingConfirmationHandler } from '../../supabase/functions/send-bookin
 
 const id = '00000000-0000-4000-8000-000000000001';
 const meta = { fullName: 'Juan Dela Cruz', emailAddress: ' HIKER@example.com ', hikeTime: '06:00 AM', hikeType: 'morning', assignedGuideId: 'guide-1', guideStatus: 'accepted' };
-const makeDetails = () => ({ booking: { id, status: 'confirmed', booking_date: '2026-09-10', group_size: 4, location_id: 'lamot2', notes: JSON.stringify(meta) }, guide: { full_name: 'Maria Santos', phone: '+63 917 123 4567' }, location: { name: 'Lamot 2' } });
+const makeDetails = () => ({ booking: { id, status: 'confirmed', booking_date: '2026-09-10', group_size: 4, location_id: 'lamot2', qr_code_data: 'REAL-RESERVATION-QR', notes: JSON.stringify(meta) }, guide: { full_name: 'Maria Santos', phone: '+63 917 123 4567' }, location: { name: 'Lamot 2' } });
 const from = 'Mt. Kalisungan <bookings@example.com>';
 
 describe('booking confirmation content', () => {
+  it('uses the database reservation QR, route and payment status', () => {
+    const details = makeDetails();
+    details.booking.notes = JSON.stringify({ ...meta, assignedTrailName: 'Official Lamot route', paymentStatus: 'paid' });
+    const payload = makeBookingEmail({ ...details, from });
+    expect(new URL(payload.templateParams.qr_code_url).searchParams.get('text')).toBe('REAL-RESERVATION-QR');
+    expect(payload.templateParams.payment_status).toBe('Paid');
+    expect(payload.templateParams.trail_name).toBe('Official Lamot route');
+    details.booking.qr_code_data = '';
+    expect(() => makeBookingEmail({ ...details, from })).toThrow();
+  });
   it('uses actual recipient, schedule, guide/contact, jump-off and embedded logo, without OTP', () => {
     const result = makeBookingEmail({ ...makeDetails(), from });
     expect(result.to).toEqual(['hiker@example.com']);
@@ -88,6 +98,20 @@ describe('Resend dispatcher and endpoint', () => {
     expect(body).toMatchObject({ service_id: 'service_test', template_id: 'template_booking', user_id: 'public_test' });
     expect(body.template_params).toMatchObject({ to_email: 'hiker@example.com', visitor_name: 'Juan Dela Cruz', booking_id: id, trail_name: 'Lamot 2' });
     expect(body).not.toHaveProperty('to');
+  });
+  it('accepts the real EmailJS plain OK response and suppresses duplicate sends', async () => {
+    fetcher.mockResolvedValue(new Response('OK', { status: 200 }));
+    const config = { ...deps(), emailJs: { serviceId: 'service_test', templateId: 'template_booking', publicKey: 'public_test' } };
+    expect(await dispatchBookingEmail(id, config)).toMatchObject({ success: true, status: 'sent' });
+    expect(await dispatchBookingEmail(id, config)).toMatchObject({ status: 'already_sent' });
+    expect(fetcher).toHaveBeenCalledTimes(1);
+  });
+  it('holds ambiguous EmailJS acceptance instead of risking a duplicate', async () => {
+    fetcher.mockRejectedValue(new Error('timeout'));
+    const config = { ...deps(), emailJs: { serviceId: 'service_test', templateId: 'template_booking', publicKey: 'public_test' } };
+    expect(await dispatchBookingEmail(id, config)).toMatchObject({ code: 'needs_review' });
+    await dispatchBookingEmail(id, config);
+    expect(fetcher).toHaveBeenCalledTimes(1);
   });
   it('includes the EmailJS private key for strict server-side accounts', async () => {
     fetcher.mockResolvedValue(new Response(JSON.stringify({ status: 200, text: 'OK' }), { status: 200 }));
