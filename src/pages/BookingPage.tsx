@@ -1215,7 +1215,7 @@ export default function BookingPage() {
       // Older deployed schema caches may briefly reject the newly-added FK.
       // The referral is also stored in notes and the assignment row, so retry
       // without only that optional column instead of losing the whole booking.
-      if (error && selectedGuide && /referral_guide_id|schema cache|column .* does not exist/i.test(error.message ?? '')) {
+      if (error && /referral_guide_id|schema cache|column .* does not exist/i.test(error.message ?? '')) {
         const { referral_guide_id: _referralGuideId, ...legacyPayload } = bookingPayload;
         ({ data, error } = await withBookingRequestTimeout(
           (signal) => supabase.from('bookings').insert(legacyPayload).select().abortSignal(signal).single(),
