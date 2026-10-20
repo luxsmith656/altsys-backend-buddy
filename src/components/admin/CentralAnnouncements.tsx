@@ -28,6 +28,7 @@ import {
 import { useAuth } from '@/hooks/useAuth';
 import { usePricing } from '@/hooks/usePricing';
 import { formatPeso } from '@/lib/payments';
+import { supabase } from '@/integrations/supabase/client';
 
 export default function CentralAnnouncements() {
   const { user } = useAuth();
@@ -42,6 +43,8 @@ export default function CentralAnnouncements() {
   const [target, setTarget] = useState<AnnouncementTarget>('all');
   const [type, setType] = useState<AnnouncementType>('info');
   const [isImportant, setIsImportant] = useState(false);
+  const [closureDate, setClosureDate] = useState('');
+  const [cancelBookingsForClosure, setCancelBookingsForClosure] = useState(false);
   const [broadcasting, setBroadcasting] = useState(false);
 
   const refreshAnnouncements = useCallback(async () => {
@@ -73,6 +76,10 @@ export default function CentralAnnouncements() {
       toast.error('Please enter the announcement message content.');
       return;
     }
+    if (type === 'closure' && cancelBookingsForClosure && !closureDate) {
+      toast.error('Choose the weather closure date before cancelling bookings.');
+      return;
+    }
 
     setBroadcasting(true);
     try {
@@ -87,10 +94,24 @@ export default function CentralAnnouncements() {
         isImportant,
       };
       await addAnnouncement(newAnn);
-      toast.success('Announcement broadcasted successfully!');
+      let cancelledCount = 0;
+      if (type === 'closure' && cancelBookingsForClosure && closureDate) {
+        const { data, error: cancellationError } = await (supabase as any).rpc('central_cancel_bookings_for_weather', {
+          p_booking_date: closureDate,
+          p_reason: `${newAnn.title}: ${newAnn.body}`,
+          p_announcement_id: newAnn.id,
+        });
+        if (cancellationError) throw new Error(`Announcement published, but bookings were not cancelled: ${cancellationError.message}`);
+        cancelledCount = Number(data || 0);
+      }
+      toast.success(cancelledCount > 0
+        ? `Announcement broadcasted. ${cancelledCount} booking${cancelledCount === 1 ? '' : 's'} cancelled for ${closureDate}.`
+        : 'Announcement broadcasted successfully!');
       setTitle('');
       setBody('');
       setIsImportant(false);
+      setClosureDate('');
+      setCancelBookingsForClosure(false);
       await refreshAnnouncements();
     } catch (err: any) {
       toast.error('Failed to broadcast: ' + err.message);
@@ -223,6 +244,29 @@ export default function CentralAnnouncements() {
                     </Select>
                   </div>
                 </div>
+
+                {type === 'closure' && (
+                  <div className="space-y-2 rounded-lg border border-destructive/30 bg-destructive/5 p-3">
+                    <Label htmlFor="closure-date" className="text-xs font-semibold">Weather closure date</Label>
+                    <Input
+                      id="closure-date"
+                      type="date"
+                      value={closureDate}
+                      onChange={(e) => setClosureDate(e.target.value)}
+                      className="h-8 bg-background/80 text-xs"
+                    />
+                    <div className="flex items-start gap-2 pt-1">
+                      <Checkbox
+                        id="cancel-closure-bookings"
+                        checked={cancelBookingsForClosure}
+                        onCheckedChange={(checked) => setCancelBookingsForClosure(Boolean(checked))}
+                      />
+                      <Label htmlFor="cancel-closure-bookings" className="cursor-pointer text-xs leading-4">
+                        Cancel open bookings on this date and let paid hikers request a reschedule or refund.
+                      </Label>
+                    </div>
+                  </div>
+                )}
 
                 <div className="space-y-1">
                   <Label className="text-xs font-semibold">Announcement Message</Label>

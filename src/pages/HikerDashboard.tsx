@@ -110,6 +110,7 @@ export default function HikerDashboard() {
   const [sessions, setSessions] = useState<any[]>([]);
   const [activeHikeSession, setActiveHikeSession] = useState<any | null>(null);
   const [cancellingId, setCancellingId] = useState<string | null>(null);
+  const [refundRequestId, setRefundRequestId] = useState<string | null>(null);
   const [cancelReason, setCancelReason] = useState('');
   const [cancelConfirmation, setCancelConfirmation] = useState('');
   const [acceptingId, setAcceptingId] = useState<string | null>(null);
@@ -132,7 +133,7 @@ export default function HikerDashboard() {
   const [submittingReview, setSubmittingReview] = useState(false);
   const [uploadingTrailPhoto, setUploadingTrailPhoto] = useState(false);
   const [chatBooking, setChatBooking] = useState<{ id: string; date: string } | null>(null);
-  const [rescheduleBooking, setRescheduleBooking] = useState<{ id: string; date: string } | null>(null);
+  const [rescheduleBooking, setRescheduleBooking] = useState<{ id: string; date: string; weatherCancelled?: boolean } | null>(null);
   const bookingMessageAlerts = useBookingMessageAlerts(bookings.map((booking) => booking.id), chatBooking?.id);
   const [bookingSearch, setBookingSearch] = useState('');
   const [qrViewer, setQrViewer] = useState<{ title: string; value: string; caption?: string } | null>(null);
@@ -361,6 +362,21 @@ export default function HikerDashboard() {
     setCancellingId(null);
   };
 
+  const handleWeatherRefundRequest = async (booking: any) => {
+    if (!booking?.id || refundRequestId) return;
+    setRefundRequestId(booking.id);
+    try {
+      const { error } = await supabase.rpc('request_weather_booking_refund' as any, { p_booking_id: booking.id });
+      if (error) throw new Error(error.message || 'Could not request the refund.');
+      toast.success('Refund request sent to the local admin for processing.');
+      await loadData();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Could not request the refund.');
+    } finally {
+      setRefundRequestId(null);
+    }
+  };
+
   /* ── Accept admin-adjusted date ── */
   const handleAcceptAdjustment = async (b: any) => {
     setAcceptingId(b.id);
@@ -551,7 +567,8 @@ export default function HikerDashboard() {
     () => bookings
       .filter((booking) => {
         const meta = parseMeta(booking.notes);
-        if (booking.status === 'cancelled') return false;
+        const weatherCancellation = (meta as any).weatherCancellation;
+        if (booking.status === 'cancelled' && !weatherCancellation) return false;
         const query = bookingSearch.trim().toLowerCase();
         const matchesSearch = !query || [
           booking.id,
@@ -560,7 +577,7 @@ export default function HikerDashboard() {
           meta.assignedGuide,
           ...(Array.isArray(meta.assignedGuides) ? meta.assignedGuides.map((guide: any) => guide?.name) : []),
         ].some((value) => String(value ?? '').toLowerCase().includes(query));
-        return matchesSearch && booking.status !== 'completed'
+        return matchesSearch && (booking.status === 'cancelled' && weatherCancellation || booking.status !== 'completed')
           && meta.groupPhase !== 'completed'
           && !meta.hikeCompletedAt;
       })
@@ -1215,6 +1232,37 @@ export default function HikerDashboard() {
                           {b.status === 'adjustment_pending' && b.requested_new_date ? 'Reschedule request pending' : (STATUS_LABELS[b.status] ?? b.status)}
                         </span>
 
+                        {(meta as any).weatherCancellation && b.status === 'cancelled' && (
+                          <div className="mt-2 space-y-2 rounded-lg border border-amber-500/30 bg-amber-500/10 p-2 text-left">
+                            <p className="text-[11px] font-semibold text-amber-800 dark:text-amber-200">Cancelled by Central Admin for weather</p>
+                            <p className="text-[10px] leading-4 text-muted-foreground">{String((meta as any).weatherCancellation?.reason || 'Weather closure advisory')}</p>
+                            {(meta as any).weatherRescheduleRequestedAt ? (
+                              <p className="text-[10px] font-medium text-primary">Reschedule request sent. Waiting for local admin approval.</p>
+                            ) : (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="h-8 w-full text-[11px]"
+                                onClick={() => setRescheduleBooking({ id: b.id, date: b.booking_date, weatherCancelled: true })}
+                              >
+                                <CalendarClock className="h-3.5 w-3.5" /> Request new date
+                              </Button>
+                            )}
+                            {((meta as any).weatherCancellation?.refundEligible || Number((meta as any).amountPaid || 0) > 0) && (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="h-8 w-full text-[11px] text-amber-700 border-amber-500/40"
+                                disabled={refundRequestId === b.id || ['requested', 'processing', 'refunded'].includes(String((meta as any).refundStatus || ''))}
+                                onClick={() => void handleWeatherRefundRequest(b)}
+                              >
+                                {refundRequestId === b.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
+                                {['requested', 'processing', 'refunded'].includes(String((meta as any).refundStatus || '')) ? 'Refund request sent' : 'Request refund'}
+                              </Button>
+                            )}
+                          </div>
+                        )}
+
                         <div className="pt-1 text-center">
                           <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400">
                             {formatPeso(receipt.total)}
@@ -1415,6 +1463,7 @@ export default function HikerDashboard() {
           bookingId={rescheduleBooking.id}
           bookingDate={rescheduleBooking.date}
           open={!!rescheduleBooking}
+          weatherCancelled={rescheduleBooking.weatherCancelled}
           onOpenChange={(open) => !open && setRescheduleBooking(null)}
           onAfterReschedule={() => { setRescheduleBooking(null); void loadData(); }}
         />

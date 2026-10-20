@@ -9,6 +9,7 @@ import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { canChangeBooking } from '@/lib/bookingReceipt';
+import { parseMeta } from '@/lib/bookingMeta';
 import { containsProfanity, PROFANITY_NOTICE } from '@/lib/contentModeration';
 
 type Props = {
@@ -17,9 +18,10 @@ type Props = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onAfterReschedule?: () => void;
+  weatherCancelled?: boolean;
 };
 
-export default function BookingRescheduleDialog({ bookingId, bookingDate, open, onOpenChange, onAfterReschedule }: Props) {
+export default function BookingRescheduleDialog({ bookingId, bookingDate, open, onOpenChange, onAfterReschedule, weatherCancelled = false }: Props) {
   const { user } = useAuth();
   const [newDate, setNewDate] = useState('');
   const [reason, setReason] = useState('');
@@ -43,10 +45,12 @@ export default function BookingRescheduleDialog({ bookingId, bookingDate, open, 
         supabase.from('bookings').select('id,status,notes,user_id').eq('id', bookingId).eq('user_id', user.id).single(),
         supabase.from('hiker_sessions').select('status,end_time').eq('booking_id', bookingId),
       ]);
-      if (bookingError || sessionError || !booking || !canChangeBooking(booking, sessions ?? [])) {
+      const bookingMeta = parseMeta(booking?.notes);
+      const canUseWeatherPath = weatherCancelled && Boolean((bookingMeta as any).weatherCancellation);
+      if (bookingError || sessionError || !booking || (!canUseWeatherPath && !canChangeBooking(booking, sessions ?? []))) {
         throw new Error(bookingError?.message || sessionError?.message || 'This hike has started or ended and cannot be rescheduled.');
       }
-      const { error: requestError } = await supabase.rpc('request_booking_reschedule' as any, {
+      const { error: requestError } = await supabase.rpc((canUseWeatherPath ? 'request_weather_booking_reschedule' : 'request_booking_reschedule') as any, {
         p_booking_id: bookingId,
         p_new_date: newDate,
         p_reason: reason.trim(),
@@ -67,7 +71,7 @@ export default function BookingRescheduleDialog({ bookingId, bookingDate, open, 
       <DialogContent className="max-w-lg">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2"><CalendarClock className="h-4 w-4 text-primary" /> Reschedule booking</DialogTitle>
-          <DialogDescription>Current booking date: <strong>{format(new Date(`${bookingDate}T00:00:00`), 'MMM d, yyyy')}</strong>. The local admin must approve the new date.</DialogDescription>
+          <DialogDescription>{weatherCancelled ? 'Weather cancellation date' : 'Current booking date'}: <strong>{format(new Date(`${bookingDate}T00:00:00`), 'MMM d, yyyy')}</strong>. The local admin must approve the new date.</DialogDescription>
         </DialogHeader>
         <div className="space-y-3">
           <div className="grid grid-cols-1 gap-2 min-[380px]:grid-cols-[minmax(0,1fr)_auto]">
@@ -75,7 +79,7 @@ export default function BookingRescheduleDialog({ bookingId, bookingDate, open, 
             <Button disabled={sending} onClick={() => void submit()}>{sending ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Send request'}</Button>
           </div>
           <Textarea aria-label="Reason for reschedule" value={reason} onChange={(event) => setReason(event.target.value)} maxLength={500} rows={3} placeholder="Why do you need to change the date?" />
-          <p className="text-xs text-muted-foreground">Your booking will stay pending until the local admin approves the change.</p>
+          <p className="text-xs text-muted-foreground">{weatherCancelled ? 'The weather-cancelled booking will stay pending until the local admin approves the new date.' : 'Your booking will stay pending until the local admin approves the change.'}</p>
         </div>
       </DialogContent>
     </Dialog>
