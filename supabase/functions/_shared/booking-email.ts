@@ -44,7 +44,7 @@ export function makeBookingEmail(input: { booking: unknown; guide: unknown; loca
   };
   const qrValue = booking.qr_code_data;
   values.qr_code_url = `https://quickchart.io/qr?text=${encodeURIComponent(qrValue)}&size=220&margin=2`;
-  const templateParams = {
+  const templateParams: Record<string, string> = {
     ...values,
     // The existing EmailJS reservation template uses these legacy names.
     to_email: meta.emailAddress,
