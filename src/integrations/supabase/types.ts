@@ -1421,6 +1421,44 @@ export type Database = {
           },
         ]
       }
+      paymongo_payment_events: {
+        Row: {
+          amount_paid: number
+          booking_id: string
+          created_at: string
+          id: string
+          paid_at: string
+          provider_event_id: string | null
+          provider_payment_id: string
+        }
+        Insert: {
+          amount_paid?: number
+          booking_id: string
+          created_at?: string
+          id?: string
+          paid_at?: string
+          provider_event_id?: string | null
+          provider_payment_id: string
+        }
+        Update: {
+          amount_paid?: number
+          booking_id?: string
+          created_at?: string
+          id?: string
+          paid_at?: string
+          provider_event_id?: string | null
+          provider_payment_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "paymongo_payment_events_booking_id_fkey"
+            columns: ["booking_id"]
+            isOneToOne: false
+            referencedRelation: "bookings"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       profiles: {
         Row: {
           age: number | null
@@ -2176,6 +2214,16 @@ export type Database = {
       mdrrmo_log_access: {
         Args: { p_booking_ids?: string[]; p_location_id?: string }
         Returns: number
+      }
+      process_paymongo_payment: {
+        Args: {
+          p_amount_paid: number
+          p_booking_id: string
+          p_paid_at?: string
+          p_provider_event_id: string
+          p_provider_payment_id: string
+        }
+        Returns: boolean
       }
       refresh_guide_duty_status: {
         Args: { p_guide_id: string }
