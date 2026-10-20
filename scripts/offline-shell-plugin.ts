@@ -10,7 +10,12 @@ export function offlineShellPlugin(): Plugin {
       this.emitFile({ type: 'asset', fileName: 'sw.js', source: `
 const CACHE = 'mtk-shell-${version}';
 const ASSETS = ${JSON.stringify(['/index.html', ...assets])};
-self.addEventListener('install', event => event.waitUntil(caches.open(CACHE).then(cache => cache.addAll(ASSETS))));
+self.addEventListener('install', event => event.waitUntil(caches.open(CACHE).then(async cache => {
+  await Promise.all(ASSETS.map(async asset => {
+    try { await cache.add(asset); } catch { /* keep the shell installable if one asset is temporarily unavailable */ }
+  }));
+  await self.skipWaiting();
+})));
 self.addEventListener('activate', event => event.waitUntil(caches.keys().then(keys => Promise.all(keys.filter(key => key.startsWith('mtk-shell-') && key !== CACHE).map(key => caches.delete(key)))).then(() => self.clients.claim())));
 self.addEventListener('fetch', event => {
   const request = event.request;
@@ -18,8 +23,26 @@ self.addEventListener('fetch', event => {
   if (request.method !== 'GET' || url.origin !== self.location.origin) return;
   if (request.mode === 'navigate') {
     event.respondWith(fetch(request).catch(() => caches.open(CACHE).then(cache => cache.match('/index.html'))));
-  } else if (ASSETS.includes(url.pathname)) {
-    event.respondWith(caches.open(CACHE).then(async cache => (await cache.match(url.pathname, { ignoreVary: true })) || fetch(request)));
+  } else {
+    event.respondWith(caches.open(CACHE).then(async cache => {
+      const cached = await cache.match(request, { ignoreVary: true });
+      if (cached) {
+        event.waitUntil(fetch(request).then(response => {
+          if (response.ok) return cache.put(request, response.clone());
+          return undefined;
+        }).catch(() => undefined));
+        return cached;
+      }
+      try {
+        const response = await fetch(request);
+        if (response.ok && (ASSETS.includes(url.pathname) || request.destination === 'image' || request.destination === 'font')) {
+          await cache.put(request, response.clone());
+        }
+        return response;
+      } catch {
+        return new Response('', { status: 504, statusText: 'Offline' });
+      }
+    }));
   }
 });` });
     },
