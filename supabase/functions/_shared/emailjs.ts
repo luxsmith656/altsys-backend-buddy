@@ -49,8 +49,10 @@ export async function sendEmailJs(
     }),
     signal: AbortSignal.timeout(15000),
   });
-  const result = await response.json().catch(() => null) as { id?: unknown; status?: unknown; text?: unknown } | null;
-  const accepted = response.ok && (result?.status === 200 || result?.status === 'OK' || result?.text === 'OK' || result?.text === 'ok');
+  const raw = await response.text();
+  let result: { id?: unknown; status?: unknown; text?: unknown } | null = null;
+  try { result = JSON.parse(raw); } catch { /* EmailJS normally returns plain OK. */ }
+  const accepted = response.ok && (raw.trim() === 'OK' || result?.status === 200 || result?.status === 'OK' || result?.text === 'OK' || result?.text === 'ok');
   if (!accepted) {
     const error = new Error(`EmailJS rejected the request (${response.status})`);
     Object.assign(error, { status: response.status });
