@@ -59,7 +59,6 @@ import ProfileAvatar, { profileChanged } from '@/components/common/ProfileAvatar
 import GuideDeclineModal from '@/components/booking/GuideDeclineModal';
 import BookingChat from '@/components/booking/BookingChat';
 import { useBookingMessageAlerts } from '@/hooks/useBookingMessageAlerts';
-import { acceptGuideAssignment } from '@/lib/guideAssignmentService';
 import { calculateGuideEarnings, GuideEarningsSummary } from '@/lib/guideEarnings';
 import { formatPeso } from '@/lib/payments';
 import BookingReceipt from '@/components/booking/BookingReceipt';
@@ -67,7 +66,6 @@ import { getHorseHelpOption, requestHorseHelpForBooking, setHorseHelpStatusForBo
 import { completeHike } from '@/lib/hikeCompletion';
 import ImportantAnnouncements from '@/components/common/ImportantAnnouncements';
 
-const QUOTA_PER_GUIDE_PER_DAY = 5;
 
 type AssignmentStatus = 'pending' | 'accepted' | 'declined' | 'completed';
 
@@ -102,7 +100,6 @@ export default function GuideDashboard() {
   const [statusUpdating, setStatusUpdating] = useState(false);
   const [activeSession, setActiveSession] = useState<any | null>(null);
   const [groupLastLocations, setGroupLastLocations] = useState<Array<{ userId: string; name: string; latitude: number; longitude: number; timestamp: string }>>([]);
-  const [acceptingId, setAcceptingId] = useState<string | null>(null);
   const [earningsFilter, setEarningsFilter] = useState<'all' | 'completed' | 'pending'>('all');
   const [loadError, setLoadError] = useState<string | null>(null);
   const [loadWarnings, setLoadWarnings] = useState<string[]>([]);
@@ -377,48 +374,6 @@ export default function GuideDashboard() {
       toast.error(err?.message || 'Could not update duty status');
     } finally {
       setStatusUpdating(false);
-    }
-  };
-
-  /* ── Accept assignment ── */
-  const handleAccept = async (a: AssignmentRow) => {
-    if (acceptingId) return;
-    if (a.booking?.booking_date) {
-      // Check quota limit
-      const sameDay = assignments.filter(
-        (x) => x.status === 'accepted' && x.booking?.booking_date === a.booking.booking_date
-      ).length;
-      if (sameDay >= QUOTA_PER_GUIDE_PER_DAY) {
-        toast.error(
-          `Daily Quota reached for ${a.booking.booking_date}: Maximum ${QUOTA_PER_GUIDE_PER_DAY} bookings per guide/day.`
-        );
-        return;
-      }
-    }
-
-    setAcceptingId(a.id);
-    try {
-      const res = await acceptGuideAssignment({
-        assignmentId: a.id,
-        bookingId: a.booking_id || a.booking?.id,
-        guideId: guideRow.id,
-        guideName: guideRow.full_name,
-        guideUserId: user?.id,
-        hikerUserId: a.booking?.user_id,
-        bookingDate: a.booking?.booking_date,
-      });
-
-      if (res.success) {
-        if (res.warnings?.length) toast.warning(`Booking confirmed. ${res.warnings.join(' ')}`);
-        else toast.success('Booking confirmed. Confirmation email sent.');
-        void load();
-      } else {
-        toast.error(res.error || 'Failed to accept booking');
-      }
-    } catch (err: any) {
-      toast.error(err?.message || 'Error accepting booking');
-    } finally {
-      setAcceptingId(null);
     }
   };
 
@@ -910,30 +865,7 @@ export default function GuideDashboard() {
                           {/* Action Buttons */}
                           <div className="guide-assignment-actions">
                             {isPending && (
-                              <>
-                                <Button
-                                  size="sm"
-                                  onClick={() => handleAccept(a)}
-                                  disabled={acceptingId === a.id}
-                                  className="text-xs h-9 gap-1.5 bg-primary shadow-sm"
-                                >
-                                  {acceptingId === a.id ? (
-                                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                                  ) : (
-                                    <CheckCircle2 className="h-3.5 w-3.5" />
-                                  )}
-                                  Accept Hike
-                                </Button>
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  onClick={() => setDeclineOpen(a)}
-                                  className="text-xs h-9 gap-1.5 text-destructive hover:bg-destructive/10"
-                                >
-                                  <XCircle className="h-3.5 w-3.5" />
-                                  Decline
-                                </Button>
-                              </>
+                              <span className="text-xs text-muted-foreground">Booking request received. Admin confirmation and guide changes are handled by the local admin.</span>
                             )}
 
                             {isAccepted && (

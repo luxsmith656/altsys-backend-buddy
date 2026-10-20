@@ -30,11 +30,20 @@ export function GuideOffDutyForm({ guideId, onChange }: { guideId: string; onCha
     if (!start || !end) { toast.error('Pick start and end dates'); return; }
     if (end < start) { toast.error('End must be after start'); return; }
     setBusy(true);
+    const { data: affected } = await supabase.from('booking_assignments' as any)
+      .select('booking_id, booking:bookings!inner(booking_date,status)')
+      .eq('guide_id', guideId)
+      .eq('status', 'accepted')
+      .gte('booking.booking_date', start)
+      .lte('booking.booking_date', end);
     const { error } = await supabase.from('guide_off_duty_requests' as any)
       .insert({ guide_id: guideId, start_date: start, end_date: end, reason, request_type: 'off_duty' });
     setBusy(false);
     if (error) { toast.error(error.message); return; }
-    toast.success('Off-duty request submitted');
+    const affectedCount = (affected ?? []).length;
+    toast.success(affectedCount
+      ? `Off-duty request submitted. ${affectedCount} confirmed booking${affectedCount === 1 ? '' : 's'} on these dates need admin reassignment.`
+      : 'Off-duty request submitted. Admin will review the requested dates.');
     setStart(''); setEnd(''); setReason(''); void load(); onChange?.();
   };
 
