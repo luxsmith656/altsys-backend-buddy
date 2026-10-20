@@ -22,12 +22,12 @@ export default function PaymongoQrPayment({ amount }: PaymongoQrPaymentProps) {
         <ShieldCheck className="h-5 w-5 shrink-0 text-primary" aria-hidden="true" />
       </div>
 
-      <div className="flex justify-center rounded-lg bg-white p-2">
+      <div className="flex justify-center rounded-lg bg-white p-3 sm:p-5">
         <img
           src="/payments/qrph-kooketz.jpg"
           alt="Kooketz PayMongo QR Ph payment code"
-          className="h-auto max-h-72 w-full max-w-[260px] object-contain"
-          loading="lazy"
+          className="h-auto max-h-[min(520px,70vh)] w-full max-w-[440px] object-contain"
+          loading="eager"
         />
       </div>
 
