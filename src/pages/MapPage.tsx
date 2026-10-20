@@ -201,7 +201,7 @@ export default function MapPage() {
   const [selfGroup, setSelfGroup] = useState<LiveMapGroup | null>(null);
   const [simControlsElement, setSimControlsElement] = useState<HTMLDivElement | null>(null);
   const [mapClock, setMapClock] = useState(Date.now);
-  const [activeSelfSession, setActiveSelfSession] = useState<{ id: string; booking_id: string | null; participant_role?: string; tracking_phase?: string } | null>(null);
+  const [activeSelfSession, setActiveSelfSession] = useState<{ id: string; booking_id: string | null; location_id?: string | null; participant_role?: string; tracking_phase?: string } | null>(null);
   const [phaseSaving, setPhaseSaving] = useState(false);
   const [expandedHikerId, setExpandedHikerId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
@@ -527,7 +527,7 @@ export default function MapPage() {
       if (navigator.onLine !== false) {
         const result = await supabase
           .from('hiker_sessions')
-          .select('id,booking_id,participant_role,tracking_phase')
+          .select('id,booking_id,location_id,participant_role,tracking_phase')
           .eq('user_id', user.id)
           .eq('status', 'active')
           .like('client_session_id', `${ADMIN_CHECKIN_TOKEN_PREFIX}%`)
@@ -552,7 +552,7 @@ export default function MapPage() {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'hiker_sessions', filter: `user_id=eq.${user.id}` }, () => {
         void supabase
           .from('hiker_sessions')
-          .select('id,booking_id,participant_role,tracking_phase')
+          .select('id,booking_id,location_id,participant_role,tracking_phase')
           .eq('user_id', user.id)
           .eq('status', 'active')
           .like('client_session_id', `${ADMIN_CHECKIN_TOKEN_PREFIX}%`)
@@ -838,6 +838,13 @@ export default function MapPage() {
               <OfflineLayer url="https://tile.openstreetmap.org/{z}/{x}/{y}.png" maxZoom={20} attribution="© OpenStreetMap" />
               {activeMapTab === 'tracker' ? <>
                 {user && isSelfTrackingRole && <LiveSessionsLayer mode="self" userId={user.id} userRole={role} routePaths={availableTrails} onSelfLocationChange={handleSelfLocationChange} />}
+                {user?.id && role === 'guide' && <LiveSessionsLayer
+                  mode="monitor"
+                  userId={user.id}
+                  userRole={role}
+                  routePaths={availableTrails}
+                  excludeUserId={user.id}
+                />}
                 {canMonitorAll && simulationMode && <ActiveHikersLayer showStations={false} routePath={currentTrail.path as [number, number][]}
                   routeStations={currentTrail.stations} routeDistanceKm={currentRouteDistanceKm} simulationRoutes={simulationRoutes} simulationControlsOpen={simulationControlsOpen}
                   filterMode={mapFilterMode} onlyActive={onlyActiveSessions} onSimulationControlsOpenChange={setSimulationControlsOpen}

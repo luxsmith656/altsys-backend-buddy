@@ -62,6 +62,8 @@ type Props = {
   userId: string;
   userRole: string | null;
   locationId?: string | null;
+  /** Monitor mode can be mounted beside self mode for guides without drawing their own marker twice. */
+  excludeUserId?: string | null;
   onSelfLocationChange?: (location: { lat: number; lng: number; timestamp?: string } | null) => void;
 };
 
@@ -112,6 +114,7 @@ export default function LiveSessionsLayer({
   userId,
   userRole,
   locationId,
+  excludeUserId = null,
   onSelfLocationChange,
   routePaths = [],
 }: Props) {
@@ -217,7 +220,9 @@ export default function LiveSessionsLayer({
     }
 
     let visibleSessions = ((data as ActiveSession[] | null) ?? []).filter(
-      (session) => session.status === 'active' && (mode === 'monitor' || session.user_id === userId),
+      (session) => session.status === 'active'
+        && (mode === 'monitor' || session.user_id === userId)
+        && (!excludeUserId || session.user_id !== excludeUserId),
     );
     if (mode === 'self' && visibleSessions.length === 0) {
       const local = await loadLocalSelfSession();
@@ -291,7 +296,7 @@ export default function LiveSessionsLayer({
       });
       setProfiles(nextProfiles);
     }
-  }, [loadLocalSelfSession, locationId, mode, onSelfLocationChange, userId]);
+  }, [excludeUserId, loadLocalSelfSession, locationId, mode, onSelfLocationChange, userId]);
 
   useEffect(() => {
     void load();
