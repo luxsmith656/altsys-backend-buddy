@@ -1193,8 +1193,7 @@ export default function BookingPage() {
         if (error) console.warn('Could not sync hiker profile details:', error.message);
       })).catch((profileError) => console.warn('Could not sync hiker profile details:', profileError));
 
-      const { data, error } = await withBookingRequestTimeout(
-        (signal) => supabase.from('bookings').insert({
+      const bookingPayload = {
           id: attemptId,
           user_id: user.id,
           booking_date: dateStr,
@@ -1208,9 +1207,21 @@ export default function BookingPage() {
           // Keep the referral relationship as a real FK. The display name in
           // notes is only a snapshot and must not be the source of truth.
           referral_guide_id: selectedGuide?.id ?? null,
-        } as any).select().abortSignal(signal).single(),
+      } as any;
+      let { data, error } = await withBookingRequestTimeout(
+        (signal) => supabase.from('bookings').insert(bookingPayload).select().abortSignal(signal).single(),
         'Booking submission',
       );
+      // Older deployed schema caches may briefly reject the newly-added FK.
+      // The referral is also stored in notes and the assignment row, so retry
+      // without only that optional column instead of losing the whole booking.
+      if (error && selectedGuide && /referral_guide_id|schema cache|column .* does not exist/i.test(error.message ?? '')) {
+        const { referral_guide_id: _referralGuideId, ...legacyPayload } = bookingPayload;
+        ({ data, error } = await withBookingRequestTimeout(
+          (signal) => supabase.from('bookings').insert(legacyPayload).select().abortSignal(signal).single(),
+          'Booking submission compatibility retry',
+        ));
+      }
       if (error) throw error;
       if (!data) throw new Error('The booking was not saved. Please try again.');
       bookingSaved = true;
