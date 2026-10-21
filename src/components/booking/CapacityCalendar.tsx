@@ -29,6 +29,16 @@ export interface DayCapacity {
 
 export type DayCapacityMap = Record<string, DayCapacity>;
 
+export interface SlotCapacityRow {
+  booking_date: string;
+  hike_type: string;
+  hike_time: string;
+  available_groups: number;
+  available_people: number;
+  max_groups?: number;
+  max_people?: number;
+}
+
 interface CapacityCalendarProps {
   selected: Date | undefined;
   onSelect: (date: Date | undefined) => void;
@@ -36,6 +46,10 @@ interface CapacityCalendarProps {
   monthCapacity: DayCapacityMap;
   defaultMaxCapacity?: number;
   hikeType?: 'day' | 'night' | 'overnight' | string;
+  slotAvailability?: SlotCapacityRow[];
+  slotAvailabilityLoading?: boolean;
+  slotAvailabilityLoaded?: boolean;
+  slotAvailabilityError?: string | null;
   onMonthChange: (year: number, month: number) => void;
   weatherMap?: Record<string, KalisunganDayWeather>;
 }
@@ -50,6 +64,10 @@ export function CapacityCalendar({
   monthCapacity,
   defaultMaxCapacity = DEFAULT_MAX,
   hikeType = 'day',
+  slotAvailability,
+  slotAvailabilityLoading = false,
+  slotAvailabilityLoaded = false,
+  slotAvailabilityError,
   onMonthChange,
   weatherMap,
 }: CapacityCalendarProps) {
@@ -78,6 +96,34 @@ export function CapacityCalendar({
 
   const getSlotInfo = (date: Date) => {
     const dateStr = format(date, 'yyyy-MM-dd');
+
+    // Central's published schedule is the authoritative source for booking
+    // capacity. A date is usable when at least one of its start-time slots can
+    // fit the requested group. We use the best slot for the calendar number so
+    // a full slot does not incorrectly make the entire date look full.
+    if (slotAvailability) {
+      const scheduleKind = hikeType === 'day' ? 'morning' : hikeType.toLowerCase();
+      const rows = slotAvailability.filter(
+        (row) => row.booking_date === dateStr && row.hike_type.toLowerCase() === scheduleKind,
+      );
+      if (slotAvailabilityLoading || !slotAvailabilityLoaded) {
+        return { available: null, max: null, hasFittingSlot: false };
+      }
+      if (slotAvailabilityError || rows.length === 0) {
+        return { available: 0, max: 0, hasFittingSlot: false };
+      }
+      const hasPeopleLimit = rows.some((row) => {
+        const maxPeople = Number(row.max_people);
+        return Number.isFinite(maxPeople) && maxPeople < 2147483647;
+      });
+      const available = Math.max(...rows.map((row) => Math.max(0, Number(hasPeopleLimit ? row.available_people : row.available_groups) || 0)));
+      const max = Math.max(...rows.map((row) => Math.max(0, Number(hasPeopleLimit ? row.max_people : row.max_groups) || 0)));
+      const hasFittingSlot = rows.some(
+        (row) => Number(row.available_groups) > 0 && Number(row.available_people) >= groupSize,
+      );
+      return { available, max, hasFittingSlot };
+    }
+
     const cap = capacityMap[dateStr];
     const totalMax = cap?.max_capacity ?? defaultMaxCapacity;
 
@@ -93,7 +139,7 @@ export function CapacityCalendar({
     }
 
     const available = Math.max(0, max - current);
-    return { available, max };
+    return { available, max, hasFittingSlot: available >= groupSize };
   };
 
   return (
@@ -142,15 +188,14 @@ export function CapacityCalendar({
           const isCurrentMonth = isSameMonth(day, currentMonth);
           const isSelected = selected ? isSameDay(day, selected) : false;
           const isTodayDate = isToday(day);
-          const { available, max } = getSlotInfo(day);
+          const { available, max, hasFittingSlot } = getSlotInfo(day);
 
-          const isFull = available === 0 || (isCurrentMonth && !isPast && available < groupSize);
+          const isFull = available !== null && (available === 0 || (isCurrentMonth && !isPast && !hasFittingSlot));
           const isDisabled = isPast || !isCurrentMonth || isFull;
 
-          const ratio = max > 0 ? available / max : 0;
+          const ratio = max && max > 0 && available !== null ? available / max : 0;
           const slotStatus: 'good' | 'low' | 'full' =
-            available === 0 ? 'full' :
-            available < groupSize ? 'full' :
+            available === null || available === 0 || !hasFittingSlot ? 'full' :
             ratio <= 0.3 ? 'low' : 'good';
 
           const dateStr = format(day, 'yyyy-MM-dd');
@@ -172,7 +217,7 @@ export function CapacityCalendar({
                 isTodayDate && !isSelected && 'bg-accent text-accent-foreground ring-2 ring-accent/60',
                 !isSelected && !isTodayDate && !isDisabled && 'hover:bg-primary/10 hover:scale-105',
               )}
-              aria-label={`${format(day, 'MMMM d, yyyy')}${isCurrentMonth && !isPast ? `, ${available} slots available` : ''}${dayWeather ? `, ${dayWeather.condition}` : ''}`}
+              aria-label={`${format(day, 'MMMM d, yyyy')}${isCurrentMonth && !isPast && available !== null ? `, ${available} capacity remaining` : ''}${dayWeather ? `, ${dayWeather.condition}` : ''}`}
               aria-pressed={isSelected}
             >
               <div className="flex items-center gap-1 leading-none mb-0.5">
@@ -215,7 +260,7 @@ export function CapacityCalendar({
                       : 'text-red-500 dark:text-red-400',
                   )}
                 >
-                  {slotStatus === 'full' ? 'Full' : `${available}`}
+                  {available === null ? '...' : slotStatus === 'full' ? 'Full' : `${available}`}
                 </span>
               )}
             </button>
