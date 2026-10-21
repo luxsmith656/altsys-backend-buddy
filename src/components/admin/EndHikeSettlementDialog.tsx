@@ -4,6 +4,7 @@ import { parseMeta, encodeMeta } from '@/lib/bookingMeta';
 import { calculateFees, calculatePeakExtensionFee, formatPeso } from '@/lib/payments';
 import { bookingReceipt } from '@/lib/bookingReceipt';
 import { completeHike } from '@/lib/hikeCompletion';
+import PaymongoQrPayment from '@/components/booking/PaymongoQrPayment';
 import {
   Dialog,
   DialogContent,
@@ -34,6 +35,9 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 
+type SettlementPaymentMethod = 'cash' | 'qrph';
+type QrPaymentState = 'idle' | 'creating' | 'waiting' | 'paid' | 'error';
+
 interface EndHikeSettlementDialogProps {
   open: boolean;
   onClose: () => void;
@@ -51,9 +55,14 @@ export default function EndHikeSettlementDialog({
 }: EndHikeSettlementDialogProps) {
   const [loading, setLoading] = useState(false);
   const [cashTendered, setCashTendered] = useState<string>('');
+  const [liveNotes, setLiveNotes] = useState<string | null>(null);
+  const [settlementPaymentMethod, setSettlementPaymentMethod] = useState<SettlementPaymentMethod>('cash');
+  const [qrCheckoutUrl, setQrCheckoutUrl] = useState<string | null>(null);
+  const [qrPaymentState, setQrPaymentState] = useState<QrPaymentState>('idle');
 
-  const meta = parseMeta(booking?.notes);
-  const groupSize = Number(booking?.group_size || meta.actualGroupSize || 1);
+  const liveBooking = booking && liveNotes ? { ...booking, notes: liveNotes } : booking;
+  const meta = parseMeta(liveBooking?.notes);
+  const groupSize = Number(liveBooking?.group_size || meta.actualGroupSize || 1);
 
   // Fee Calculations
   const { guideFee, guidesNeeded, entryFee, envFee, totalFee: baseTotalFee } = calculateFees(groupSize, { hikeType: meta.hikeType });
@@ -63,7 +72,7 @@ export default function EndHikeSettlementDialog({
   const horseHelpFee = (meta.horseHelpRequests ?? [])
     .filter((request) => request.status !== 'cancelled')
     .reduce((sum, request) => sum + Number(request.fee || 0), 0);
-  const receipt = bookingReceipt(booking ?? {});
+  const receipt = bookingReceipt(liveBooking ?? {});
   const totalAmountDue = receipt.total;
 
   // Payment Status
@@ -72,10 +81,23 @@ export default function EndHikeSettlementDialog({
 
   const recordedPaymentMethod = String(meta.paymentMethod || (booking as any)?.payment_method || '').toLowerCase();
   const isOnlinePayment =
-    ['gcash', 'bank_transfer', 'online'].includes(recordedPaymentMethod) &&
+    ['gcash', 'bank_transfer', 'online', 'paymongo'].includes(recordedPaymentMethod) &&
     (booking?.payment_status === 'paid' || alreadyPaid >= totalAmountDue);
 
   const isFullySettled = remainingBalance === 0;
+
+  useEffect(() => {
+    if (!open || !booking) return;
+    setLiveNotes(null);
+    setQrCheckoutUrl(null);
+    setQrPaymentState('idle');
+    setSettlementPaymentMethod('cash');
+    const initialMeta = parseMeta(booking.notes);
+    if (initialMeta.paymentMethod === 'paymongo' && initialMeta.paymentStatus === 'paid') {
+      setSettlementPaymentMethod('qrph');
+      setQrPaymentState('paid');
+    }
+  }, [open, booking?.id]);
 
   // Initialize defaults on open
   useEffect(() => {
@@ -89,10 +111,55 @@ export default function EndHikeSettlementDialog({
   const changeDue = parsedCash - remainingBalance;
   const isCashSufficient = isFullySettled || parsedCash >= remainingBalance;
 
+  const handleStartQrPayment = async () => {
+    if (!booking || qrPaymentState === 'creating' || isFullySettled) return;
+    setSettlementPaymentMethod('qrph');
+    setQrPaymentState('creating');
+    const { data, error } = await supabase.functions.invoke('paymongo-checkout', {
+      body: { bookingId: booking.id, purpose: 'settlement' },
+    });
+    if (error || !data?.checkoutUrl) {
+      setQrPaymentState('error');
+      toast.error(error?.message || data?.error || 'Could not create the secure QRPh settlement checkout.');
+      return;
+    }
+    setQrCheckoutUrl(String(data.checkoutUrl));
+    setQrPaymentState('waiting');
+    toast.info('Secure QRPh checkout is ready. Waiting for PayMongo confirmation.');
+  };
+
+  // Only read the booking here. The signed PayMongo webhook is the only code
+  // that can mark the payment paid; the browser never writes a paid status.
+  useEffect(() => {
+    if (!open || !booking?.id || settlementPaymentMethod !== 'qrph' || !qrCheckoutUrl || qrPaymentState !== 'waiting') return;
+    let stopped = false;
+    const checkPayment = async () => {
+      const { data } = await supabase.from('bookings').select('notes').eq('id', booking.id).maybeSingle();
+      if (stopped || !data?.notes) return;
+      const latestMeta = parseMeta(data.notes);
+      setLiveNotes(data.notes);
+      if (latestMeta.paymentStatus === 'paid' && Number(latestMeta.amountPaid || 0) >= totalAmountDue) {
+        setQrPaymentState('paid');
+        toast.success('QRPh payment verified automatically by PayMongo.');
+      }
+    };
+    void checkPayment();
+    const timer = window.setInterval(() => void checkPayment(), 2500);
+    return () => {
+      stopped = true;
+      window.clearInterval(timer);
+    };
+  }, [open, booking?.id, settlementPaymentMethod, qrCheckoutUrl, qrPaymentState, totalAmountDue]);
+
   const handleEndHike = async () => {
     if (!booking || loading) return;
 
-    if (!isFullySettled && !isOnlinePayment && !isCashSufficient) {
+    if (!isFullySettled && settlementPaymentMethod === 'qrph' && qrPaymentState !== 'paid') {
+      toast.error('Wait for PayMongo to verify the QRPh payment before completing the hike.');
+      return;
+    }
+
+    if (!isFullySettled && settlementPaymentMethod === 'cash' && !isOnlinePayment && !isCashSufficient) {
       toast.error(`Cash tendered (₱${parsedCash}) is less than balance due (₱${remainingBalance}).`);
       return;
     }
@@ -326,12 +393,42 @@ export default function EndHikeSettlementDialog({
               </p>
             </div>
           ) : (
-            /* CASE C: Onsite / Cash Collection with Change Calculator */
+            /* CASE C: Onsite payment selection */
             <div className="rounded-2xl border border-amber-500/30 bg-amber-500/5 p-4 space-y-4 animate-in fade-in">
               <div className="flex items-center gap-2 text-amber-700 dark:text-amber-300 font-bold text-sm">
                 <Banknote className="h-5 w-5 shrink-0" />
-                <span>Onsite Cash Collection & Change Calculator</span>
+                <span>Onsite Payment</span>
               </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <Button type="button" variant={settlementPaymentMethod === 'cash' ? 'default' : 'outline'} onClick={() => setSettlementPaymentMethod('cash')} className="gap-2">
+                  <Banknote className="h-4 w-4" /> Cash
+                </Button>
+                <Button type="button" variant={settlementPaymentMethod === 'qrph' ? 'default' : 'outline'} onClick={() => setSettlementPaymentMethod('qrph')} className="gap-2">
+                  <CreditCard className="h-4 w-4" /> QRPh
+                </Button>
+              </div>
+
+              {settlementPaymentMethod === 'qrph' ? (
+                qrCheckoutUrl ? (
+                  <div className="space-y-3">
+                    <PaymongoQrPayment amount={remainingBalance} checkoutUrl={qrCheckoutUrl} automaticVerification />
+                    <p className="text-center text-xs text-muted-foreground">
+                      {qrPaymentState === 'paid' ? 'Payment verified. You can complete the hike.' : 'Payment status is checked automatically; no receipt upload or manual verification is required.'}
+                    </p>
+                  </div>
+                ) : (
+                  <div className="rounded-xl border border-primary/30 bg-primary/5 p-4 space-y-3">
+                    <p className="text-sm font-semibold">Pay {formatPeso(remainingBalance)} with QRPh</p>
+                    <p className="text-xs text-muted-foreground">Create a secure PayMongo QRPh checkout. The booking will update only after PayMongo sends a signed payment confirmation.</p>
+                    <Button type="button" onClick={handleStartQrPayment} disabled={qrPaymentState === 'creating'} className="w-full gap-2">
+                      {qrPaymentState === 'creating' ? <Loader2 className="h-4 w-4 animate-spin" /> : <CreditCard className="h-4 w-4" />}
+                      {qrPaymentState === 'creating' ? 'Preparing secure checkout…' : 'Create secure QRPh checkout'}
+                    </Button>
+                  </div>
+                )
+              ) : (
+                <>
 
               {/* Amount Given Input */}
               <div className="space-y-1.5">
@@ -408,6 +505,8 @@ export default function EndHikeSettlementDialog({
                   </p>
                 )}
               </div>
+                </>
+              )}
             </div>
           )}
         </div>
@@ -419,7 +518,7 @@ export default function EndHikeSettlementDialog({
           <Button
             type="button"
             onClick={handleEndHike}
-            disabled={loading || !isCashSufficient}
+            disabled={loading || (settlementPaymentMethod === 'qrph' ? qrPaymentState !== 'paid' : !isCashSufficient)}
             className="gap-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-bold rounded-xl shadow-lg"
           >
             {loading ? (

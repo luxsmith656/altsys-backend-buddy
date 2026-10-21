@@ -81,6 +81,8 @@ export interface BookingMeta {
   paymentMethod?: BookingPaymentMethod;
   paymongoCheckoutSessionId?: string;
   paymongoCheckoutCreatedAt?: string;
+  paymongoPaymentPurpose?: 'reservation' | 'settlement';
+  paymongoSettlementAmount?: number;
   paymongoPaymentId?: string;
   paymongoPaidAt?: string;
   paymentReference?: string;

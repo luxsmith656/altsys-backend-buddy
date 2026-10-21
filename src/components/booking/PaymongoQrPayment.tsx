@@ -13,13 +13,14 @@ import { formatPeso } from '@/lib/payments';
 type PaymongoQrPaymentProps = {
   amount: number;
   checkoutUrl?: string | null;
+  automaticVerification?: boolean;
 };
 
 /**
  * Static QR Ph merchant payment instructions.
  * The image is intentionally public; PayMongo secret keys must stay server-side.
  */
-export default function PaymongoQrPayment({ amount, checkoutUrl }: PaymongoQrPaymentProps) {
+export default function PaymongoQrPayment({ amount, checkoutUrl, automaticVerification = false }: PaymongoQrPaymentProps) {
   const [viewerOpen, setViewerOpen] = useState(false);
   const [zoom, setZoom] = useState(1);
 
@@ -40,20 +41,37 @@ export default function PaymongoQrPayment({ amount, checkoutUrl }: PaymongoQrPay
         <ShieldCheck className="h-5 w-5 shrink-0 text-primary" aria-hidden="true" />
       </div>
 
-      <button
-        type="button"
-        onClick={openViewer}
-        className="group flex w-full cursor-zoom-in justify-center rounded-lg bg-white p-3 outline-none ring-offset-background focus-visible:ring-2 focus-visible:ring-ring sm:p-5"
-        aria-label="Open QR Ph code for zooming"
-      >
-        <img
-          src="/payments/qrph-kooketz.jpg"
-          alt="Kooketz PayMongo QR Ph payment code"
-          className="h-auto max-h-[min(520px,70vh)] w-full max-w-[440px] object-contain transition-opacity group-hover:opacity-90"
-          loading="eager"
-        />
-      </button>
-      <p className="text-center text-xs text-muted-foreground">Click or tap the QR code to enlarge and zoom.</p>
+      {automaticVerification && checkoutUrl ? (
+        <div className="space-y-3 rounded-lg border border-primary/20 bg-background/60 p-4 text-center">
+          <p className="text-sm font-semibold text-foreground">Secure QRPh checkout ready</p>
+          <p className="text-xs text-muted-foreground">Open the PayMongo checkout, scan the booking QRPh code, and the webhook will verify the payment automatically.</p>
+          <a
+            href={checkoutUrl}
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex w-full items-center justify-center rounded-lg bg-primary px-3 py-2 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary/90"
+          >
+            Open secure QRPh checkout <ExternalLink className="ml-1.5 h-4 w-4" aria-hidden="true" />
+          </a>
+        </div>
+      ) : (
+        <>
+          <button
+            type="button"
+            onClick={openViewer}
+            className="group flex w-full cursor-zoom-in justify-center rounded-lg bg-white p-3 outline-none ring-offset-background focus-visible:ring-2 focus-visible:ring-ring sm:p-5"
+            aria-label="Open QR Ph code for zooming"
+          >
+            <img
+              src="/payments/qrph-kooketz.jpg"
+              alt="Kooketz PayMongo QR Ph payment code"
+              className="h-auto max-h-[min(520px,70vh)] w-full max-w-[440px] object-contain transition-opacity group-hover:opacity-90"
+              loading="eager"
+            />
+          </button>
+          <p className="text-center text-xs text-muted-foreground">Click or tap the QR code to enlarge and zoom.</p>
+        </>
+      )}
 
       <Dialog open={viewerOpen} onOpenChange={setViewerOpen}>
         <DialogContent className="max-w-3xl overflow-hidden p-4 sm:p-6">
@@ -93,7 +111,7 @@ export default function PaymongoQrPayment({ amount, checkoutUrl }: PaymongoQrPay
         </p>
       </div>
 
-      {checkoutUrl && (
+      {checkoutUrl && !automaticVerification && (
         <a
           href={checkoutUrl}
           target="_blank"

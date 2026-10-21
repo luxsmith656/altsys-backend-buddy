@@ -111,6 +111,18 @@ describe('paymongo webhook handler', () => {
     expect(deps.process).not.toHaveBeenCalled();
   });
 
+  it('checks a settlement payment against the remaining balance', async () => {
+    const deps = makeDeps({
+      loadBooking: vi.fn(async () => ({ id: bookingId, notes: JSON.stringify({ totalFee: 370, amountPaid: 100 }) })),
+      fetcher: vi.fn(async () => new Response(JSON.stringify(paidSession(27000)), { status: 200 })) as unknown as typeof fetch,
+    });
+    const raw = event();
+    const result = await post(paymongoWebhookHandler(deps), raw, await sign(raw));
+
+    expect(result.status).toBe(200);
+    expect(deps.process).toHaveBeenCalledWith(expect.objectContaining({ p_amount_paid: 270 }));
+  });
+
   it('asks PayMongo to retry when the provider cannot be reached', async () => {
     const deps = makeDeps({ fetcher: vi.fn(async () => new Response('down', { status: 503 })) as unknown as typeof fetch });
     const raw = event();

@@ -33,20 +33,37 @@ Deno.serve(async (request) => {
   const { data: authData, error: authError } = await db.auth.getUser(token);
   if (authError || !authData.user) return response({ error: 'Authentication required' }, 401);
 
-  let input: { bookingId?: string; email?: string; name?: string; phone?: string };
+  let input: { bookingId?: string; email?: string; name?: string; phone?: string; purpose?: 'reservation' | 'settlement' };
   try { input = await request.json(); } catch { return response({ error: 'Invalid request body' }, 400); }
   if (!input.bookingId) return response({ error: 'bookingId is required' }, 400);
 
+  const purpose = input.purpose === 'settlement' ? 'settlement' : 'reservation';
+
   const { data: booking, error: bookingError } = await db
     .from('bookings')
-    .select('id,user_id,booking_date,group_size,notes')
+    .select('id,user_id,location_id,status,booking_date,group_size,notes')
     .eq('id', input.bookingId)
-    .eq('user_id', authData.user.id)
     .maybeSingle();
   if (bookingError || !booking) return response({ error: 'Booking not found' }, 404);
 
+  const { data: roles } = await db.from('user_roles').select('role').eq('user_id', authData.user.id);
+  const isSuperAdmin = (roles ?? []).some((row: any) => row.role === 'super_admin');
+  const isLocalAdmin = (roles ?? []).some((row: any) => row.role === 'admin');
+  if (purpose === 'settlement') {
+    if (!isSuperAdmin && !isLocalAdmin) return response({ error: 'Only an authorized admin can start onsite settlement.' }, 403);
+    if (!isSuperAdmin) {
+      const { data: location } = await db.from('user_locations').select('location_id').eq('user_id', authData.user.id).eq('location_id', booking.location_id).maybeSingle();
+      if (!location) return response({ error: 'This booking is outside your assigned trailhead.' }, 403);
+    }
+    if (booking.status === 'cancelled' || booking.status === 'completed') return response({ error: 'This booking is already closed.' }, 409);
+  } else if (booking.user_id !== authData.user.id) {
+    return response({ error: 'Booking not found' }, 404);
+  }
+
   const meta = parseMeta(booking.notes);
-  const amount = Number(meta.totalFee ?? 0);
+  const totalFee = Number(meta.totalFee ?? 0);
+  const amountPaid = Number(meta.amountPaid ?? 0);
+  const amount = purpose === 'settlement' ? Math.max(0, totalFee - amountPaid) : totalFee;
   if (!Number.isFinite(amount) || amount <= 0) return response({ error: 'Booking amount is invalid' }, 422);
 
   const origin = request.headers.get('Origin') || env('APP_ORIGIN') || 'https://mtkali.vercel.app';
@@ -60,7 +77,9 @@ Deno.serve(async (request) => {
         },
         cancel_url: `${origin}/hiker?payment=cancelled&booking=${booking.id}`,
         success_url: `${origin}/hiker?payment=success&booking=${booking.id}`,
-        description: `Mt. Kalisungan booking ${booking.id}`,
+        description: purpose === 'settlement'
+          ? `Mt. Kalisungan onsite settlement ${booking.id}`
+          : `Mt. Kalisungan booking ${booking.id}`,
         line_items: [{
           amount: Math.round(amount * 100),
           currency: 'PHP',
@@ -102,9 +121,10 @@ Deno.serve(async (request) => {
     paymentStatus: 'partial',
     paymongoCheckoutSessionId: sessionId,
     paymongoCheckoutCreatedAt: new Date().toISOString(),
+    ...(purpose === 'settlement' ? { paymongoPaymentPurpose: 'settlement', paymongoSettlementAmount: amount } : {}),
   };
   const { error: updateError } = await db.from('bookings').update({ notes: encodeMeta(nextMeta) }).eq('id', booking.id);
   if (updateError) console.warn('Checkout created but booking metadata was not updated:', updateError.message);
 
-  return response({ checkoutUrl, sessionId });
+  return response({ checkoutUrl, sessionId, amount, purpose });
 });

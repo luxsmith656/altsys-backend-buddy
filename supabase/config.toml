@@ -16,3 +16,11 @@ verify_jwt = false
 [functions.send-password-reset-emailjs]
 # Password recovery must work before a user has a session.
 verify_jwt = false
+
+[functions.paymongo-checkout]
+# Checkout creation is an authenticated hiker/admin action.
+verify_jwt = true
+
+[functions.paymongo-webhook]
+# PayMongo authenticates this endpoint with the paymongo-signature header.
+verify_jwt = false

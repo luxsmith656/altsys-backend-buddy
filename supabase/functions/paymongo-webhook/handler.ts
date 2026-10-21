@@ -61,8 +61,11 @@ export function paymongoWebhookHandler(deps: WebhookDeps) {
       if (!paid) return fail('payment_not_paid', 'Payment is not yet verified as paid; retry delivery.', 409);
       const booking = await deps.loadBooking(attrs.reference_number);
       if (!booking) return fail('booking_not_found', 'Matching booking was not found.', 404);
-      const meta = z.object({ totalFee: z.coerce.number().positive() }).safeParse(JSON.parse(booking.notes));
-      if (!meta.success || Math.round(meta.data.totalFee * 100) !== paid.attributes.amount) return fail('amount_mismatch', 'Paid amount does not match the reservation.', 422);
+      const meta = z.object({ totalFee: z.coerce.number().positive(), amountPaid: z.coerce.number().nonnegative().default(0) }).safeParse(JSON.parse(booking.notes));
+      if (!meta.success) return fail('amount_mismatch', 'Paid amount does not match the reservation.', 422);
+      const outstanding = Math.max(0, meta.data.totalFee - meta.data.amountPaid);
+      if (outstanding <= 0) return json({ received: true, alreadyProcessed: true });
+      if (Math.round(outstanding * 100) !== paid.attributes.amount) return fail('amount_mismatch', 'Paid amount does not match the outstanding reservation balance.', 422);
       const processed = await deps.process({ p_booking_id: booking.id, p_provider_payment_id: paid.id,
         p_provider_event_id: event.id, p_amount_paid: paid.attributes.amount / 100,
         p_paid_at: paid.attributes.paid_at ? new Date(paid.attributes.paid_at * 1000).toISOString() : new Date().toISOString() });
