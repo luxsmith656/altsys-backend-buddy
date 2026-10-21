@@ -22,7 +22,8 @@ describe('booking confirmation content', () => {
   it('uses actual recipient, schedule, guide/contact, jump-off and embedded logo, without OTP', () => {
     const result = makeBookingEmail({ ...makeDetails(), from });
     expect(result.to).toEqual(['hiker@example.com']);
-    for (const value of ['September 10, 2026', '06:00 AM PHT (UTC+8)', 'Maria Santos', '+63 917 123 4567', 'Lamot 2', '4 hikers', 'Call your guide the day before', 'https://mtkali.vercel.app/brand/kalisungan-logo.png', 'Reservation QR code', 'quickchart.io/qr']) expect(result.html).toContain(value);
+    for (const value of ['September 10, 2026', '06:00 AM PHT (UTC+8)', 'Maria Santos', '+63 917 123 4567', 'Lamot 2', '4 hikers', 'Call your guide the day before', 'https://mtkali.vercel.app/brand/kalisungan-logo.png', 'Reservation QR code', 'Reserved for Juan Dela Cruz', 'Download QR code', 'quickchart.io/qr']) expect(result.html).toContain(value);
+    expect(result.html).toContain(`download="mt-kalisungan-qr-${id}.png"`);
     expect(result.attachments[0].content_id).toBe('kalisungan-logo');
     expect(Buffer.from(result.attachments[0].content, 'base64').subarray(1, 4).toString()).toBe('PNG');
     expect(result.html).not.toMatch(/otp_code|Security Check|\{\{/);
