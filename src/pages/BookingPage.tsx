@@ -405,6 +405,7 @@ export default function BookingPage() {
 
   const [loading, setLoading] = useState(false);
   const [booking, setBooking] = useState<SubmittedBooking | null>(null);
+  const [paymongoCheckoutUrl, setPaymongoCheckoutUrl] = useState<string | null>(null);
 
   /* -- Restore form draft from localStorage -- */
   useEffect(() => {
@@ -1247,15 +1248,23 @@ export default function BookingPage() {
       }
 
       if (paymentOption === 'online') {
-        const { data: checkout, error: checkoutError } = await supabase.functions.invoke('paymongo-checkout', {
-          body: { bookingId: data.id },
-        });
-        if (!checkoutError && checkout?.checkoutUrl) {
-          window.location.assign(checkout.checkoutUrl as string);
-          return;
-        }
-        if (checkoutError || !checkout?.checkoutUrl) {
-          throw new Error(checkout?.error || 'Automatic QR Ph checkout is unavailable. Please try again.');
+        try {
+          const { data: checkout, error: checkoutError } = await supabase.functions.invoke('paymongo-checkout', {
+            body: { bookingId: data.id },
+          });
+          if (!checkoutError && checkout?.checkoutUrl) {
+            setPaymongoCheckoutUrl(checkout.checkoutUrl as string);
+          } else {
+            // The static QR remains a valid payment path. Do not discard a saved
+            // booking just because the optional hosted checkout is unavailable.
+            console.warn('PayMongo hosted checkout unavailable; showing the static QR instead.', checkoutError ?? checkout?.error);
+            setPaymongoCheckoutUrl(null);
+            toast.warning('Your booking was saved. Scan the QR Ph code below to complete payment.');
+          }
+        } catch (checkoutError) {
+          console.warn('PayMongo hosted checkout request failed; showing the static QR instead.', checkoutError);
+          setPaymongoCheckoutUrl(null);
+          toast.warning('Your booking was saved. Scan the QR Ph code below to complete payment.');
         }
       }
 
@@ -1374,11 +1383,15 @@ export default function BookingPage() {
               </div>
               <p className="text-xs text-muted-foreground mt-2">Show this at the trailhead once confirmed.</p>
             </div>
+            {booking.paymentOption === 'online' && (
+              <PaymongoQrPayment amount={booking.totalFee} checkoutUrl={paymongoCheckoutUrl} />
+            )}
             <Button
               variant="outline"
               className="w-full"
               onClick={() => {
                 setBooking(null);
+                setPaymongoCheckoutUrl(null);
                 setStep(1);
                 setDate(undefined);
                 setGroupSize(1);

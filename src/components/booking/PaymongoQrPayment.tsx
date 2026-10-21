@@ -12,13 +12,14 @@ import { formatPeso } from '@/lib/payments';
 
 type PaymongoQrPaymentProps = {
   amount: number;
+  checkoutUrl?: string | null;
 };
 
 /**
  * Static QR Ph merchant payment instructions.
  * The image is intentionally public; PayMongo secret keys must stay server-side.
  */
-export default function PaymongoQrPayment({ amount }: PaymongoQrPaymentProps) {
+export default function PaymongoQrPayment({ amount, checkoutUrl }: PaymongoQrPaymentProps) {
   const [viewerOpen, setViewerOpen] = useState(false);
   const [zoom, setZoom] = useState(1);
 
@@ -88,9 +89,20 @@ export default function PaymongoQrPayment({ amount }: PaymongoQrPaymentProps) {
       <div className="space-y-1 text-xs">
         <p>Amount to send: <strong>{formatPeso(amount)}</strong></p>
         <p className="text-muted-foreground">
-          Submit the booking to continue through PayMongo checkout. No receipt upload is required here.
+          Scan the QR above to pay. No receipt upload is required here.
         </p>
       </div>
+
+      {checkoutUrl && (
+        <a
+          href={checkoutUrl}
+          target="_blank"
+          rel="noreferrer"
+          className="inline-flex w-full items-center justify-center rounded-lg bg-primary px-3 py-2 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary/90"
+        >
+          Continue to PayMongo checkout <ExternalLink className="ml-1.5 h-4 w-4" aria-hidden="true" />
+        </a>
+      )}
 
       <a
         href="https://www.paymongo.com/"
