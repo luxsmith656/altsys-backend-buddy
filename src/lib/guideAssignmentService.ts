@@ -4,6 +4,21 @@ import { notifyUser } from '@/lib/firestoreNotifications';
 import { confirmReservation } from '@/lib/notification-service';
 import { calculateGuidesNeeded } from '@/lib/payments';
 
+async function expediteHikerConfirmationEmail(bookingId: string, warnings: string[]) {
+  const { data, error } = await supabase
+    .from('bookings')
+    .select('status')
+    .eq('id', bookingId)
+    .maybeSingle();
+  if (error) {
+    warnings.push(`Confirmation email status: ${error.message}`);
+    return;
+  }
+  if (data?.status !== 'confirmed') return;
+  const email = await confirmReservation({ id: bookingId });
+  if (email.success === false) warnings.push(`Confirmation email: ${email.error}`);
+}
+
 export interface AcceptAssignmentParams {
   assignmentId: string;
   bookingId: string;
@@ -191,6 +206,7 @@ export async function addAdditionalGuideToBooking({ bookingId, guideId, guideUse
       category: 'booking',
       bookingId,
     });
+    await expediteHikerConfirmationEmail(bookingId, warnings);
     return warnings.length ? { success: true, warnings } : { success: true };
   } catch (error: any) {
     return { success: false, error: error?.message || 'Failed to assign the additional guide' };
@@ -423,6 +439,7 @@ export async function assignGuideToBooking({
       category: 'booking',
       bookingId,
     });
+    await expediteHikerConfirmationEmail(bookingId, warnings);
     return warnings.length ? { success: true, warnings } : { success: true };
   } catch (error: unknown) {
     const message = error && typeof error === 'object' && 'message' in error ? String(error.message) : 'Failed to assign guide';
