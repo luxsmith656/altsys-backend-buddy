@@ -1,4 +1,4 @@
-import { z } from 'npm:zod@3.25.76';
+import { z } from 'zod';
 
 const eventSchema = z.object({ data: z.object({ id: z.string().min(1), attributes: z.object({
   livemode: z.boolean(), type: z.string(),
