@@ -412,7 +412,12 @@ export default function EndHikeSettlementDialog({
               {settlementPaymentMethod === 'qrph' ? (
                 qrCheckoutUrl ? (
                   <div className="space-y-3">
-                    <PaymongoQrPayment amount={remainingBalance} checkoutUrl={qrCheckoutUrl} automaticVerification />
+                    <PaymongoQrPayment
+                      amount={remainingBalance}
+                      checkoutUrl={qrCheckoutUrl}
+                      onRetry={handleStartQrPayment}
+                      retrying={qrPaymentState === 'creating'}
+                    />
                     <p className="text-center text-xs text-muted-foreground">
                       {qrPaymentState === 'paid' ? 'Payment verified. You can complete the hike.' : 'Payment status is checked automatically; no receipt upload or manual verification is required.'}
                     </p>

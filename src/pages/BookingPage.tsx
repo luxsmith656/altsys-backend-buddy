@@ -127,6 +127,7 @@ type Sex = 'male' | 'female' | 'prefer_not_to_say';
 type PaymentOption = 'onsite' | 'online';
 
 type SubmittedBooking = {
+  id: string;
   booking_date: string;
   group_size: number;
   qr_code_data: string;
@@ -405,6 +406,7 @@ export default function BookingPage() {
   const [loading, setLoading] = useState(false);
   const [booking, setBooking] = useState<SubmittedBooking | null>(null);
   const [paymongoCheckoutUrl, setPaymongoCheckoutUrl] = useState<string | null>(null);
+  const [paymongoCheckoutRetrying, setPaymongoCheckoutRetrying] = useState(false);
 
   /* -- Restore form draft from localStorage -- */
   useEffect(() => {
@@ -1067,6 +1069,27 @@ export default function BookingPage() {
     setStep((s) => s + 1);
   };
 
+  const createPaymongoCheckout = async (bookingId: string) => {
+    setPaymongoCheckoutRetrying(true);
+    setPaymongoCheckoutUrl(null);
+    try {
+      const { data: checkout, error: checkoutError } = await supabase.functions.invoke('paymongo-checkout', {
+        body: { bookingId },
+      });
+      if (!checkoutError && checkout?.checkoutUrl) {
+        setPaymongoCheckoutUrl(String(checkout.checkoutUrl));
+        return true;
+      }
+      console.warn('PayMongo generated checkout unavailable:', checkoutError ?? checkout?.error);
+      return false;
+    } catch (checkoutError) {
+      console.warn('PayMongo checkout generation failed:', checkoutError);
+      return false;
+    } finally {
+      setPaymongoCheckoutRetrying(false);
+    }
+  };
+
   /* -- Submit -- */
   const handleBook = async () => {
     if (bookingSubmitLock.current) return;
@@ -1293,24 +1316,8 @@ export default function BookingPage() {
       }
 
       if (paymentOption === 'online') {
-        try {
-          const { data: checkout, error: checkoutError } = await supabase.functions.invoke('paymongo-checkout', {
-            body: { bookingId: data.id },
-          });
-          if (!checkoutError && checkout?.checkoutUrl) {
-            setPaymongoCheckoutUrl(checkout.checkoutUrl as string);
-          } else {
-            // The static QR remains a valid payment path. Do not discard a saved
-            // booking just because the optional hosted checkout is unavailable.
-            console.warn('PayMongo hosted checkout unavailable; showing the static QR instead.', checkoutError ?? checkout?.error);
-            setPaymongoCheckoutUrl(null);
-            toast.warning('Your booking was saved. Scan the QR Ph code below to complete payment.');
-          }
-        } catch (checkoutError) {
-          console.warn('PayMongo hosted checkout request failed; showing the static QR instead.', checkoutError);
-          setPaymongoCheckoutUrl(null);
-          toast.warning('Your booking was saved. Scan the QR Ph code below to complete payment.');
-        }
+        const checkoutReady = await createPaymongoCheckout(data.id);
+        if (!checkoutReady) toast.warning('Your booking was saved, but PayMongo could not generate the secure QRPh checkout yet. Use the retry button below.');
       }
 
       setBooking({
@@ -1429,7 +1436,12 @@ export default function BookingPage() {
               <p className="text-xs text-muted-foreground mt-2">Show this at the trailhead once confirmed.</p>
             </div>
             {booking.paymentOption === 'online' && (
-              <PaymongoQrPayment amount={booking.totalFee} checkoutUrl={paymongoCheckoutUrl} />
+              <PaymongoQrPayment
+                amount={booking.totalFee}
+                checkoutUrl={paymongoCheckoutUrl}
+                onRetry={() => void createPaymongoCheckout(booking.id)}
+                retrying={paymongoCheckoutRetrying}
+              />
             )}
             <Button
               variant="outline"
@@ -1437,6 +1449,7 @@ export default function BookingPage() {
               onClick={() => {
                 setBooking(null);
                 setPaymongoCheckoutUrl(null);
+                setPaymongoCheckoutRetrying(false);
                 setStep(1);
                 setDate(undefined);
                 setGroupSize(1);
