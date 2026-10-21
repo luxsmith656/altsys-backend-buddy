@@ -143,8 +143,12 @@ CREATE TRIGGER normalize_confirmed_guide_booking_notes
   FOR EACH ROW EXECUTE FUNCTION public.normalize_confirmed_guide_booking_notes();
 
 -- Repair assignments created by the previous pending-acceptance workflow.
+-- Do not force an overlapping assignment to accepted: the schedule guard must
+-- remain authoritative. Those rows stay pending until an admin reassigns or
+-- resolves the conflicting booking.
 UPDATE public.booking_assignments
 SET status = 'accepted', decided_at = COALESCE(decided_at, now())
-WHERE status = 'pending';
+WHERE status = 'pending'
+  AND NOT public.guide_has_schedule_conflict(guide_id, booking_id, id);
 
 NOTIFY pgrst, 'reload schema';
