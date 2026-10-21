@@ -4,7 +4,7 @@ The current primary transport is the server-side EmailJS integration documented 
 
 ## Preview and branding
 - Open `booking-confirmation-preview.html` for the filled-in example. It is clearly marked as a sample, not a real booking.
-- `booking-confirmation.html` is the editable source. It uses the supplied security-email template's green header and the existing Mt. Kalisungan logo, but contains no security code.
+- `booking-confirmation.html` is the editable source. It uses the supplied security-email template's green header and the existing Mt. Kalisungan logo, but contains no security code. Its `{{qr_code_url}}` image is also the exact field to add to the remote EmailJS reservation template.
 - Run `npm run email:sync` after changing the HTML or `public/brand/kalisungan-logo.png`. CI's `email:check` rejects a stale server bundle or preview.
 - The actual email embeds the logo as a CID attachment, so Vercel asset hashes cannot break it.
 - Includes confirmed date/time (Manila), jump-off, guide/contact, pax, booking reference and the reminder to call the guide a day before. No medical notes or companion data.
@@ -18,7 +18,7 @@ The current primary transport is the server-side EmailJS integration documented 
 6. Leases plus a stable Resend idempotency key prevent concurrent/repeated sends. Payloads are persisted before submission so retries are identical. Ambiguous sends beyond 23 hours or eight attempts require operator review, not another blind send.
 7. A changed date, recipient, guide/contact or group size pauses an attempted message for review. It does not send stale details or silently replace the payload under an existing provider key.
 
-Client-side EmailJS and SMS send paths are not used. Server-side EmailJS is the primary booking/reset transport; Resend is only an optional booking fallback. Provider retries are recorded through the confirmation outbox so a failed attempt can be reviewed without silently sending stale details.
+Client-side EmailJS and SMS send paths are not used. Server-side EmailJS is the primary booking/reset transport; Resend is only an optional booking fallback. Provider retries are recorded through the confirmation outbox so a failed attempt can be reviewed without silently sending stale details. The EmailJS dashboard template is a separate remote resource: paste the reviewed HTML and include `{{qr_code_url}}` in its image source.
 
 ## Required Lovable setup
 These are server secrets, never `VITE_` variables:

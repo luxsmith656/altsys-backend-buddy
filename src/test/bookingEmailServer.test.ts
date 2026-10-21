@@ -88,27 +88,33 @@ describe('Resend dispatcher and endpoint', () => {
       ...deps(),
       apiKey: '',
       from: '',
-      emailJs: { serviceId: 'service_test', templateId: 'template_booking', publicKey: 'public_test' },
+      emailJs: { serviceId: 'service_test', templateId: 'template_booking', publicKey: 'public_test', privateKey: 'private_test' },
     });
 
     expect(result).toEqual({ success: true, status: 'sent' });
     const [url, req] = fetcher.mock.calls[0];
     expect(url).toBe('https://api.emailjs.com/api/v1.0/email/send');
     const body = JSON.parse(String(req?.body));
-    expect(body).toMatchObject({ service_id: 'service_test', template_id: 'template_booking', user_id: 'public_test' });
-    expect(body.template_params).toMatchObject({ to_email: 'hiker@example.com', visitor_name: 'Juan Dela Cruz', booking_id: id, trail_name: 'Lamot 2' });
+    expect(body).toMatchObject({ service_id: 'service_test', template_id: 'template_booking', user_id: 'public_test', accessToken: 'private_test' });
+    expect(body.template_params).toMatchObject({
+      to_email: 'hiker@example.com',
+      visitor_name: 'Juan Dela Cruz',
+      booking_id: id,
+      trail_name: 'Lamot 2',
+      qr_code_url: expect.stringContaining('quickchart.io/qr'),
+    });
     expect(body).not.toHaveProperty('to');
   });
   it('accepts the real EmailJS plain OK response and suppresses duplicate sends', async () => {
     fetcher.mockResolvedValue(new Response('OK', { status: 200 }));
-    const config = { ...deps(), emailJs: { serviceId: 'service_test', templateId: 'template_booking', publicKey: 'public_test' } };
+    const config = { ...deps(), emailJs: { serviceId: 'service_test', templateId: 'template_booking', publicKey: 'public_test', privateKey: 'private_test' } };
     expect(await dispatchBookingEmail(id, config)).toMatchObject({ success: true, status: 'sent' });
     expect(await dispatchBookingEmail(id, config)).toMatchObject({ status: 'already_sent' });
     expect(fetcher).toHaveBeenCalledTimes(1);
   });
   it('holds ambiguous EmailJS acceptance instead of risking a duplicate', async () => {
     fetcher.mockRejectedValue(new Error('timeout'));
-    const config = { ...deps(), emailJs: { serviceId: 'service_test', templateId: 'template_booking', publicKey: 'public_test' } };
+    const config = { ...deps(), emailJs: { serviceId: 'service_test', templateId: 'template_booking', publicKey: 'public_test', privateKey: 'private_test' } };
     expect(await dispatchBookingEmail(id, config)).toMatchObject({ code: 'needs_review' });
     await dispatchBookingEmail(id, config);
     expect(fetcher).toHaveBeenCalledTimes(1);
@@ -132,6 +138,18 @@ describe('Resend dispatcher and endpoint', () => {
   it('requires sender and key before claiming work', async () => {
     expect(await dispatchBookingEmail(id, { ...deps(), from: '' })).toMatchObject({ success: false, code: 'not_configured' });
     expect(store.claim).not.toHaveBeenCalled(); expect(fetcher).not.toHaveBeenCalled();
+  });
+  it('does not call EmailJS when its private key is missing', async () => {
+    const result = await dispatchBookingEmail(id, {
+      ...deps(),
+      apiKey: '',
+      from: '',
+      emailJs: { serviceId: 'service_test', templateId: 'template_booking', publicKey: 'public_test' },
+    });
+    expect(result).toMatchObject({ success: false, code: 'not_configured' });
+    expect(result).toHaveProperty('error', 'EmailJS is missing EMAILJS_PRIVATE_KEY in the Edge Function secrets.');
+    expect(store.claim).not.toHaveBeenCalled();
+    expect(fetcher).not.toHaveBeenCalled();
   });
   it.each([429, 500, 503])('queues retry on HTTP %s without success', async status => {
     fetcher.mockResolvedValue(new Response('{}', { status }));

@@ -6,7 +6,7 @@ EmailJS is the primary provider for password-reset and booking-confirmation mail
 - Booking template: `template_quhvfai`
 - Password-reset template: configure `EMAILJS_PASSWORD_RESET_TEMPLATE_ID` with a dedicated reset template. `template_dcs8uaj` is the account's OTP template and must not be used for booking confirmations or password recovery.
 
-The dedicated reset template should expect `to_name`, `to_email`, `email`, and `reset_link`. The booking template receives both its existing fields (`visitor_name`, `booking_id`, `hike_date`, `trail_name`, `checkin_time`, `name`, `email`) and the newer confirmation fields.
+The dedicated reset template should expect `to_name`, `to_email`, `email`, and `reset_link`. The booking template receives both its existing fields (`visitor_name`, `booking_id`, `hike_date`, `trail_name`, `checkin_time`, `name`, `email`) and the newer confirmation fields. To show the reservation QR in EmailJS, add an image whose source is exactly `{{qr_code_url}}` (for example, `<img src="{{qr_code_url}}" alt="Reservation QR code" width="220" height="220">`). The server builds this URL from the confirmed booking's database `qr_code_data`; it does not accept a QR URL from the browser.
 
 ## Runtime
 
@@ -31,4 +31,4 @@ supabase functions deploy send-password-reset-emailjs
 supabase functions deploy send-booking-confirmation
 ```
 
-`EMAILJS_PRIVATE_KEY` is required when EmailJS Account > Security has **Use Private Key** enabled. Set it as a Supabase Edge Function secret for both functions. Never put it, a Supabase service-role key, or a reset token in `VITE_` variables or in a template parameter supplied by the browser.
+`EMAILJS_PRIVATE_KEY` is required by this deployment for the booking sender. Set it as a Supabase Edge Function secret for both functions, even if the EmailJS template itself is public. The booking function will refuse a partial EmailJS configuration instead of silently sending a rejected request. Never put it, a Supabase service-role key, or a reset token in `VITE_` variables or in a template parameter supplied by the browser.

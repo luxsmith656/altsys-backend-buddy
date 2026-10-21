@@ -34,7 +34,28 @@ export async function canSendBookingEmail(db: SupabaseClient, userId: string, bo
 export function createBookingEmailStore(db: SupabaseClient): BookingEmailStore {
   return {
     async claim(id) {
-      const { data, error } = await db.rpc('claim_booking_confirmation_email', { _booking_id: id });
+      let { data, error } = await db.rpc('claim_booking_confirmation_email', { _booking_id: id });
+      if (error) throw error;
+      if (data?.[0]) return data[0] as EmailJob;
+
+      // The status trigger is the normal queue path. Seed a missing row for a
+      // confirmed booking so a deployed function can recover older bookings or
+      // a confirmation that raced the trigger/schema-cache refresh.
+      const { data: booking, error: bookingError } = await db
+        .from('bookings')
+        .select('status')
+        .eq('id', id)
+        .maybeSingle();
+      if (bookingError) throw bookingError;
+      if (booking?.status !== 'confirmed') return null;
+
+      const { error: seedError } = await db.from('booking_confirmation_emails').upsert(
+        { booking_id: id, status: 'pending', attempts: 0, next_attempt_at: new Date().toISOString() },
+        { onConflict: 'booking_id', ignoreDuplicates: true },
+      );
+      if (seedError) throw seedError;
+
+      ({ data, error } = await db.rpc('claim_booking_confirmation_email', { _booking_id: id }));
       if (error) throw error;
       return (data?.[0] ?? null) as EmailJob | null;
     },

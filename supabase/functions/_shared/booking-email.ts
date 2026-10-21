@@ -87,9 +87,19 @@ export async function dispatchBookingEmail(id: string, deps: {
   fetcher: typeof fetch;
   emailJs?: EmailJsConfig;
 }): Promise<SendResult> {
-  const emailJsConfigured = Boolean(deps.emailJs?.serviceId && deps.emailJs.templateId && deps.emailJs.publicKey);
+  // This account uses EmailJS private-key mode. Treat a partial EmailJS
+  // configuration as unavailable instead of sending a request that the
+  // provider will reject and leaving the outbox stuck in review.
+  const emailJsConfigured = Boolean(
+    deps.emailJs?.serviceId && deps.emailJs.templateId && deps.emailJs.publicKey && deps.emailJs.privateKey,
+  );
   const resendConfigured = Boolean(deps.apiKey && deps.from);
-  if (!emailJsConfigured && !resendConfigured) return { success: false, code: 'not_configured', error: 'Booking email sender is not configured. Contact the administrator.' };
+  if (!emailJsConfigured && !resendConfigured) {
+    const error = deps.emailJs?.serviceId && deps.emailJs.templateId && deps.emailJs.publicKey
+      ? 'EmailJS is missing EMAILJS_PRIVATE_KEY in the Edge Function secrets.'
+      : 'Booking email sender is not configured. Contact the administrator.';
+    return { success: false, code: 'not_configured', error };
+  }
   const { store } = deps;
   let job: EmailJob | null = null;
   try {
