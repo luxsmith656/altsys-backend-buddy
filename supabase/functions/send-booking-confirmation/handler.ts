@@ -85,7 +85,7 @@ export function createBookingEmailStore(db: SupabaseClient): BookingEmailStore {
 }
 
 export function bookingConfirmationHandler(deps: {
-  apiKey: string; from: string; workerSecret: string; store: BookingEmailStore; fetcher: typeof fetch;
+  apiKey: string; from: string; logoUrl?: string; workerSecret: string; store: BookingEmailStore; fetcher: typeof fetch;
   emailJs?: EmailJsConfig;
   userForToken: (token: string) => Promise<string | null>;
   authorize: (userId: string, bookingId: string) => Promise<boolean>;
