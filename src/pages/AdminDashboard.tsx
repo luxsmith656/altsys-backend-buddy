@@ -1321,6 +1321,13 @@ export default function AdminDashboard() {
         assignedTrailName: officialTrailNameFromLocation(booking?.location_id, '', '', routeInfo.route?.name, 'Assigned trail'),
         assignedTrailAuto: routeInfo.auto,
       },
+      onConfirmationEmailResult: (email) => {
+        if (email?.success) {
+          toast.success('Reservation email sent to the hiker.');
+        } else if (email?.success === false) {
+          toast.warning(`Booking confirmed. Reservation email is still queued: ${email.error}`);
+        }
+      },
     });
     const requiredGuides = calculateFees(Number(booking?.group_size) || 1).guidesNeeded;
     if (result.success && requiredGuides > 1) {

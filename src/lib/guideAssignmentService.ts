@@ -1,22 +1,18 @@
 import { supabase } from '@/integrations/supabase/client';
 import { encodeMeta, parseMeta } from '@/lib/bookingMeta';
 import { notifyUser } from '@/lib/firestoreNotifications';
-import { confirmReservation } from '@/lib/notification-service';
+import { confirmReservation, type BookingEmailResult } from '@/lib/notification-service';
 import { calculateGuidesNeeded } from '@/lib/payments';
 
-async function expediteHikerConfirmationEmail(bookingId: string, warnings: string[]) {
+async function expediteHikerConfirmationEmail(bookingId: string): Promise<BookingEmailResult | null> {
   const { data, error } = await supabase
     .from('bookings')
     .select('status')
     .eq('id', bookingId)
     .maybeSingle();
-  if (error) {
-    warnings.push(`Confirmation email status: ${error.message}`);
-    return;
-  }
-  if (data?.status !== 'confirmed') return;
-  const email = await confirmReservation({ id: bookingId });
-  if (email.success === false) warnings.push(`Confirmation email: ${email.error}`);
+  if (error) throw error;
+  if (data?.status !== 'confirmed') return null;
+  return confirmReservation({ id: bookingId });
 }
 
 export interface AcceptAssignmentParams {
@@ -206,7 +202,7 @@ export async function addAdditionalGuideToBooking({ bookingId, guideId, guideUse
       category: 'booking',
       bookingId,
     });
-    await expediteHikerConfirmationEmail(bookingId, warnings);
+    // The primary assignment owns the single confirmation email queue entry.
     return warnings.length ? { success: true, warnings } : { success: true };
   } catch (error: any) {
     return { success: false, error: error?.message || 'Failed to assign the additional guide' };
@@ -401,6 +397,8 @@ export interface AdminAssignParams {
   locationId?: string | null;
   /** Extra booking-meta fields to persist with the assignment (e.g. assigned trail). */
   extraMeta?: Record<string, unknown>;
+  /** Called after the confirmation email finishes, without delaying assignment completion. */
+  onConfirmationEmailResult?: (result: BookingEmailResult | null) => void;
 }
 
 /**
@@ -409,7 +407,7 @@ export interface AdminAssignParams {
  * assignment the guide cannot actually see.
  */
 export async function assignGuideToBooking({
-  bookingId, guideId, extraMeta = {},
+  bookingId, guideId, extraMeta = {}, onConfirmationEmailResult,
 }: AdminAssignParams): Promise<{ success: boolean; error?: string; warnings?: string[] }> {
   try {
     const { data, error } = await supabase.rpc('admin_assign_hike_guide', {
@@ -439,7 +437,18 @@ export async function assignGuideToBooking({
       category: 'booking',
       bookingId,
     });
-    await expediteHikerConfirmationEmail(bookingId, warnings);
+    // The booking is already committed and the email is also queued by the
+    // database. Do not make the admin wait for the provider response here.
+    void expediteHikerConfirmationEmail(bookingId)
+      .then((email) => onConfirmationEmailResult?.(email))
+      .catch((error) => {
+        console.warn('Booking confirmed, but confirmation email follow-up failed:', error);
+        onConfirmationEmailResult?.({
+          success: false,
+          code: 'unavailable',
+          error: 'The reservation email is queued, but its delivery status could not be checked yet.',
+        });
+      });
     return warnings.length ? { success: true, warnings } : { success: true };
   } catch (error: unknown) {
     const message = error && typeof error === 'object' && 'message' in error ? String(error.message) : 'Failed to assign guide';
