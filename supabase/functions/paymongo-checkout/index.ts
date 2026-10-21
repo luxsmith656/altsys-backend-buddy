@@ -30,6 +30,9 @@ Deno.serve(async (request) => {
     global: { headers: { Authorization: `Bearer ${token}` } },
     auth: { persistSession: false, autoRefreshToken: false },
   });
+  const serviceDb = createClient(env('SUPABASE_URL'), env('SUPABASE_SERVICE_ROLE_KEY'), {
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
   const { data: authData, error: authError } = await db.auth.getUser(token);
   if (authError || !authData.user) return response({ error: 'Authentication required' }, 401);
 
@@ -65,6 +68,23 @@ Deno.serve(async (request) => {
   const amountPaid = Number(meta.amountPaid ?? 0);
   const amount = purpose === 'settlement' ? Math.max(0, totalFee - amountPaid) : totalFee;
   if (!Number.isFinite(amount) || amount <= 0) return response({ error: 'Booking amount is invalid' }, 422);
+
+  const { data: intent, error: intentError } = await serviceDb.rpc('claim_paymongo_checkout', {
+    p_booking_id: booking.id,
+    p_purpose: purpose,
+    p_amount: amount,
+  });
+  if (intentError) {
+    console.error('Could not claim PayMongo checkout intent:', intentError.message);
+    return response({ error: 'Could not reserve a payment session. Please try again.' }, 503);
+  }
+  const claimed = Array.isArray(intent) ? intent[0] : intent;
+  if (claimed?.session_id && claimed?.checkout_url) {
+    return response({ checkoutUrl: claimed.checkout_url, sessionId: claimed.session_id, amount, purpose, reused: true });
+  }
+  if (!claimed?.can_create || !claimed?.claim_token) {
+    return response({ error: 'A payment session for this booking is already being prepared. Please use the existing checkout or try again shortly.' }, 409);
+  }
 
   const origin = request.headers.get('Origin') || env('APP_ORIGIN') || 'https://mtkali.vercel.app';
   const payload = {
@@ -108,18 +128,43 @@ Deno.serve(async (request) => {
   const paymongoBody = await paymongoResponse.json().catch(() => ({}));
   if (!paymongoResponse.ok) {
     console.error('PayMongo checkout creation failed:', paymongoResponse.status, paymongoBody);
+    await serviceDb.rpc('fail_paymongo_checkout', {
+      p_booking_id: booking.id,
+      p_purpose: purpose,
+      p_claim_token: claimed.claim_token,
+    });
     return response({ error: 'PayMongo could not create the checkout session.' }, 502);
   }
 
   const sessionId = paymongoBody?.data?.id;
   const checkoutUrl = paymongoBody?.data?.attributes?.checkout_url;
-  if (!sessionId || !checkoutUrl) return response({ error: 'PayMongo returned an incomplete checkout session.' }, 502);
+  if (!sessionId || !checkoutUrl) {
+    await serviceDb.rpc('fail_paymongo_checkout', {
+      p_booking_id: booking.id,
+      p_purpose: purpose,
+      p_claim_token: claimed.claim_token,
+    });
+    return response({ error: 'PayMongo returned an incomplete checkout session.' }, 502);
+  }
+
+  const { error: completeIntentError } = await serviceDb.rpc('complete_paymongo_checkout', {
+    p_booking_id: booking.id,
+    p_purpose: purpose,
+    p_claim_token: claimed.claim_token,
+    p_session_id: sessionId,
+    p_checkout_url: checkoutUrl,
+  });
+  if (completeIntentError) {
+    console.error('PayMongo checkout was created but could not be recorded:', completeIntentError.message);
+    return response({ error: 'PayMongo checkout could not be safely recorded. Please retry.' }, 503);
+  }
 
   const nextMeta: BookingMeta = {
     ...meta,
     paymentMethod: 'paymongo',
     paymentStatus: 'partial',
     paymongoCheckoutSessionId: sessionId,
+    paymongoCheckoutUrl: checkoutUrl,
     paymongoCheckoutCreatedAt: new Date().toISOString(),
     ...(purpose === 'settlement' ? { paymongoPaymentPurpose: 'settlement', paymongoSettlementAmount: amount } : {}),
   };

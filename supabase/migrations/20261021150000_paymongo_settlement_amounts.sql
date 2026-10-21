@@ -77,6 +77,12 @@ BEGIN
   SET notes = v_meta::text
   WHERE id = p_booking_id;
 
+  UPDATE public.paymongo_checkout_intents
+  SET status = 'paid', updated_at = now()
+  WHERE booking_id = p_booking_id
+    AND purpose = COALESCE(v_meta->>'paymongoPaymentPurpose', 'reservation')
+    AND status IN ('creating', 'pending');
+
   INSERT INTO public.app_notifications(
     user_id, title, body, category, link, type, reference_id, target_type,
     target_id, route, read, is_read
