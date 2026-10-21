@@ -2415,7 +2415,7 @@ export default function BookingPage() {
 
                       {paymentOption === 'online' && (
                         <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-4">
-                          <PaymongoQrPayment amount={totalFee} />
+                          <PaymongoQrPayment amount={totalFee} deferred />
                           <p className="text-xs text-muted-foreground">After submission, PayMongo checkout opens so the payment can be linked to this reservation automatically.</p>
                         </motion.div>
                       )}

@@ -7,6 +7,7 @@ type PaymongoQrPaymentProps = {
   checkoutUrl?: string | null;
   onRetry?: () => void;
   retrying?: boolean;
+  deferred?: boolean;
 };
 
 /**
@@ -14,7 +15,7 @@ type PaymongoQrPaymentProps = {
  * booking-specific Checkout Session, so a static merchant QR must never be
  * used as an automatic online-payment fallback.
  */
-export default function PaymongoQrPayment({ amount, checkoutUrl, onRetry, retrying = false }: PaymongoQrPaymentProps) {
+export default function PaymongoQrPayment({ amount, checkoutUrl, onRetry, retrying = false, deferred = false }: PaymongoQrPaymentProps) {
   return (
     <div className="rounded-xl border border-primary/20 bg-primary/5 p-4 space-y-3">
       <div className="flex items-start justify-between gap-3">
@@ -39,6 +40,11 @@ export default function PaymongoQrPayment({ amount, checkoutUrl, onRetry, retryi
           >
             Open secure QRPh checkout <ExternalLink className="ml-1.5 h-4 w-4" aria-hidden="true" />
           </a>
+        </div>
+      ) : deferred ? (
+        <div className="space-y-2 rounded-lg border border-primary/20 bg-background/60 p-4 text-center">
+          <p className="text-sm font-semibold text-foreground">Secure QRPh checkout will be generated after submission</p>
+          <p className="text-xs text-muted-foreground">After you confirm this reservation, PayMongo will create a unique QRPh payment for the exact amount.</p>
         </div>
       ) : (
         <div className="space-y-3 rounded-lg border border-warning/30 bg-warning/10 p-4 text-center">
