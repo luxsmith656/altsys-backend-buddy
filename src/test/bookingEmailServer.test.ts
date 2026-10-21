@@ -22,7 +22,7 @@ describe('booking confirmation content', () => {
   it('uses actual recipient, schedule, guide/contact, jump-off and embedded logo, without OTP', () => {
     const result = makeBookingEmail({ ...makeDetails(), from });
     expect(result.to).toEqual(['hiker@example.com']);
-    for (const value of ['September 10, 2026', '06:00 AM PHT (UTC+8)', 'Maria Santos', '+63 917 123 4567', 'Lamot 2', '4 hikers', 'Call your guide the day before', 'cid:kalisungan-logo', 'Reservation QR code', 'quickchart.io/qr']) expect(result.html).toContain(value);
+    for (const value of ['September 10, 2026', '06:00 AM PHT (UTC+8)', 'Maria Santos', '+63 917 123 4567', 'Lamot 2', '4 hikers', 'Call your guide the day before', 'https://mtkali.vercel.app/brand/kalisungan-logo.png', 'Reservation QR code', 'quickchart.io/qr']) expect(result.html).toContain(value);
     expect(result.attachments[0].content_id).toBe('kalisungan-logo');
     expect(Buffer.from(result.attachments[0].content, 'base64').subarray(1, 4).toString()).toBe('PNG');
     expect(result.html).not.toMatch(/otp_code|Security Check|\{\{/);
@@ -102,6 +102,7 @@ describe('Resend dispatcher and endpoint', () => {
       booking_id: id,
       trail_name: 'Lamot 2',
       qr_code_url: expect.stringContaining('quickchart.io/qr'),
+      logo_url: 'https://mtkali.vercel.app/brand/kalisungan-logo.png',
     });
     expect(body).not.toHaveProperty('to');
   });

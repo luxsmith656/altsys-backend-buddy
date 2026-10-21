@@ -6,7 +6,7 @@ The current primary transport is the server-side EmailJS integration documented 
 - Open `booking-confirmation-preview.html` for the filled-in example. It is clearly marked as a sample, not a real booking.
 - `booking-confirmation.html` is the editable source. It uses the supplied security-email template's green header and the existing Mt. Kalisungan logo, but contains no security code. Its `{{qr_code_url}}` image is also the exact field to add to the remote EmailJS reservation template.
 - Run `npm run email:sync` after changing the HTML or `public/brand/kalisungan-logo.png`. CI's `email:check` rejects a stale server bundle or preview.
-- The actual email embeds the logo as a CID attachment, so Vercel asset hashes cannot break it.
+- The logo uses the public `{{logo_url}}` parameter so EmailJS can load it; the Edge Function builds it from `PUBLIC_APP_URL` and defaults to `https://mtkali.vercel.app`.
 - Includes confirmed date/time (Manila), jump-off, guide/contact, pax, booking reference and the reminder to call the guide a day before. No medical notes or companion data.
 
 ## Sending flow

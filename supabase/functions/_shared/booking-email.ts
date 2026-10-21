@@ -19,7 +19,7 @@ export type ConfirmationBooking = z.infer<typeof bookingSchema>;
 export function confirmationMeta(notes: string) { return metaSchema.parse(JSON.parse(notes)); }
 const escapeHtml = (value: string) => value.replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[char] ?? char);
 
-export function makeBookingEmail(input: { booking: unknown; guide: unknown; location: unknown; from?: string }) {
+export function makeBookingEmail(input: { booking: unknown; guide: unknown; location: unknown; from?: string; logoUrl?: string }) {
   const booking = bookingSchema.parse(input.booking);
   const meta = confirmationMeta(booking.notes);
   const guide = z.object({ full_name: text, phone: text.regex(/^[+\d ()-]{7,30}$/) }).parse(input.guide);
@@ -35,6 +35,7 @@ export function makeBookingEmail(input: { booking: unknown; guide: unknown; loca
   if (!/^\d{4}-\d{2}-\d{2}$/.test(booking.booking_date) || !Number.isFinite(date.getTime()) || date.toISOString().slice(0, 10) !== booking.booking_date) throw new Error('Invalid confirmed date');
   const values: Record<string, string> = {
     to_name: meta.fullName, booking_reference: booking.id, guide_name: guide.full_name, guide_contact: guide.phone,
+    logo_url: input.logoUrl?.trim() || 'https://mtkali.vercel.app/brand/kalisungan-logo.png',
     hike_date: new Intl.DateTimeFormat('en-US', { timeZone: 'Asia/Manila', year: 'numeric', month: 'long', day: 'numeric' }).format(date),
     hike_time: hikeTime, jump_off: location.name, pax: String(booking.group_size),
     route: meta.assignedTrailName || meta.assignedTrail || location.name,
@@ -84,6 +85,7 @@ export async function dispatchBookingEmail(id: string, deps: {
   store: BookingEmailStore;
   apiKey: string;
   from: string;
+  logoUrl?: string;
   fetcher: typeof fetch;
   emailJs?: EmailJsConfig;
 }): Promise<SendResult> {
@@ -121,7 +123,7 @@ export async function dispatchBookingEmail(id: string, deps: {
     }
     let payload = job.payload;
     let currentPayload: EmailPayload;
-    try { currentPayload = makeBookingEmail({ ...details, from: resendConfigured ? deps.from : undefined }); }
+    try { currentPayload = makeBookingEmail({ ...details, from: resendConfigured ? deps.from : undefined, logoUrl: deps.logoUrl }); }
     catch {
       await store.update(job, { status: 'needs_review', last_error: 'Invalid confirmed schedule, recipient or guide contact.', lease_until: null });
       return { success: false, code: 'missing_details', error: 'Confirmation email has incomplete schedule, recipient or guide contact details.' };

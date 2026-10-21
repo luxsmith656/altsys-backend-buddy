@@ -3,6 +3,7 @@ import { bookingConfirmationHandler, canSendBookingEmail, createBookingEmailStor
 import { DEFAULT_EMAILJS_BOOKING_TEMPLATE_ID, DEFAULT_EMAILJS_PASSWORD_RESET_TEMPLATE_ID, emailJsConfigFromEnv } from '../_shared/emailjs.ts';
 
 const env = (name: string) => (Deno.env.get(name) ?? '').trim();
+const publicAppUrl = env('PUBLIC_APP_URL') || 'https://mtkali.vercel.app';
 const db = createClient(env('SUPABASE_URL'), env('SUPABASE_SERVICE_ROLE_KEY'), { auth: { persistSession: false, autoRefreshToken: false } });
 Deno.serve(bookingConfirmationHandler({
   apiKey: env('RESENDAPI') || env('RESEND_API_KEY'),
@@ -14,6 +15,7 @@ Deno.serve(bookingConfirmationHandler({
     [DEFAULT_EMAILJS_PASSWORD_RESET_TEMPLATE_ID, env('EMAILJS_PASSWORD_RESET_TEMPLATE_ID'), 'template_dcs8uaj'],
   ),
   workerSecret: env('BOOKING_EMAIL_WORKER_SECRET'),
+  logoUrl: `${publicAppUrl.replace(/\/+$/, '')}/brand/kalisungan-logo.png`,
   store: createBookingEmailStore(db), fetcher: fetch,
   async userForToken(token) {
     const { data, error } = await db.auth.getUser(token);
