@@ -1343,7 +1343,7 @@ export default function BookingPage() {
             </div>
             <h2 className="text-gradient text-2xl font-bold">Booking Submitted!</h2>
             <p className="text-muted-foreground text-sm mt-1">
-              Your reservation is pending admin approval. A booking confirmation email will follow once your guide accepts and your booking is confirmed.
+              Your reservation is pending admin approval. A booking confirmation email will follow once the admin confirms your booking and assigns a guide.
             </p>
           </CardHeader>
           <CardContent className="space-y-5">

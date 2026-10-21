@@ -12,27 +12,30 @@ before(async () => {
     CREATE FUNCTION has_role(u uuid, r text) RETURNS boolean LANGUAGE sql AS $$ SELECT (u = '${id(1)}' AND r = 'admin') OR (u = '${id(2)}' AND r = 'super_admin') $$;
     CREATE TABLE user_locations(user_id uuid, location_id uuid);
     INSERT INTO user_locations VALUES ('${id(1)}','${id(10)}');
-    CREATE TABLE bookings(id uuid PRIMARY KEY, location_id uuid, status text, notes text, booking_date date);
+    CREATE TABLE bookings(id uuid PRIMARY KEY, location_id uuid, status text, notes text, booking_date date, group_size int);
     CREATE TABLE guides(id uuid PRIMARY KEY, user_id uuid, location_id uuid, is_active boolean, status text, full_name text);
     CREATE TABLE trail_zones(id uuid, location_id uuid, status text, is_official boolean, review_status text, name text);
     CREATE TABLE booking_assignments(id uuid PRIMARY KEY DEFAULT gen_random_uuid(), booking_id uuid, guide_id uuid, location_id uuid, status text, decided_at timestamptz, created_at timestamptz DEFAULT now());
+    CREATE FUNCTION guide_has_schedule_conflict(guide uuid, booking uuid, excluded uuid DEFAULT NULL) RETURNS boolean LANGUAGE sql AS $$ SELECT false $$;
     GRANT USAGE ON SCHEMA auth,public TO authenticated;
     GRANT SELECT,INSERT,UPDATE ON ALL TABLES IN SCHEMA public TO authenticated;`);
   await db.exec(await readFile('supabase/migrations/20261004120000_atomic_admin_guide_assignment.sql', 'utf8'));
+  await db.exec(await readFile('supabase/migrations/20261021120000_admin_confirmed_guide_assignments.sql', 'utf8'));
 }, { timeout: 30000 });
 beforeEach(async () => {
   await db.exec(`RESET ROLE; TRUNCATE bookings,guides,booking_assignments,trail_zones;
-    INSERT INTO bookings VALUES ('${id(20)}','${id(10)}','confirmed','{}','2026-10-10');
+    INSERT INTO bookings VALUES ('${id(20)}','${id(10)}','pending','{}','2026-10-10',1);
     INSERT INTO guides VALUES ('${id(30)}','${id(40)}','${id(10)}',true,'available','Guide One'), ('${id(31)}','${id(41)}','${id(11)}',true,'available','Other Station');
     SET ROLE authenticated; SET test.actor = '${id(1)}';`);
 });
 after(async () => { await db?.close(); });
 const assign = (guide = id(30), route = null) => db.query('SELECT admin_assign_hike_guide($1,$2,$3) AS result', [id(20), guide, route]);
 
-test('assignment persists one pending offer, preserves confirmed status, and is idempotent', async () => {
+test('assignment is immediately accepted, confirms the booking, and is idempotent', async () => {
   await assign();
   assert.equal((await assign()).rows[0].result.unchanged, true);
   assert.equal((await db.query('SELECT * FROM booking_assignments')).rows.length, 1);
+  assert.equal((await db.query('SELECT status FROM booking_assignments')).rows[0].status, 'accepted');
   const b = (await db.query('SELECT * FROM bookings')).rows[0];
   assert.equal(b.status, 'confirmed');
   assert.equal(JSON.parse(b.notes).assignedGuideId, id(30));

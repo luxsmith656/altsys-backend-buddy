@@ -182,12 +182,12 @@ export async function addAdditionalGuideToBooking({ bookingId, guideId, guideUse
       booking_id: bookingId,
       sender_role: 'system',
       kind: 'system',
-      content: `Admin assigned additional mountain guide ${guideName}. Awaiting guide acceptance for ${date}.`,
+      content: `Admin assigned additional mountain guide ${guideName} for ${date}. The booking is confirmed; the guide was notified.`,
     } as any);
     if (messageError) warnings.push(`Booking message: ${messageError.message}`);
     if (guideUserId) await notifyUser(guideUserId, {
       title: 'Additional Hike Guide Assignment',
-      body: `You have been assigned as an additional guide for Booking #${bookingId.slice(0, 8)} on ${date}. Please review and accept.`,
+      body: `You have been assigned as an additional guide for Booking #${bookingId.slice(0, 8)} on ${date}. The booking is confirmed; review the details in your Guide Dashboard.`,
       category: 'booking',
       bookingId,
     });
@@ -227,7 +227,7 @@ export async function declineAndReassignGuide({
     if (result.replacementGuideUserId && result.replacementGuideName) {
       await notifyUser(result.replacementGuideUserId, {
         title: 'New Hike Assignment Handover',
-        body: `You were reassigned to Booking #${bookingId.slice(0, 8)} on ${date} by ${result.oldGuideName}. Please review and accept.`,
+        body: `You were reassigned to confirmed Booking #${bookingId.slice(0, 8)} on ${date} by ${result.oldGuideName}. Review the details in your Guide Dashboard.`,
         category: 'booking',
         bookingId,
       }).catch((error) => console.warn('Guide handoff committed, but replacement notification failed:', error));
@@ -354,7 +354,7 @@ export async function reassignGuideByAdmin({
     if (result.guideUserId) {
       await notifyUser(result.guideUserId, {
         title: '📋 New Hike Booking Assignment',
-        body: `You have been assigned to lead Booking #${bookingId.slice(0, 8)} on ${effectiveDate}. Please review and accept.`,
+        body: `You have been assigned to lead confirmed Booking #${bookingId.slice(0, 8)} on ${effectiveDate}. Review the details in your Guide Dashboard.`,
         category: 'booking',
         bookingId,
       }).catch((error) => console.warn('Guide reassigned, but replacement notification failed:', error));
@@ -414,12 +414,12 @@ export async function assignGuideToBooking({
     const warnings: string[] = [];
     const { error: messageError } = await supabase.from('booking_messages').insert({
       booking_id: bookingId, sender_role: 'system', kind: 'system',
-      content: `Admin assigned mountain guide ${data.guideName}. Awaiting guide acceptance.`,
+      content: `Admin assigned mountain guide ${data.guideName}. The booking is confirmed and the guide was notified.`,
     });
     if (messageError) warnings.push(`Booking message: ${messageError.message}`);
     await notifyUser(data.guideUserId, {
       title: 'New Hike Booking Assignment',
-      body: `You have been assigned to Booking #${bookingId.slice(0, 8)} on ${data.bookingDate}. Please review and accept.`,
+      body: `You have been assigned to confirmed Booking #${bookingId.slice(0, 8)} on ${data.bookingDate}. Review the details in your Guide Dashboard.`,
       category: 'booking',
       bookingId,
     });

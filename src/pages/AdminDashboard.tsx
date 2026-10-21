@@ -1353,12 +1353,12 @@ export default function AdminDashboard() {
       toast.error(`Failed to assign guide: ${result.error}`);
     } else {
       result.warnings?.forEach((w) => toast.warning(w));
-      toast.success(`📋 Assignment offer sent to Guide "${guideName}". Awaiting guide acceptance to confirm booking.`);
+      toast.success(`📋 Booking confirmed and Guide "${guideName}" notified.`);
       void writeActivityLog({
         action: 'guide_assigned',
         entity_type: 'booking',
         entity_id: acceptDialogId,
-        after_state: { status: 'pending', assignedGuide: guideName, assignedTrail: officialTrailNameFromLocation(booking?.location_id, '', '', routeInfo.route?.name, 'Assigned trail') },
+        after_state: { status: 'confirmed', assignedGuide: guideName, assignedTrail: officialTrailNameFromLocation(booking?.location_id, '', '', routeInfo.route?.name, 'Assigned trail') },
       });
       setPendingBookings((prev) => prev.filter((b) => b.id !== acceptDialogId));
       setAcceptDialogId(null);
@@ -2543,7 +2543,7 @@ export default function AdminDashboard() {
                       return (
                         <div className="rounded-lg border border-primary/20 bg-primary/5 px-3 py-2 text-sm text-foreground">
                           <span className="font-semibold">{acceptBooking?.group_size || 1} pax · {requiredGuides} guide{requiredGuides === 1 ? '' : 's'} required.</span>{' '}
-                          {requiredGuides > 1 ? 'This group must have two accepted guide assignments before check-in.' : 'Select an available guide to assign to this booking.'}
+                          {requiredGuides > 1 ? 'This group needs two guide assignments before check-in.' : 'Select an available guide to confirm this booking.'}
                         </div>
                       );
                     })()}
@@ -2578,7 +2578,7 @@ export default function AdminDashboard() {
                             ))}
                           </SelectContent>
                         </Select>
-                        <p className="text-[11px] text-muted-foreground">Both guides receive an assignment and must accept before this booking is confirmed.</p>
+                        <p className="text-[11px] text-muted-foreground">Both guides are assigned immediately and will be notified when the booking is confirmed.</p>
                       </div>
                     )}
                     <div className="space-y-2">
@@ -3122,20 +3122,18 @@ export default function AdminDashboard() {
                             </div>
                           </div>
                         </div>
-                      ) : (scannedBooking.status !== 'confirmed' || meta.guideStatus === 'pending' || meta.guideStatus === 'unassigned') ? (
+                      ) : (scannedBooking.status !== 'confirmed' || !meta.assignedGuideId) ? (
                         <div className="space-y-2 rounded-xl border border-amber-500/40 bg-amber-500/10 p-3.5 text-xs text-amber-900 dark:text-amber-200">
                           <div className="flex items-center gap-2 font-bold">
                             <AlertTriangle className="h-4 w-4 text-amber-600 shrink-0" />
                             <span>
-                              {meta.assignedGuide && meta.guideStatus === 'pending'
-                                ? `Awaiting Guide Acceptance: ${meta.assignedGuide}`
-                                : 'Booking Not Confirmed'}
+                              {meta.assignedGuide ? `Booking Not Confirmed: ${meta.assignedGuide}` : 'Booking Not Confirmed'}
                             </span>
                           </div>
                           <p className="text-[11px] leading-relaxed opacity-90">
-                            {meta.assignedGuide && meta.guideStatus === 'pending'
-                              ? `Assigned guide "${meta.assignedGuide}" must accept this booking in their Guide Dashboard before onsite check-in can be started.`
-                              : 'Assign a mountain guide and have them accept the permit to confirm this booking before check-in.'}
+                            {meta.assignedGuide
+                              ? 'The administrator must finish confirming this booking before onsite check-in can be started.'
+                              : 'Assign a mountain guide and confirm the booking before check-in.'}
                           </p>
                           <div className="pt-1">
                             <Button

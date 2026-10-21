@@ -67,7 +67,7 @@ import { completeHike } from '@/lib/hikeCompletion';
 import ImportantAnnouncements from '@/components/common/ImportantAnnouncements';
 
 
-type AssignmentStatus = 'pending' | 'accepted' | 'declined' | 'completed';
+type AssignmentStatus = 'accepted' | 'declined' | 'completed';
 
 interface AssignmentRow {
   id: string;
@@ -277,9 +277,16 @@ export default function GuideDashboard() {
       mineList.forEach((a: any) => {
         a.booking = bookingMap[a.booking_id];
       });
-      // A cancelled booking is no longer a guide assignment. Keep it out of
-      // every guide tab, counter, earnings calculation and action list.
-      setAssignments(mineList.filter((assignment: any) => assignment.booking && assignment.booking.status !== 'cancelled'));
+      // An admin-confirmed assignment is immediately active for the guide.
+      // Normalize legacy pending rows so an older assignment cannot put the
+      // guide back into the removed accept/decline workflow.
+      const visibleAssignments = mineList
+        .filter((assignment: any) => assignment.booking && assignment.booking.status !== 'cancelled' && assignment.status !== 'declined')
+        .map((assignment: any) => ({
+          ...assignment,
+          status: assignment.status === 'completed' ? 'completed' : 'accepted',
+        })) as AssignmentRow[];
+      setAssignments(visibleAssignments);
 
       // 5. Peer guide stats
       const peersList = (peers as any[]) ?? [];
@@ -316,10 +323,8 @@ export default function GuideDashboard() {
   const counts = useMemo(() => {
     const today = format(new Date(), 'yyyy-MM-dd');
     return {
-      pending: assignments.filter((a) => a.status === 'pending').length,
       accepted: assignments.filter((a) => a.status === 'accepted').length,
       completed: assignments.filter((a) => a.status === 'completed').length,
-      declined: assignments.filter((a) => a.status === 'declined').length,
       todayAccepted: assignments.filter(
         (a) => a.status === 'accepted' && a.booking?.booking_date === today
       ).length,
@@ -333,12 +338,7 @@ export default function GuideDashboard() {
   }, [reviews]);
 
   const filteredAssignments = useMemo(() => {
-    const statusOrder: Record<AssignmentStatus, number> = {
-      pending: 0,
-      accepted: 1,
-      completed: 2,
-      declined: 3,
-    };
+    const statusOrder: Record<AssignmentStatus, number> = { accepted: 0, completed: 1, declined: 2 };
     return assignments
       .filter((assignment) => filter === 'all' || assignment.status === filter)
       .sort((a, b) => {
@@ -654,8 +654,7 @@ export default function GuideDashboard() {
 
         <section aria-label="Guide work summary" className="guide-summary">
           {[
-            { label: 'Needs response', value: counts.pending, icon: Inbox, color: 'text-amber-500' },
-            { label: 'Upcoming', value: counts.accepted, icon: CalendarCheck, color: 'text-primary' },
+            { label: 'Assigned', value: counts.accepted, icon: CalendarCheck, color: 'text-primary' },
             { label: 'Completed', value: counts.completed, icon: CheckCircle2, color: 'text-sky-500' },
             { label: 'Total earnings', value: formatPeso(earnings.lifetimeEarned), icon: Wallet, color: 'text-emerald-500' },
           ].map((item) => (
@@ -677,11 +676,6 @@ export default function GuideDashboard() {
               <TabsTrigger value="my" className="gap-1.5 text-xs">
                 <Inbox className="h-3.5 w-3.5" />
                 Assignments
-                {counts.pending > 0 && (
-                  <span className="ml-1 px-1.5 py-0.2 rounded-full bg-amber-500 text-white font-bold text-[10px]">
-                    {counts.pending}
-                  </span>
-                )}
               </TabsTrigger>
               <TabsTrigger value="earnings" className="gap-1.5 text-xs">
                 <Receipt className="h-3.5 w-3.5" />
@@ -715,10 +709,8 @@ export default function GuideDashboard() {
                 <SelectTrigger id="guide-assignment-filter"><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All assignments</SelectItem>
-                  <SelectItem value="pending">Needs response ({counts.pending})</SelectItem>
                   <SelectItem value="accepted">Confirmed ({counts.accepted})</SelectItem>
                   <SelectItem value="completed">Completed</SelectItem>
-                  <SelectItem value="declined">Declined</SelectItem>
                 </SelectContent>
               </Select>
               <span>{filteredAssignments.length} {filteredAssignments.length === 1 ? 'hike' : 'hikes'}</span>
@@ -739,9 +731,7 @@ export default function GuideDashboard() {
                 {filteredAssignments.map((a) => {
                   const booking = a.booking;
                   const meta = parseMeta(booking?.notes);
-                  const isPending = a.status === 'pending';
                   const isAccepted = a.status === 'accepted';
-                  const isDeclined = a.status === 'declined';
                   const isCompleted = a.status === 'completed';
                   const feeAmount =
                     earnings.hikeRecords.find((record) => record.assignmentId === a.id)?.guideFee ??
@@ -753,9 +743,7 @@ export default function GuideDashboard() {
                     <Card
                       key={a.id}
                       className={`guide-assignment ${
-                        isPending
-                          ? 'guide-assignment-pending'
-                          : isAccepted
+                        isAccepted
                           ? 'border-primary/30'
                           : ''
                       }`}
@@ -767,18 +755,14 @@ export default function GuideDashboard() {
                             <div className="flex items-center gap-2.5 flex-wrap">
                               <Badge
                                 className={
-                                  isPending
-                                    ? 'bg-amber-500/20 text-amber-600 dark:text-amber-400 border-amber-500/30'
-                                    : isAccepted
+                                  isAccepted
                                     ? 'bg-primary/20 text-primary border-primary/30'
                                     : isCompleted
                                     ? 'bg-sky-500/20 text-sky-600 dark:text-sky-400 border-sky-500/30'
                                     : 'bg-muted text-muted-foreground'
                                 }
                               >
-                                {isPending
-                                  ? 'Needs response'
-                                  : isAccepted
+                                {isAccepted
                                   ? 'Confirmed'
                                   : isCompleted
                                   ? 'Completed'
@@ -864,10 +848,6 @@ export default function GuideDashboard() {
 
                           {/* Action Buttons */}
                           <div className="guide-assignment-actions">
-                            {isPending && (
-                              <span className="text-xs text-muted-foreground">Booking request received. Admin confirmation and guide changes are handled by the local admin.</span>
-                            )}
-
                             {isAccepted && (
                               <>
                                 <Button

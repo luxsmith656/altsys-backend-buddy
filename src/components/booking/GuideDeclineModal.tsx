@@ -129,7 +129,7 @@ export default function GuideDeclineModal({
   const handleSubmit = async () => {
     const reason = getEffectiveReason();
     if (!reason) {
-      toast.error('Please specify a reason for declining.');
+      toast.error('Please specify a reason for requesting reassignment.');
       return;
     }
 
@@ -167,10 +167,10 @@ export default function GuideDeclineModal({
         onSuccess();
         onClose();
       } else {
-        toast.error(res.error || 'Failed to decline booking');
+        toast.error(res.error || 'Failed to request reassignment');
       }
     } catch (err: any) {
-      toast.error(err?.message || 'Error declining booking');
+      toast.error(err?.message || 'Error requesting reassignment');
     } finally {
       setSubmitting(false);
     }
@@ -182,10 +182,10 @@ export default function GuideDeclineModal({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-destructive">
             <UserX className="h-5 w-5" />
-            Decline & Reassign Booking
+            Request Reassignment
           </DialogTitle>
           <DialogDescription>
-            If you are unable to guide this hike, state the reason and reassign to an available peer or return it to dispatch.
+            If you cannot guide this confirmed hike, state the reason and request a replacement or return it to admin dispatch.
           </DialogDescription>
         </DialogHeader>
 
@@ -205,7 +205,7 @@ export default function GuideDeclineModal({
           {/* Reason Selection */}
           <div className="space-y-2">
             <Label className="text-xs font-semibold text-foreground uppercase tracking-wide">
-              Reason for Declining
+              Reason for Reassignment
             </Label>
             <Select value={reasonCategory} onValueChange={setReasonCategory}>
               <SelectTrigger className="text-xs h-9">

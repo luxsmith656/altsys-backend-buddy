@@ -1210,8 +1210,8 @@ export default function HikerDashboard() {
                                   ✓ Guide Confirmed
                                 </span>
                               ) : meta.guideStatus === 'reassigned_pending' ? (
-                                <span className="text-[10px] text-amber-600 dark:text-amber-400 font-semibold bg-amber-500/10 px-2 py-0.5 rounded-md">
-                                  🔄 Guide Updated (Awaiting Confirmation)
+                                <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-semibold bg-emerald-500/10 px-2 py-0.5 rounded-md">
+                                  🔄 Guide Updated
                                 </span>
                               ) : (
                                 <span className="text-[10px] text-sky-600 dark:text-sky-400 font-medium bg-sky-500/10 px-2 py-0.5 rounded-md">

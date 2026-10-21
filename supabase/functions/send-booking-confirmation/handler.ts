@@ -49,7 +49,7 @@ export function createBookingEmailStore(db: SupabaseClient): BookingEmailStore {
       const booking = bookingSchema.parse(data);
       const meta = confirmationMeta(booking.notes);
       const { data: assignment, error: assignmentError } = await db.from('booking_assignments').select('id').eq('booking_id', id).eq('guide_id', meta.assignedGuideId).eq('status', 'accepted').limit(1).maybeSingle();
-      if (assignmentError || !assignment) throw assignmentError || new Error('Guide has not accepted this booking');
+      if (assignmentError || !assignment) throw assignmentError || new Error('A confirmed guide assignment is missing');
       const { data: guide, error: guideError } = await db.from('guides').select('full_name,phone').eq('id', meta.assignedGuideId).single();
       if (guideError) throw guideError;
       const { data: location, error: locationError } = await db.from('locations').select('name').eq('id', booking.location_id).single();

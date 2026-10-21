@@ -11,7 +11,7 @@ describe('Kali context presentation', () => {
     expect(getKaliExpression('Congratulations, you completed your hike!')).toBe('celebrating');
   });
   it('offers guide work and emergency monitoring instead of booking prompts to staff', () => {
-    expect(getKaliQuickReplies('guide')).toContain('How do I accept an assignment?');
+    expect(getKaliQuickReplies('guide')).toContain('How do I request reassignment?');
     expect(getKaliQuickReplies('mdrrmo')).toContain('Explain last-known locations');
     expect(getKaliQuickReplies('hiker')).toContain('Help me plan my hike');
   });
