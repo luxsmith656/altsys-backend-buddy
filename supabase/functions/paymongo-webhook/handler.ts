@@ -1,8 +1,8 @@
-import { z } from 'npm:zod@3.25.76';
+import { z } from 'zod';
 
 const eventSchema = z.object({ data: z.object({ id: z.string().min(1), attributes: z.object({
   livemode: z.boolean(), type: z.string(),
-  data: z.object({ id: z.string().regex(/^cs_[A-Za-z0-9]+$/), type: z.literal('checkout_session') }).passthrough(),
+  data: z.object({ id: z.string().regex(/^cs_[A-Za-z0-9_]+$/), type: z.literal('checkout_session') }).passthrough(),
 }).passthrough() }).passthrough() });
 const uuid = z.string().uuid();
 type Booking = { id: string; notes: string };
@@ -50,7 +50,7 @@ export function paymongoWebhookHandler(deps: WebhookDeps) {
       if (!response.ok) return fail('provider_unavailable', 'Payment verification could not complete; retry delivery.', 502);
       const sessionSchema = z.object({ data: z.object({ id: z.literal(sessionId), attributes: z.object({
         livemode: z.literal(event.attributes.livemode), reference_number: uuid,
-        payments: z.array(z.object({ id: z.string().regex(/^pay_[A-Za-z0-9]+$/), attributes: z.object({
+        payments: z.array(z.object({ id: z.string().regex(/^pay_[A-Za-z0-9_]+$/), attributes: z.object({
           status: z.string(), amount: z.number().int().positive(), currency: z.literal('PHP'), paid_at: z.number().optional(),
         }).passthrough() }).passthrough()),
       }).passthrough() }).passthrough() });
