@@ -61,6 +61,7 @@ import { useLocations } from '@/hooks/useLocations';
 import LocationPreview from '@/components/booking/LocationPreview';
 import AdminWalkInRegistrationDialog from '@/components/admin/AdminWalkInRegistrationDialog';
 import AdminWalkInDesk from '@/components/admin/AdminWalkInDesk';
+import PaymongoQrPayment from '@/components/booking/PaymongoQrPayment';
 import KaliContextPanel from '@/components/kali/KaliContextPanel';
 import { useKaliContext } from '@/hooks/useKaliContext';
 import { HIKE_TIME_OPTIONS, getGuideFeePerGuide, getHikeTypeLabel, isValidHikeTime, normalizeHikeType, type HikeType } from '@/lib/hikeSchedule';
@@ -2336,11 +2337,8 @@ export default function BookingPage() {
 
                       {paymentOption === 'online' && (
                         <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-4">
-                          <div className="rounded-xl border border-primary/20 bg-primary/5 p-4 text-sm space-y-2">
-                            <p className="font-semibold text-primary">Pay online with dynamic QR Ph</p>
-                            <p className="text-xs text-muted-foreground">After you submit the booking, you will be redirected to PayMongo. Scan the QR Ph shown there and pay the exact amount of {formatPeso(totalFee)}.</p>
-                            <p className="text-xs text-muted-foreground">Payment is confirmed automatically by PayMongo. No screenshot, reference number, bank transfer, or manual verification is required.</p>
-                          </div>
+                          <PaymongoQrPayment amount={totalFee} />
+                          <p className="text-xs text-muted-foreground">After submission, PayMongo checkout opens so the payment can be linked to this reservation automatically.</p>
                         </motion.div>
                       )}
 
