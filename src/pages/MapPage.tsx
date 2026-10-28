@@ -165,6 +165,7 @@ export default function MapPage() {
   const { activeLocationId, loading: locationsLoading, isSuperAdmin, locations } = useLocations();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
+  const isGuestMap = searchParams.get('guest') === '1';
   const focusBookingId = searchParams.get('bookingId');
   const focusSosId = searchParams.get('sosId');
 
@@ -207,6 +208,52 @@ export default function MapPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [mapFilterMode, setMapFilterMode] = useState<MapHikerFilterMode>('group');
   const [onlyActiveSessions, setOnlyActiveSessions] = useState(true);
+
+  // Companion QR users are temporary accounts without an auth.users record.
+  // Keep their GPS beacon running while their guest map is open so the
+  // assigned guide can see them through the guide-scoped monitor query.
+  useEffect(() => {
+    if (!isGuestMap) return;
+    let saved: {
+      bookingId?: string;
+      joinCode?: string;
+      companionIndex?: number;
+      deviceId?: string;
+    } | null = null;
+    try {
+      const raw = localStorage.getItem('active_guest_session');
+      saved = raw ? JSON.parse(raw) : null;
+    } catch {
+      saved = null;
+    }
+    if (!saved?.bookingId || !saved.joinCode || !Number.isInteger(saved.companionIndex) || !saved.deviceId || !navigator.geolocation) return;
+
+    let lastSentAt = 0;
+    const publish = (position: GeolocationPosition) => {
+      const now = Date.now();
+      if (now - lastSentAt < 5000) return;
+      lastSentAt = now;
+      void (supabase as any).rpc('upsert_booking_companion_location', {
+        p_join_code: saved!.joinCode,
+        p_companion_index: saved!.companionIndex,
+        p_device_id: saved!.deviceId,
+        p_latitude: position.coords.latitude,
+        p_longitude: position.coords.longitude,
+        p_accuracy: position.coords.accuracy,
+        p_speed_m_s: position.coords.speed,
+        p_heading: position.coords.heading,
+        p_timestamp: new Date(position.timestamp).toISOString(),
+      }).then(({ error }: { error?: { message?: string } | null }) => {
+        if (error) console.warn('Companion location sync is waiting for connection:', error.message);
+      });
+    };
+    const watchId = navigator.geolocation.watchPosition(publish, () => undefined, {
+      enableHighAccuracy: true,
+      maximumAge: 5000,
+      timeout: 15000,
+    });
+    return () => navigator.geolocation.clearWatch(watchId);
+  }, [isGuestMap]);
 
   // Warm a bounded mountain-area tile cache as soon as the map opens. The
   // visible Leaflet tiles are still cached on demand; this prefetch keeps the

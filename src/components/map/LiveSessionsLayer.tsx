@@ -40,6 +40,18 @@ type LocationPoint = {
   timestamp: string;
 };
 
+type CompanionLocation = {
+  id: string;
+  booking_id: string;
+  companion_index: number;
+  companion_name: string;
+  latitude: number;
+  longitude: number;
+  accuracy?: number | null;
+  heading?: number | null;
+  timestamp: string;
+};
+
 function SelfMapSosControl() {
   const map = useMap();
   const container = useMemo(() => document.createElement('div'), []);
@@ -122,6 +134,7 @@ export default function LiveSessionsLayer({
   const [sessions, setSessions] = useState<ActiveSession[]>([]);
   const [paths, setPaths] = useState<Record<string, LocationPoint[]>>({});
   const [profiles, setProfiles] = useState<Record<string, ParticipantProfile>>({});
+  const [companionLocations, setCompanionLocations] = useState<CompanionLocation[]>([]);
   const [localSnapshot, setLocalSnapshot] = useState<TrackerSnapshot | null>(null);
   const [stationReports, setStationReports] = useState<Record<string, { station: number; reported_at: string }>>({});
   const centeredRef = useRef(false);
@@ -170,6 +183,7 @@ export default function LiveSessionsLayer({
     }
     if (mode === 'self' && navigator.onLine === false) {
       // IndexedDB is the source of truth until the connection returns.
+      setCompanionLocations([]);
       return;
     }
     let sessionQuery = supabase
@@ -236,6 +250,20 @@ export default function LiveSessionsLayer({
       }
     }
     setSessions(visibleSessions);
+
+    // QR companions are temporary, unauthenticated participants. Their latest
+    // beacon is kept in a separate table and RLS returns only this guide's
+    // assigned booking rows (or the staff rows for monitor accounts).
+    if (mode === 'monitor') {
+      const { data: companionRows } = await (supabase as any)
+        .from('booking_companion_locations')
+        .select('id,booking_id,companion_index,companion_name,latitude,longitude,accuracy,heading,timestamp')
+        .eq('status', 'active')
+        .order('timestamp', { ascending: false });
+      setCompanionLocations((companionRows as CompanionLocation[] | null) ?? []);
+    } else {
+      setCompanionLocations([]);
+    }
 
     const ids = visibleSessions.map((session) => session.id);
     if (ids.length === 0) {
@@ -305,6 +333,7 @@ export default function LiveSessionsLayer({
       .on('postgres_changes', { event: '*', schema: 'public', table: 'hiker_sessions' }, () => void load())
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'hike_station_reports' }, () => void load())
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'hiker_locations' }, () => void load())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'booking_companion_locations' }, () => void load())
       .subscribe();
     const poll = window.setInterval(() => void load(), 30_000);
     return () => {
@@ -435,6 +464,30 @@ export default function LiveSessionsLayer({
               </Popup>
             </Marker>
           </Fragment>
+        );
+      })}
+      {mode === 'monitor' && companionLocations.map((companion) => {
+        const bookingColor = ['#16a34a', '#2563eb', '#9333ea', '#ea580c', '#0891b2'][
+          Array.from(companion.booking_id).reduce((sum, char) => sum + char.charCodeAt(0), 0) % 5
+        ];
+        const position = { lat: Number(companion.latitude), lng: Number(companion.longitude) };
+        if (!Number.isFinite(position.lat) || !Number.isFinite(position.lng)) return null;
+        return (
+          <Marker
+            key={`companion-${companion.id}`}
+            position={[position.lat, position.lng]}
+            icon={liveMarkerIcon('hiker', Number(companion.heading), false, null, bookingColor)}
+            zIndexOffset={2200}
+          >
+            <Popup>
+              <div className="min-w-[180px] text-sm">
+                <p className="font-bold">{companion.companion_name}</p>
+                <p className="capitalize text-xs">Companion · temporary account</p>
+                <p className="mt-1 text-xs">Last update: {new Date(companion.timestamp).toLocaleString()}</p>
+                {companion.accuracy != null && <p className="text-xs">GPS accuracy: ±{Math.round(Number(companion.accuracy))} m</p>}
+              </div>
+            </Popup>
+          </Marker>
         );
       })}
     </>

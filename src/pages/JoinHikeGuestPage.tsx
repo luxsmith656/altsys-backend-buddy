@@ -120,6 +120,9 @@ export default function JoinHikeGuestPage() {
       const sessionData = {
         guestSessionId,
         bookingId: booking.id,
+        joinCode,
+        companionIndex: selectedCompanion,
+        deviceId: savedDeviceId,
         guestName,
         leadHikerName: meta.fullName || booking.emergency_contact_name || 'Group Lead',
         hikeDate: booking.booking_date,
