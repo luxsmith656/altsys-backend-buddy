@@ -35,6 +35,7 @@ import {
   DialogHeader,
   DialogTitle,
   DialogFooter,
+  DialogTrigger,
 } from '@/components/ui/dialog';
 import {
   Select,
@@ -116,6 +117,7 @@ import { loadGuideRatings, renderStars, type GuideRating } from '@/lib/guideRati
 import { getHikeTypeLabel } from '@/lib/hikeSchedule';
 import { guidePhotoForName } from '@/lib/guideDirectory';
 import { setGuideAccountActiveAtLocation } from '@/lib/guideManagement';
+import { containsProfanity, PROFANITY_NOTICE } from '@/lib/contentModeration';
 import { getBusyGuideIdsForSlot, isGuideEligibleForAssignment } from '@/lib/guideAvailability';
 import {
   BarChart,
@@ -401,6 +403,11 @@ export default function AdminDashboard() {
   const [allTabBookings, setAllTabBookings] = useState<any[]>([]);
   const [allTabLoading, setAllTabLoading] = useState(false);
   const bookingMessageAlerts = useBookingMessageAlerts(allTabBookings.map((booking) => booking.id), chatBooking?.id);
+  const [messageComposerOpen, setMessageComposerOpen] = useState(false);
+  const [messageRecipientIds, setMessageRecipientIds] = useState<string[]>([]);
+  const [messageRecipientSearch, setMessageRecipientSearch] = useState('');
+  const [messageComposerText, setMessageComposerText] = useState('');
+  const [messageComposerSending, setMessageComposerSending] = useState(false);
 
   useEffect(() => {
     const bookingId = searchParams.get('bookingId');
@@ -1554,6 +1561,77 @@ export default function AdminDashboard() {
     }
   };
 
+  const getBookingRecipientName = (booking: any) => {
+    const meta = parseMeta(booking?.notes);
+    return String(meta.fullName || booking?.emergency_contact_name || 'Hiker').trim() || 'Hiker';
+  };
+
+  const messageRecipientBookings = useMemo(() => {
+    const query = messageRecipientSearch.trim().toLowerCase();
+    return allTabBookings
+      .filter((booking) => !['cancelled', 'completed', 'deleted'].includes(String(booking.status)))
+      .filter((booking) => {
+        if (!query) return true;
+        const meta = parseMeta(booking.notes);
+        const name = getBookingRecipientName(booking);
+        return [
+          name,
+          booking.id,
+          booking.booking_date,
+          meta.phoneNumber,
+          booking.emergency_contact_phone,
+        ].filter(Boolean).some((value) => String(value).toLowerCase().includes(query));
+      })
+      .sort((a, b) => String(a.booking_date || '').localeCompare(String(b.booking_date || '')));
+  }, [allTabBookings, messageRecipientSearch]);
+
+  const sendMessageToSelectedBookings = async () => {
+    const content = messageComposerText.trim();
+    const activeBookingIds = new Set(
+      allTabBookings
+        .filter((booking) => !['cancelled', 'completed', 'deleted'].includes(String(booking.status)))
+        .map((booking) => booking.id),
+    );
+    const selectedIds = Array.from(new Set(messageRecipientIds)).filter((id) => activeBookingIds.has(id));
+    if (selectedIds.length === 0) {
+      toast.error('Select at least one booking recipient.');
+      return;
+    }
+    if (!content) {
+      toast.error('Write a message first.');
+      return;
+    }
+    if (containsProfanity(content)) {
+      toast.error(PROFANITY_NOTICE);
+      return;
+    }
+    if (!adminUser?.id) {
+      toast.error('Your admin session is still loading. Please try again.');
+      return;
+    }
+
+    setMessageComposerSending(true);
+    const rows = selectedIds.map((bookingId) => ({
+      booking_id: bookingId,
+      sender_id: adminUser.id,
+      sender_role: 'admin',
+      recipient_role: 'hiker',
+      kind: 'chat',
+      content,
+    }));
+    const { error } = await supabase.from('booking_messages' as any).insert(rows);
+    setMessageComposerSending(false);
+    if (error) {
+      toast.error(`Message could not be sent: ${error.message}`);
+      return;
+    }
+    toast.success(`Message sent to ${selectedIds.length} booking${selectedIds.length === 1 ? '' : 's'}.`);
+    setMessageComposerOpen(false);
+    setMessageRecipientIds([]);
+    setMessageRecipientSearch('');
+    setMessageComposerText('');
+  };
+
   const loadData = async () => {
     // Scope to current location when the admin has one selected (super_admin sees all).
     const scopeBookings = (q: any) => {
@@ -2178,32 +2256,157 @@ export default function AdminDashboard() {
                 <h2 className="text-lg font-semibold">All Bookings</h2>
                 <p className="text-sm text-muted-foreground">View and manage all booking records by status.</p>
               </div>
-              {allTabBookings.some((b) => b.status === 'cancelled') && (
-                <AlertDialog>
-                  <AlertDialogTrigger asChild>
-                    <Button size="sm" variant="outline" className="gap-1.5 text-xs text-destructive border-destructive/30 hover:bg-destructive/10">
-                      <Trash2 className="h-3.5 w-3.5" /> Purge Cancelled ({allTabBookings.filter((b) => b.status === 'cancelled').length})
-                    </Button>
-                  </AlertDialogTrigger>
-                  <AlertDialogContent>
-                    <AlertDialogHeader>
-                      <AlertDialogTitle>Purge all cancelled bookings?</AlertDialogTitle>
-                      <AlertDialogDescription>
-                        This will permanently delete {allTabBookings.filter((b) => b.status === 'cancelled').length} cancelled bookings and their linked chat messages/session data to clean up the database.
-                      </AlertDialogDescription>
-                    </AlertDialogHeader>
-                    <AlertDialogFooter>
-                      <AlertDialogCancel>Cancel</AlertDialogCancel>
-                      <AlertDialogAction
-                        className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                        onClick={() => void handlePurgeCancelledBookings()}
-                      >
-                        Purge All Cancelled
-                      </AlertDialogAction>
-                    </AlertDialogFooter>
-                  </AlertDialogContent>
-                </AlertDialog>
-              )}
+              <div className="flex flex-wrap items-center gap-2">
+                {!isSuperAdmin && (
+                  <Dialog open={messageComposerOpen} onOpenChange={(open) => {
+                    setMessageComposerOpen(open);
+                    if (!open) {
+                      setMessageRecipientIds([]);
+                      setMessageRecipientSearch('');
+                      setMessageComposerText('');
+                    }
+                  }}>
+                    <DialogTrigger asChild>
+                      <Button size="sm" variant="outline" className="gap-1.5 text-xs">
+                        <MessageCircle className="h-3.5 w-3.5" /> Create Message
+                      </Button>
+                    </DialogTrigger>
+                    <DialogContent className="flex max-h-[90vh] flex-col overflow-hidden sm:max-w-2xl">
+                      <DialogHeader>
+                        <DialogTitle>New booking message</DialogTitle>
+                        <DialogDescription>Select one or more bookings and send the same message to their hikers.</DialogDescription>
+                      </DialogHeader>
+
+                      <div className="min-h-0 space-y-4 overflow-y-auto pr-1">
+                        <div className="rounded-lg border border-primary/20 bg-primary/5 p-3">
+                          <p className="text-xs font-semibold uppercase tracking-wide text-primary">Recipients</p>
+                          <p className="mt-1 text-sm font-medium">{messageRecipientIds.length} booking{messageRecipientIds.length === 1 ? '' : 's'} selected</p>
+                          {messageRecipientIds.length > 0 && (
+                            <div className="mt-2 flex flex-wrap gap-1.5">
+                              {messageRecipientIds.map((bookingId) => {
+                                const booking = allTabBookings.find((item) => item.id === bookingId);
+                                if (!booking) return null;
+                                return (
+                                  <Badge key={bookingId} variant="secondary" className="gap-1.5 py-1 text-xs font-semibold">
+                                    {getBookingRecipientName(booking)}
+                                    <button
+                                      type="button"
+                                      className="rounded-full text-muted-foreground hover:text-foreground"
+                                      onClick={() => setMessageRecipientIds((current) => current.filter((id) => id !== bookingId))}
+                                      aria-label={`Remove ${getBookingRecipientName(booking)}`}
+                                    >
+                                      <XCircle className="h-3 w-3" />
+                                    </button>
+                                  </Badge>
+                                );
+                              })}
+                            </div>
+                          )}
+                        </div>
+
+                        <div className="space-y-2">
+                          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                            <Label htmlFor="message-recipient-search">Choose bookings</Label>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              className="h-7 px-2 text-xs"
+                              onClick={() => {
+                                const visibleIds = messageRecipientBookings.map((booking) => booking.id);
+                                const allVisibleSelected = visibleIds.length > 0 && visibleIds.every((id) => messageRecipientIds.includes(id));
+                                setMessageRecipientIds((current) => allVisibleSelected
+                                  ? current.filter((id) => !visibleIds.includes(id))
+                                  : [...new Set([...current, ...visibleIds])]);
+                              }}
+                              disabled={messageRecipientBookings.length === 0}
+                            >
+                              {messageRecipientBookings.length > 0 && messageRecipientBookings.every((booking) => messageRecipientIds.includes(booking.id)) ? 'Clear visible' : 'Select visible'}
+                            </Button>
+                          </div>
+                          <Input
+                            id="message-recipient-search"
+                            value={messageRecipientSearch}
+                            onChange={(event) => setMessageRecipientSearch(event.target.value)}
+                            placeholder="Search hiker name, booking ID, phone, or date..."
+                          />
+                          <div className="max-h-64 space-y-1 overflow-y-auto rounded-lg border border-border/30 p-1">
+                            {messageRecipientBookings.length === 0 ? (
+                              <p className="px-3 py-6 text-center text-sm text-muted-foreground">No active bookings match your search.</p>
+                            ) : messageRecipientBookings.map((booking) => {
+                              const selected = messageRecipientIds.includes(booking.id);
+                              return (
+                                <label
+                                  key={booking.id}
+                                  className={cn('flex cursor-pointer items-center gap-3 rounded-md px-3 py-2.5 transition-colors', selected ? 'bg-primary/10 ring-1 ring-primary/30' : 'hover:bg-secondary/50')}
+                                >
+                                  <Checkbox
+                                    checked={selected}
+                                    onCheckedChange={(checked) => setMessageRecipientIds((current) => checked
+                                      ? [...new Set([...current, booking.id])]
+                                      : current.filter((id) => id !== booking.id))}
+                                  />
+                                  <span className="min-w-0 flex-1">
+                                    <span className="block truncate text-sm font-bold text-foreground">{getBookingRecipientName(booking)}</span>
+                                    <span className="block text-xs text-muted-foreground">{booking.booking_date} · {booking.id.slice(0, 8)}… · {booking.group_size || 1} hiker{Number(booking.group_size) === 1 ? '' : 's'}</span>
+                                  </span>
+                                </label>
+                              );
+                            })}
+                          </div>
+                        </div>
+
+                        <div className="space-y-2">
+                          <Label htmlFor="broadcast-booking-message">Message</Label>
+                          <Textarea
+                            id="broadcast-booking-message"
+                            value={messageComposerText}
+                            onChange={(event) => setMessageComposerText(event.target.value)}
+                            placeholder="Write the message for the selected hikers..."
+                            rows={5}
+                            maxLength={1000}
+                          />
+                          <p className="text-right text-xs text-muted-foreground">{messageComposerText.length}/1000</p>
+                        </div>
+                      </div>
+
+                      <DialogFooter className="mt-2 gap-2 sm:justify-between">
+                        <Button type="button" variant="ghost" onClick={() => setMessageComposerOpen(false)}>Cancel</Button>
+                        <Button type="button" onClick={() => void sendMessageToSelectedBookings()} disabled={messageComposerSending || messageRecipientIds.length === 0 || !messageComposerText.trim()} className="gap-2">
+                          {messageComposerSending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+                          Send to {messageRecipientIds.length || 'selected'}
+                        </Button>
+                      </DialogFooter>
+                    </DialogContent>
+                  </Dialog>
+                )}
+                {allTabBookings.some((b) => b.status === 'cancelled') && (
+                  <AlertDialog>
+                    <AlertDialogTrigger asChild>
+                      <Button size="sm" variant="outline" className="gap-1.5 text-xs text-destructive border-destructive/30 hover:bg-destructive/10">
+                        <Trash2 className="h-3.5 w-3.5" /> Purge Cancelled ({allTabBookings.filter((b) => b.status === 'cancelled').length})
+                      </Button>
+                    </AlertDialogTrigger>
+                    <AlertDialogContent>
+                      <AlertDialogHeader>
+                        <AlertDialogTitle>Purge all cancelled bookings?</AlertDialogTitle>
+                        <AlertDialogDescription>
+                          This will permanently delete {allTabBookings.filter((b) => b.status === 'cancelled').length} cancelled bookings and their linked chat messages/session data to clean up the database.
+                        </AlertDialogDescription>
+                      </AlertDialogHeader>
+                      <AlertDialogFooter>
+                        <AlertDialogCancel>Cancel</AlertDialogCancel>
+                        <AlertDialogAction
+                          className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                          onClick={() => void handlePurgeCancelledBookings()}
+                        >
+                          Purge All Cancelled
+                        </AlertDialogAction>
+                      </AlertDialogFooter>
+                    </AlertDialogContent>
+                  </AlertDialog>
+                )}
+              </div>
             </div>
 
             {/* Search */}
