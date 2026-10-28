@@ -233,6 +233,9 @@ export default function AdminDashboard() {
   const [annTarget, setAnnTarget] = useState<AnnouncementTarget>('all');
   const [annStartDate, setAnnStartDate] = useState('');
   const [annEndDate, setAnnEndDate] = useState('');
+  const [annClosureDates, setAnnClosureDates] = useState<string[]>([]);
+  const [annClosureDateDraft, setAnnClosureDateDraft] = useState('');
+  const [annCancelBookings, setAnnCancelBookings] = useState(false);
   const [annSending, setAnnSending] = useState(false);
 
   /* ── Guide state ── */
@@ -1654,8 +1657,19 @@ export default function AdminDashboard() {
   };
 
   /* ── Announcements ── */
+  const addLocalClosureDate = () => {
+    if (!annClosureDateDraft || annClosureDates.includes(annClosureDateDraft)) return;
+    setAnnClosureDates((current) => [...current, annClosureDateDraft].sort());
+    setAnnClosureDateDraft('');
+  };
+
   const postAnnouncement = async () => {
     if (!annTitle.trim() || !annBody.trim()) { toast.error('Please fill in title and message.'); return; }
+    const selectedClosureDates = Array.from(new Set([...annClosureDates, annClosureDateDraft].filter(Boolean))).sort();
+    if (!isSuperAdmin && annType === 'closure' && annCancelBookings && selectedClosureDates.length === 0) {
+      toast.error('Add at least one cancellation date.');
+      return;
+    }
     setAnnSending(true);
     const startsAt = annStartDate ? new Date(`${annStartDate}T00:00:00`).toISOString() : undefined;
     const expiresAt = annEndDate ? new Date(`${annEndDate}T23:59:59`).toISOString() : undefined;
@@ -1676,6 +1690,20 @@ export default function AdminDashboard() {
     try {
       const saved = await addAnnouncement(newAnn);
       setAnnouncements(visibleAnnouncements(saved, role));
+      let cancelledCount = 0;
+      if (!isSuperAdmin && annType === 'closure' && annCancelBookings && selectedClosureDates.length > 0) {
+        const { data, error: cancellationError } = await (supabase as any).rpc('cancel_bookings_for_announcement', {
+          p_booking_dates: selectedClosureDates,
+          p_reason: `${newAnn.title}: ${newAnn.body}`,
+          p_announcement_id: newAnn.id,
+          p_location_ids: activeLocationId ? [activeLocationId] : null,
+        });
+        if (cancellationError) throw new Error(`Announcement saved, but bookings were not cancelled: ${cancellationError.message}`);
+        cancelledCount = Number(data || 0);
+      }
+      if (cancelledCount > 0) {
+        toast.success(`${cancelledCount} booking${cancelledCount === 1 ? '' : 's'} cancelled for ${selectedClosureDates.join(', ')}.`);
+      }
     } catch (error) {
       toast.error(`Announcement could not be saved: ${error instanceof Error ? error.message : 'Database request failed.'}`);
       setAnnSending(false);
@@ -1688,6 +1716,9 @@ export default function AdminDashboard() {
     setAnnImportant(false);
     setAnnStartDate('');
     setAnnEndDate('');
+    setAnnClosureDates([]);
+    setAnnClosureDateDraft('');
+    setAnnCancelBookings(false);
     setAnnSending(false);
     toast.success(isSuperAdmin ? 'Announcement published.' : 'Announcement submitted to Central Admin for approval.');
   };
@@ -3661,9 +3692,39 @@ export default function AdminDashboard() {
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="annBody">Message</Label>
-                    <Textarea id="annBody" value={annBody} onChange={(e) => setAnnBody(e.target.value)} placeholder="Describe the announcement in detail..." rows={4} maxLength={500} />
+                    <Textarea id="annBody" value={annBody} onChange={(e) => setAnnBody(e.target.value)} placeholder={annType === 'closure' ? 'State the closure reason and what hikers should do next...' : 'Describe the announcement in detail...'} rows={4} maxLength={500} />
                     <p className="text-xs text-muted-foreground">{annBody.length}/500</p>
                   </div>
+                  {!isSuperAdmin && annType === 'closure' && (
+                    <div className="space-y-3 rounded-lg border border-destructive/30 bg-destructive/5 p-3">
+                      <div className="space-y-1">
+                        <Label className="text-sm font-semibold">Cancel bookings with this closure</Label>
+                        <p className="text-xs text-muted-foreground">Your assigned trailhead is used automatically. Paid hikers will see reschedule or refund options.</p>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Checkbox id="annCancelBookings" checked={annCancelBookings} onCheckedChange={(v) => setAnnCancelBookings(!!v)} />
+                        <Label htmlFor="annCancelBookings" className="text-sm cursor-pointer">Cancel open bookings on selected dates</Label>
+                      </div>
+                      {annCancelBookings && (
+                        <>
+                          <div className="flex gap-2">
+                            <Input type="date" value={annClosureDateDraft} onChange={(e) => setAnnClosureDateDraft(e.target.value)} className="h-9" />
+                            <Button type="button" variant="outline" onClick={addLocalClosureDate} className="h-9 px-3 text-xs"><CalendarCheck className="h-3.5 w-3.5 mr-1" /> Add date</Button>
+                          </div>
+                          {annClosureDates.length > 0 && (
+                            <div className="flex flex-wrap gap-1.5">
+                              {annClosureDates.map((date) => (
+                                <Badge key={date} variant="secondary" className="gap-1 text-xs">
+                                  {date}
+                                  <button type="button" onClick={() => setAnnClosureDates((current) => current.filter((item) => item !== date))} aria-label={`Remove ${date}`}><XCircle className="h-3 w-3" /></button>
+                                </Badge>
+                              ))}
+                            </div>
+                          )}
+                        </>
+                      )}
+                    </div>
+                  )}
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div className="space-y-2">
                       <Label htmlFor="annStartDate">Show From (optional)</Label>

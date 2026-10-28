@@ -15,6 +15,8 @@ import {
   Trash2,
   Sparkles,
   Clock,
+  Plus,
+  X,
 } from 'lucide-react';
 import {
   addAnnouncement,
@@ -27,12 +29,14 @@ import {
 } from '@/lib/announcements';
 import { useAuth } from '@/hooks/useAuth';
 import { usePricing } from '@/hooks/usePricing';
+import { useLocations } from '@/hooks/useLocations';
 import { formatPeso } from '@/lib/payments';
 import { supabase } from '@/integrations/supabase/client';
 
 export default function CentralAnnouncements() {
   const { user } = useAuth();
   const { pricing } = usePricing();
+  const { locations } = useLocations();
   const [announcements, setAnnouncements] = useState<AdminAnnouncement[]>([]);
   const [filterTarget, setFilterTarget] = useState<string>('all_filter');
 
@@ -43,9 +47,22 @@ export default function CentralAnnouncements() {
   const [target, setTarget] = useState<AnnouncementTarget>('all');
   const [type, setType] = useState<AnnouncementType>('info');
   const [isImportant, setIsImportant] = useState(false);
-  const [closureDate, setClosureDate] = useState('');
+  const [closureDates, setClosureDates] = useState<string[]>([]);
+  const [closureDateDraft, setClosureDateDraft] = useState('');
+  const [closureScope, setClosureScope] = useState<'all' | 'selected'>('all');
+  const [closureLocationIds, setClosureLocationIds] = useState<string[]>([]);
   const [cancelBookingsForClosure, setCancelBookingsForClosure] = useState(false);
   const [broadcasting, setBroadcasting] = useState(false);
+
+  const trailheadLocations = locations.filter((location) =>
+    ['lamot-1', 'lamot-2', 'sto-tomas'].includes(location.slug),
+  );
+
+  const addClosureDate = () => {
+    if (!closureDateDraft || closureDates.includes(closureDateDraft)) return;
+    setClosureDates((current) => [...current, closureDateDraft].sort());
+    setClosureDateDraft('');
+  };
 
   const refreshAnnouncements = useCallback(async () => {
     setAnnouncements(await fetchAnnouncementsFromDb());
@@ -76,8 +93,13 @@ export default function CentralAnnouncements() {
       toast.error('Please enter the announcement message content.');
       return;
     }
-    if (type === 'closure' && cancelBookingsForClosure && !closureDate) {
-      toast.error('Choose the weather closure date before cancelling bookings.');
+    const selectedClosureDates = Array.from(new Set([...closureDates, closureDateDraft].filter(Boolean))).sort();
+    if (type === 'closure' && cancelBookingsForClosure && selectedClosureDates.length === 0) {
+      toast.error('Add at least one closure date before cancelling bookings.');
+      return;
+    }
+    if (type === 'closure' && cancelBookingsForClosure && closureScope === 'selected' && closureLocationIds.length === 0) {
+      toast.error('Select at least one local trailhead or choose all trailheads.');
       return;
     }
 
@@ -95,22 +117,26 @@ export default function CentralAnnouncements() {
       };
       await addAnnouncement(newAnn);
       let cancelledCount = 0;
-      if (type === 'closure' && cancelBookingsForClosure && closureDate) {
-        const { data, error: cancellationError } = await (supabase as any).rpc('central_cancel_bookings_for_weather', {
-          p_booking_date: closureDate,
+      if (type === 'closure' && cancelBookingsForClosure && selectedClosureDates.length > 0) {
+        const { data, error: cancellationError } = await (supabase as any).rpc('cancel_bookings_for_announcement', {
+          p_booking_dates: selectedClosureDates,
           p_reason: `${newAnn.title}: ${newAnn.body}`,
           p_announcement_id: newAnn.id,
+          p_location_ids: closureScope === 'all' ? null : closureLocationIds,
         });
         if (cancellationError) throw new Error(`Announcement published, but bookings were not cancelled: ${cancellationError.message}`);
         cancelledCount = Number(data || 0);
       }
       toast.success(cancelledCount > 0
-        ? `Announcement broadcasted. ${cancelledCount} booking${cancelledCount === 1 ? '' : 's'} cancelled for ${closureDate}.`
+        ? `Announcement broadcasted. ${cancelledCount} booking${cancelledCount === 1 ? '' : 's'} cancelled for ${selectedClosureDates.join(', ')}.`
         : 'Announcement broadcasted successfully!');
       setTitle('');
       setBody('');
       setIsImportant(false);
-      setClosureDate('');
+      setClosureDates([]);
+      setClosureDateDraft('');
+      setClosureScope('all');
+      setClosureLocationIds([]);
       setCancelBookingsForClosure(false);
       await refreshAnnouncements();
     } catch (err: any) {
@@ -247,14 +273,54 @@ export default function CentralAnnouncements() {
 
                 {type === 'closure' && (
                   <div className="space-y-2 rounded-lg border border-destructive/30 bg-destructive/5 p-3">
-                    <Label htmlFor="closure-date" className="text-xs font-semibold">Weather closure date</Label>
-                    <Input
-                      id="closure-date"
-                      type="date"
-                      value={closureDate}
-                      onChange={(e) => setClosureDate(e.target.value)}
-                      className="h-8 bg-background/80 text-xs"
-                    />
+                    <Label className="text-xs font-semibold">Booking cancellation dates</Label>
+                    <div className="flex gap-2">
+                      <Input
+                        id="closure-date"
+                        type="date"
+                        value={closureDateDraft}
+                        onChange={(e) => setClosureDateDraft(e.target.value)}
+                        className="h-8 bg-background/80 text-xs"
+                      />
+                      <Button type="button" variant="outline" size="sm" onClick={addClosureDate} className="h-8 px-2 text-xs">
+                        <Plus className="h-3 w-3 mr-1" /> Add date
+                      </Button>
+                    </div>
+                    {closureDates.length > 0 && (
+                      <div className="flex flex-wrap gap-1.5">
+                        {closureDates.map((date) => (
+                          <Badge key={date} variant="secondary" className="gap-1 text-[11px]">
+                            {date}
+                            <button type="button" onClick={() => setClosureDates((current) => current.filter((item) => item !== date))} aria-label={`Remove ${date}`}>
+                              <X className="h-3 w-3" />
+                            </button>
+                          </Badge>
+                        ))}
+                      </div>
+                    )}
+                    <div className="space-y-1.5">
+                      <Label className="text-xs font-medium">Affected local trailheads</Label>
+                      <Select value={closureScope} onValueChange={(value: 'all' | 'selected') => setClosureScope(value)}>
+                        <SelectTrigger className="h-8 bg-background/80 text-xs"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="all">All local trailheads</SelectItem>
+                          <SelectItem value="selected">Selected trailheads only</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    {closureScope === 'selected' && (
+                      <div className="grid grid-cols-1 gap-1.5 pt-1">
+                        {trailheadLocations.map((location) => (
+                          <label key={location.id} className="flex items-center gap-2 text-xs">
+                            <Checkbox
+                              checked={closureLocationIds.includes(location.id)}
+                              onCheckedChange={(checked) => setClosureLocationIds((current) => checked ? [...new Set([...current, location.id])] : current.filter((id) => id !== location.id))}
+                            />
+                            {location.name}
+                          </label>
+                        ))}
+                      </div>
+                    )}
                     <div className="flex items-start gap-2 pt-1">
                       <Checkbox
                         id="cancel-closure-bookings"
@@ -262,7 +328,7 @@ export default function CentralAnnouncements() {
                         onCheckedChange={(checked) => setCancelBookingsForClosure(Boolean(checked))}
                       />
                       <Label htmlFor="cancel-closure-bookings" className="cursor-pointer text-xs leading-4">
-                        Cancel open bookings on this date and let paid hikers request a reschedule or refund.
+                        Cancel open bookings on these dates and let paid hikers request a reschedule or refund.
                       </Label>
                     </div>
                   </div>
