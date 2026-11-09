@@ -10,7 +10,7 @@ function client(role: string, location = 'lamot2', accepted = true) {
       const url = new URL(String(input));
       const table = url.pathname.split('/').pop()!;
       const rows: Record<string, Record<string, unknown>[]> = {
-        bookings: [{ id: 'booking', user_id: 'owner', location_id: 'lamot2', status: 'confirmed', booking_date: '2026-09-10', group_size: 4, notes: JSON.stringify({ fullName: 'Lead', emailAddress: 'hiker@example.com', hikeType: 'morning', hikeTime: '06:00 AM', guideStatus: 'accepted', assignedGuideId: 'assigned' }) }],
+        bookings: [{ id: 'booking', user_id: 'owner', location_id: 'lamot2', status: 'confirmed', booking_date: '2026-09-10', group_size: 4, qr_code_data: 'MK-BOOKING-QR', notes: JSON.stringify({ fullName: 'Lead', emailAddress: 'hiker@example.com', hikeType: 'morning', hikeTime: '06:00 AM', guideStatus: 'accepted', assignedGuideId: 'assigned' }) }],
         user_roles: [{ user_id: 'caller', role }],
         user_locations: [{ user_id: 'caller', location_id: location }],
         guides: [{ id: 'assigned', user_id: 'caller', full_name: 'Guide', phone: '+639171234567' }],
