@@ -294,7 +294,7 @@ export default function AboutPage() {
                 Are there any river crossings on Mt. Kalisungan?
               </h4>
               <p className="text-xs sm:text-sm text-muted-foreground leading-relaxed pl-5">
-                Route conditions vary by published trail and weather. Check the selected route briefing and follow your accredited guide around wet or uneven sections.
+                <strong>Strictly zero.</strong> Mt. Kalisungan has no river crossings along its trails—the path traverses dry agricultural footpaths, shaded fruit orchards, forest trails, and open cogon grassland ridges to the summit. Route conditions vary by published trail and weather; check the selected route briefing and follow your accredited guide around wet or uneven sections.
               </p>
             </Card>
 
@@ -331,13 +331,10 @@ export default function AboutPage() {
             <Card className="glass-card p-5 border-border/60 space-y-2">
               <h4 className="text-sm sm:text-base font-bold text-foreground flex items-start gap-2">
                 <span className="text-primary font-black">Q:</span>
-                What are the available booking time slots?
+                What is advisable to wear during a hike at Mt. Kalisungan?
               </h4>
               <p className="text-xs sm:text-sm text-muted-foreground leading-relaxed pl-5">
-                To prevent overcrowding, slots follow fixed 2-hour intervals:
-                <br />• <strong>Morning:</strong> 2:00 AM, 4:00 AM, 6:00 AM, 8:00 AM, 10:00 AM
-                <br />• <strong>Afternoon:</strong> 2:00 PM, 4:00 PM
-                <br />• <strong>Overnight:</strong> 2:00 PM, 3:00 PM, 4:00 PM
+                The recommended clothing for hiking Mt. Kalisungan depends on the weather conditions. During sunny or hot weather, hikers should wear lightweight, breathable clothing, a cap or hat, and comfortable hiking shoes with good grip. During rainy or cold weather, hikers should wear quick-drying clothes, a waterproof jacket or raincoat, and non-slip hiking shoes to prevent slipping on muddy trails. Hikers are advise to check the weather forecast before their hike and dress accordingly.
               </p>
             </Card>
 

@@ -5,7 +5,14 @@ import { Send, Sparkles, WifiOff } from 'lucide-react';
 import { motion } from 'framer-motion';
 import ReactMarkdown from 'react-markdown';
 import type { ChatMessage } from '@/types';
-import { getOfflineAnswer, learnFromResponse, getCacheSize } from '@/lib/trail-offline-kb';
+import {
+  getOfflineAnswer,
+  learnFromResponse,
+  getCacheSize,
+  getLiveSystemSnapshot,
+  matchSystemFaqOrLiveQuery,
+  syncLiveSystemSnapshot,
+} from '@/lib/trail-offline-kb';
 import { getOfflineRoleHelp } from '@/lib/offline-role-help';
 import { getProphetAIForecastContext } from '@/lib/ml/prophetDataService';
 import KaliAvatar from '@/components/kali/KaliAvatar';
@@ -80,6 +87,7 @@ export default function ChatPage() {
     };
 
     try {
+      void syncLiveSystemSnapshot();
       const forecastContext = /crowd|forecast|busy|quiet|capacity|demand|projection/i.test(text)
         ? await getProphetAIForecastContext().catch(() => null) : null;
       const resp = await fetch(CHAT_URL, {
@@ -97,6 +105,7 @@ export default function ChatPage() {
             current_page: 'Trail Chat',
             pricing_policy: getDynamicFeePolicyText(),
             pricing: getPricingConfig(),
+            live_system_snapshot: getLiveSystemSnapshot(),
             forecasting: forecastContext ? {
               summary: forecastContext.summaryText,
               horizonDays: forecastContext.horizonDays,
@@ -144,13 +153,29 @@ export default function ChatPage() {
           } catch { /* partial */ }
         }
       }
+      // Replace uncertain LLM replies on known System FAQs with authoritative system data
+      const faqFallback = matchSystemFaqOrLiveQuery(text.trim());
+      if (
+        faqFallback &&
+        (!assistantSoFar.trim() ||
+          /(cannot confirm|can't confirm|not available in|isn't available|no published route available|unavailable right now)/i.test(assistantSoFar))
+      ) {
+        assistantSoFar = faqFallback;
+        setMessages((prev) => {
+          const last = prev[prev.length - 1];
+          if (last?.role === 'assistant') {
+            return prev.map((m, i) => (i === prev.length - 1 ? { ...m, content: assistantSoFar } : m));
+          }
+          return [...prev, { role: 'assistant', content: assistantSoFar }];
+        });
+      }
       // Learn from successful response for future offline use
       if (assistantSoFar.trim()) {
         learnFromResponse(text.trim(), assistantSoFar);
       }
     } catch (e: any) {
-      // If network failed mid-request, try offline fallback
-      if (!navigator.onLine) {
+      // Fallback to local knowledge base + latest synced system snapshot so Kali never says it doesn't know
+      if (!assistantSoFar.trim()) {
         const roleHelp = getOfflineRoleHelp(role);
         const answer = `${getOfflineAnswer(text.trim())}\n\n---\n\n### ${roleHelp.title}\n${roleHelp.body}\n\n${roleHelp.links.map((link) => `- [${link.label}](${link.href})`).join('\n')}`;
         setMessages((prev) => {
@@ -161,11 +186,7 @@ export default function ChatPage() {
           return [...prev, { role: 'assistant', content: answer }];
         });
       } else {
-        const friendly =
-          assistantSoFar.trim().length > 0
-            ? "\n\n*Sorry — I got cut off. We're fixing it, please try again in a little while.*"
-            : "Sorry, I'm having trouble answering right now. We're working on a fix — please try again in a few minutes. For urgent help, contact the barangay tourism office at the trailhead.";
-        upsert(friendly);
+        upsert("\n\n*Sorry — I got cut off. We're fixing it, please try again in a little while.*");
       }
     }
     setLoading(false);

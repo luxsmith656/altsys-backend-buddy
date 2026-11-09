@@ -49,10 +49,34 @@ export const KB_SEED: KbSeed[] = [
       "Published entry, environmental, guide, peak, horse-rescue and other fees come from Central's live pricing configuration. Quote only the current database values; if they are unavailable, direct the user to the booking page or staff.",
   },
   {
-    title: "Guides",
+    title: "Guides and guide assignment",
     category: "guides",
     content:
-      "A trail guide is mandatory for every group. Guides are assigned by staff after a booking is confirmed and the hiker is notified in the booking chat. Guides may be reassigned by an admin if they go off duty; everyone involved is notified with the reason. Guide availability changes with approved leave and current assignments.",
+      "A local Mountain Guide is mandatory for every group by municipal tourism ordinance (1 guide per up to 5 hikers). Manual guide picking from a list is disabled to ensure fair livelihood rotation among local guides. During booking, hikers may enter a guide's referral code or referral link; if none is entered, or if the group needs 2 or more guides, the system automatically assigns certified mountain guides on rotation.",
+  },
+  {
+    title: "What is advisable to wear during a hike at Mt. Kalisungan",
+    category: "gear",
+    content:
+      "The recommended clothing for hiking Mt. Kalisungan depends on the weather conditions. During sunny or hot weather, hikers should wear lightweight, breathable clothing, a cap or hat, and comfortable hiking shoes with good grip. During rainy or cold weather, hikers should wear quick-drying clothes, a waterproof jacket or raincoat, and non-slip hiking shoes to prevent slipping on muddy trails. Hikers are advise to check the weather forecast before their hike and dress accordingly.",
+  },
+  {
+    title: "River crossings on Mt. Kalisungan",
+    category: "trail",
+    content:
+      "There are strictly zero (0) river crossings on Mt. Kalisungan. The trail traverses dry agricultural footpaths, coconut plantations, fruit orchards, forest trails, and open cogon grassland ridges to the 760 MASL summit. Follow your accredited guide around muddy or uneven sections during wet weather.",
+  },
+  {
+    title: "Overnight camping at the summit",
+    category: "booking",
+    content:
+      "Overnight camping slots are available on the Mount Kalisungan summit grassland. Campers must bring their own wind-resistant tents, warm clothing, and drinking water (no peak lodging or tent rentals onsite). Open bonfires and campfires are strictly prohibited to protect the cogon grass and prevent bushfires.",
+  },
+  {
+    title: "Trailhead entry points and how to commute",
+    category: "trail",
+    content:
+      "The registered trailhead jump-offs in Calauan, Laguna are Lamot 1, Lamot 2, and Sto. Tomas. To get to the trailhead via commute: take any provincial bus bound for Sta. Cruz, Laguna from Buendia, Pasay, or Cubao. Disembark at Duck Junction / Calauan highway, then hire a local tricycle directly to the Lamot 1, Lamot 2, or Sto. Tomas Barangay Hall / Trailhead Terminal.",
   },
   {
     title: "What to bring",

@@ -17,6 +17,14 @@ import { getPricingConfig, getDynamicFeePolicyText } from '@/lib/pricingService'
 import { getOfflineRoleHelp } from '@/lib/offline-role-help';
 import { containsProfanity, PROFANITY_NOTICE } from '@/lib/contentModeration';
 import { loadKaliMemory, saveKaliMemory } from '@/lib/kaliMemory';
+import {
+  getLiveSystemSnapshot,
+  learnFromResponse,
+  matchSystemFaqOrLiveQuery,
+  OFFICIAL_CLOTHING_FAQ_ANSWER,
+  syncLiveSystemSnapshot,
+  updateLiveSystemSnapshotPartial,
+} from '@/lib/trail-offline-kb';
 
 
 interface WeatherSnapshot {
@@ -403,6 +411,18 @@ function generateResponse(
     };
   }
 
+  /* FAQ-05 (New): What is advisable to wear during a hike at Mt. Kalisungan? */
+  if (lower.match(/(advisable to wear|what to wear|what should i wear|wear during a hike|recommended clothing|clothing|clothes|attire|outfit|dress|jacket|raincoat)/)) {
+    return {
+      content:
+        `**What is advisable to wear during a hike at Mt. Kalisungan?**\n\n` +
+        `${OFFICIAL_CLOTHING_FAQ_ANSWER}\n\n` +
+        `• **Sunny / Hot Weather:** Lightweight, breathable clothing, a cap or hat, and comfortable hiking shoes with good grip.\n` +
+        `• **Rainy / Cold Weather:** Quick-drying clothes, a waterproof jacket or raincoat, and non-slip hiking shoes to prevent slipping on muddy trails.`,
+      quickReplies: ['What should I bring?', 'Are there river crossings?', 'Weather advice'],
+    };
+  }
+
   /* What to bring */
   if (lower.match(/(bring|pack|gear|equipment|what to|prepare|essentials|bag|backpack)/)) {
     const hasKids = groupComposition && groupComposition.kids > 0;
@@ -411,14 +431,48 @@ function generateResponse(
         `**Essential packing list** for Mt. Kalisungan:\n\n` +
         `💧 **Water** — 1.5–2L per person minimum\n` +
         `👟 **Footwear** — Trail shoes or boots (no slippers!)\n` +
+        `👕 **Clothing** — ${OFFICIAL_CLOTHING_FAQ_ANSWER}\n` +
         `🍱 **Snacks/Lunch** — High-energy food\n` +
         `🧴 **Sunscreen + bug spray** — Essential!\n` +
         `🔦 **Flashlight** — Even for day hikes (early start)\n` +
         `🩹 **Basic first aid** — Bandages, meds` +
         (hasKids ? `\n🧒 **For kids** — Extra snacks, light jacket` : '') +
         `\n\nTrail registration fee collected at the trailhead!`,
-      quickReplies: ["What's the registration fee?", 'Any food along the trail?', 'Safety tips'],
+      quickReplies: ["What's the registration fee?", 'What is advisable to wear?', 'Safety tips'],
     };
+  }
+
+  /* FAQ-02 & FAQ-03: Guide mandatory & Guide assignment during booking */
+  if (lower.match(/(guide assignment|assign.*guide|how does guide|choose a guide|pick a guide|select a guide|referral code|referral link|guide rotation|guide mandatory|mandatory.*guide|is a.*guide.*mandatory|is a.*guide.*required|need a guide|require a guide|without a guide)/)) {
+    const faqMatch = matchSystemFaqOrLiveQuery(message);
+    if (faqMatch) {
+      return {
+        content: faqMatch,
+        quickReplies: ['What are the fees?', 'Book a Morning Hike', 'What trailheads can I choose?'],
+      };
+    }
+  }
+
+  /* FAQ-06: Can we camp overnight at the summit? */
+  if (lower.match(/(camp overnight|overnight.*summit|can we camp|camping.*summit|summit.*camp|pitch a tent|bonfire|campfire)/)) {
+    const faqMatch = matchSystemFaqOrLiveQuery(message);
+    if (faqMatch) {
+      return {
+        content: faqMatch,
+        quickReplies: ['Overnight start times?', 'What is advisable to wear?', 'What should I pack?'],
+      };
+    }
+  }
+
+  /* FAQ-08: How do we get to the trailhead via commute? */
+  if (lower.match(/(via commute|how do we get to the trailhead|how to get to.*trailhead|commute|public transport|bus to|duck junction|tricycle)/)) {
+    const faqMatch = matchSystemFaqOrLiveQuery(message);
+    if (faqMatch) {
+      return {
+        content: faqMatch,
+        quickReplies: ['What trailhead entry points can I choose?', 'Best start time?', 'Are there river crossings?'],
+      };
+    }
   }
 
   /* Fees & Fare Inquiries */
@@ -465,33 +519,31 @@ function generateResponse(
         `• Hikers will **never** need to wade across rivers, creeks, or streams.\n` +
         `• Trail running shoes or standard hiking boots with good grip are ideal—no water shoes or aquatic gear needed.\n` +
         `• Water refill stations and fresh buko juice are sold by local farmers at rest huts along the lower trail.`,
-      quickReplies: ['Summit Route details', 'What shoes should I wear?', 'Weather advice'],
+      quickReplies: ['Summit Route details', 'What is advisable to wear?', 'Weather advice'],
     };
   }
 
-  /* Trail info */
-  if (lower.match(/(trail|route|path|distance|km|elevation|summit|difficulty|how long)/)) {
+  /* Trail info, FAQ-04 (Difficulty & Summit Elevation), FAQ-07 (Trailhead Entry Points) */
+  if (lower.match(/(trail|route|path|distance|km|elevation|summit|difficulty|how long|entry point|jump-off|jump off|jumpoff)/)) {
     if (publishedRoute) {
       const distance = publishedRoute.distanceKm ? ` about **${publishedRoute.distanceKm.toFixed(1)} km**` : '';
       const elevation = publishedRoute.elevationMeters ? ` and **${publishedRoute.elevationMeters}m** elevation` : '';
       const stations = publishedRoute.stationNames?.length ? `\n\nStations: **${publishedRoute.stationNames.join(' → ')}**.` : '';
       return {
         content:
+          `Mount Kalisungan stands at **760 MASL** (2,493 ft) in Calauan, Laguna, classified overall as **Moderate overall**.\n\n` +
           `The published route for **${publishedRoute.locationName}** is **${publishedRoute.name}**${distance}${elevation}.\n\n` +
-          `Difficulty: **${publishedRoute.difficulty || 'not specified'}**. This is the route to follow for this entry point; I won't substitute an unpublished path.${stations}`,
-        quickReplies: ['How long will it take?', 'How do I stay on the route?', 'What should I bring?'],
+          `Difficulty: **${publishedRoute.difficulty || 'Moderate overall'}**. This is the official route to follow for this entry point.${stations}`,
+        quickReplies: ['How long will it take?', 'How do I stay on the route?', 'What is advisable to wear?'],
       };
     }
-    return {
-      content:
-        `Mt. Kalisungan has **3 trail routes**:\n\n` +
-        `🏔️ **Lamot 2 Trail** — Published distance and terrain details come from the selected route\n` +
-        `🌴 **Lamot 1 Trail** — Published distance and terrain details come from the selected route\n` +
-        `🌄 **Sto. Tomas Trail** — Published distance and terrain details come from the selected route\n\n` +
-        `The mountain is 760 MASL. Use the selected published route for distance and time.\n\n` +
-        `Which route interests you most?`,
-      quickReplies: ['Summit Route details', 'Are there river crossings?', 'Which is easiest?', 'Can beginners do it?'],
-    };
+    const faqMatch = matchSystemFaqOrLiveQuery(message);
+    if (faqMatch) {
+      return {
+        content: faqMatch,
+        quickReplies: ['Are there river crossings?', 'What is advisable to wear?', 'How does guide assignment work?'],
+      };
+    }
   }
 
   /* Persuasion / worth it */
@@ -539,6 +591,15 @@ function generateResponse(
         `You can add companions in **Step 2** of the booking form.\n\n` +
         `Groups of 3–10 are ideal for pace and coordination!`,
       quickReplies: ['Tips for booking a group', 'Large group tips'],
+    };
+  }
+
+  /* System FAQs & Live System Snapshot fallback before generic default */
+  const systemFaqMatch = matchSystemFaqOrLiveQuery(message);
+  if (systemFaqMatch) {
+    return {
+      content: systemFaqMatch,
+      quickReplies: ['What is advisable to wear?', 'Are there river crossings?', 'How does guide assignment work?'],
     };
   }
 
@@ -685,6 +746,26 @@ export default function BookingAIChat({
     previousDateKey.current = nextDateKey;
   }, [date, isOpen, addAIMessage]);
 
+  useEffect(() => {
+    if (!publishedRoute) return;
+    const current = getLiveSystemSnapshot();
+    const existingRoutes = current.routes.filter((r) => r.id !== publishedRoute.id && r.locationName !== publishedRoute.locationName);
+    updateLiveSystemSnapshotPartial({
+      routes: [
+        {
+          id: publishedRoute.id,
+          name: publishedRoute.name,
+          locationName: publishedRoute.locationName,
+          difficulty: publishedRoute.difficulty,
+          elevationMeters: publishedRoute.elevationMeters,
+          distanceKm: publishedRoute.distanceKm,
+          stationNames: publishedRoute.stationNames,
+        },
+        ...existingRoutes,
+      ],
+    });
+  }, [publishedRoute]);
+
 
   const getOnlineAnswer = useCallback(async (text: string): Promise<string | null> => {
     if (!navigator.onLine || offlineModeRef.current) return null;
@@ -728,6 +809,7 @@ export default function BookingAIChat({
             weather_forecast: weatherInsight ?? null,
             pricing_policy: getDynamicFeePolicyText(),
             pricing: getPricingConfig(),
+            live_system_snapshot: getLiveSystemSnapshot(),
             forecasting: forecastContext ? {
               summary: forecastContext.summaryText,
               horizonDays: forecastContext.horizonDays,
@@ -789,18 +871,22 @@ export default function BookingAIChat({
       setInput('');
 
       try {
+        if (navigator.onLine && !forceOffline) {
+          void syncLiveSystemSnapshot();
+        }
         const onlineAnswer = await getOnlineAnswer(text);
         setBasicGuidance(!onlineAnswer);
         if (onlineAnswer) {
           const { clean, suggestion } = extractSuggestion(onlineAnswer);
-          addAIMessage(clean, undefined, suggestion);
+          const faqFallback = matchSystemFaqOrLiveQuery(text);
+          const isUncertainReply =
+            Boolean(faqFallback) &&
+            /(cannot confirm|can't confirm|not available in|isn't available|no published route available|unavailable right now)/i.test(clean);
+          const finalContent = isUncertainReply && faqFallback ? faqFallback : clean;
+          learnFromResponse(text, finalContent);
+          addAIMessage(finalContent, undefined, suggestion);
           setTimeout(() => inputRef.current?.focus(), 100);
           return;
-        }
-        if (navigator.onLine) {
-          addAIMessage(
-            "I couldn't reach live AI. Here is basic guidance from the app; I can't verify current availability or trail conditions.",
-          );
         }
 
         const response = generateResponse(
